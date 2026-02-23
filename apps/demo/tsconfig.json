@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "paths": {
+      "@dstorage/crypto": ["../../packages/crypto/src/index.ts"],
+      "@dstorage/storage": ["../../packages/storage/src/index.ts"],
+      "@dstorage/chain": ["../../packages/chain/src/index.ts"],
+      "@dstorage/core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

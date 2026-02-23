@@ -1,0 +1,19 @@
+{
+  "name": "dstorage-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "dStorage SDK — Privacy-first data layer for dApps",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace=apps/demo",
+    "lint": "eslint packages/*/src apps/*/src --ext .ts,.tsx"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "eslint": "^8.57.0"
+  }
+}

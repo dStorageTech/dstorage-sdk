@@ -1,0 +1,94 @@
+/**
+ * @dstorage/crypto — encrypt.ts
+ * AES-GCM encryption/decryption using the WebCrypto API.
+ * Works in both browser (native) and Node.js 18+ (globalThis.crypto).
+ */
+
+/** Shape of an encrypted payload stored alongside its IV. */
+export interface EncryptedPayload {
+  /** AES-GCM ciphertext as base64 string */
+  ciphertext: string;
+  /** 12-byte initialisation vector as base64 string */
+  iv: string;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function getCrypto(): Crypto {
+  if (typeof globalThis.crypto !== 'undefined') return globalThis.crypto;
+  throw new Error('[dStorage/crypto] WebCrypto not available in this environment.');
+}
+
+function bufferToBase64(buffer: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+function base64ToBuffer(b64: string): Uint8Array {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+// ── Core API ─────────────────────────────────────────────────────────────────
+
+/**
+ * Encrypt arbitrary bytes using AES-GCM 256.
+ * Returns a self-contained EncryptedPayload (ciphertext + iv) ready to store.
+ */
+export async function encrypt(
+  key: CryptoKey,
+  data: Uint8Array
+): Promise<EncryptedPayload> {
+  const crypto = getCrypto();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const ciphertextBuffer = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    data
+  );
+
+  return {
+    ciphertext: bufferToBase64(ciphertextBuffer),
+    iv: bufferToBase64(iv),
+  };
+}
+
+/**
+ * Decrypt an EncryptedPayload back to its original bytes.
+ */
+export async function decrypt(
+  key: CryptoKey,
+  payload: EncryptedPayload
+): Promise<Uint8Array> {
+  const crypto = getCrypto();
+
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64ToBuffer(payload.iv) },
+    key,
+    base64ToBuffer(payload.ciphertext)
+  );
+
+  return new Uint8Array(plaintext);
+}
+
+/**
+ * Serialize an EncryptedPayload to a compact JSON string safe to pass to storage.
+ */
+export function serializePayload(payload: EncryptedPayload): string {
+  return JSON.stringify(payload);
+}
+
+/**
+ * Deserialize a stored JSON string back to an EncryptedPayload.
+ */
+export function deserializePayload(raw: string): EncryptedPayload {
+  const parsed: unknown = JSON.parse(raw);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('ciphertext' in parsed) ||
+    !('iv' in parsed)
+  ) {
+    throw new Error('[dStorage/crypto] Invalid payload format.');
+  }
+  return parsed as EncryptedPayload;
+}

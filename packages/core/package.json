@@ -1,0 +1,26 @@
+{
+  "name": "@dstorage/core",
+  "version": "0.1.0",
+  "description": "dStorage SDK — Privacy-first data layer for dApps",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit && echo 'Types OK'"
+  },
+  "dependencies": {
+    "@dstorage/crypto": "*",
+    "@dstorage/storage": "*",
+    "@dstorage/chain": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
