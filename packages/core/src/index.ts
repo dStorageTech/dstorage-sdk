@@ -15,6 +15,8 @@ export {
 
 export {
   MockChainAdapter,
+  MockMidnightChainAdapter,
+  MockProofServer,
   MidnightChainAdapter,
 } from '@dstorage/chain';
 

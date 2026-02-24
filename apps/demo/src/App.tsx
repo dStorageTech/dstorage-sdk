@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import {
-  DStorage, MockStorageAdapter, MockChainAdapter,
+  DStorage, MockStorageAdapter, MockMidnightChainAdapter,
   connectMetaMask, connectDemoWallet,
   INSURANCE_CLAIMS,
   simulateZkProof,
@@ -28,7 +28,7 @@ export default function App() {
 
   const buildSDK = useCallback(() => new DStorage({
     storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockChainAdapter(),
+    chainAdapter: new MockMidnightChainAdapter(),
   }), []);
 
   const handleConnect = async (mode: 'metamask' | 'demo') => {

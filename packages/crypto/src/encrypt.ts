@@ -23,8 +23,11 @@ function bufferToBase64(buffer: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
-function base64ToBuffer(b64: string): Uint8Array {
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+function base64ToBuffer(b64: string): Uint8Array<ArrayBuffer> {
+  const str = atob(b64);
+  const result = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) result[i] = str.charCodeAt(i);
+  return result;
 }
 
 // ── Core API ─────────────────────────────────────────────────────────────────
@@ -43,12 +46,12 @@ export async function encrypt(
   const ciphertextBuffer = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
-    data
+    new Uint8Array(data)
   );
 
   return {
     ciphertext: bufferToBase64(ciphertextBuffer),
-    iv: bufferToBase64(iv),
+    iv: bufferToBase64(iv.buffer as ArrayBuffer),
   };
 }
 

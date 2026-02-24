@@ -57,8 +57,8 @@ export class MidnightChainAdapter implements ChainAdapter {
         config.nodeEndpoint ?? 'https://rpc.testnet-02.midnight.network',
       indexerEndpoint:
         config.indexerEndpoint ?? 'https://indexer.testnet-02.midnight.network',
-      wallet: config.wallet,
-      contractAddress: config.contractAddress,
+      ...(config.wallet !== undefined ? { wallet: config.wallet } : {}),
+      ...(config.contractAddress !== undefined ? { contractAddress: config.contractAddress } : {}),
     };
 
     console.warn(

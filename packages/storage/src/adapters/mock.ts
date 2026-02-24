@@ -21,18 +21,21 @@ function generateId(): string {
 }
 
 function storeSet(key: string, value: string): void {
-  if (typeof localStorage !== 'undefined') {
+  try {
     localStorage.setItem(key, value);
-  } else {
+  } catch {
+    // localStorage not available (e.g. Node.js) — fall back to memory
     memoryStore.set(key, value);
   }
 }
 
 function storeGet(key: string): string | null {
-  if (typeof localStorage !== 'undefined') {
+  try {
     return localStorage.getItem(key);
+  } catch {
+    // localStorage not available (e.g. Node.js) — fall back to memory
+    return memoryStore.get(key) ?? null;
   }
-  return memoryStore.get(key) ?? null;
 }
 
 export class MockStorageAdapter implements StorageAdapter {
@@ -77,13 +80,14 @@ export class MockStorageAdapter implements StorageAdapter {
 
   /** List all stored IDs (useful for debugging in the demo app) */
   listAll(): string[] {
-    if (typeof localStorage !== 'undefined') {
+    try {
       return Object.keys(localStorage)
         .filter((k) => k.startsWith('dstorage:blob:'))
         .map((k) => k.replace('dstorage:blob:', ''));
+    } catch {
+      return [...memoryStore.keys()]
+        .filter((k) => k.startsWith('dstorage:blob:'))
+        .map((k) => k.replace('dstorage:blob:', ''));
     }
-    return [...memoryStore.keys()]
-      .filter((k) => k.startsWith('dstorage:blob:'))
-      .map((k) => k.replace('dstorage:blob:', ''));
   }
 }

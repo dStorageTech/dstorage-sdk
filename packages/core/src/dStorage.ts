@@ -110,11 +110,12 @@ export class DStorage {
     );
 
     // 3. Write on-chain reference — only the pointer, never the data
+    const dataLabel = this.config.defaultDataLabel ?? metadata['label'];
     const chainResult = await this.config.chainAdapter.writeReference({
       storageId: storageResult.id,
       storageProvider: storageResult.provider,
       owner: this.wallet!.address,
-      dataLabel: this.config.defaultDataLabel ?? metadata['label'],
+      ...(dataLabel !== undefined ? { dataLabel } : {}),
       createdAt: Date.now(),
     });
 

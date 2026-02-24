@@ -45,7 +45,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         port: 443,
         protocol: 'https',
       },
-      walletKey: config.walletKey,
+      ...(config.walletKey !== undefined ? { walletKey: config.walletKey } : {}),
     };
   }
 

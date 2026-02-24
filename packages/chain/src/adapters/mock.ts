@@ -35,15 +35,19 @@ function generateRefId(): string {
 }
 
 function persist(key: string, value: unknown): void {
-  if (typeof localStorage !== 'undefined') {
+  try {
     localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // localStorage not available in this environment (e.g. Node.js)
   }
 }
 
 function load<T>(key: string): T | null {
-  if (typeof localStorage !== 'undefined') {
+  try {
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw) as T;
+  } catch {
+    // localStorage not available in this environment (e.g. Node.js)
   }
   return null;
 }
@@ -52,12 +56,10 @@ export class MockChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = 'mock';
 
   constructor() {
-    // Rehydrate from localStorage if available
-    if (typeof localStorage !== 'undefined') {
-      const savedRefs = load<Record<string, ChainReference>>('dstorage:chain:refs');
-      if (savedRefs) {
-        for (const [k, v] of Object.entries(savedRefs)) refs.set(k, v);
-      }
+    // Rehydrate from localStorage if available (browser only; no-op in Node.js)
+    const savedRefs = load<Record<string, ChainReference>>('dstorage:chain:refs');
+    if (savedRefs) {
+      for (const [k, v] of Object.entries(savedRefs)) refs.set(k, v);
     }
   }
 

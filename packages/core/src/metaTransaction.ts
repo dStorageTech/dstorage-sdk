@@ -448,7 +448,7 @@ export class MetaTransaction {
     const step = this.getStep(id);
     step.status = 'done';
     step.detail = detail;
-    step.durationMs = step.startedAt ? Date.now() - step.startedAt : undefined;
+    if (step.startedAt) step.durationMs = Date.now() - step.startedAt;
     this.emit({ overallStatus: 'running', currentStepId: id });
   }
 

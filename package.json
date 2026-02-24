@@ -8,11 +8,14 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace=packages/crypto && npm run build --workspace=packages/storage && npm run build --workspace=packages/chain && npm run build --workspace=packages/payment && npm run build --workspace=packages/core",
     "dev": "npm run dev --workspace=apps/demo",
+    "example": "tsx examples/basic-flow.ts",
     "lint": "eslint packages/*/src apps/*/src --ext .ts,.tsx"
   },
   "devDependencies": {
+    "tsup": "^8.0.0",
+    "tsx": "^4.7.0",
     "typescript": "^5.4.5",
     "eslint": "^8.57.0"
   }
