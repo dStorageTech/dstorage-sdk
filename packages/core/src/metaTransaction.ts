@@ -21,9 +21,10 @@
 import { encrypt, serializePayload } from '@dstorage/crypto';
 import type { StorageAdapter } from '@dstorage/storage';
 import type { ChainAdapter } from '@dstorage/chain';
+import type { PaymentAdapter } from '@dstorage/payment';
+import { MockPaymentAdapter } from '@dstorage/payment';
 import {
-  estimateCost,
-  simulatePayment,
+  buildCostEstimate,
   defaultStorageToken,
   defaultChainToken,
 } from './payment.js';
@@ -107,9 +108,15 @@ export interface MetaTxReceipt {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export interface MetaTxConfig {
-  /** Override the default storage payment token */
+  /**
+   * @deprecated Token is now determined by the payment adapter's `token` property.
+   * Pass a configured payment adapter via DStorageConfig.storagePaymentAdapter instead.
+   */
   storageToken?: TokenSymbol;
-  /** Override the default chain payment token */
+  /**
+   * @deprecated Token is now determined by the payment adapter's `token` property.
+   * Pass a configured payment adapter via DStorageConfig.chainPaymentAdapter instead.
+   */
   chainToken?: TokenSymbol;
   /** Optional metadata to attach to the on-chain reference */
   metadata?: Record<string, string>;
@@ -217,6 +224,8 @@ function buildInitialSteps(): MetaTxStepState[] {
 export class MetaTransaction {
   private storageAdapter: StorageAdapter;
   private chainAdapter: ChainAdapter;
+  private storagePaymentAdapter: PaymentAdapter;
+  private chainPaymentAdapter: PaymentAdapter;
   private encryptionKey: CryptoKey;
   private ownerAddress: string;
   private progressCallback: ((p: MetaTxProgress) => void) | null = null;
@@ -227,12 +236,25 @@ export class MetaTransaction {
     storageAdapter: StorageAdapter,
     chainAdapter: ChainAdapter,
     encryptionKey: CryptoKey,
-    ownerAddress: string
+    ownerAddress: string,
+    storagePaymentAdapter?: PaymentAdapter,
+    chainPaymentAdapter?: PaymentAdapter
   ) {
     this.storageAdapter = storageAdapter;
-    this.chainAdapter = chainAdapter;
-    this.encryptionKey = encryptionKey;
-    this.ownerAddress = ownerAddress;
+    this.chainAdapter   = chainAdapter;
+    this.encryptionKey  = encryptionKey;
+    this.ownerAddress   = ownerAddress;
+
+    // Default to MockPaymentAdapter with the token that matches the chosen adapter,
+    // so existing code that doesn't configure payment adapters continues to work.
+    this.storagePaymentAdapter = storagePaymentAdapter ?? new MockPaymentAdapter({
+      type:  'storage',
+      token: defaultStorageToken(storageAdapter.name),
+    });
+    this.chainPaymentAdapter = chainPaymentAdapter ?? new MockPaymentAdapter({
+      type:  'chain',
+      token: defaultChainToken(chainAdapter.name),
+    });
   }
 
   /** Register a progress listener. Called after every step state change. */
@@ -250,17 +272,19 @@ export class MetaTransaction {
     this.startedAt = Date.now();
     this.steps = buildInitialSteps();
 
-    const storageToken =
-      config.storageToken ?? defaultStorageToken(this.storageAdapter.name);
-    const chainToken =
-      config.chainToken ?? defaultChainToken(this.chainAdapter.name);
-
     this.emit({ overallStatus: 'running' });
 
     try {
       // ── Step 0: Estimate ────────────────────────────────────────────────
       this.startStep('estimate', 'Analysing file and fetching price feeds…');
-      const estimate = estimateCost(file.size, storageToken, chainToken);
+
+      // Fetch quotes from both payment adapters in parallel — they are independent.
+      const [storageQuote, chainQuote] = await Promise.all([
+        this.storagePaymentAdapter.estimateCost(file.size),
+        this.chainPaymentAdapter.estimateCost(file.size),
+      ]);
+
+      const estimate = buildCostEstimate(storageQuote, chainQuote, file.size);
       await sleep(400); // Realistic pause
       this.completeStep('estimate', `~$${estimate.totalUsd} USD total`);
       this.emit({ overallStatus: 'running', estimate });
@@ -278,23 +302,20 @@ export class MetaTransaction {
         `${estimate.fileSizeDisplay} encrypted (${(serialized.length / 1024).toFixed(1)} KB ciphertext)`
       );
 
-      // ── Step 3: Storage payment ─────────────────────────────────────────
+      // ── Step 2: Storage payment ─────────────────────────────────────────
       this.startStep(
         'payment_storage',
-        `Preparing ${estimate.storageCost.amount} ${storageToken} payment…`
+        `Preparing ${storageQuote.amount} ${storageQuote.token} payment…`
       );
 
-      const storageReceipt = await simulatePayment(
-        'storage',
-        estimate.storageCost.amount,
-        storageToken,
-        estimate.storageCost.usd,
+      const storageReceipt = await this.storagePaymentAdapter.pay(
+        storageQuote,
         (msg) => this.updateStepDetail('payment_storage', msg)
       );
 
       this.completeStep(
         'payment_storage',
-        `${estimate.storageCost.amount} ${storageToken} ≈ $${estimate.storageCost.usd}`
+        `${storageReceipt.amount} ${storageReceipt.token} ≈ $${storageReceipt.usd}`
       );
 
       // ── Step 3: Upload ──────────────────────────────────────────────────
@@ -319,20 +340,17 @@ export class MetaTransaction {
       // ── Step 4: Chain fee payment ────────────────────────────────────────
       this.startStep(
         'payment_chain',
-        `Preparing ${estimate.chainCost.amount} ${chainToken} transaction…`
+        `Preparing ${chainQuote.amount} ${chainQuote.token} transaction…`
       );
 
-      const chainReceipt = await simulatePayment(
-        'chain',
-        estimate.chainCost.amount,
-        chainToken,
-        estimate.chainCost.usd,
+      const chainReceipt = await this.chainPaymentAdapter.pay(
+        chainQuote,
         (msg) => this.updateStepDetail('payment_chain', msg)
       );
 
       this.completeStep(
         'payment_chain',
-        `${estimate.chainCost.amount} ${chainToken} ≈ $${estimate.chainCost.usd}`
+        `${chainReceipt.amount} ${chainReceipt.token} ≈ $${chainReceipt.usd}`
       );
 
       // ── Step 5: On-chain reference ───────────────────────────────────────
@@ -349,11 +367,8 @@ export class MetaTransaction {
         createdAt: Date.now(),
       });
 
-      const circuitLabel = config.circuitName
-        ? ` via ${config.circuitName}`
-        : '';
-      const contractLabel = config.contractName
-        ? ` on ${config.contractName}` : '';
+      const circuitLabel  = config.circuitName  ? ` via ${config.circuitName}`  : '';
+      const contractLabel = config.contractName ? ` on ${config.contractName}`  : '';
 
       this.completeStep(
         'chain_reference',
@@ -361,25 +376,25 @@ export class MetaTransaction {
       );
 
       // ── Step 6: Complete ─────────────────────────────────────────────────
-      const dataId = `${uploadResult.id}::${chainResult.refId}`;
+      const dataId         = `${uploadResult.id}::${chainResult.refId}`;
       const totalDurationMs = Date.now() - this.startedAt;
 
       this.completeStep('complete', `Completed in ${(totalDurationMs / 1000).toFixed(1)}s`);
 
       const receipt: MetaTxReceipt = {
         dataId,
-        storageId: uploadResult.id,
+        storageId:  uploadResult.id,
         chainRefId: chainResult.refId,
         file: {
-          name: file.name,
-          type: file.type,
+          name:      file.name,
+          type:      file.type,
           sizeBytes: file.size,
           sizeDisplay: estimate.fileSizeDisplay,
         },
         storagePayment: storageReceipt,
-        chainPayment: chainReceipt,
-        storageToken,
-        chainToken,
+        chainPayment:   chainReceipt,
+        storageToken:   storageReceipt.token,
+        chainToken:     chainReceipt.token,
         totalUsd: estimate.totalUsd,
         ...(config.contractAddress ? {
           contract: {
@@ -389,7 +404,7 @@ export class MetaTransaction {
         } : {}),
         ...(config.circuitId ? {
           circuit: {
-            id: config.circuitId,
+            id:   config.circuitId,
             name: config.circuitName ?? config.circuitId,
           }
         } : {}),

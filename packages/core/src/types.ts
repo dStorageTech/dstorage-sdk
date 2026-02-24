@@ -5,6 +5,7 @@
 
 import type { StorageAdapter, StorageProviderName } from '@dstorage/storage';
 import type { ChainAdapter, ChainProviderName } from '@dstorage/chain';
+import type { PaymentAdapter } from '@dstorage/payment';
 
 /** Wallet connection info returned after connecting */
 export interface WalletInfo {
@@ -20,6 +21,16 @@ export interface DStorageConfig {
   storageAdapter: StorageAdapter;
   /** Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...) */
   chainAdapter: ChainAdapter;
+  /**
+   * Payment adapter for storage network fees (AR, ANT, or MOCK).
+   * Defaults to MockPaymentAdapter with the token matching the storageAdapter.
+   */
+  storagePaymentAdapter?: PaymentAdapter;
+  /**
+   * Payment adapter for blockchain transaction fees (DUST, ETH, or MOCK).
+   * Defaults to MockPaymentAdapter with the token matching the chainAdapter.
+   */
+  chainPaymentAdapter?: PaymentAdapter;
   /** Optional label for the type of data being stored */
   defaultDataLabel?: string;
 }

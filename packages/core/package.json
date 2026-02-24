@@ -18,7 +18,8 @@
   "dependencies": {
     "@dstorage/crypto": "*",
     "@dstorage/storage": "*",
-    "@dstorage/chain": "*"
+    "@dstorage/chain": "*",
+    "@dstorage/payment": "*"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

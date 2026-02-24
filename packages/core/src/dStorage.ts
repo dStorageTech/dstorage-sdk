@@ -238,7 +238,9 @@ export class DStorage {
       this.config.storageAdapter,
       this.config.chainAdapter,
       this.encryptionKey!,
-      this.wallet!.address
+      this.wallet!.address,
+      this.config.storagePaymentAdapter,
+      this.config.chainPaymentAdapter
     );
 
     metaTx.onProgress(onProgress);

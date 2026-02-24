@@ -1,0 +1,21 @@
+{
+  "name": "@dstorage/payment",
+  "version": "0.1.0",
+  "description": "Pluggable payment adapters for dStorage SDK",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit && echo 'Types OK'"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

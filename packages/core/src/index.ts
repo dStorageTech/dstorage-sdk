@@ -17,3 +17,11 @@ export {
   MockChainAdapter,
   MidnightChainAdapter,
 } from '@dstorage/chain';
+
+export {
+  MockPaymentAdapter,
+  ArweavePaymentAdapter,
+  MidnightPaymentAdapter,
+} from '@dstorage/payment';
+
+export type { PaymentAdapter, PaymentQuote } from '@dstorage/payment';

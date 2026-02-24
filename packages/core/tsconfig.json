@@ -6,7 +6,8 @@
     "paths": {
       "@dstorage/crypto": ["../crypto/src/index.ts"],
       "@dstorage/storage": ["../storage/src/index.ts"],
-      "@dstorage/chain": ["../chain/src/index.ts"]
+      "@dstorage/chain": ["../chain/src/index.ts"],
+      "@dstorage/payment": ["../payment/src/index.ts"]
     }
   },
   "include": ["src"]
