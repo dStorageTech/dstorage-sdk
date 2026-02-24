@@ -80,14 +80,22 @@ export class MockStorageAdapter implements StorageAdapter {
 
   /** List all stored IDs (useful for debugging in the demo app) */
   listAll(): string[] {
-    try {
-      return Object.keys(localStorage)
-        .filter((k) => k.startsWith('dstorage:blob:'))
-        .map((k) => k.replace('dstorage:blob:', ''));
-    } catch {
-      return [...memoryStore.keys()]
-        .filter((k) => k.startsWith('dstorage:blob:'))
-        .map((k) => k.replace('dstorage:blob:', ''));
+    const ids: string[] = [];
+
+    // Always include in-memory items (Node.js fallback when localStorage is unavailable)
+    for (const k of memoryStore.keys()) {
+      if (k.startsWith('dstorage:blob:')) ids.push(k.replace('dstorage:blob:', ''));
     }
+
+    // Also include browser localStorage items when available
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith('dstorage:blob:')) ids.push(k.replace('dstorage:blob:', ''));
+      }
+    } catch {
+      // localStorage not accessible — already covered by memoryStore above
+    }
+
+    return ids;
   }
 }

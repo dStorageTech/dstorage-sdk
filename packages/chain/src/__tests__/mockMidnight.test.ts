@@ -1,0 +1,239 @@
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { MockMidnightChainAdapter } from '../adapters/mockMidnight.js';
+
+afterEach(() => vi.useRealTimers());
+
+// Use a zero-delay proof server for all tests to keep them fast.
+function makeAdapter() {
+  return new MockMidnightChainAdapter({ proofServerMinMs: 0, proofServerMaxMs: 0 });
+}
+
+function uniqueRef(tag: string) {
+  return {
+    storageId: `store_${tag}`,
+    storageProvider: 'mock',
+    owner: `0xOwner_${tag}`,
+    createdAt: Date.now(),
+  };
+}
+
+describe('MockMidnightChainAdapter', () => {
+  it('name is "midnight"', () => {
+    expect(makeAdapter().name).toBe('midnight');
+  });
+
+  // ── writeReference ────────────────────────────────────────────────────────
+
+  describe('writeReference', () => {
+    it('returns a ChainWriteResult with refId, provider, blockHeight, writtenAt', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const p = adapter.writeReference(uniqueRef('wr1'));
+      await vi.runAllTimersAsync();
+      const result = await p;
+      expect(result).toHaveProperty('refId');
+      expect(result).toHaveProperty('provider');
+      expect(result).toHaveProperty('blockHeight');
+      expect(result).toHaveProperty('writtenAt');
+    });
+
+    it('provider is "midnight"', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const p = adapter.writeReference(uniqueRef('wr2'));
+      await vi.runAllTimersAsync();
+      const result = await p;
+      expect(result.provider).toBe('midnight');
+    });
+
+    it('refId starts with "ref_"', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const p = adapter.writeReference(uniqueRef('wr3'));
+      await vi.runAllTimersAsync();
+      const result = await p;
+      expect(result.refId.startsWith('ref_')).toBe(true);
+    });
+
+    it('blockHeight starts at or above 1,000,000 (realistic mock)', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const p = adapter.writeReference(uniqueRef('wr4'));
+      await vi.runAllTimersAsync();
+      const result = await p;
+      expect(result.blockHeight).toBeGreaterThanOrEqual(1_000_000);
+    });
+
+    it('blockHeight increments by 1 on each write', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+
+      const p1 = adapter.writeReference(uniqueRef('wr5a'));
+      await vi.runAllTimersAsync();
+      const r1 = await p1;
+
+      const p2 = adapter.writeReference(uniqueRef('wr5b'));
+      await vi.runAllTimersAsync();
+      const r2 = await p2;
+
+      expect(r2.blockHeight).toBe(r1.blockHeight! + 1);
+    });
+
+    it('successive writes return unique refIds', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+
+      const p1 = adapter.writeReference(uniqueRef('wr6a'));
+      await vi.runAllTimersAsync();
+      const r1 = await p1;
+
+      const p2 = adapter.writeReference(uniqueRef('wr6b'));
+      await vi.runAllTimersAsync();
+      const r2 = await p2;
+
+      expect(r1.refId).not.toBe(r2.refId);
+    });
+
+    it('written reference is retrievable', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const ref = uniqueRef('wr7');
+      const p = adapter.writeReference(ref);
+      await vi.runAllTimersAsync();
+      const result = await p;
+      const stored = await adapter.readReference(result.refId);
+      expect(stored.storageId).toBe(ref.storageId);
+      expect(stored.owner).toBe(ref.owner);
+    });
+  });
+
+  // ── readReference ─────────────────────────────────────────────────────────
+
+  describe('readReference', () => {
+    it('returns the stored reference', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const ref = { storageId: 'sid_rr1', storageProvider: 'arweave', owner: '0xAlice_rr1', createdAt: Date.now() };
+      const p = adapter.writeReference(ref);
+      await vi.runAllTimersAsync();
+      const { refId } = await p;
+      const stored = await adapter.readReference(refId);
+      expect(stored.storageId).toBe('sid_rr1');
+      expect(stored.storageProvider).toBe('arweave');
+      expect(stored.owner).toBe('0xAlice_rr1');
+    });
+
+    it('throws for unknown refId', async () => {
+      const adapter = makeAdapter();
+      await expect(adapter.readReference('ref_does_not_exist')).rejects.toThrow(
+        '[dStorage/mock-midnight] No reference found for refId: ref_does_not_exist'
+      );
+    });
+  });
+
+  // ── grantAccess ───────────────────────────────────────────────────────────
+
+  describe('grantAccess', () => {
+    it('grants access and returns a permId', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const p = adapter.writeReference(uniqueRef('ga1'));
+      await vi.runAllTimersAsync();
+      const { refId } = await p;
+
+      const grantP = adapter.grantAccess({ refId, grantee: '0xBob_ga1' });
+      await vi.runAllTimersAsync();
+      const permId = await grantP;
+
+      expect(typeof permId).toBe('string');
+      expect(permId.length).toBeGreaterThan(0);
+    });
+
+    it('grantee has access after grant', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const wp = adapter.writeReference(uniqueRef('ga2'));
+      await vi.runAllTimersAsync();
+      const { refId } = await wp;
+
+      const gp = adapter.grantAccess({ refId, grantee: '0xBob_ga2' });
+      await vi.runAllTimersAsync();
+      await gp;
+
+      expect(await adapter.hasAccess(refId, '0xBob_ga2')).toBe(true);
+    });
+  });
+
+  // ── revokeAccess ──────────────────────────────────────────────────────────
+
+  describe('revokeAccess', () => {
+    it('grantee loses access after revoke', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+
+      const wp = adapter.writeReference(uniqueRef('ra1'));
+      await vi.runAllTimersAsync();
+      const { refId } = await wp;
+
+      const gp = adapter.grantAccess({ refId, grantee: '0xBob_ra1' });
+      await vi.runAllTimersAsync();
+      await gp;
+
+      await adapter.revokeAccess(refId, '0xBob_ra1');
+      expect(await adapter.hasAccess(refId, '0xBob_ra1')).toBe(false);
+    });
+
+    it('revoking non-existent grantee does not throw', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const wp = adapter.writeReference(uniqueRef('ra2'));
+      await vi.runAllTimersAsync();
+      const { refId } = await wp;
+      await expect(adapter.revokeAccess(refId, '0xNobody_ra2')).resolves.toBeUndefined();
+    });
+  });
+
+  // ── hasAccess ─────────────────────────────────────────────────────────────
+
+  describe('hasAccess', () => {
+    it('owner always has access without explicit grant', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const owner = '0xOwner_ha1';
+      const ref = { ...uniqueRef('ha1'), owner };
+      const wp = adapter.writeReference(ref);
+      await vi.runAllTimersAsync();
+      const { refId } = await wp;
+      expect(await adapter.hasAccess(refId, owner)).toBe(true);
+    });
+
+    it('random wallet has no access', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const wp = adapter.writeReference(uniqueRef('ha2'));
+      await vi.runAllTimersAsync();
+      const { refId } = await wp;
+      expect(await adapter.hasAccess(refId, '0xStranger_ha2')).toBe(false);
+    });
+  });
+
+  // ── getAllReferences ───────────────────────────────────────────────────────
+
+  describe('getAllReferences', () => {
+    it('returns an array', () => {
+      const adapter = makeAdapter();
+      expect(Array.isArray(adapter.getAllReferences())).toBe(true);
+    });
+
+    it('includes a written reference', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const wp = adapter.writeReference(uniqueRef('all1'));
+      await vi.runAllTimersAsync();
+      const { refId } = await wp;
+
+      const all = adapter.getAllReferences();
+      expect(all.some((r) => r.refId === refId)).toBe(true);
+    });
+  });
+});

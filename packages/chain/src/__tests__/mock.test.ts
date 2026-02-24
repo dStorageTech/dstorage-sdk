@@ -1,0 +1,265 @@
+import { describe, it, expect } from 'vitest';
+import { MockChainAdapter } from '../adapters/mock.js';
+
+// Module-level refs/permissions Maps are shared within this file but fresh
+// per test file (vitest isolates module state between files).
+// Tests use unique owner addresses and refIds to avoid interference.
+
+function uniqueRef(suffix: string) {
+  return {
+    storageId: `store_${suffix}`,
+    storageProvider: 'mock',
+    owner: `0xOwner_${suffix}`,
+    createdAt: Date.now(),
+  };
+}
+
+describe('MockChainAdapter', () => {
+  it('name is "mock"', () => {
+    const adapter = new MockChainAdapter();
+    expect(adapter.name).toBe('mock');
+  });
+
+  // ── writeReference ────────────────────────────────────────────────────────
+
+  describe('writeReference', () => {
+    it('returns a ChainWriteResult with refId, provider, writtenAt', async () => {
+      const adapter = new MockChainAdapter();
+      const result = await adapter.writeReference(uniqueRef('wr1'));
+      expect(result).toHaveProperty('refId');
+      expect(result).toHaveProperty('provider');
+      expect(result).toHaveProperty('writtenAt');
+    });
+
+    it('refId starts with "ref_"', async () => {
+      const adapter = new MockChainAdapter();
+      const result = await adapter.writeReference(uniqueRef('wr2'));
+      expect(result.refId.startsWith('ref_')).toBe(true);
+    });
+
+    it('provider is "mock"', async () => {
+      const adapter = new MockChainAdapter();
+      const result = await adapter.writeReference(uniqueRef('wr3'));
+      expect(result.provider).toBe('mock');
+    });
+
+    it('writtenAt is a recent timestamp', async () => {
+      const before = Date.now();
+      const adapter = new MockChainAdapter();
+      const result = await adapter.writeReference(uniqueRef('wr4'));
+      const after = Date.now();
+      expect(result.writtenAt).toBeGreaterThanOrEqual(before);
+      expect(result.writtenAt).toBeLessThanOrEqual(after);
+    });
+
+    it('successive writes return unique refIds', async () => {
+      const adapter = new MockChainAdapter();
+      const r1 = await adapter.writeReference(uniqueRef('wr5a'));
+      const r2 = await adapter.writeReference(uniqueRef('wr5b'));
+      const r3 = await adapter.writeReference(uniqueRef('wr5c'));
+      const ids = new Set([r1.refId, r2.refId, r3.refId]);
+      expect(ids.size).toBe(3);
+    });
+
+    it('overrides createdAt with current timestamp', async () => {
+      const adapter = new MockChainAdapter();
+      const ref = { ...uniqueRef('wr6'), createdAt: 1 }; // old timestamp
+      const before = Date.now();
+      await adapter.writeReference(ref);
+      const stored = await adapter.readReference(
+        (await adapter.writeReference(uniqueRef('wr6b'))).refId
+      );
+      expect(stored.createdAt).toBeGreaterThanOrEqual(before);
+    });
+
+    it('writes a reference with optional dataLabel', async () => {
+      const adapter = new MockChainAdapter();
+      const ref = { ...uniqueRef('wr7'), dataLabel: 'insurance-card' };
+      const result = await adapter.writeReference(ref);
+      const stored = await adapter.readReference(result.refId);
+      expect(stored.dataLabel).toBe('insurance-card');
+    });
+  });
+
+  // ── readReference ─────────────────────────────────────────────────────────
+
+  describe('readReference', () => {
+    it('returns the stored ChainReference', async () => {
+      const adapter = new MockChainAdapter();
+      const ref = uniqueRef('rr1');
+      const { refId } = await adapter.writeReference(ref);
+      const stored = await adapter.readReference(refId);
+      expect(stored.storageId).toBe(ref.storageId);
+      expect(stored.storageProvider).toBe(ref.storageProvider);
+      expect(stored.owner).toBe(ref.owner);
+    });
+
+    it('throws for unknown refId with descriptive message', async () => {
+      const adapter = new MockChainAdapter();
+      await expect(adapter.readReference('ref_nonexistent')).rejects.toThrow(
+        '[dStorage/mock-chain] No reference found for refId: ref_nonexistent'
+      );
+    });
+
+    it('returns the exact reference data (no mutation)', async () => {
+      const adapter = new MockChainAdapter();
+      const ref = { storageId: 'sid_rr3', storageProvider: 'arweave', owner: '0xOwner_rr3', createdAt: Date.now() };
+      const { refId } = await adapter.writeReference(ref);
+      const stored = await adapter.readReference(refId);
+      expect(stored.storageId).toBe('sid_rr3');
+      expect(stored.storageProvider).toBe('arweave');
+      expect(stored.owner).toBe('0xOwner_rr3');
+    });
+  });
+
+  // ── grantAccess ───────────────────────────────────────────────────────────
+
+  describe('grantAccess', () => {
+    it('returns a permId string', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ga1'));
+      const permId = await adapter.grantAccess({ refId, grantee: '0xBob_ga1' });
+      expect(typeof permId).toBe('string');
+      expect(permId.length).toBeGreaterThan(0);
+    });
+
+    it('permId format is "perm_<refId>_<grantee>"', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ga2'));
+      const grantee = '0xBob_ga2';
+      const permId = await adapter.grantAccess({ refId, grantee });
+      expect(permId).toBe(`perm_${refId}_${grantee}`);
+    });
+
+    it('grantee has access after grant', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ga3'));
+      await adapter.grantAccess({ refId, grantee: '0xBob_ga3' });
+      expect(await adapter.hasAccess(refId, '0xBob_ga3')).toBe(true);
+    });
+
+    it('granting the same grantee twice does not error', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ga4'));
+      await adapter.grantAccess({ refId, grantee: '0xBob_ga4' });
+      await expect(
+        adapter.grantAccess({ refId, grantee: '0xBob_ga4' })
+      ).resolves.toBeDefined();
+    });
+
+    it('multiple grantees can have access to the same ref', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ga5'));
+      await adapter.grantAccess({ refId, grantee: '0xBob_ga5' });
+      await adapter.grantAccess({ refId, grantee: '0xCarol_ga5' });
+      expect(await adapter.hasAccess(refId, '0xBob_ga5')).toBe(true);
+      expect(await adapter.hasAccess(refId, '0xCarol_ga5')).toBe(true);
+    });
+  });
+
+  // ── revokeAccess ──────────────────────────────────────────────────────────
+
+  describe('revokeAccess', () => {
+    it('grantee loses access after revoke', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ra1'));
+      await adapter.grantAccess({ refId, grantee: '0xBob_ra1' });
+      await adapter.revokeAccess(refId, '0xBob_ra1');
+      expect(await adapter.hasAccess(refId, '0xBob_ra1')).toBe(false);
+    });
+
+    it('revoking a non-existent grantee does not throw', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ra2'));
+      await expect(adapter.revokeAccess(refId, '0xNobody_ra2')).resolves.toBeUndefined();
+    });
+
+    it('revoking from a non-existent refId does not throw', async () => {
+      const adapter = new MockChainAdapter();
+      await expect(adapter.revokeAccess('ref_nonexistent_ra3', '0xBob')).resolves.toBeUndefined();
+    });
+
+    it('revoke only affects the specified grantee', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ra4'));
+      await adapter.grantAccess({ refId, grantee: '0xBob_ra4' });
+      await adapter.grantAccess({ refId, grantee: '0xCarol_ra4' });
+      await adapter.revokeAccess(refId, '0xBob_ra4');
+      expect(await adapter.hasAccess(refId, '0xBob_ra4')).toBe(false);
+      expect(await adapter.hasAccess(refId, '0xCarol_ra4')).toBe(true);
+    });
+  });
+
+  // ── hasAccess ─────────────────────────────────────────────────────────────
+
+  describe('hasAccess', () => {
+    it('owner always has access (not in permissions list)', async () => {
+      const adapter = new MockChainAdapter();
+      const owner = '0xOwner_ha1';
+      const { refId } = await adapter.writeReference({ ...uniqueRef('ha1'), owner });
+      expect(await adapter.hasAccess(refId, owner)).toBe(true);
+    });
+
+    it('random wallet has no access', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ha2'));
+      expect(await adapter.hasAccess(refId, '0xStranger_ha2')).toBe(false);
+    });
+
+    it('granted grantee has access', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ha3'));
+      await adapter.grantAccess({ refId, grantee: '0xBob_ha3' });
+      expect(await adapter.hasAccess(refId, '0xBob_ha3')).toBe(true);
+    });
+
+    it('revoked grantee loses access', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('ha4'));
+      await adapter.grantAccess({ refId, grantee: '0xBob_ha4' });
+      await adapter.revokeAccess(refId, '0xBob_ha4');
+      expect(await adapter.hasAccess(refId, '0xBob_ha4')).toBe(false);
+    });
+
+    it('returns false for completely unknown refId', async () => {
+      const adapter = new MockChainAdapter();
+      expect(await adapter.hasAccess('ref_totally_unknown', '0xAnyone')).toBe(false);
+    });
+
+    it('owner retains access even after another user is granted and revoked', async () => {
+      const adapter = new MockChainAdapter();
+      const owner = '0xOwner_ha5';
+      const { refId } = await adapter.writeReference({ ...uniqueRef('ha5'), owner });
+      await adapter.grantAccess({ refId, grantee: '0xBob_ha5' });
+      await adapter.revokeAccess(refId, '0xBob_ha5');
+      expect(await adapter.hasAccess(refId, owner)).toBe(true);
+    });
+  });
+
+  // ── getAllReferences ───────────────────────────────────────────────────────
+
+  describe('getAllReferences', () => {
+    it('returns an array', async () => {
+      const adapter = new MockChainAdapter();
+      expect(Array.isArray(adapter.getAllReferences())).toBe(true);
+    });
+
+    it('includes a newly written reference', async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef('all1'));
+      const all = adapter.getAllReferences();
+      const found = all.find((r) => r.refId === refId);
+      expect(found).toBeDefined();
+      expect(found?.ref.storageId).toBe('store_all1');
+    });
+
+    it('includes all written references', async () => {
+      const adapter = new MockChainAdapter();
+      const r1 = await adapter.writeReference(uniqueRef('all2a'));
+      const r2 = await adapter.writeReference(uniqueRef('all2b'));
+      const all = adapter.getAllReferences();
+      expect(all.some((r) => r.refId === r1.refId)).toBe(true);
+      expect(all.some((r) => r.refId === r2.refId)).toBe(true);
+    });
+  });
+});
