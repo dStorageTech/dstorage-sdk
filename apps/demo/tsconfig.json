@@ -3,6 +3,7 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "paths": {
       "@dstorage/crypto": ["../../packages/crypto/src/index.ts"],
       "@dstorage/storage": ["../../packages/storage/src/index.ts"],
