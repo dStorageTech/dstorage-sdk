@@ -11,8 +11,14 @@ import type { PaymentAdapter } from '@dstorage/payment';
 export interface WalletInfo {
   address: string;
   chainProvider: ChainProviderName;
-  /** The raw signature used to derive the encryption key (kept in memory only) */
+  /** The raw signature (or PBKDF2 seed) used to derive the encryption key (kept in memory only) */
   _signatureHex: string;
+  /**
+   * The raw DApp Connector API object returned by the wallet.
+   * Passed through to MidnightChainAdapter so it can balance and submit transactions
+   * without re-connecting. Present only when using connectMidnightWallet().
+   */
+  walletApi?: unknown;
 }
 
 /** Configuration passed to dStorage.init() */
