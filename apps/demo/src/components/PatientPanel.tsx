@@ -125,7 +125,7 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
 
       <button className="pp-btn pp-btn-primary pp-btn-full" onClick={handleUpload}
         disabled={!selectedFile || !!loading}>
-        {loading === 'upload' ? <><Spinner /> Encrypting &amp; Storing…</> : '🔒 Encrypt &amp; Store Record'}
+        {loading === 'upload' ? <><Spinner /> Encrypting & Storing…</> : '🔒 Encrypt & Store Record'}
       </button>
     </div>
   );
@@ -136,7 +136,7 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
       <div className="pp-record-stored">
         <div className="pp-record-check">✓</div>
         <div>
-          <div className="pp-record-title">Record Stored &amp; Encrypted</div>
+          <div className="pp-record-title">Record Stored & Encrypted</div>
           <div className="pp-record-file">{record?.fileName}</div>
           <div className="pp-record-ref">Ref: {record?.chainRefId.slice(0, 28)}…</div>
         </div>
@@ -168,7 +168,7 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
       </div>
 
       <button className="pp-btn pp-btn-primary pp-btn-full" onClick={handleProve} disabled={!!loading}>
-        {loading === 'prove' ? <><Spinner /> Generating ZK Proof…</> : '⚡ Generate &amp; Send Proof'}
+        {loading === 'prove' ? <><Spinner /> Generating ZK Proof…</> : '⚡ Generate & Send Proof'}
       </button>
     </div>
   );
