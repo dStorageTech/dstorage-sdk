@@ -42,6 +42,12 @@ For terminal-only testing, `npm run demo:midnight` starts a CLI that:
 
 ---
 
+## Documentation
+
+- **[Getting Started Guide](docs/getting-started.md)** — Adapters explained, supported flows, and code examples for every use case
+
+---
+
 ## SDK Usage (3 lines to get started)
 
 ```typescript
