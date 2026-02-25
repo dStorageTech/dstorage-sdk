@@ -35,10 +35,16 @@ export interface MidnightChainAdapterConfig {
    */
   nodeEndpoint?: string;
   /**
-   * Midnight indexer (GraphQL) endpoint for state queries.
+   * Midnight indexer HTTP (GraphQL) endpoint for state queries.
    * Default: Midnight testnet-02 public indexer.
    */
   indexerEndpoint?: string;
+  /**
+   * Midnight indexer WebSocket endpoint for real-time subscriptions.
+   * Needed when using indexerPublicDataProvider for contract state queries.
+   * Example: wss://indexer.preprod.midnight.network/api/v3/graphql/ws
+   */
+  indexerWsEndpoint?: string;
   /**
    * Proof server URL.
    * Default: http://localhost:6300 (local proof server).
@@ -107,7 +113,14 @@ interface MidnightReferenceEntry {
 export class MidnightChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = 'midnight';
 
-  private readonly config: Required<MidnightChainAdapterConfig>;
+  private readonly config: {
+    nodeEndpoint: string;
+    indexerEndpoint: string;
+    indexerWsEndpoint?: string;
+    proofServerEndpoint: string;
+    contractAddress: string;
+    wallet: unknown;
+  };
 
   /** Lazily initialised contract instance */
   private contract: MidnightContract | null = null;
@@ -130,6 +143,9 @@ export class MidnightChainAdapter implements ChainAdapter {
       nodeEndpoint: config.nodeEndpoint ?? 'https://rpc.testnet-02.midnight.network',
       indexerEndpoint:
         config.indexerEndpoint ?? 'https://indexer.testnet-02.midnight.network/api/v1/graphql',
+      ...(config.indexerWsEndpoint !== undefined
+        ? { indexerWsEndpoint: config.indexerWsEndpoint }
+        : {}),
       proofServerEndpoint: config.proofServerEndpoint ?? 'http://localhost:6300',
       contractAddress: config.contractAddress,
       wallet: config.wallet,

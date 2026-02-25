@@ -10,6 +10,7 @@
   "scripts": {
     "build": "npm run build --workspace=packages/crypto && npm run build --workspace=packages/storage && npm run build --workspace=packages/chain && npm run build --workspace=packages/payment && npm run build --workspace=packages/core",
     "dev": "npm run dev --workspace=apps/demo",
+    "demo:midnight": "npm run start --workspace=apps/midnight-console",
     "example": "tsx examples/basic-flow.ts",
     "test": "vitest run",
     "test:watch": "vitest",
