@@ -6,6 +6,59 @@ Everything is imported from a single package: `@dstorage/core`.
 
 ---
 
+## SDK Architecture
+
+```mermaid
+graph TB
+    App["User Application"]
+    DS["@dstorage/core — DStorage"]
+
+    subgraph Crypto ["@dstorage/crypto"]
+        direction LR
+        Enc["encrypt / decrypt\n(AES-GCM · PBKDF2)"]
+        KD["KeyDeriver\n(mnemonic · hex seed)"]
+    end
+
+    subgraph Storage ["@dstorage/storage — StorageAdapter"]
+        direction LR
+        MS["Mock\n(memory / localStorage)"]
+        ARS["Arweave"]
+        AUS["Autonomi\n(stub)"]
+    end
+
+    subgraph Chain ["@dstorage/chain — ChainAdapter"]
+        direction LR
+        MC["Mock\n(memory)"]
+        MMC["MockMidnight\n(simulated ZK)"]
+        MCA["Midnight"]
+    end
+
+    subgraph Payment ["@dstorage/payment — PaymentAdapter (optional)"]
+        direction LR
+        MP["Mock"]
+        ARP["Arweave"]
+        MDP["Midnight"]
+    end
+
+    ArNet[("Arweave\nNetwork")]
+    MidNet[("Midnight\nNetwork")]
+
+    App -- "upload · retrieve\ngrant · revoke" --> DS
+    DS --> Crypto
+    DS --> Storage
+    DS --> Chain
+    DS --> Payment
+
+    ARS -.->|"encrypted blobs"| ArNet
+    ARP -.->|"AR token fees"| ArNet
+    MCA -.->|"ZK proofs · txs"| MidNet
+    MDP -.->|"DUST fees"| MidNet
+```
+
+Each adapter slot is independently swappable. Swap `MockStorageAdapter` for `ArweaveStorageAdapter`, or `MockChainAdapter` for `MidnightChainAdapter`, without touching your application logic.
+
+---
+
 ## Installation
 
 ```bash
@@ -220,6 +273,30 @@ The SDK signs a fixed message with the wallet, derives an AES-GCM key via PBKDF2
 
 For server-side or CLI usage, derive keys directly from a BIP-39 mnemonic or a 32/64-byte hex seed using `KeyDeriver` from `@dstorage/crypto`:
 
+```mermaid
+flowchart LR
+    M["BIP-39 Mnemonic\n(12 / 24 words)"]
+    S["Hex Seed\n(32 or 64 bytes)"]
+    KD["KeyDeriver\n(@dstorage/crypto)"]
+
+    M --> KD
+    S --> KD
+
+    KD --> EK["deriveEncryptionKey()\nAES-GCM CryptoKey"]
+    KD --> SK["deriveMidnightSigningKeys()"]
+
+    SK --> ZS["zswapSeed\n→ ShieldedWallet"]
+    SK --> DS2["dustSeed\n→ DustWallet"]
+    SK --> NE["nightExternalSeed\n→ UnshieldedWallet"]
+
+    ZS --> WF["WalletFacade\n(Midnight SDK)"]
+    DS2 --> WF
+    NE --> WF
+
+    EK --> Enc["encrypt / decrypt\ndata stored via DStorage"]
+    WF --> MidNet[("Midnight\nNetwork")]
+```
+
 ```typescript
 import { KeyDeriver } from '@dstorage/crypto';
 
@@ -235,6 +312,29 @@ See `apps/midnight-console` for a complete Node.js example that constructs a ful
 ---
 
 ## Supported Flows
+
+```mermaid
+flowchart LR
+    subgraph upload ["ds.upload(content)"]
+        direction TB
+        U1["1. encrypt\n(AES-GCM key)"]
+        U2["2. store encrypted blob\n(StorageAdapter)"]
+        U3["3. write reference + owner\n(ChainAdapter)"]
+        U4["returns dataId\n(storageId :: refId)"]
+        U1 --> U2 --> U3 --> U4
+    end
+
+    subgraph retrieve ["ds.retrieve(dataId)"]
+        direction TB
+        R1["1. read reference\n(ChainAdapter)"]
+        R2["2. fetch encrypted blob\n(StorageAdapter)"]
+        R3["3. decrypt locally\n(AES-GCM key)"]
+        R4["returns content"]
+        R1 --> R2 --> R3 --> R4
+    end
+```
+
+The encryption key is derived from the wallet signature and never leaves the device. The chain adapter holds only a reference (storage ID + owner address) — not the data itself.
 
 ### Flow 1: Upload and Retrieve
 
