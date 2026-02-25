@@ -43,6 +43,7 @@ describe('MidnightChainAdapter', () => {
     it('name is "midnight"', () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       expect(adapter.name).toBe('midnight');
@@ -50,38 +51,58 @@ describe('MidnightChainAdapter', () => {
 
     it('throws if contractAddress is not provided (empty string)', () => {
       expect(
-        () => new MidnightChainAdapter({ contractAddress: '', wallet: MOCK_WALLET })
+        () => new MidnightChainAdapter({ contractAddress: '', compiledContract: {}, wallet: MOCK_WALLET })
       ).toThrow('[dStorage/midnight] contractAddress is required');
     });
 
     it('throws with clear guidance about contractAddress', () => {
       expect(
-        () => new MidnightChainAdapter({ contractAddress: '', wallet: MOCK_WALLET })
-      ).toThrow('Deploy DataRegistry.compact to Midnight');
+        () => new MidnightChainAdapter({ contractAddress: '', compiledContract: {}, wallet: MOCK_WALLET })
+      ).toThrow('Deploy your compiled contract to Midnight');
+    });
+
+    it('throws if compiledContract is not provided (undefined)', () => {
+      expect(
+        // @ts-expect-error — intentional: testing runtime validation
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', wallet: MOCK_WALLET })
+      ).toThrow('[dStorage/midnight] compiledContract is required');
+    });
+
+    it('throws if compiledContract is null', () => {
+      expect(
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', compiledContract: null as unknown as object, wallet: MOCK_WALLET })
+      ).toThrow('[dStorage/midnight] compiledContract is required');
+    });
+
+    it('throws with guidance about compiledContract', () => {
+      expect(
+        // @ts-expect-error — intentional: testing runtime validation
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', wallet: MOCK_WALLET })
+      ).toThrow('compactc');
     });
 
     it('throws if wallet is not provided (undefined)', () => {
       expect(
         // @ts-expect-error — intentional: testing runtime validation
-        () => new MidnightChainAdapter({ contractAddress: '0xContract' })
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', compiledContract: {} })
       ).toThrow('[dStorage/midnight] wallet is required');
     });
 
     it('throws if wallet is null', () => {
       expect(
-        () => new MidnightChainAdapter({ contractAddress: '0xContract', wallet: null as unknown as object })
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', compiledContract: {}, wallet: null as unknown as object })
       ).toThrow('[dStorage/midnight] wallet is required');
     });
 
     it('throws with clear guidance about wallet', () => {
       expect(
-        () => new MidnightChainAdapter({ contractAddress: '0xContract', wallet: null as unknown as object })
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', compiledContract: {}, wallet: null as unknown as object })
       ).toThrow('connectMidnightWallet()');
     });
 
-    it('does not throw with valid contractAddress and wallet', () => {
+    it('does not throw with valid contractAddress, compiledContract, and wallet', () => {
       expect(
-        () => new MidnightChainAdapter({ contractAddress: '0xABC', wallet: MOCK_WALLET })
+        () => new MidnightChainAdapter({ contractAddress: '0xABC', compiledContract: {}, wallet: MOCK_WALLET })
       ).not.toThrow();
     });
   });
@@ -92,6 +113,7 @@ describe('MidnightChainAdapter', () => {
     it('nodeEndpoint defaults to Midnight testnet-02 URL', () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       // Access through the private config via inspection — the key behaviour is
@@ -104,6 +126,7 @@ describe('MidnightChainAdapter', () => {
       expect(
         () => new MidnightChainAdapter({
           contractAddress: '0xContract',
+          compiledContract: {},
           wallet: MOCK_WALLET,
           nodeEndpoint: 'https://custom.node.example.com',
         })
@@ -114,6 +137,7 @@ describe('MidnightChainAdapter', () => {
       expect(
         () => new MidnightChainAdapter({
           contractAddress: '0xContract',
+          compiledContract: {},
           wallet: MOCK_WALLET,
           indexerEndpoint: 'https://custom.indexer.example.com/graphql',
         })
@@ -124,6 +148,7 @@ describe('MidnightChainAdapter', () => {
       expect(
         () => new MidnightChainAdapter({
           contractAddress: '0xContract',
+          compiledContract: {},
           wallet: MOCK_WALLET,
           proofServerEndpoint: 'http://proof-server.internal:6300',
         })
@@ -138,6 +163,7 @@ describe('MidnightChainAdapter', () => {
       mockFetchReturnsNull();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       const result = await adapter.fetchIndexerContractState();
@@ -148,6 +174,7 @@ describe('MidnightChainAdapter', () => {
       mockFetchReturnsAction();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       const result = await adapter.fetchIndexerContractState();
@@ -160,6 +187,7 @@ describe('MidnightChainAdapter', () => {
       mockFetchFails();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       await expect(adapter.fetchIndexerContractState()).rejects.toThrow(
@@ -171,6 +199,7 @@ describe('MidnightChainAdapter', () => {
       mockFetchFails();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
         indexerEndpoint: 'http://localhost:8088/api/v3/graphql',
       });
@@ -180,12 +209,13 @@ describe('MidnightChainAdapter', () => {
     });
   });
 
-  // ── Runtime errors when SDK / compiled contract is not present ────────────
+  // ── Runtime errors when Midnight SDK is not installed ─────────────────────
 
-  describe('runtime behaviour without compiled contract', () => {
-    it('writeReference throws about the missing compiled ABI', async () => {
+  describe('runtime behaviour when Midnight SDK is not installed', () => {
+    it('writeReference throws about the missing SDK', async () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       await expect(
@@ -195,28 +225,14 @@ describe('MidnightChainAdapter', () => {
           owner: '0xOwner',
           createdAt: Date.now(),
         })
-      ).rejects.toThrow('compile:contract');
-    });
-
-    it('writeReference error includes rebuild hint', async () => {
-      const adapter = new MidnightChainAdapter({
-        contractAddress: '0xContract',
-        wallet: MOCK_WALLET,
-      });
-      await expect(
-        adapter.writeReference({
-          storageId: 'sid',
-          storageProvider: 'mock',
-          owner: '0xOwner',
-          createdAt: Date.now(),
-        })
-      ).rejects.toThrow('@dstorage/chain');
+      ).rejects.toThrow('midnight-js-contracts');
     });
 
     it('readReference throws "Contract not found" when indexer returns null', async () => {
       mockFetchReturnsNull();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       await expect(adapter.readReference('ref_abc')).rejects.toThrow(
@@ -228,6 +244,7 @@ describe('MidnightChainAdapter', () => {
       mockFetchReturnsNull();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xDeadBeef',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       const err = await adapter.readReference('ref_abc').catch((e: unknown) => e);
@@ -237,32 +254,35 @@ describe('MidnightChainAdapter', () => {
       expect(msg).toContain('deployed');
     });
 
-    it('readReference reports contract FOUND but mentions missing ABI when contract exists', async () => {
+    it('readReference reports contract FOUND but cannot decode when SDK is missing', async () => {
       mockFetchReturnsAction();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       await expect(adapter.readReference('ref_abc')).rejects.toThrow('Contract FOUND');
     });
 
-    it('readReference error mentions compile:contract when contract exists but ABI is missing', async () => {
+    it('readReference error mentions midnight-js-contracts when contract exists but SDK is missing', async () => {
       mockFetchReturnsAction();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
-      await expect(adapter.readReference('ref_abc')).rejects.toThrow('compile:contract');
+      await expect(adapter.readReference('ref_abc')).rejects.toThrow('midnight-js-contracts');
     });
 
-    it('grantAccess throws about the missing compiled ABI', async () => {
+    it('grantAccess throws about the missing SDK', async () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
+        compiledContract: {},
         wallet: MOCK_WALLET,
       });
       await expect(
         adapter.grantAccess({ refId: 'ref_abc', grantee: '0xBob' })
-      ).rejects.toThrow('compile:contract');
+      ).rejects.toThrow('midnight-js-contracts');
     });
   });
 });

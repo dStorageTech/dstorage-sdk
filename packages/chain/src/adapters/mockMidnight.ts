@@ -71,7 +71,14 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
   private readonly proofServer: MockProofServer;
 
-  constructor(options: { proofServerMinMs?: number; proofServerMaxMs?: number } = {}) {
+  constructor(options: {
+    proofServerMinMs?: number;
+    proofServerMaxMs?: number;
+    /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
+    compiledContract?: unknown;
+    /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
+    contractAddress?: string;
+  } = {}) {
     this.proofServer = new MockProofServer({
       ...(options.proofServerMinMs !== undefined ? { minMs: options.proofServerMinMs } : {}),
       ...(options.proofServerMaxMs !== undefined ? { maxMs: options.proofServerMaxMs } : {}),

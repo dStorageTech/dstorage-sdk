@@ -6,7 +6,7 @@
  *  2. Builds a full Midnight wallet: ShieldedWallet + DustWallet + UnshieldedWallet → WalletFacade
  *  3. Connects to the Midnight indexer and waits for wallet sync
  *  4. Checks NIGHT and DUST balances (displays funding address if empty)
- *  5. Reads a DataRegistry contract reference via MidnightChainAdapter
+ *  5. Reads a TodoList contract reference via MidnightChainAdapter
  *
  * Reference implementations:
  *   - bricktowers/midnight-local-network: src/utils.ts (wallet construction)
@@ -39,6 +39,21 @@ import {
   UnshieldedWallet,
 } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import { firstValueFrom, filter } from 'rxjs';
+
+// ── Compiled contract ─────────────────────────────────────────────────────────
+// Loaded from the compactc-generated output. Run `npm run compile:contract` first.
+// Using a dynamic import so missing output causes a clear runtime error rather
+// than a build failure.
+let compiledTodoList: object | null = null;
+try {
+  // @ts-ignore — file only exists after running compile:contract
+  const managed = await import('../contracts/managed/todoList/contract/index.js');
+  compiledTodoList = managed.Contract ?? managed.default ?? null;
+} catch (err) {
+  // Will be handled in main() with a user-friendly message.
+  // Log here so import failures (e.g. missing @midnight-ntwrk/compact-runtime) are visible.
+  console.error('[dStorage] Failed to load compiled contract:', err);
+}
 
 // ── Network defaults ───────────────────────────────────────────────────────────
 
@@ -233,8 +248,16 @@ async function main(): Promise<void> {
     }
 
     // ── 8. Contract interaction ─────────────────────────────────────────────
+    if (!compiledTodoList) {
+      throw new Error(
+        'TodoList contract is not compiled.\n' +
+        '  Run: npm run compile:contract\n' +
+        '  Then restart the demo.'
+      );
+    }
+
     const contractAddress = (
-      await rl.question('\nDataRegistry contract address on Midnight (required): ')
+      await rl.question('\nDeployed contract address on Midnight (required): ')
     ).trim();
     if (!contractAddress) {
       throw new Error('A contract address is required.');
@@ -247,6 +270,7 @@ async function main(): Promise<void> {
     console.log('\nInitialising chain adapter...');
     const chain = new MidnightChainAdapter({
       contractAddress,
+      compiledContract: compiledTodoList,
       wallet: facade,
       nodeEndpoint,
       indexerEndpoint: indexerHttp,
@@ -273,7 +297,7 @@ async function main(): Promise<void> {
         console.log(
           `\nNo contract found at "${contractAddress}".\n` +
           `  • Verify the address is correct\n` +
-          `  • Confirm DataRegistry is deployed on this network\n` +
+          `  • Confirm the contract is deployed on this network\n` +
           `  • Check you are connected to the right network (undeployed vs preprod)`
         );
       } else {

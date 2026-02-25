@@ -5,11 +5,13 @@
   "description": "Console demo for Midnight-only dStorage SDK usage with real wallet",
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "compile:contract": "compact compile contracts/todoList.compact contracts/managed/todoList"
   },
   "dependencies": {
     "@dstorage/chain": "*",
     "@dstorage/crypto": "*",
+    "@midnight-ntwrk/compact-runtime": "^0.14.0",
     "@midnight-ntwrk/ledger-v7": "7.0.0",
     "@midnight-ntwrk/midnight-js-network-id": "^3.1.0",
     "@midnight-ntwrk/wallet-sdk-address-format": "^3.0.0",
