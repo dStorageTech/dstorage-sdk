@@ -1,9 +1,42 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MidnightChainAdapter } from '../adapters/midnight.js';
 
 const MOCK_WALLET = { connect: async () => {} };
 
+// Helpers to mock the global fetch used by fetchIndexerContractState()
+function mockFetchReturnsNull(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { contractAction: null } }),
+    })
+  );
+}
+
+function mockFetchReturnsAction(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          contractAction: { address: '0xContract', state: 'deadbeef' },
+        },
+      }),
+    })
+  );
+}
+
+function mockFetchFails(): void {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+}
+
 describe('MidnightChainAdapter', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   // ── Constructor validation ─────────────────────────────────────────────────
 
   describe('constructor', () => {
@@ -98,10 +131,59 @@ describe('MidnightChainAdapter', () => {
     });
   });
 
-  // ── Runtime errors when SDK is not installed ──────────────────────────────
+  // ── fetchIndexerContractState ─────────────────────────────────────────────
 
-  describe('runtime behaviour without Midnight SDK', () => {
-    it('writeReference throws with a helpful error about the missing SDK', async () => {
+  describe('fetchIndexerContractState', () => {
+    it('returns null when the indexer has no record of the contract', async () => {
+      mockFetchReturnsNull();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xContract',
+        wallet: MOCK_WALLET,
+      });
+      const result = await adapter.fetchIndexerContractState();
+      expect(result).toBeNull();
+    });
+
+    it('returns the contract action when the indexer knows the contract', async () => {
+      mockFetchReturnsAction();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xContract',
+        wallet: MOCK_WALLET,
+      });
+      const result = await adapter.fetchIndexerContractState();
+      expect(result).not.toBeNull();
+      expect(result?.address).toBe('0xContract');
+      expect(typeof result?.state).toBe('string');
+    });
+
+    it('throws a clear error when the indexer is unreachable', async () => {
+      mockFetchFails();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xContract',
+        wallet: MOCK_WALLET,
+      });
+      await expect(adapter.fetchIndexerContractState()).rejects.toThrow(
+        'Cannot reach indexer'
+      );
+    });
+
+    it('includes the indexer URL in the error when unreachable', async () => {
+      mockFetchFails();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xContract',
+        wallet: MOCK_WALLET,
+        indexerEndpoint: 'http://localhost:8088/api/v3/graphql',
+      });
+      await expect(adapter.fetchIndexerContractState()).rejects.toThrow(
+        'localhost:8088'
+      );
+    });
+  });
+
+  // ── Runtime errors when SDK / compiled contract is not present ────────────
+
+  describe('runtime behaviour without compiled contract', () => {
+    it('writeReference throws about the missing compiled ABI', async () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
         wallet: MOCK_WALLET,
@@ -113,42 +195,74 @@ describe('MidnightChainAdapter', () => {
           owner: '0xOwner',
           createdAt: Date.now(),
         })
-      ).rejects.toThrow('@midnight-ntwrk/midnight-js-contracts');
+      ).rejects.toThrow('compile:contract');
     });
 
-    it('readReference throws with helpful error about the missing SDK', async () => {
+    it('writeReference error includes rebuild hint', async () => {
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xContract',
+        wallet: MOCK_WALLET,
+      });
+      await expect(
+        adapter.writeReference({
+          storageId: 'sid',
+          storageProvider: 'mock',
+          owner: '0xOwner',
+          createdAt: Date.now(),
+        })
+      ).rejects.toThrow('@dstorage/chain');
+    });
+
+    it('readReference throws "Contract not found" when indexer returns null', async () => {
+      mockFetchReturnsNull();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
         wallet: MOCK_WALLET,
       });
       await expect(adapter.readReference('ref_abc')).rejects.toThrow(
-        '@midnight-ntwrk/midnight-js-contracts'
+        'Contract not found'
       );
     });
 
-    it('grantAccess throws with helpful error about the missing SDK', async () => {
+    it('readReference error includes address and actionable hints when contract is missing', async () => {
+      mockFetchReturnsNull();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xDeadBeef',
+        wallet: MOCK_WALLET,
+      });
+      const err = await adapter.readReference('ref_abc').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      const msg = (err as Error).message;
+      expect(msg).toContain('0xDeadBeef');
+      expect(msg).toContain('deployed');
+    });
+
+    it('readReference reports contract FOUND but mentions missing ABI when contract exists', async () => {
+      mockFetchReturnsAction();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xContract',
+        wallet: MOCK_WALLET,
+      });
+      await expect(adapter.readReference('ref_abc')).rejects.toThrow('Contract FOUND');
+    });
+
+    it('readReference error mentions compile:contract when contract exists but ABI is missing', async () => {
+      mockFetchReturnsAction();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: '0xContract',
+        wallet: MOCK_WALLET,
+      });
+      await expect(adapter.readReference('ref_abc')).rejects.toThrow('compile:contract');
+    });
+
+    it('grantAccess throws about the missing compiled ABI', async () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
         wallet: MOCK_WALLET,
       });
       await expect(
         adapter.grantAccess({ refId: 'ref_abc', grantee: '0xBob' })
-      ).rejects.toThrow('@midnight-ntwrk/midnight-js-contracts');
-    });
-
-    it('error message includes install command hint', async () => {
-      const adapter = new MidnightChainAdapter({
-        contractAddress: '0xContract',
-        wallet: MOCK_WALLET,
-      });
-      await expect(
-        adapter.writeReference({
-          storageId: 'sid',
-          storageProvider: 'mock',
-          owner: '0xOwner',
-          createdAt: Date.now(),
-        })
-      ).rejects.toThrow('npm install');
+      ).rejects.toThrow('compile:contract');
     });
   });
 });

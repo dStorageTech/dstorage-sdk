@@ -243,11 +243,31 @@ async function main(): Promise<void> {
 
     if (refId) {
       console.log(`Querying contract state for reference "${refId}"...`);
-      const reference = await chain.readReference(refId);
+      const reference = await withTicker(
+        () => 'Querying indexer...',
+        () => chain.readReference(refId)
+      );
       console.log('Reference found:');
       console.log(JSON.stringify(reference, null, 2));
     } else {
-      console.log('\nNo reference ID provided — skipping chain read.');
+      // No refId — at least confirm the contract exists on-chain.
+      console.log('Checking contract exists on-chain...');
+      const action = await withTicker(
+        () => 'Querying indexer...',
+        () => chain.fetchIndexerContractState()
+      );
+      if (action === null) {
+        console.log(
+          `\nNo contract found at "${contractAddress}".\n` +
+          `  • Verify the address is correct\n` +
+          `  • Confirm DataRegistry is deployed on this network\n` +
+          `  • Check you are connected to the right network (undeployed vs preprod)`
+        );
+      } else {
+        const stateBytes = action.state.length / 2;
+        console.log(`Contract exists at ${action.address} (state: ${stateBytes} bytes).`);
+        console.log('Pass a reference ID to query specific data.');
+      }
     }
 
     console.log('\nDone.\n');
