@@ -105,7 +105,7 @@ const ds = new DStorage({
 });
 ```
 
-### `ArweaveStorageAdapter` 🟡 Preview
+### `ArweaveStorageAdapter` ✅ Live
 
 Uploads encrypted blobs to [Arweave](https://arweave.org) — pay once, store forever. Requires the `arweave` package and either ArConnect (browser) or a JWK wallet key (Node.js).
 
@@ -119,6 +119,7 @@ const ds = new DStorage({
 });
 
 // Node.js — pass a JWK wallet key
+import fs from 'fs';
 const ds = new DStorage({
   storageAdapter: new ArweaveStorageAdapter({
     walletKey: JSON.parse(fs.readFileSync('wallet.json', 'utf8')),
@@ -126,10 +127,21 @@ const ds = new DStorage({
   // ...
 });
 
-// Use Arweave testnet (default is mainnet)
+// Testnet (default is mainnet arweave.net)
 const ds = new DStorage({
   storageAdapter: new ArweaveStorageAdapter({
     gateway: { host: 'arweave.dev', port: 443, protocol: 'https' },
+  }),
+  // ...
+});
+
+// Advanced options
+const ds = new DStorage({
+  storageAdapter: new ArweaveStorageAdapter({
+    walletKey,
+    maxRetries:          3,       // retry failed posts up to N times (default: 3)
+    waitForConfirmation: false,   // block until tx is mined — can take 2–20 min (default: false)
+    confirmationPollMs:  30_000,  // how often to poll when waiting (default: 30 s)
   }),
   // ...
 });
@@ -137,38 +149,66 @@ const ds = new DStorage({
 
 #### Setting up for Arweave
 
-Before you can use `ArweaveStorageAdapter` in a real environment you need a wallet with AR tokens and (for browser use) the ArConnect extension. Here is everything you need:
+Before you can use `ArweaveStorageAdapter` with a real network you need a wallet with AR tokens and, for browser use, the ArConnect extension. Here is everything you need step by step.
 
-**1. Install the `arweave` package**
+---
 
-`arweave` is a peer dependency — install it alongside `@dstorage/core`:
+**Step 1 — Install the `arweave` peer dependency**
+
+`arweave` is an optional peer dependency. Install it alongside `@dstorage/core`:
 
 ```bash
 npm install arweave
 ```
 
-**2. Browser — ArConnect wallet**
+If you skip this step, the adapter will throw a clear error at runtime with the install command as a reminder.
 
-[ArConnect](https://www.arconnect.io) is the standard browser extension for Arweave wallets, similar to MetaMask for Ethereum.
+---
 
-1. Install the [ArConnect extension](https://chrome.google.com/webstore/detail/arconnect/einnioafmpimabjcddiinlhmijaionap) (Chrome / Brave / Edge) or [Firefox add-on](https://addons.mozilla.org/en-US/firefox/addon/arconnect/).
-2. Create a new wallet inside ArConnect — it will generate and securely store your JWK key.
-3. ArConnect exposes `window.arweaveWallet` once installed. `ArweaveStorageAdapter` detects it automatically; no extra config is needed.
+**Step 2 — Get a wallet**
 
-> **Testnet tip:** Switch ArConnect to **arweave.dev** (Settings → Network) while developing so you do not spend real AR tokens.
+You need an Arweave wallet to sign and pay for transactions. Choose the path that matches your environment.
 
-**3. Node.js — JWK wallet file**
+**Browser — ArConnect extension**
 
-For server-side scripts or the CLI you need a JWK (JSON Web Key) wallet file:
+[ArConnect](https://www.arconnect.io) is the standard Arweave browser wallet, equivalent to MetaMask for Ethereum. It injects `window.arweaveWallet` which the adapter detects automatically.
 
-```bash
-# Generate a new wallet with the arweave CLI (no account needed)
-npx arweave-wallet generate --output wallet.json
+1. Install from the [Chrome Web Store](https://chrome.google.com/webstore/detail/arconnect/einnioafmpimabjcddiinlhmijaionap) (Chrome / Brave / Edge) or [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/arconnect/).
+2. Open the extension and create a new wallet. ArConnect generates and stores your key securely — you never handle the raw key file in the browser.
+3. Your dApp must call `window.arweaveWallet.connect()` before the first upload to request the necessary permissions. The adapter handles this transparently, but if you want to prompt the user explicitly at startup:
+
+```typescript
+// Request permissions up front (recommended for better UX)
+await window.arweaveWallet.connect(
+  ['ACCESS_ADDRESS', 'SIGN_TRANSACTION', 'DISPATCH'],
+  { name: 'Your App Name', logo: 'https://yourapp.com/logo.png' }
+);
 ```
 
-Or export an existing wallet from ArConnect: **Settings → Wallets → Export → Save JSON**.
+> **Testnet tip:** In ArConnect, go to **Settings → Networks** and switch to `arweave.dev` while developing. This keeps test transactions completely separate from mainnet.
 
-Pass the parsed JSON to the adapter:
+---
+
+**Node.js — JWK wallet file**
+
+For server-side scripts or backend services, use a JWK (JSON Web Key) wallet file.
+
+*Option A — Generate a fresh wallet using arweave-js:*
+
+```typescript
+import Arweave from 'arweave';
+import fs from 'fs';
+
+const arweave = Arweave.init({ host: 'arweave.net', port: 443, protocol: 'https' });
+const jwk     = await arweave.wallets.generate();
+
+fs.writeFileSync('wallet.json', JSON.stringify(jwk, null, 2));
+console.log('Wallet address:', await arweave.wallets.jwkToAddress(jwk));
+```
+
+*Option B — Export from ArConnect:* Open ArConnect → **Settings → Wallets → ⋮ → Export** → save the JSON file.
+
+Pass the loaded JWK to the adapter:
 
 ```typescript
 import fs from 'fs';
@@ -178,30 +218,42 @@ const walletKey = JSON.parse(fs.readFileSync('wallet.json', 'utf8'));
 const adapter   = new ArweaveStorageAdapter({ walletKey });
 ```
 
-> ⚠️ Never commit `wallet.json` to version control. Add it to `.gitignore`.
+> ⚠️ **Never commit `wallet.json` to version control.** Add it to `.gitignore` immediately:
+> ```
+> echo "wallet.json" >> .gitignore
+> ```
 
-**4. Get AR tokens**
+---
+
+**Step 3 — Fund your wallet with AR tokens**
+
+Arweave transactions require AR tokens to pay for permanent storage. The cost is tiny — typically fractions of a cent per KB — but the wallet must have a non-zero balance.
 
 | Environment | How to get AR |
 |-------------|---------------|
-| **Testnet** (`arweave.dev`) | Use the [Arweave faucet](https://faucet.arweave.net) — paste your wallet address and receive free test AR. |
-| **Mainnet** (`arweave.net`) | Purchase AR on a centralised exchange (Binance, Coinbase, KuCoin) or a DEX (Uniswap via the AR bridge), then withdraw to your wallet address. |
+| **Testnet** (`arweave.dev`) | Use the free [Arweave faucet](https://faucet.arweave.net) — paste your wallet address and receive test AR instantly. |
+| **Mainnet** (`arweave.net`) | Buy AR on a centralised exchange (Binance, Coinbase, KuCoin) or a DEX, then withdraw to your wallet address. |
 
-Check your balance at any time:
+Check your balance before uploading:
 
 ```typescript
 import Arweave from 'arweave';
+import fs from 'fs';
 
 const arweave  = Arweave.init({ host: 'arweave.net', port: 443, protocol: 'https' });
-const address  = await arweave.wallets.jwkToAddress(walletKey);
+const jwk      = JSON.parse(fs.readFileSync('wallet.json', 'utf8'));
+const address  = await arweave.wallets.jwkToAddress(jwk);
 const winstons = await arweave.wallets.getBalance(address);
-const ar       = arweave.ar.winstonToAr(winstons);
-console.log(`Balance: ${ar} AR`);
+
+console.log(`Address: ${address}`);
+console.log(`Balance: ${arweave.ar.winstonToAr(winstons)} AR`);
 ```
 
-**5. Cost estimation before uploading**
+---
 
-`ArweaveStorageAdapter` runs a pre-flight cost check before every upload and returns the estimated cost in the `UploadResult`. You can also estimate independently:
+**Step 4 — Estimate cost before uploading**
+
+`ArweaveStorageAdapter` fetches the current network fee from Arweave's oracle before every upload and includes it in the `UploadResult.cost` field. You can also estimate without committing:
 
 ```typescript
 import { DStorage, ArweaveStorageAdapter, MockChainAdapter } from '@dstorage/core';
@@ -211,19 +263,47 @@ const ds = new DStorage({
   chainAdapter:   new MockChainAdapter(),
 });
 
+await ds.connect(walletInfo);
+
+// Returns a human-readable string, e.g. "~0.00000312 AR"
 const estimate = await ds.estimateCost('My private content');
-console.log(`Estimated storage cost: ${estimate.storageCost.amount} ${estimate.storageCost.token}`);
+console.log(`Estimated storage cost: ${estimate}`);
 ```
 
-**6. Switching from mock → Arweave (one-line change)**
+---
+
+**Step 5 — Switch from mock to Arweave (one-line change)**
+
+The adapter pattern means swapping from development to production is a single line change:
 
 ```typescript
-// Development
+// Development — no network, no tokens needed
 storageAdapter: new MockStorageAdapter()
 
-// Production — swap in one line, everything else stays the same
+// Production — drop-in replacement, zero application code changes
 storageAdapter: new ArweaveStorageAdapter({ walletKey })
 ```
+
+---
+
+**Transaction lifecycle**
+
+Arweave transactions are **optimistic** — a `202 Accepted` response means the gateway received the transaction, not that it is confirmed on-chain. Confirmation (block inclusion) typically takes **2–20 minutes**.
+
+By default `ArweaveStorageAdapter` returns immediately after the gateway accepts the transaction. Set `waitForConfirmation: true` to block until the block height is available:
+
+```typescript
+const adapter = new ArweaveStorageAdapter({
+  walletKey,
+  waitForConfirmation:   true,
+  confirmationPollMs:    30_000,   // check every 30 s
+  confirmationTimeoutMs: 1_200_000 // give up after 20 min
+});
+```
+
+If you need to track a transaction's status independently, use its `id` (the Arweave txId returned in `UploadResult`) at [viewblock.io/arweave](https://viewblock.io/arweave).
+
+> **Security note:** The `storageId` (Arweave txId) returned in `UploadResult` is **publicly visible** on the Arweave network. Anyone who knows the txId can download the blob. Data confidentiality relies entirely on the AES-GCM encryption applied by `@dstorage/crypto` before the data reaches this adapter — do not expose txIds to untrusted parties.
 
 ---
 
