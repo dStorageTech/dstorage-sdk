@@ -2,7 +2,7 @@
  * dStorage Midnight Console Demo
  *
  * A real working CLI that:
- *  1. Accepts a BIP-39 mnemonic (or 64-byte hex seed) and derives Midnight wallet keys
+ *  1. Accepts a BIP-39 mnemonic (or 32/64-byte hex seed) and derives Midnight wallet keys
  *  2. Builds a full Midnight wallet: ShieldedWallet + DustWallet + UnshieldedWallet → WalletFacade
  *  3. Connects to the Midnight indexer and waits for wallet sync
  *  4. Checks NIGHT and DUST balances (displays funding address if empty)
@@ -77,7 +77,7 @@ async function withTicker<T>(statusLine: () => string, fn: () => Promise<T>): Pr
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const rl = createInterface({ input, output });
+  let rl = createInterface({ input, output });
   let facade: WalletFacade | undefined;
 
   try {
@@ -112,17 +112,30 @@ async function main(): Promise<void> {
       defaults.proofServer;
 
     // ── 3. Mnemonic or hex seed ─────────────────────────────────────────────
-    console.log('\nEnter your BIP-39 mnemonic phrase (12 or 24 words) or a 64-byte hex seed.');
+    console.log('\nEnter your BIP-39 mnemonic phrase (12 or 24 words) or a hex seed (64 or 128 hex chars).');
+
+    // Close readline BEFORE entering raw mode so that rl's stdin listener
+    // doesn't conflict with promptSecret's direct stdin.setRawMode() use.
+    rl.close();
     const seedInput = await promptSecret('Mnemonic / hex seed: ');
+    // Recreate readline with a clean stdin state.
+    rl = createInterface({ input, output });
+    process.stdout.write('\n'); // ensure terminal is on a fresh line after raw-mode input
+
     if (!seedInput) {
       throw new Error('Mnemonic or seed is required.');
     }
 
-    // Detect hex seed vs mnemonic
-    const isHex = /^[0-9a-fA-F]{128}$/.test(seedInput.trim());
-    const deriver = isHex
-      ? new KeyDeriver({ seedHex: seedInput.trim() })
-      : new KeyDeriver({ mnemonic: seedInput.trim() });
+    // Detect hex seed vs mnemonic.
+    // Accept both 64-char (32-byte) and 128-char (64-byte) hex strings.
+    // Short seeds are left-padded with zeros to reach the required 64 bytes.
+    const trimmed = seedInput.trim();
+    const isHex64 = /^[0-9a-fA-F]{64}$/.test(trimmed);
+    const isHex128 = /^[0-9a-fA-F]{128}$/.test(trimmed);
+    const hexSeed = isHex64 ? trimmed.padStart(128, '0') : trimmed;
+    const deriver = (isHex64 || isHex128)
+      ? new KeyDeriver({ seedHex: hexSeed })
+      : new KeyDeriver({ mnemonic: trimmed });
 
     console.log('\nDeriving Midnight signing keys...');
     const { zswapSeed, dustSeed, nightExternalSeed } = await deriver.deriveMidnightSigningKeys();
