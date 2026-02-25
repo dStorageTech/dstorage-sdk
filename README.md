@@ -14,6 +14,12 @@ Instead of dApps collecting and storing user data on centralised servers, dStora
 
 Privacy becomes an **architectural guarantee**, not a compliance promise.
 
+Most applications store user data on servers they control. That means users have to trust that the service provider won't read, sell, or lose their data — and history shows that trust is often misplaced. dStorage takes a different approach: data is encrypted on the user's device before it ever leaves, stored on a decentralised network where no single party has control, and a tamper-proof on-chain record ties the data back to its owner. The service provider never sees the plaintext. Neither does anyone else.
+
+The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from their wallet — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Autonomi, or a mock for development). A lightweight reference — just a storage ID and the owner's address — is then written to a blockchain, giving the owner a permanent, verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob, decrypt it locally. At no point does any server hold an unencrypted copy.
+
+For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, connect a wallet, and call `upload` and `retrieve`. Access control — granting or revoking read permissions for other addresses — is a single method call. You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in real adapters for production when you are ready. If you are building on Midnight specifically, there is built-in support for ZK proof generation, DUST fee handling, and full wallet construction from a seed phrase.
+
 ---
 
 ## Quick Start
