@@ -62,13 +62,13 @@ const NETWORKS = {
     node: 'wss://rpc.preprod.midnight.network',
     indexerHttp: 'https://indexer.preprod.midnight.network/api/v3/graphql',
     indexerWs: 'wss://indexer.preprod.midnight.network/api/v3/graphql/ws',
-    proofServer: 'http://localhost:6300',
+    proofServer: 'http://127.0.0.1:6300',
   },
   undeployed: {
-    node: 'ws://localhost:9944',
-    indexerHttp: 'http://localhost:8088/api/v3/graphql',
-    indexerWs: 'ws://localhost:8088/api/v3/graphql/ws',
-    proofServer: 'http://localhost:6300',
+    node: 'ws://127.0.0.1:9944',
+    indexerHttp: 'http://127.0.0.1:8088/api/v3/graphql',
+    indexerWs: 'ws://127.0.0.1:8088/api/v3/graphql/ws',
+    proofServer: 'http://127.0.0.1:6300',
   },
 } as const;
 
@@ -143,13 +143,11 @@ async function main(): Promise<void> {
 
     // Detect hex seed vs mnemonic.
     // Accept both 64-char (32-byte) and 128-char (64-byte) hex strings.
-    // Short seeds are left-padded with zeros to reach the required 64 bytes.
     const trimmed = seedInput.trim();
     const isHex64 = /^[0-9a-fA-F]{64}$/.test(trimmed);
     const isHex128 = /^[0-9a-fA-F]{128}$/.test(trimmed);
-    const hexSeed = isHex64 ? trimmed.padStart(128, '0') : trimmed;
     const deriver = (isHex64 || isHex128)
-      ? new KeyDeriver({ seedHex: hexSeed })
+      ? new KeyDeriver({ seedHex: trimmed })
       : new KeyDeriver({ mnemonic: trimmed });
 
     console.log('\nDeriving Midnight signing keys...');

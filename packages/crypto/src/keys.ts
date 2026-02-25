@@ -41,7 +41,7 @@ export interface MidnightSigningKeys {
 
 /**
  * Derives encryption and blockchain signing keys from a BIP-39 mnemonic or
- * a raw 64-byte hex seed.
+ * a raw 32-byte or 64-byte hex seed.
  *
  * For Midnight signing keys, @midnight-ntwrk/wallet-sdk-hd must be installed
  * (optional peer dependency — dynamically imported on demand).
@@ -60,8 +60,8 @@ export class KeyDeriver {
   private async getSeedBuffer(): Promise<Uint8Array> {
     if (this.input.seedHex) {
       const bytes = hexToBytes(this.input.seedHex);
-      if (bytes.length !== 64) {
-        throw new Error('[dStorage/crypto] seedHex must be exactly 64 bytes (128 hex chars).');
+      if (bytes.length !== 32 && bytes.length !== 64) {
+        throw new Error('[dStorage/crypto] seedHex must be 32 bytes (64 hex chars) or 64 bytes (128 hex chars).');
       }
       return bytes;
     }
