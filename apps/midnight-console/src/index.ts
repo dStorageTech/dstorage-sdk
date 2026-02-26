@@ -27,8 +27,13 @@ import { KeyDeriver } from '@dstorage/crypto';
 import { MidnightChainAdapter } from '@dstorage/chain';
 
 import * as ledger from '@midnight-ntwrk/ledger-v7';
-import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import {
+  DustAddress,
+  ShieldedAddress,
+  ShieldedCoinPublicKey,
+  ShieldedEncryptionPublicKey,
+} from '@midnight-ntwrk/wallet-sdk-address-format';
 import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
 import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
@@ -100,8 +105,8 @@ async function main(): Promise<void> {
 
     // ── 1. Network selection ────────────────────────────────────────────────
     const networkInput =
-      (await rl.question('Midnight network [preprod / undeployed, default: undeployed]: ')).trim() ||
-      'undeployed';
+      (await rl.question('Midnight network [preprod / undeployed, default: preprod]: ')).trim() ||
+      'preprod';
     if (networkInput !== 'preprod' && networkInput !== 'undeployed') {
       throw new Error(`Unknown network "${networkInput}". Choose preprod or undeployed.`);
     }
@@ -194,16 +199,19 @@ async function main(): Promise<void> {
     console.log('Wallet started.');
 
     // ── 5. Display addresses ────────────────────────────────────────────────
-    const initialState = await firstValueFrom(facade.state());
-    const unshieldedAddr = UnshieldedAddress.codec.encode(
-      getNetworkId(),
-      initialState.unshielded.address ?? unshieldedKeystore
-    );
+    // Derive all three addresses directly from the keys — no sync needed.
+    const unshieldedAddr = unshieldedKeystore.getBech32Address().toString();
+    const cpk = ShieldedCoinPublicKey.fromHexString(shieldedSecretKeys.coinPublicKey);
+    const epk = ShieldedEncryptionPublicKey.fromHexString(shieldedSecretKeys.encryptionPublicKey);
+    const shieldedAddr = ShieldedAddress.codec
+      .encode(networkId, new ShieldedAddress(cpk, epk))
+      .toString();
+    const dustAddr = DustAddress.encodePublicKey(networkId, dustSecretKey.publicKey);
+
     console.log('\nWallet addresses:');
     console.log(`  Unshielded: ${unshieldedAddr}`);
-    console.log(
-      `  Shielded:   (available after sync — check wallet state for bech32m address)`
-    );
+    console.log(`  Shielded:   ${shieldedAddr}`);
+    console.log(`  Dust:       ${dustAddr}`);
 
     // ── 6. Wait for sync ────────────────────────────────────────────────────
     console.log('\nSyncing wallet with indexer...');

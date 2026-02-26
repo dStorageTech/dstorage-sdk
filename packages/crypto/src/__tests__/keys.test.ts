@@ -156,7 +156,7 @@ describe('deriveKeyFromSignature', () => {
 // Reference: counter-cli uses HDWallet.fromSeed(Buffer.from(seed, 'hex'))
 // with the raw 32 bytes — our KeyDeriver must do the same (no padding).
 
-describe('KeyDeriver — Midnight address derivation', () => {
+describe('KeyDeriver — Midnight address derivation (hex seed)', () => {
   // 32 bytes (64 hex chars) — the shortest valid HD-wallet seed
   const SEED_HEX = '0000000000000000000000000000000000000000000000000000000000000001';
 
@@ -229,6 +229,86 @@ describe('KeyDeriver — Midnight address derivation', () => {
       const { dust } = deriveAddresses('preprod');
       expect(dust).toBe(
         'mn_dust_preprod1w0l54txthpu8q05j9j9ttk3j5dyu5766dc9zkz2s435vdglzwdr35mk3d8y'
+      );
+    });
+  });
+});
+
+// ── KeyDeriver — Midnight address derivation (BIP-39 mnemonic) ───────────────
+// Verifies that a known BIP-39 mnemonic produces the expected on-chain
+// addresses on the `undeployed` (local) network.
+
+describe('KeyDeriver — Midnight address derivation (mnemonic)', () => {
+  const MNEMONIC =
+    'credit pool deputy saddle drama govern plug cradle today skate wise like ' +
+    'bronze tackle normal split panel rabbit soldier join dragon dwarf foil humor';
+
+  let zswapSeed: Uint8Array;
+  let dustSeed: Uint8Array;
+  let nightExternalSeed: Uint8Array;
+
+  beforeAll(async () => {
+    const deriver = new KeyDeriver({ mnemonic: MNEMONIC });
+    ({ zswapSeed, dustSeed, nightExternalSeed } = await deriver.deriveMidnightSigningKeys());
+  });
+
+  /** Derive all three wallet addresses for a given network. */
+  function deriveAddresses(networkId: string) {
+    const zswapKeys = ZswapSecretKeys.fromSeed(zswapSeed);
+    const cpk = ShieldedCoinPublicKey.fromHexString(zswapKeys.coinPublicKey);
+    const epk = ShieldedEncryptionPublicKey.fromHexString(zswapKeys.encryptionPublicKey);
+    const shielded = ShieldedAddress.codec.encode(networkId, new ShieldedAddress(cpk, epk)).toString();
+
+    const unshielded = createKeystore(nightExternalSeed, networkId).getBech32Address().toString();
+
+    const dustKey = DustSecretKey.fromSeed(dustSeed);
+    const dust = DustAddress.encodePublicKey(networkId, dustKey.publicKey);
+
+    return { shielded, unshielded, dust };
+  }
+
+  describe('undeployed network', () => {
+    it('derives the correct shielded (ZSwap) address', () => {
+      const { shielded } = deriveAddresses('undeployed');
+      expect(shielded).toBe(
+        'mn_shield-addr_undeployed10trfltvgae9xaxpgtn9c0xzgzmnewv9gk4sclu6dt8ekhhrf769k0fy42dv28mqp92fegsvkckl8fjhkrdkfnknll0wtylar2hutn5g68cl0r'
+      );
+    });
+
+    it('derives the correct unshielded address', () => {
+      const { unshielded } = deriveAddresses('undeployed');
+      expect(unshielded).toBe(
+        'mn_addr_undeployed1ahmwmhjj8y343d5glctv2pnaypt2n843euygr85dt7hqvuzcx30scpjkas'
+      );
+    });
+
+    it('derives the correct dust address', () => {
+      const { dust } = deriveAddresses('undeployed');
+      expect(dust).toBe(
+        'mn_dust_undeployed1wva2ns5xumx9597drc3cr408hwyjgpaetwktuklq0fq38ydgxlryvh0aetl'
+      );
+    });
+  });
+
+  describe('preprod network', () => {
+    it('derives the correct shielded (ZSwap) address', () => {
+      const { shielded } = deriveAddresses('preprod');
+      expect(shielded).toBe(
+        'mn_shield-addr_preprod10trfltvgae9xaxpgtn9c0xzgzmnewv9gk4sclu6dt8ekhhrf769k0fy42dv28mqp92fegsvkckl8fjhkrdkfnknll0wtylar2hutn5grrtxnt'
+      );
+    });
+
+    it('derives the correct unshielded address', () => {
+      const { unshielded } = deriveAddresses('preprod');
+      expect(unshielded).toBe(
+        'mn_addr_preprod1ahmwmhjj8y343d5glctv2pnaypt2n843euygr85dt7hqvuzcx30sz6ggvp'
+      );
+    });
+
+    it('derives the correct dust address', () => {
+      const { dust } = deriveAddresses('preprod');
+      expect(dust).toBe(
+        'mn_dust_preprod1wva2ns5xumx9597drc3cr408hwyjgpaetwktuklq0fq38ydgxlryvphj3rl'
       );
     });
   });
