@@ -1,14 +1,18 @@
 import type { MetaTxProgress, ZkProofProgress } from '@dstorage/core';
+import type { StorageAdapterKey } from '../App.tsx';
+import { ADAPTER_CONFIGS } from '../App.tsx';
 
 interface Props {
   open: boolean;
   mode: 'metatx' | 'zkproof';
   metaTxProgress: MetaTxProgress | null;
   zkProgress: ZkProofProgress | null;
+  storageAdapterKey: StorageAdapterKey;
   onToggle: () => void;
 }
 
-export function SdkDrawer({ open, mode, metaTxProgress, zkProgress, onToggle }: Props) {
+export function SdkDrawer({ open, mode, metaTxProgress, zkProgress, storageAdapterKey, onToggle }: Props) {
+  const storageAdapter = ADAPTER_CONFIGS[storageAdapterKey];
   const hasActivity = !!(metaTxProgress || zkProgress);
 
   return (
@@ -39,9 +43,24 @@ export function SdkDrawer({ open, mode, metaTxProgress, zkProgress, onToggle }: 
           <ZkProofView progress={zkProgress} />
         )}
         {!hasActivity && (
-          <div className="sdk-empty">
-            <span className="sdk-empty-icon">⛓</span>
-            <span>SDK activity will appear here when transactions run</span>
+          <div className="sdk-idle">
+            <div className="sdk-idle-config">
+              <div className="sdk-idle-title">Active configuration</div>
+              <div className="sdk-idle-row">
+                <span className="sdk-idle-label">Storage</span>
+                <span className={`as-badge as-badge-${storageAdapter.status}`}>{storageAdapter.label}</span>
+                <span className="sdk-idle-desc">{storageAdapter.description}</span>
+              </div>
+              <div className="sdk-idle-row">
+                <span className="sdk-idle-label">Chain</span>
+                <span className="as-badge as-badge-live">MockMidnight</span>
+                <span className="sdk-idle-desc">Simulated ZK proof flow, no network</span>
+              </div>
+            </div>
+            <div className="sdk-idle-hint">
+              <span className="sdk-idle-hint-icon">⛓</span>
+              <span>SDK transaction activity will appear here when you upload or prove</span>
+            </div>
           </div>
         )}
       </div>

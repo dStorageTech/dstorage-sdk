@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import {
-  DStorage, MockStorageAdapter, MockMidnightChainAdapter,
+  DStorage,
+  MockStorageAdapter, ArweaveStorageAdapter, AutonomiStorageAdapter,
+  MockMidnightChainAdapter,
   connectMetaMask, connectDemoWallet,
   INSURANCE_CLAIMS,
   simulateZkProof,
@@ -12,6 +14,32 @@ import { SdkDrawer } from './components/SdkDrawer.tsx';
 
 export type AppStep = 'connect' | 'upload' | 'prove' | 'done';
 export interface StoredRecord { dataId: string; fileName: string; uploadedAt: number; chainRefId: string; }
+
+export type StorageAdapterKey = 'mock' | 'arweave' | 'autonomi';
+
+export const ADAPTER_CONFIGS: Record<StorageAdapterKey, {
+  label: string;
+  description: string;
+  status: 'live' | 'preview' | 'stub';
+  note?: string;
+}> = {
+  mock: {
+    label: 'Mock',
+    description: 'In-memory store, no network. Instant — ideal for development.',
+    status: 'live',
+  },
+  arweave: {
+    label: 'Arweave',
+    description: 'Pay-once permanent storage on the permaweb.',
+    status: 'preview',
+    note: 'Requires the ArConnect browser extension',
+  },
+  autonomi: {
+    label: 'Autonomi',
+    description: 'Self-encrypting decentralised network. Memory-backed in this preview.',
+    status: 'stub',
+  },
+};
 
 export default function App() {
   const [wallet, setWallet]       = useState<WalletInfo | null>(null);
@@ -25,15 +53,19 @@ export default function App() {
   const [metaTxProgress, setMetaTxProgress] = useState<MetaTxProgress | null>(null);
   const [zkProgress, setZkProgress]         = useState<ZkProofProgress | null>(null);
   const [drawerMode, setDrawerMode]         = useState<'metatx' | 'zkproof'>('metatx');
+  const [storageAdapterKey, setStorageAdapterKey] = useState<StorageAdapterKey>('mock');
 
-  const buildSDK = useCallback(() => new DStorage({
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockMidnightChainAdapter(),
-  }), []);
+  const buildSDK = useCallback((key: StorageAdapterKey) => {
+    const storageAdapter =
+      key === 'arweave'  ? new ArweaveStorageAdapter() :
+      key === 'autonomi' ? new AutonomiStorageAdapter() :
+      new MockStorageAdapter();
+    return new DStorage({ storageAdapter, chainAdapter: new MockMidnightChainAdapter() });
+  }, []);
 
   const handleConnect = async (mode: 'metamask' | 'demo') => {
     const w = mode === 'metamask' ? await connectMetaMask() : await connectDemoWallet();
-    const sdk = buildSDK();
+    const sdk = buildSDK(storageAdapterKey);
     await sdk.connect(w);
     setWallet(w); setDStorage(sdk); setStep('upload');
   };
@@ -94,6 +126,8 @@ export default function App() {
         <div className="hv-panel hv-patient">
           <div className="hv-panel-label"><span>👤</span> Patient</div>
           <PatientPanel step={step} wallet={wallet} record={record}
+            storageAdapterKey={storageAdapterKey}
+            onStorageAdapterChange={setStorageAdapterKey}
             onConnect={handleConnect} onUpload={handleUpload} onGenerateProof={handleGenerateProof} />
         </div>
         <div className="hv-divider">
@@ -106,7 +140,8 @@ export default function App() {
       </main>
 
       <SdkDrawer open={drawerOpen} mode={drawerMode} metaTxProgress={metaTxProgress}
-        zkProgress={zkProgress} onToggle={() => setDrawerOpen(o => !o)} />
+        zkProgress={zkProgress} storageAdapterKey={storageAdapterKey}
+        onToggle={() => setDrawerOpen(o => !o)} />
     </div>
   );
 }

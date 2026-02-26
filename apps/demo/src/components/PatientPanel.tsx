@@ -1,23 +1,29 @@
 import { useState } from 'react';
 import { validateFile, INSURANCE_CLAIMS } from '@dstorage/core';
 import type { WalletInfo } from '@dstorage/core';
-import type { AppStep, StoredRecord } from '../App.tsx';
+import type { AppStep, StoredRecord, StorageAdapterKey } from '../App.tsx';
+import { ADAPTER_CONFIGS } from '../App.tsx';
 
 interface Props {
   step: AppStep;
   wallet: WalletInfo | null;
   record: StoredRecord | null;
+  storageAdapterKey: StorageAdapterKey;
+  onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onConnect: (mode: 'metamask' | 'demo') => Promise<void>;
   onUpload: (file: File) => Promise<void>;
   onGenerateProof: (claimId: string) => Promise<void>;
 }
 
-export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGenerateProof }: Props) {
+export function PatientPanel({ step, wallet, record, storageAdapterKey, onStorageAdapterChange, onConnect, onUpload, onGenerateProof }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedClaim, setSelectedClaim] = useState(INSURANCE_CLAIMS[0]!.id);
+
+  const activeAdapter = ADAPTER_CONFIGS[storageAdapterKey];
 
   const handleConnect = async (mode: 'metamask' | 'demo') => {
     setLoading('connect');
@@ -33,7 +39,14 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
   const handleUpload = async () => {
     if (!selectedFile) return;
     setLoading('upload');
-    try { await onUpload(selectedFile); } finally { setLoading(null); }
+    setUploadError(null);
+    try {
+      await onUpload(selectedFile);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed. Check your storage adapter configuration.');
+    } finally {
+      setLoading(null);
+    }
   };
 
   const handleProve = async () => {
@@ -53,6 +66,32 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
           without ever sharing your personal details.
         </p>
       </div>
+
+      <div className="as-picker">
+        <div className="as-picker-label">Storage Backend</div>
+        <div className="as-cards">
+          {(Object.entries(ADAPTER_CONFIGS) as [StorageAdapterKey, typeof ADAPTER_CONFIGS[StorageAdapterKey]][]).map(([key, cfg]) => (
+            <button
+              key={key}
+              className={`as-card ${storageAdapterKey === key ? 'selected' : ''}`}
+              onClick={() => onStorageAdapterChange(key)}
+            >
+              <div className="as-card-top">
+                <span className="as-card-name">{cfg.label}</span>
+                <span className={`as-card-status as-status-${cfg.status}`}>
+                  {cfg.status === 'live' ? 'Live' : cfg.status === 'preview' ? 'Preview' : 'Soon'}
+                </span>
+              </div>
+              <div className="as-card-desc">{cfg.description}</div>
+              {cfg.note && <div className="as-card-note">{cfg.note}</div>}
+            </button>
+          ))}
+        </div>
+        <div className="as-picker-hint">
+          Swap the storage backend with one line of code — the SDK handles the rest.
+        </div>
+      </div>
+
       <div className="pp-connect-btns">
         <button className="pp-btn pp-btn-primary" onClick={() => handleConnect('metamask')} disabled={!!loading}>
           {loading === 'connect' ? <Spinner /> : '🦊'} Connect MetaMask
@@ -75,6 +114,12 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
         <div className="pp-wallet-dot" />
         <span className="pp-wallet-addr">{wallet?.address.slice(0, 14)}…{wallet?.address.slice(-6)}</span>
         <span className="pp-wallet-label">Connected</span>
+      </div>
+
+      <div className="as-active-row">
+        <span className="as-active-label">Storage</span>
+        <span className={`as-badge as-badge-${activeAdapter.status}`}>{activeAdapter.label}</span>
+        <span className="as-active-desc">{activeAdapter.description}</span>
       </div>
 
       <h3 className="pp-step-title">Upload Your Insurance Card</h3>
@@ -110,7 +155,8 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
           </div>
         )}
       </div>
-      {fileError && <div className="pp-error">{fileError}</div>}
+      {fileError   && <div className="pp-error">{fileError}</div>}
+      {uploadError && <div className="pp-error">{uploadError}</div>}
 
       <div className="pp-encrypt-note">
         <div className="pp-encrypt-steps">
@@ -183,7 +229,13 @@ export function PatientPanel({ step, wallet, record, onConnect, onUpload, onGene
       </div>
       <div className="pp-privacy-guarantee">
         <div className="pp-pg-row"><span className="pp-pg-icon">🔒</span><span>Encryption key never left your device</span></div>
-        <div className="pp-pg-row"><span className="pp-pg-icon">📦</span><span>Raw record stored encrypted on Midnight / Arweave</span></div>
+        <div className="pp-pg-row">
+          <span className="pp-pg-icon">📦</span>
+          <span>
+            Encrypted blob stored via <strong>{activeAdapter.label}</strong> adapter
+            {' '}<span className={`as-badge as-badge-${activeAdapter.status}`} style={{ fontSize: '10px' }}>{activeAdapter.status === 'live' ? 'Live' : activeAdapter.status === 'preview' ? 'Preview' : 'Soon'}</span>
+          </span>
+        </div>
         <div className="pp-pg-row"><span className="pp-pg-icon">⚡</span><span>Only a ZK commitment was shared — zero personal data</span></div>
         <div className="pp-pg-row"><span className="pp-pg-icon">⛓</span><span>Proof committed on-chain and verifiable by any party</span></div>
       </div>
