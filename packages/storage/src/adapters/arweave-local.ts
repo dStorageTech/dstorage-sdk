@@ -36,9 +36,9 @@
  *   ArweaveLocalError          — typed error thrown by helper methods
  */
 
-import { ArweaveStorageAdapter } from './adapters/arweave.js';
-import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from './adapters/arweave.js';
-import type { StorageProviderName, UploadResult } from './types.js';
+import { ArweaveStorageAdapter } from './arweave.js';
+import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from './arweave.js';
+import type { StorageProviderName, UploadResult } from '../types.js';
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 

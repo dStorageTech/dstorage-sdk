@@ -13,7 +13,7 @@ import {
   ARWEAVE_MAINNET,
   ARWEAVE_LOCAL,
   arlocalGateway,
-} from '../arweave-local.js';
+} from '../adapters/arweave-local.js';
 
 // ── arweave-js mock ───────────────────────────────────────────────────────────
 

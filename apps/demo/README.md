@@ -22,6 +22,7 @@ Before connecting your wallet, the demo lets you pick a storage backend:
 | Adapter | Status | What it does |
 |---|---|---|
 | **Mock** | Live | Stores encrypted blobs in memory — no network, instant |
+| **Arweave Local** | Live | Real Arweave transaction flow against a local [arlocal](https://github.com/textury/arlocal) node — no AR tokens needed |
 | **Arweave** | Preview | Uploads to the Arweave permaweb (requires ArConnect extension) |
 | **Autonomi** | Stub | Autonomi network — memory-backed until JS SDK is stable |
 
@@ -30,6 +31,10 @@ Switching between them is a single line change in application code:
 ```typescript
 // Mock — for development
 storageAdapter: new MockStorageAdapter()
+
+// Arweave Local — integration testing with a local arlocal node
+// Start: npx arlocal
+storageAdapter: new ArweaveLocalStorageAdapter()
 
 // Arweave — pay-once permanent storage
 storageAdapter: new ArweaveStorageAdapter()

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   DStorage,
-  MockStorageAdapter, ArweaveStorageAdapter, AutonomiStorageAdapter,
+  MockStorageAdapter, ArweaveStorageAdapter, ArweaveLocalStorageAdapter, AutonomiStorageAdapter,
   MockMidnightChainAdapter,
   connectMetaMask, connectDemoWallet,
   INSURANCE_CLAIMS,
@@ -15,7 +15,7 @@ import { SdkDrawer } from './components/SdkDrawer.tsx';
 export type AppStep = 'connect' | 'upload' | 'prove' | 'done';
 export interface StoredRecord { dataId: string; fileName: string; uploadedAt: number; chainRefId: string; }
 
-export type StorageAdapterKey = 'mock' | 'arweave' | 'autonomi';
+export type StorageAdapterKey = 'mock' | 'arweave-local' | 'arweave' | 'autonomi';
 
 export const ADAPTER_CONFIGS: Record<StorageAdapterKey, {
   label: string;
@@ -27,6 +27,12 @@ export const ADAPTER_CONFIGS: Record<StorageAdapterKey, {
     label: 'Mock',
     description: 'In-memory store, no network. Instant — ideal for development.',
     status: 'live',
+  },
+  'arweave-local': {
+    label: 'Arweave Local',
+    description: 'Local arlocal node — real Arweave flow, no AR tokens needed.',
+    status: 'live',
+    note: 'Run: npx arlocal  (default port 1984)',
   },
   arweave: {
     label: 'Arweave',
@@ -57,8 +63,9 @@ export default function App() {
 
   const buildSDK = useCallback((key: StorageAdapterKey) => {
     const storageAdapter =
-      key === 'arweave'  ? new ArweaveStorageAdapter() :
-      key === 'autonomi' ? new AutonomiStorageAdapter() :
+      key === 'arweave-local' ? new ArweaveLocalStorageAdapter() :
+      key === 'arweave'       ? new ArweaveStorageAdapter() :
+      key === 'autonomi'      ? new AutonomiStorageAdapter() :
       new MockStorageAdapter();
     return new DStorage({ storageAdapter, chainAdapter: new MockMidnightChainAdapter() });
   }, []);
