@@ -32,7 +32,7 @@ export const ADAPTER_CONFIGS: Record<StorageAdapterKey, {
     label: 'Arweave Local',
     description: 'Local arlocal node — real Arweave flow, no AR tokens needed.',
     status: 'live',
-    note: 'Run: npx arlocal  (default port 1984)',
+    note: 'docker run -d --rm -p 1984:1984 textury/arlocal  (or: npx arlocal)',
   },
   arweave: {
     label: 'Arweave',

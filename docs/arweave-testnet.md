@@ -28,33 +28,47 @@ is the standard solution:
 ```bash
 # Required peer dep — arweave-js for signing transactions
 npm install arweave
-
-# arlocal — dev dep only, not needed in production
-npm install --save-dev arlocal
 ```
+
+> `arlocal` itself does not need to be installed as an npm package when you run it via Docker (recommended) or `npx`. Only add it as a dev dependency if you want to import it programmatically in test setup files.
 
 ---
 
 ## 2. Start arlocal
 
+Docker is the recommended approach — no npm install required and more reliable
+across environments:
+
+```bash
+# Start on the default port (1984) — detached, auto-removed on stop
+docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal
+
+# Custom port
+docker run -d --rm -p 1985:1984 --name arlocal textury/arlocal
+
+# Stop when done
+docker stop arlocal
+```
+
+Alternatively, run via `npx` (downloads arlocal on demand):
+
 ```bash
 # Start on the default port (1984)
 npx arlocal
 
-# Start on a custom port
+# Custom port
 npx arlocal --port 1985
 
-# Start with persistent storage (survives restarts)
+# With persistent storage (survives restarts)
 npx arlocal --persist
 ```
 
-You should see:
+Either way you should see (or the container starts silently in the background):
 ```
 arlocal started on port 1984
 ```
 
-Leave it running in a terminal tab while you develop. For CI, add it to your
-test startup script (see [CI setup](#ci-setup) below).
+Leave it running while you develop. For CI, see [CI setup](#ci-setup) below.
 
 ---
 
@@ -241,7 +255,11 @@ cryptic connection error:
 const helper = new ArweaveLocalHelper();
 
 if (!(await helper.isRunning())) {
-  console.warn('⚠️  arlocal is not running — start it with: npx arlocal');
+  console.warn(
+    '⚠️  arlocal is not running.\n' +
+    '  Docker (recommended): docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal\n' +
+    '  npx:                  npx arlocal'
+  );
   process.exit(1);
 }
 ```
@@ -264,6 +282,8 @@ Add arlocal as a background process in your CI pipeline:
 
 ### GitHub Actions
 
+Docker (recommended — available on all GitHub-hosted runners):
+
 ```yaml
 jobs:
   test:
@@ -273,16 +293,22 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
 
+      - name: Start arlocal
+        run: docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Start arlocal
-        run: npx arlocal &
-        # Give it a moment to boot
-      - run: sleep 2
-
       - name: Run tests
         run: npm test
+```
+
+Alternatively, via `npx` (no Docker required):
+
+```yaml
+      - name: Start arlocal
+        run: npx arlocal &
+      - run: sleep 2   # give it a moment to boot
 ```
 
 ### Or use vitest globalSetup
@@ -305,7 +331,11 @@ import { ArweaveLocalHelper } from '@dstorage/storage';
 export async function setup() {
   const helper = new ArweaveLocalHelper();
   if (!(await helper.isRunning())) {
-    throw new Error('arlocal must be running before tests. Run: npx arlocal');
+    throw new Error(
+      'arlocal must be running before tests.\n' +
+      '  Docker: docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal\n' +
+      '  npx:    npx arlocal'
+    );
   }
 }
 ```

@@ -11,7 +11,9 @@
  *
  * ── Quick start ───────────────────────────────────────────────────────────────
  *
- *   # 1. Start arlocal (once per dev session)
+ *   # 1. Start arlocal (once per dev session) — Docker is recommended:
+ *   docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal
+ *   # alternatively, without Docker:
  *   npx arlocal
  *
  *   # 2. In your code, use ArweaveLocalStorageAdapter instead of the real one
@@ -249,9 +251,11 @@ export interface ArweaveLocalAdapterConfig extends Omit<ArweaveAdapterConfig, 'g
  *
  * ── Requirements ──────────────────────────────────────────────────────────────
  *
- *   1. Install arlocal (dev dependency):  npm install --save-dev arlocal
- *   2. Install arweave (peer dep):        npm install arweave
- *   3. Start arlocal before your tests:   npx arlocal
+ *   1. Install arweave (peer dep):  npm install arweave
+ *   2. Start arlocal (Docker recommended — no npm install needed):
+ *        docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal
+ *      or, via npx (installs arlocal on demand):
+ *        npx arlocal
  *
  * ── Usage ─────────────────────────────────────────────────────────────────────
  *

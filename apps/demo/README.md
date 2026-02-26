@@ -33,7 +33,8 @@ Switching between them is a single line change in application code:
 storageAdapter: new MockStorageAdapter()
 
 // Arweave Local — integration testing with a local arlocal node
-// Start: npx arlocal
+// Start: docker run -d --rm -p 1984:1984 textury/arlocal
+//    or: npx arlocal
 storageAdapter: new ArweaveLocalStorageAdapter()
 
 // Arweave — pay-once permanent storage
