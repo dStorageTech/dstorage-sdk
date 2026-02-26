@@ -42,6 +42,16 @@ export interface ChainPermission {
   expiresAt?: number;
 }
 
+/** Result of calling a custom ZK circuit */
+export interface CircuitCallResult {
+  /** Transaction hash returned by the network */
+  txHash: string;
+  /** Block height at which the transaction was included (if available) */
+  blockHeight?: number;
+  /** Unix timestamp of when the call was made */
+  calledAt: number;
+}
+
 /** Every chain adapter must implement this interface */
 export interface ChainAdapter {
   readonly name: ChainProviderName;
@@ -71,4 +81,16 @@ export interface ChainAdapter {
    * Check if a wallet has access to a reference.
    */
   hasAccess(refId: string, wallet: string): Promise<boolean>;
+
+  /**
+   * Call a custom ZK circuit by name, running the full prove → balance → submit pipeline.
+   * Optional — not all adapters support ZK proving (e.g. plain mock adapters).
+   */
+  callCircuit?(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult>;
+
+  /**
+   * Query read-only contract state by circuit/query name without generating a proof.
+   * Optional — not all adapters support direct contract state queries.
+   */
+  queryCircuit?<T = unknown>(queryName: string, inputs: unknown[]): Promise<T>;
 }

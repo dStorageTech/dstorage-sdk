@@ -23,6 +23,7 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
+  CircuitCallResult,
 } from '../types.js';
 import { MockProofServer } from '../mockProofServer.js';
 
@@ -163,5 +164,26 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   /** List all references (useful for demo UI) */
   getAllReferences(): Array<{ refId: string; ref: ChainReference }> {
     return [...refs.entries()].map(([refId, ref]) => ({ refId, ref }));
+  }
+
+  // ── Generic circuit API ───────────────────────────────────────────────────
+
+  async callCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {
+    await this.proofServer.generateProof(circuitName, inputs);
+
+    // Simulate block inclusion delay
+    await sleep(150 + Math.random() * 250);
+    mockBlockHeight += 1;
+
+    return {
+      txHash:      `mock-tx-${Date.now()}`,
+      blockHeight: mockBlockHeight,
+      calledAt:    Date.now(),
+    };
+  }
+
+  async queryCircuit<T = unknown>(_queryName: string, _inputs: unknown[]): Promise<T> {
+    // Default mock returns undefined — override per test as needed
+    return undefined as T;
   }
 }

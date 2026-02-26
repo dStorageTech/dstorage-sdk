@@ -24,6 +24,7 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
+  CircuitCallResult,
 } from '../types.js';
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -68,7 +69,39 @@ export interface MidnightChainAdapterConfig {
    * This object is used to balance transactions (attach DUST fees) and submit them.
    */
   wallet: unknown;
+  /**
+   * Optional remapping from built-in operation names to the actual circuit names
+   * used in your compiled contract.
+   *
+   * Useful when your contract uses different function names than the SDK defaults,
+   * e.g. `storeInsuranceRecord` instead of `storeReference`.
+   *
+   * Omitted keys fall back to the SDK defaults.
+   *
+   * @example
+   * circuitNames: {
+   *   writeReference: 'saveRecord',
+   *   grantAccess:    'allowViewer',
+   * }
+   */
+  circuitNames?: {
+    writeReference?: string; // default: 'storeReference'
+    grantAccess?:    string; // default: 'grantAccess'
+    revokeAccess?:   string; // default: 'revokeAccess'
+    hasAccess?:      string; // default: 'hasAccess'
+    readReference?:  string; // default: 'getReference'
+  };
 }
+
+// ── Circuit name defaults ───────────────────────────────────────────────────────
+
+const CIRCUIT_DEFAULTS = {
+  writeReference: 'storeReference',
+  grantAccess:    'grantAccess',
+  revokeAccess:   'revokeAccess',
+  hasAccess:      'hasAccess',
+  readReference:  'getReference',
+} as const;
 
 // ── Internal Midnight SDK types (minimal surface needed) ───────────────────────
 
@@ -108,6 +141,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     contractAddress: string;
     compiledContract: object;
     wallet: unknown;
+    circuitNames?: MidnightChainAdapterConfig['circuitNames'];
   };
 
   constructor(config: MidnightChainAdapterConfig) {
@@ -141,6 +175,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       contractAddress: config.contractAddress,
       compiledContract: config.compiledContract,
       wallet: config.wallet,
+      ...(config.circuitNames !== undefined ? { circuitNames: config.circuitNames } : {}),
     };
   }
 
@@ -222,6 +257,17 @@ export class MidnightChainAdapter implements ChainAdapter {
     });
   }
 
+  // ── Circuit name resolution ────────────────────────────────────────────────
+
+  /**
+   * Resolve the actual circuit name for a built-in operation.
+   * Uses the user-supplied remapping when present, otherwise falls back to the
+   * SDK default.
+   */
+  private circuitName(key: keyof typeof CIRCUIT_DEFAULTS): string {
+    return this.config.circuitNames?.[key] ?? CIRCUIT_DEFAULTS[key];
+  }
+
   // ── Full Midnight transaction flow ─────────────────────────────────────────
 
   /**
@@ -244,16 +290,16 @@ export class MidnightChainAdapter implements ChainAdapter {
   // ── ChainAdapter implementation ────────────────────────────────────────────
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
+    const circuitFn = this.circuitName('writeReference');
     const contract = await this.getContract() as {
-      call: { storeReference(a: string, b: string, c: string, d: string): Promise<UnprovenTx> };
+      call: Record<string, (a: string, b: string, c: string, d: string) => Promise<UnprovenTx>>;
     };
 
-    const unproven = await contract.call.storeReference(
-      ref.storageId,
-      ref.storageProvider,
-      ref.owner,
-      ref.dataLabel ?? ''
-    );
+    const fn = contract.call[circuitFn];
+    if (!fn) {
+      throw new Error(`[dStorage/midnight] Circuit '${circuitFn}' not found in compiled contract`);
+    }
+    const unproven = await fn(ref.storageId, ref.storageProvider, ref.owner, ref.dataLabel ?? '');
 
     const receipt = await this.executeTransaction(unproven);
 
@@ -300,10 +346,11 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Step 3: use the compiled contract to look up the refId in the ledger state.
     // This path is reached only once both the ABI and the dApp SDK are present.
+    const readFn = this.circuitName('readReference');
     const c = contract as {
-      query: { getReference(refId: string): Promise<{ storageId: string; storageProvider: string; owner: string; dataLabel: string; createdAt: number } | null> };
+      query: Record<string, (refId: string) => Promise<{ storageId: string; storageProvider: string; owner: string; dataLabel: string; createdAt: number } | null>>;
     };
-    const entry = await c.query.getReference(refId);
+    const entry = await c.query[readFn]?.(refId);
     if (!entry) {
       throw new Error(`[dStorage/midnight] No reference found on-chain for refId: ${refId}`);
     }
@@ -318,11 +365,16 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   async grantAccess(permission: ChainPermission): Promise<string> {
+    const circuitFn = this.circuitName('grantAccess');
     const contract = await this.getContract() as {
-      call: { grantAccess(refId: string, grantee: string): Promise<UnprovenTx> };
+      call: Record<string, (refId: string, grantee: string) => Promise<UnprovenTx>>;
     };
 
-    const unproven = await contract.call.grantAccess(permission.refId, permission.grantee);
+    const fn = contract.call[circuitFn];
+    if (!fn) {
+      throw new Error(`[dStorage/midnight] Circuit '${circuitFn}' not found in compiled contract`);
+    }
+    const unproven = await fn(permission.refId, permission.grantee);
     const receipt = await this.executeTransaction(unproven);
 
     console.log(
@@ -333,22 +385,66 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   async revokeAccess(refId: string, grantee: string): Promise<void> {
+    const circuitFn = this.circuitName('revokeAccess');
     const contract = await this.getContract() as {
-      call: { revokeAccess(refId: string, grantee: string): Promise<UnprovenTx> };
+      call: Record<string, (refId: string, grantee: string) => Promise<UnprovenTx>>;
     };
 
-    const unproven = await contract.call.revokeAccess(refId, grantee);
+    const fn = contract.call[circuitFn];
+    if (!fn) {
+      throw new Error(`[dStorage/midnight] Circuit '${circuitFn}' not found in compiled contract`);
+    }
+    const unproven = await fn(refId, grantee);
     await this.executeTransaction(unproven);
 
     console.log(`[dStorage/midnight] Access revoked: ${grantee} → ${refId}`);
   }
 
   async hasAccess(refId: string, wallet: string): Promise<boolean> {
+    const queryFn = this.circuitName('hasAccess');
     const contract = await this.getContract() as {
-      query: { hasAccess(refId: string, wallet: string): Promise<boolean> };
+      query: Record<string, (refId: string, wallet: string) => Promise<boolean>>;
     };
 
     // Pure query — no transaction submitted, reads contract state from indexer
-    return contract.query.hasAccess(refId, wallet);
+    const fn = contract.query[queryFn];
+    if (!fn) {
+      throw new Error(`[dStorage/midnight] Query '${queryFn}' not found in compiled contract`);
+    }
+    return fn(refId, wallet);
+  }
+
+  // ── Generic circuit API ───────────────────────────────────────────────────
+
+  async callCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {
+    const contract = await this.getContract() as {
+      call: Record<string, (...args: unknown[]) => Promise<UnprovenTx>>;
+    };
+
+    const fn = contract.call[circuitName];
+    if (!fn) {
+      throw new Error(`[dStorage/midnight] Circuit '${circuitName}' not found in compiled contract`);
+    }
+
+    const receipt = await this.executeTransaction(await fn(...inputs));
+
+    return {
+      txHash:      receipt.txHash,
+      blockHeight: receipt.blockHeight,
+      calledAt:    Date.now(),
+    };
+  }
+
+  async queryCircuit<T = unknown>(queryName: string, inputs: unknown[]): Promise<T> {
+    const contract = await this.getContract() as {
+      query: Record<string, (...args: unknown[]) => Promise<T>>;
+    };
+
+    const fn = contract.query[queryName];
+    if (!fn) {
+      throw new Error(`[dStorage/midnight] Query '${queryName}' not found in compiled contract`);
+    }
+
+    return fn(...inputs);
   }
 }

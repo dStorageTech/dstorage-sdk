@@ -34,6 +34,8 @@ export {
   MidnightChainAdapter,
 } from '@dstorage/chain';
 
+export type { CircuitCallResult } from '@dstorage/chain';
+
 export {
   MockPaymentAdapter,
   ArweavePaymentAdapter,

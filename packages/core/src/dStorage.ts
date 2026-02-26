@@ -24,6 +24,7 @@ import {
   deriveKeyFromSignature,
 } from '@dstorage/crypto';
 
+import type { CircuitCallResult } from '@dstorage/chain';
 import type { DStorageConfig, RetrieveResult, UploadResult, WalletInfo } from './types.js';
 import { MetaTransaction } from './metaTransaction.js';
 import type { MetaTxConfig, MetaTxProgress, MetaTxReceipt } from './metaTransaction.js';
@@ -246,6 +247,31 @@ export class DStorage {
 
     metaTx.onProgress(onProgress);
     return metaTx.execute(file, config);
+  }
+
+  // ── Custom circuit calls ───────────────────────────────────────────────────
+
+  /**
+   * Call a custom ZK circuit on the connected chain adapter.
+   *
+   * Runs the full prove → balance → submit pipeline for the named circuit.
+   * Only available when using an adapter that supports ZK proving
+   * (e.g. MidnightChainAdapter or MockMidnightChainAdapter).
+   *
+   * @param circuitName  The exact circuit name as compiled by compactc
+   * @param inputs       Positional arguments forwarded to the circuit call
+   */
+  async executeCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {
+    this.assertConnected();
+
+    if (!this.config.chainAdapter.callCircuit) {
+      throw new Error(
+        '[dStorage] The current chain adapter does not support callCircuit(). ' +
+          'Use MidnightChainAdapter or MockMidnightChainAdapter.'
+      );
+    }
+
+    return this.config.chainAdapter.callCircuit(circuitName, inputs);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
