@@ -2,3 +2,4 @@ export * from './types.js';
 export * from './adapters/mock.js';
 export * from './adapters/arweave.js';
 export * from './adapters/autonomi.js';
+export * from './arweave-local.js';

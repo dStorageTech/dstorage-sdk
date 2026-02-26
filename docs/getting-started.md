@@ -307,6 +307,37 @@ If you need to track a transaction's status independently, use its `id` (the Arw
 
 ---
 
+### `ArweaveLocalStorageAdapter` 🧪 Local testing
+
+A dedicated adapter for local Arweave integration testing using [arlocal](https://github.com/textury/arlocal) — a zero-config local Arweave sandbox with instant token minting, no real AR required, and full offline support.
+
+```typescript
+import { ArweaveLocalStorageAdapter, MockChainAdapter } from '@dstorage/core';
+
+// Generates a wallet, mints 10 test AR, returns a ready-to-use adapter
+const { adapter, walletKey, address } =
+  await ArweaveLocalStorageAdapter.createWithTestWallet();
+
+const ds = new DStorage({
+  storageAdapter: adapter,     // ← drop-in replacement for ArweaveStorageAdapter
+  chainAdapter:   new MockChainAdapter(),
+});
+
+// Upload to local arlocal instance (no real AR spent)
+const { id } = await ds.upload('test data');
+
+// Fast-forward a block to "confirm" the transaction
+await adapter.testnet.mine();
+
+// Retrieve
+const { content } = await ds.retrieve(id);
+```
+
+> 📖 **Full guide:** [docs/arweave-testnet.md](./arweave-testnet.md) — covers setup,
+> wallet generation, token minting, CI integration, and switching to mainnet.
+
+---
+
 ### `AutonomiStorageAdapter` 🔵 Stub
 
 Placeholder for [Autonomi](https://autonomi.com) integration. Currently backed by an in-memory store. Awaiting Autonomi JS SDK stability.

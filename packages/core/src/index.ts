@@ -11,6 +11,20 @@ export {
   MockStorageAdapter,
   ArweaveStorageAdapter,
   AutonomiStorageAdapter,
+  // Local / testnet
+  ArweaveLocalStorageAdapter,
+  ArweaveLocalHelper,
+  ArweaveLocalError,
+  ARWEAVE_MAINNET,
+  ARWEAVE_LOCAL,
+  arlocalGateway,
+} from '@dstorage/storage';
+
+export type {
+  ArweaveLocalAdapterConfig,
+  ArweaveLocalHelperConfig,
+  ArweaveLocalInfo,
+  ArweaveLocalBalance,
 } from '@dstorage/storage';
 
 export {
