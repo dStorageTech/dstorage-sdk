@@ -7,6 +7,7 @@ import {
   INSURANCE_CLAIMS,
   simulateZkProof,
   MockPaymentAdapter,
+  WalletManagedPaymentAdapter,
 } from '@dstorage/core';
 import { MidnightChainAdapter } from '@dstorage/chain';
 import { ArweaveLocalHelper } from '@dstorage/storage';
@@ -104,17 +105,18 @@ export default function App() {
           })
         : new MockMidnightChainAdapter();
 
-    // For Midnight, fees are handled internally by the wallet during transaction execution,
-    // so we don't need a separate chain payment adapter. For other chains, use mock.
+    // For Midnight connector, DUST fees are handled by the Lace wallet during
+    // transaction balancing (balanceUnsealedTransaction) — no separate payment step.
+    // For other chains, use mock payment.
+    const chainPaymentAdapter = chainKey === 'midnight-connector'
+      ? new WalletManagedPaymentAdapter({ token: 'DUST' })
+      : new MockPaymentAdapter({ token: 'DUST' });
+
     const dstorageConfig: any = {
       storageAdapter,
       chainAdapter,
+      chainPaymentAdapter,
     };
-
-    // Only add chainPaymentAdapter for non-Midnight chains
-    if (chainKey !== 'midnight-connector') {
-      dstorageConfig.chainPaymentAdapter = new MockPaymentAdapter({ token: 'DUST' });
-    }
 
     return {
       sdk: new DStorage(dstorageConfig),

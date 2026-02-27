@@ -40,6 +40,7 @@ export {
   MockPaymentAdapter,
   ArweavePaymentAdapter,
   MidnightPaymentAdapter,
+  WalletManagedPaymentAdapter,
 } from '@dstorage/payment';
 
 export type { PaymentAdapter, PaymentQuote } from '@dstorage/payment';
