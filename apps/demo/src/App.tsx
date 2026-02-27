@@ -6,6 +6,7 @@ import {
   connectMetaMask, connectDemoWallet,
   INSURANCE_CLAIMS,
   simulateZkProof,
+  MockPaymentAdapter,
 } from '@dstorage/core';
 import { MidnightChainAdapter } from '@dstorage/chain';
 import { ArweaveLocalHelper } from '@dstorage/storage';
@@ -102,7 +103,23 @@ export default function App() {
           })
         : new MockMidnightChainAdapter();
 
-    return { sdk: new DStorage({ storageAdapter, chainAdapter }), storageAdapter, chainKey };
+    // For Midnight, fees are handled internally by the wallet during transaction execution,
+    // so we don't need a separate chain payment adapter. For other chains, use mock.
+    const dstorageConfig: any = {
+      storageAdapter,
+      chainAdapter,
+    };
+
+    // Only add chainPaymentAdapter for non-Midnight chains
+    if (chainKey !== 'midnight-connector') {
+      dstorageConfig.chainPaymentAdapter = new MockPaymentAdapter({ token: 'DUST' });
+    }
+
+    return {
+      sdk: new DStorage(dstorageConfig),
+      storageAdapter,
+      chainKey
+    };
   }, []);
 
   /**
