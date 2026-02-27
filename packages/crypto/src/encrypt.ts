@@ -20,7 +20,18 @@ function getCrypto(): Crypto {
 }
 
 function bufferToBase64(buffer: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  // Convert buffer to string in chunks to avoid "Maximum call stack size exceeded"
+  // with large files. String.fromCharCode can only handle ~64KB arguments at a time.
+  const bytes = new Uint8Array(buffer);
+  let binaryStr = '';
+  const chunkSize = 8192; // Process 8KB at a time
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, i + chunkSize);
+    binaryStr += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binaryStr);
 }
 
 function base64ToBuffer(b64: string): Uint8Array<ArrayBuffer> {
