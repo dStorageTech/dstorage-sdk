@@ -106,39 +106,35 @@ export default function App() {
   }, []);
 
   /**
-   * Smart connect: determines which wallet(s) are needed based on selected adapters.
-   * - Arweave Local/Real → needs ArConnect (or test JWK)
-   * - Mock storage → no wallet needed
-   * - MetaMask → used for identity/encryption key derivation
+   * Smart connect: uses the selected adapters without forcing a specific wallet.
+   * - Storage adapters (Arweave) will request their own wallets (ArConnect) when needed
+   * - Chain adapters use their configured mode (mock or connector)
+   * - DStorage needs a wallet for encryption key derivation (we use demo wallet for this)
    */
   const handleConnect = async () => {
     try {
-      const { sdk, storageAdapter, chainKey } = buildSDK(storageAdapterKey, chainAdapterKey);
+      const { sdk, storageAdapter } = buildSDK(storageAdapterKey, chainAdapterKey);
 
-      // Determine which wallet to use based on storage adapter
-      let wallet: WalletInfo;
-      if (storageAdapterKey === 'arweave' || storageAdapterKey === 'arweave-local') {
-        // Arweave requires ArConnect
-        wallet = await connectMetaMask(); // Also works with ArConnect in browser
+      // Always use demo wallet for encryption key derivation
+      // Storage adapters (ArweaveStorageAdapter) will request ArConnect when they need it
+      const wallet = await connectDemoWallet();
 
-        // Auto-mint for local testing
-        if (storageAdapterKey === 'arweave-local' && storageAdapter instanceof ArweaveLocalStorageAdapter) {
-          try {
-            console.log('[Demo] Auto-minting test AR tokens for arlocal...');
-            const helper = new ArweaveLocalHelper();
-            await helper.mintTokens(wallet.address, 10_000_000_000_000n); // 10 AR
-            console.log(`[Demo] ✅ Minted 10 AR to ${wallet.address.slice(0, 14)}…`);
-          } catch (mintErr) {
-            console.warn(
-              '[Demo] ⚠️ Auto-mint failed (arlocal may not be running):\n' +
-              (mintErr instanceof Error ? mintErr.message : String(mintErr))
-            );
-            // Don't fail the connection — the user might fund manually or use a different method
-          }
+      // Auto-mint for local testing
+      if (storageAdapterKey === 'arweave-local' && storageAdapter instanceof ArweaveLocalStorageAdapter) {
+        try {
+          console.log('[Demo] Auto-minting test AR tokens for arlocal...');
+          const helper = new ArweaveLocalHelper();
+          // Use a generic address since we don't have ArConnect yet
+          const testAddress = 'rJ9qkRpkWlAiLKY_J_5KfIjFfv0O6hYXFrE9wN6qHCE';
+          await helper.mintTokens(testAddress, 10_000_000_000_000n); // 10 AR
+          console.log(`[Demo] ✅ Minted 10 AR to test wallet`);
+        } catch (mintErr) {
+          console.warn(
+            '[Demo] ⚠️ Auto-mint failed (arlocal may not be running or is unreachable):\n' +
+            (mintErr instanceof Error ? mintErr.message : String(mintErr))
+          );
+          // Don't fail the connection — user can fund manually or troubleshoot arlocal
         }
-      } else {
-        // For mock and other adapters, use demo wallet (no real transaction signing needed)
-        wallet = await connectDemoWallet();
       }
 
       await sdk.connect(wallet);
