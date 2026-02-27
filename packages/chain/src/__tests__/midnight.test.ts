@@ -97,15 +97,27 @@ describe('MidnightChainAdapter', () => {
       ).toThrow('[dStorage/midnight] network is required');
     });
 
-    it('throws if credentials.mnemonic and credentials.seedHex are both missing', () => {
+    it('throws if credentials.mnemonic and credentials.seedHex are both missing in facade mode', () => {
       expect(
-        () => new MidnightChainAdapter({ contractAddress: '0xContract', compiledContract: {}, network: MOCK_NETWORK, credentials: {} })
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', compiledContract: {}, network: MOCK_NETWORK, walletMode: 'facade', credentials: {} })
       ).toThrow('credentials.mnemonic or credentials.seedHex is required');
     });
 
-    it('does not throw with valid contractAddress, compiledContract, and wallet', () => {
+    it('does not throw when credentials are missing in connector mode', () => {
+      expect(
+        () => new MidnightChainAdapter({ contractAddress: '0xContract', compiledContract: {}, network: MOCK_NETWORK, walletMode: 'connector' })
+      ).not.toThrow();
+    });
+
+    it('does not throw with valid contractAddress, compiledContract, and wallet in facade mode', () => {
       expect(
         () => new MidnightChainAdapter({ contractAddress: '0xABC', compiledContract: {}, network: MOCK_NETWORK, credentials: MOCK_CREDENTIALS })
+      ).not.toThrow();
+    });
+
+    it('does not throw with valid contractAddress, compiledContract in connector mode', () => {
+      expect(
+        () => new MidnightChainAdapter({ contractAddress: '0xABC', compiledContract: {}, network: MOCK_NETWORK, walletMode: 'connector' })
       ).not.toThrow();
     });
   });

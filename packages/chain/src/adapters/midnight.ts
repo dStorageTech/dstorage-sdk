@@ -57,9 +57,22 @@ function trimNull(bytes: Uint8Array): string {
   return new TextDecoder().decode(nullIdx >= 0 ? bytes.slice(0, nullIdx) : bytes);
 }
 
+// ── Connector API types (minimal surface) ─────────────────────────────────────
+
+interface ConnectedAPI {
+  // Balance unsealed transaction (step 2 of the pipeline)
+  balanceUnsealedTransaction(hex: string): Promise<string>;
+  // Submit balanced transaction (step 3 of the pipeline)
+  submitTransaction(hex: string): Promise<string>; // returns txId
+  // Get shielded addresses
+  getShieldedAddresses(): Promise<{ address: string; publicKey: string }[]>;
+  // Get configuration (endpoints)
+  getConfiguration(): Promise<{ proofServerUrl: string; indexerUrl: string }>;
+}
+
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-export interface MidnightChainAdapterConfig {
+interface BaseConfig {
   /**
    * Midnight node RPC endpoint.
    * Default: Midnight testnet-02 public node.
@@ -103,16 +116,6 @@ export interface MidnightChainAdapterConfig {
    * Target network. Controls wallet networkId, address format, and fee overhead.
    */
   network: 'testnet' | 'preprod' | 'undeployed';
-
-  /**
-   * Wallet credentials. Provide exactly one of mnemonic or seedHex.
-   * Used by init() to derive Midnight signing keys.
-   */
-  credentials: {
-    mnemonic?: string;  // BIP-39 mnemonic
-    seedHex?: string;   // 64 or 128 hex chars
-  };
-
   /**
    * Optional remapping from built-in operation names to the actual circuit names
    * used in your compiled contract.
@@ -158,6 +161,37 @@ export interface MidnightChainAdapterConfig {
   stateDecoder?(hexState: string): unknown;
 }
 
+export type MidnightChainAdapterConfig = BaseConfig & (
+  | {
+      /**
+       * Wallet mode. Default: 'facade' (uses wallet-sdk-facade for Node.js CLI).
+       * Set to 'connector' to use browser wallet extension (e.g., Midnight Lace).
+       */
+      walletMode?: 'facade';
+      /**
+       * Wallet credentials. Provide exactly one of mnemonic or seedHex.
+       * Used by init() to derive Midnight signing keys in facade mode.
+       * Required only when walletMode is 'facade' or not specified.
+       */
+      credentials: {
+        mnemonic?: string;  // BIP-39 mnemonic
+        seedHex?: string;   // 64 or 128 hex chars
+      };
+    }
+  | {
+      /**
+       * Browser wallet connector mode.
+       * Delegates all key management to the wallet extension (e.g., Midnight Lace).
+       */
+      walletMode: 'connector';
+      /**
+       * Wallet connector name. Default: 'mnLace' (Midnight Lace).
+       * Example: window.midnight.mnLace
+       */
+      connectorName?: string;
+    }
+);
+
 // ── Circuit name defaults ───────────────────────────────────────────────────────
 
 const CIRCUIT_DEFAULTS = {
@@ -199,7 +233,11 @@ export class MidnightChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = 'midnight';
 
   private facade: unknown | null = null;
+  private connectorAPI: ConnectedAPI | null = null;
   private addresses: WalletAddresses | null = null;
+
+  private readonly walletMode: 'facade' | 'connector';
+  private readonly connectorName: string;
 
   private readonly config: {
     nodeEndpoint: string;
@@ -209,7 +247,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     contractAddress: string;
     compiledContract: object;
     network: 'testnet' | 'preprod' | 'undeployed';
-    credentials: { mnemonic?: string; seedHex?: string };
+    credentials?: { mnemonic?: string; seedHex?: string };
     circuitNames?: MidnightChainAdapterConfig['circuitNames'];
     stateDecoder?: MidnightChainAdapterConfig['stateDecoder'];
   };
@@ -227,16 +265,27 @@ export class MidnightChainAdapter implements ChainAdapter {
           'Import the compactc output and pass the contract class/object here.'
       );
     }
-    if (!config.credentials?.mnemonic && !config.credentials?.seedHex) {
-      throw new Error(
-        '[dStorage/midnight] credentials.mnemonic or credentials.seedHex is required.'
-      );
-    }
     if (!config.network) {
       throw new Error(
         '[dStorage/midnight] network is required.'
       );
     }
+
+    // Determine wallet mode and validate credentials
+    const walletMode = 'walletMode' in config ? config.walletMode ?? 'facade' : 'facade';
+    if (walletMode === 'facade') {
+      const facadeConfig = config as Extract<MidnightChainAdapterConfig, { walletMode?: 'facade' }>;
+      if (!facadeConfig.credentials?.mnemonic && !facadeConfig.credentials?.seedHex) {
+        throw new Error(
+          '[dStorage/midnight] credentials.mnemonic or credentials.seedHex is required (walletMode: "facade").'
+        );
+      }
+    }
+
+    this.walletMode = walletMode;
+    this.connectorName = walletMode === 'connector'
+      ? (config as Extract<MidnightChainAdapterConfig, { walletMode: 'connector' }>).connectorName ?? 'mnLace'
+      : '';
 
     this.config = {
       nodeEndpoint: config.nodeEndpoint ?? 'https://rpc.testnet-02.midnight.network',
@@ -249,7 +298,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       contractAddress: config.contractAddress,
       compiledContract: config.compiledContract,
       network: config.network,
-      credentials: config.credentials,
+      ...(walletMode === 'facade' && 'credentials' in config ? { credentials: config.credentials } : {}),
       ...(config.circuitNames !== undefined ? { circuitNames: config.circuitNames } : {}),
       ...(config.stateDecoder !== undefined ? { stateDecoder: config.stateDecoder } : {}),
     };
@@ -350,23 +399,47 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   /**
    * Execute the full Midnight tx pipeline: build → prove → balance → submit.
+   * Branches based on wallet mode:
+   *   - 'facade': use WalletFacade for balance + submit
+   *   - 'connector': use browser connector API for balance + submit
    * Returns the transaction receipt.
    */
   private async executeTransaction(unproven: UnprovenTx): Promise<TxReceipt> {
-    if (!this.facade) {
-      throw new Error('[dStorage/midnight] Wallet not initialized. Call await chain.init() first.');
-    }
-
     // Step 1: Generate ZK proof via proof server
     const proven = await unproven.prove(this.config.proofServerEndpoint);
 
-    // Step 2: Attach DUST fees via the connected wallet
-    const balanced = await proven.balance(this.facade);
+    if (this.walletMode === 'facade') {
+      // Facade mode: attach DUST fees and submit via WalletFacade
+      if (!this.facade) {
+        throw new Error('[dStorage/midnight] Wallet not initialized. Call await chain.init() first.');
+      }
+      const balanced = await proven.balance(this.facade);
+      const receipt = await balanced.submit();
+      return receipt;
+    } else {
+      // Connector mode: serialize, balance via connector, submit via connector
+      if (!this.connectorAPI) {
+        throw new Error('[dStorage/midnight] Connector not initialized. Call await chain.init() first.');
+      }
 
-    // Step 3: Submit to the Midnight network and wait for block inclusion
-    const receipt = await balanced.submit();
+      // Serialize the proven transaction to hex
+      // The proven transaction object has a toJSON() method that returns the serialized form
+      const provenHex = (proven as any).toJSON?.()
+        ? JSON.stringify((proven as any).toJSON())
+        : Buffer.from(JSON.stringify(proven)).toString('hex');
 
-    return receipt;
+      // Step 2: Balance via connector
+      const balancedHex = await this.connectorAPI.balanceUnsealedTransaction(provenHex);
+
+      // Step 3: Submit via connector
+      const txId = await this.connectorAPI.submitTransaction(balancedHex);
+
+      // Return a receipt-like object; the actual blockHeight may not be available immediately
+      return {
+        txHash: txId,
+        blockHeight: 0, // Connector doesn't provide block height at submission time
+      };
+    }
   }
 
   // ── ChainAdapter implementation ────────────────────────────────────────────
@@ -637,29 +710,45 @@ export class MidnightChainAdapter implements ChainAdapter {
   // ── Wallet lifecycle ───────────────────────────────────────────────────────
 
   /**
-   * Initialize the wallet: derive keys, build WalletFacade, wait for sync.
-   * Must be called before write operations or getBalances().
+   * Initialize the wallet.
+   * Branches based on wallet mode:
+   *   - 'facade': derive keys, build WalletFacade, wait for sync (Node.js CLI)
+   *   - 'connector': connect to browser wallet extension, extract addresses (browser dApp)
    *
-   * All Midnight wallet SDK imports are dynamic to avoid hard build-time failures
-   * when these optional peers are absent.
+   * Must be called before write operations or getBalances().
+   * All Midnight wallet SDK imports are dynamic to avoid hard build-time failures.
    */
   async init(): Promise<WalletAddresses> {
-    // 1. Set global network ID (required by Midnight JS SDK)
+    // Set global network ID (required by Midnight JS SDK)
     const { setNetworkId } = await import('@midnight-ntwrk/midnight-js-network-id' as string);
     setNetworkId(this.config.network);
 
-    // 2. Derive signing key seeds
+    if (this.walletMode === 'facade') {
+      return this._initFacade();
+    } else {
+      return this._initConnector();
+    }
+  }
+
+  /**
+   * Initialize in facade mode: derive keys, build WalletFacade, wait for sync.
+   */
+  private async _initFacade(): Promise<WalletAddresses> {
+    // Credentials are guaranteed by constructor validation
+    const credentials = this.config.credentials!;
+
+    // 1. Derive signing key seeds
     const { KeyDeriver } = await import('@dstorage/crypto');
-    const deriver = new KeyDeriver(this.config.credentials);
+    const deriver = new KeyDeriver(credentials);
     const { zswapSeed, dustSeed, nightExternalSeed } =
       await deriver.deriveMidnightSigningKeys();
 
-    // 3. Derive typed secret keys
+    // 2. Derive typed secret keys
     const ledger = await import('@midnight-ntwrk/ledger-v7' as string);
     const shieldedSecretKeys = (ledger as any).ZswapSecretKeys.fromSeed(zswapSeed);
     const dustSecretKey = (ledger as any).DustSecretKey.fromSeed(dustSeed);
 
-    // 4. Derive unshielded keystore
+    // 3. Derive unshielded keystore
     const {
       createKeystore,
       InMemoryTransactionHistoryStorage,
@@ -668,7 +757,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     } = await import('@midnight-ntwrk/wallet-sdk-unshielded-wallet' as string);
     const unshieldedKeystore = (createKeystore as any)(nightExternalSeed, this.config.network);
 
-    // 5. Build wallet config
+    // 4. Build wallet config
     const feeOverhead =
       this.config.network === 'undeployed'
         ? 500_000_000_000_000_000n
@@ -685,7 +774,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       indexerUrl: this.config.indexerWsEndpoint ?? '',
     };
 
-    // 6. Construct the three wallet parts
+    // 5. Construct the three wallet parts
     const { ShieldedWallet } = await import('@midnight-ntwrk/wallet-sdk-shielded' as string);
     const { DustWallet } = await import('@midnight-ntwrk/wallet-sdk-dust-wallet' as string);
 
@@ -701,13 +790,13 @@ export class MidnightChainAdapter implements ChainAdapter {
       (UnshieldedPublicKey as any).fromKeyStore(unshieldedKeystore)
     );
 
-    // 7. Start WalletFacade
+    // 6. Start WalletFacade
     const { WalletFacade } = await import('@midnight-ntwrk/wallet-sdk-facade' as string);
     const facade = new (WalletFacade as any)(shielded, unshielded, dust);
     await facade.start(shieldedSecretKeys, dustSecretKey);
     this.facade = facade;
 
-    // 8. Derive wallet addresses from keys (synchronous, no sync needed)
+    // 7. Derive wallet addresses from keys
     const {
       ShieldedCoinPublicKey,
       ShieldedEncryptionPublicKey,
@@ -729,7 +818,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       dust: (DustAddress as any).encodePublicKey(this.config.network, dustSecretKey.publicKey),
     };
 
-    // 9. Wait for wallet sync with indexer
+    // 8. Wait for wallet sync with indexer
     const { firstValueFrom, filter } = await import('rxjs' as string);
     await (firstValueFrom as any)(
       facade.state().pipe(
@@ -738,6 +827,66 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
 
     return this.addresses;
+  }
+
+  /**
+   * Initialize in connector mode: connect to browser wallet extension.
+   */
+  private async _initConnector(): Promise<WalletAddresses> {
+    // Access the window.midnight[connectorName] connector
+    const windowAny = typeof window !== 'undefined' ? (window as any) : null;
+    if (!windowAny?.midnight?.[this.connectorName]) {
+      throw new Error(
+        `[dStorage/midnight] Browser wallet "${this.connectorName}" not found.\n` +
+          `  Check that the wallet extension is installed (e.g., Midnight Lace)\n` +
+          `  window.midnight.${this.connectorName} must be available`
+      );
+    }
+
+    const connector = windowAny.midnight[this.connectorName];
+
+    // Connect to the wallet extension
+    let connectedAPI: ConnectedAPI;
+    try {
+      connectedAPI = await connector.connect(this.config.network);
+      this.connectorAPI = connectedAPI;
+    } catch (err) {
+      throw new Error(
+        `[dStorage/midnight] Failed to connect to wallet "${this.connectorName}": ` +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+
+    // Extract addresses from connector
+    try {
+      const shieldedAddresses = await connectedAPI.getShieldedAddresses();
+      if (!shieldedAddresses || shieldedAddresses.length === 0) {
+        throw new Error('No shielded addresses available from wallet');
+      }
+
+      // For now, use the first shielded address; a real app might let the user choose
+      const firstAddr = shieldedAddresses[0];
+      if (!firstAddr?.address) {
+        throw new Error('Shielded address is missing or invalid');
+      }
+      const firstAddress = firstAddr.address;
+
+      // The connector doesn't provide unshielded/dust addresses directly
+      // In a real connector, these would be derived separately or obtained from the connector
+      // For now, use placeholder values (the actual addresses would come from the connector API)
+      this.addresses = {
+        shielded: firstAddress,
+        unshielded: '', // Not available from connector in v3.x
+        dust: '',       // Not available from connector in v3.x
+      };
+
+      return this.addresses;
+    } catch (err) {
+      throw new Error(
+        `[dStorage/midnight] Failed to extract addresses from wallet: ` +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
   }
 
   /**
@@ -752,40 +901,69 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
-   * Read NIGHT and DUST balances from synced wallet state.
+   * Read NIGHT and DUST balances.
+   * - Facade mode: reads from synced wallet state
+   * - Connector mode: returns 0n (known limitation; could be queried directly from indexer in future)
    */
   async getBalances(): Promise<WalletBalances> {
-    if (!this.facade) {
-      throw new Error('[dStorage/midnight] getBalances() called before init().');
+    if (this.walletMode === 'facade') {
+      if (!this.facade) {
+        throw new Error('[dStorage/midnight] getBalances() called before init().');
+      }
+
+      const { firstValueFrom } = await import('rxjs' as string);
+      const ledger = await import('@midnight-ntwrk/ledger-v7' as string);
+
+      const state = await (firstValueFrom as any)(
+        ((this.facade as any).state as () => any)()
+      );
+      const nightToken = (ledger as any).unshieldedToken();
+
+      return {
+        night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
+        dust: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
+      };
+    } else {
+      // Connector mode: balance queries not available from current connector API
+      // This is a known limitation; could be extended in the future
+      if (!this.connectorAPI) {
+        throw new Error('[dStorage/midnight] getBalances() called before init().');
+      }
+      return {
+        night: 0n,
+        dust: 0n,
+      };
     }
-
-    const { firstValueFrom } = await import('rxjs' as string);
-    const ledger = await import('@midnight-ntwrk/ledger-v7' as string);
-
-    const state = await (firstValueFrom as any)(
-      ((this.facade as any).state as () => any)()
-    );
-    const nightToken = (ledger as any).unshieldedToken();
-
-    return {
-      night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
-      dust: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
-    };
   }
 
   /**
    * Stop the wallet and release resources. No-op if init() was never called.
+   * - Facade mode: stops the WalletFacade
+   * - Connector mode: disconnects from the browser wallet (if available)
    */
   async stop(): Promise<void> {
-    if (!this.facade) return;
+    if (this.walletMode === 'facade') {
+      if (!this.facade) return;
 
-    const stopFn = ((this.facade as any).stop as (() => Promise<void>) | undefined);
-    await Promise.race([
-      stopFn?.() ?? Promise.resolve(),
-      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-    ]).catch(() => undefined);
+      const stopFn = ((this.facade as any).stop as (() => Promise<void>) | undefined);
+      await Promise.race([
+        stopFn?.() ?? Promise.resolve(),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ]).catch(() => undefined);
 
-    this.facade = null;
+      this.facade = null;
+    } else {
+      // Connector mode: attempt to disconnect if the API supports it
+      if (this.connectorAPI && typeof (this.connectorAPI as any).disconnect === 'function') {
+        try {
+          await (this.connectorAPI as any).disconnect();
+        } catch {
+          // Ignore disconnection errors
+        }
+      }
+      this.connectorAPI = null;
+    }
+
     this.addresses = null;
   }
 }

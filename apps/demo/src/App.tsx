@@ -7,6 +7,8 @@ import {
   INSURANCE_CLAIMS,
   simulateZkProof,
 } from '@dstorage/core';
+import { MidnightChainAdapter } from '@dstorage/chain';
+import { ArweaveLocalHelper } from '@dstorage/storage';
 import type { WalletInfo, MetaTxProgress, ZkProofResult, ZkProofProgress } from '@dstorage/core';
 import { PatientPanel } from './components/PatientPanel.tsx';
 import { VerifierPanel } from './components/VerifierPanel.tsx';
@@ -16,6 +18,7 @@ export type AppStep = 'connect' | 'upload' | 'prove' | 'done';
 export interface StoredRecord { dataId: string; fileName: string; uploadedAt: number; chainRefId: string; }
 
 export type StorageAdapterKey = 'mock' | 'arweave-local' | 'arweave' | 'autonomi';
+export type ChainAdapterKey = 'mock' | 'midnight-connector';
 
 export const ADAPTER_CONFIGS: Record<StorageAdapterKey, {
   label: string;
@@ -47,6 +50,25 @@ export const ADAPTER_CONFIGS: Record<StorageAdapterKey, {
   },
 };
 
+export const CHAIN_ADAPTER_CONFIGS: Record<ChainAdapterKey, {
+  label: string;
+  description: string;
+  status: 'live' | 'preview' | 'stub';
+  note?: string;
+}> = {
+  mock: {
+    label: 'Mock Midnight',
+    description: 'Simulated Midnight chain. Instant transactions — ideal for development.',
+    status: 'live',
+  },
+  'midnight-connector': {
+    label: 'Midnight Connector (Browser)',
+    description: 'Real Midnight network via browser wallet extension.',
+    status: 'preview',
+    note: 'Requires Midnight Lace wallet extension',
+  },
+};
+
 export default function App() {
   const [wallet, setWallet]       = useState<WalletInfo | null>(null);
   const [dstorage, setDStorage]   = useState<DStorage | null>(null);
@@ -60,21 +82,74 @@ export default function App() {
   const [zkProgress, setZkProgress]         = useState<ZkProofProgress | null>(null);
   const [drawerMode, setDrawerMode]         = useState<'metatx' | 'zkproof'>('metatx');
   const [storageAdapterKey, setStorageAdapterKey] = useState<StorageAdapterKey>('mock');
+  const [chainAdapterKey, setChainAdapterKey] = useState<ChainAdapterKey>('mock');
 
-  const buildSDK = useCallback((key: StorageAdapterKey) => {
+  const buildSDK = useCallback((storageKey: StorageAdapterKey, chainKey: ChainAdapterKey) => {
     const storageAdapter =
-      key === 'arweave-local' ? new ArweaveLocalStorageAdapter() :
-      key === 'arweave'       ? new ArweaveStorageAdapter() :
-      key === 'autonomi'      ? new AutonomiStorageAdapter() :
+      storageKey === 'arweave-local' ? new ArweaveLocalStorageAdapter() :
+      storageKey === 'arweave'       ? new ArweaveStorageAdapter() :
+      storageKey === 'autonomi'      ? new AutonomiStorageAdapter() :
       new MockStorageAdapter();
-    return new DStorage({ storageAdapter, chainAdapter: new MockMidnightChainAdapter() });
+
+    const chainAdapter =
+      chainKey === 'midnight-connector'
+        ? new MidnightChainAdapter({
+            contractAddress: 'midnight:3edc4rfv5tgb6yhn7ujm8ik', // Example contract address
+            compiledContract: {}, // In real app, import the compiled contract
+            network: 'preprod',
+            walletMode: 'connector',
+            connectorName: 'mnLace',
+          })
+        : new MockMidnightChainAdapter();
+
+    return { sdk: new DStorage({ storageAdapter, chainAdapter }), storageAdapter, chainKey };
   }, []);
 
-  const handleConnect = async (mode: 'metamask' | 'demo') => {
-    const w = mode === 'metamask' ? await connectMetaMask() : await connectDemoWallet();
-    const sdk = buildSDK(storageAdapterKey);
-    await sdk.connect(w);
-    setWallet(w); setDStorage(sdk); setStep('upload');
+  /**
+   * Smart connect: determines which wallet(s) are needed based on selected adapters.
+   * - Arweave Local/Real → needs ArConnect (or test JWK)
+   * - Mock storage → no wallet needed
+   * - MetaMask → used for identity/encryption key derivation
+   */
+  const handleConnect = async () => {
+    try {
+      const { sdk, storageAdapter, chainKey } = buildSDK(storageAdapterKey, chainAdapterKey);
+
+      // Determine which wallet to use based on storage adapter
+      let wallet: WalletInfo;
+      if (storageAdapterKey === 'arweave' || storageAdapterKey === 'arweave-local') {
+        // Arweave requires ArConnect
+        wallet = await connectMetaMask(); // Also works with ArConnect in browser
+
+        // Auto-mint for local testing
+        if (storageAdapterKey === 'arweave-local' && storageAdapter instanceof ArweaveLocalStorageAdapter) {
+          try {
+            console.log('[Demo] Auto-minting test AR tokens for arlocal...');
+            const helper = new ArweaveLocalHelper();
+            await helper.mintTokens(wallet.address, 10_000_000_000_000n); // 10 AR
+            console.log(`[Demo] ✅ Minted 10 AR to ${wallet.address.slice(0, 14)}…`);
+          } catch (mintErr) {
+            console.warn(
+              '[Demo] ⚠️ Auto-mint failed (arlocal may not be running):\n' +
+              (mintErr instanceof Error ? mintErr.message : String(mintErr))
+            );
+            // Don't fail the connection — the user might fund manually or use a different method
+          }
+        }
+      } else {
+        // For mock and other adapters, use demo wallet (no real transaction signing needed)
+        wallet = await connectDemoWallet();
+      }
+
+      await sdk.connect(wallet);
+      setWallet(wallet);
+      setDStorage(sdk);
+      setStep('upload');
+    } catch (err) {
+      console.error('Connection failed:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`Connection failed:\n${msg}`);
+    }
   };
 
   const handleUpload = async (file: File) => {
@@ -134,7 +209,9 @@ export default function App() {
           <div className="hv-panel-label"><span>👤</span> Patient</div>
           <PatientPanel step={step} wallet={wallet} record={record}
             storageAdapterKey={storageAdapterKey}
+            chainAdapterKey={chainAdapterKey}
             onStorageAdapterChange={setStorageAdapterKey}
+            onChainAdapterChange={setChainAdapterKey}
             onConnect={handleConnect} onUpload={handleUpload} onGenerateProof={handleGenerateProof} />
         </div>
         <div className="hv-divider">

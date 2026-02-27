@@ -1,21 +1,23 @@
 import { useState } from 'react';
 import { validateFile, INSURANCE_CLAIMS } from '@dstorage/core';
 import type { WalletInfo } from '@dstorage/core';
-import type { AppStep, StoredRecord, StorageAdapterKey } from '../App.tsx';
-import { ADAPTER_CONFIGS } from '../App.tsx';
+import type { AppStep, StoredRecord, StorageAdapterKey, ChainAdapterKey } from '../App.tsx';
+import { ADAPTER_CONFIGS, CHAIN_ADAPTER_CONFIGS } from '../App.tsx';
 
 interface Props {
   step: AppStep;
   wallet: WalletInfo | null;
   record: StoredRecord | null;
   storageAdapterKey: StorageAdapterKey;
+  chainAdapterKey: ChainAdapterKey;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
-  onConnect: (mode: 'metamask' | 'demo') => Promise<void>;
+  onChainAdapterChange: (key: ChainAdapterKey) => void;
+  onConnect: () => Promise<void>;
   onUpload: (file: File) => Promise<void>;
   onGenerateProof: (claimId: string) => Promise<void>;
 }
 
-export function PatientPanel({ step, wallet, record, storageAdapterKey, onStorageAdapterChange, onConnect, onUpload, onGenerateProof }: Props) {
+export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAdapterKey, onStorageAdapterChange, onChainAdapterChange, onConnect, onUpload, onGenerateProof }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -25,9 +27,9 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, onStorag
 
   const activeAdapter = ADAPTER_CONFIGS[storageAdapterKey];
 
-  const handleConnect = async (mode: 'metamask' | 'demo') => {
+  const handleConnect = async () => {
     setLoading('connect');
-    try { await onConnect(mode); } finally { setLoading(null); }
+    try { await onConnect(); } finally { setLoading(null); }
   };
 
   const handleFile = (file: File) => {
@@ -92,17 +94,41 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, onStorag
         </div>
       </div>
 
+      <div className="as-picker">
+        <div className="as-picker-label">Blockchain Backend</div>
+        <div className="as-cards">
+          {(Object.entries(CHAIN_ADAPTER_CONFIGS) as [ChainAdapterKey, typeof CHAIN_ADAPTER_CONFIGS[ChainAdapterKey]][]).map(([key, cfg]) => (
+            <button
+              key={key}
+              className={`as-card ${chainAdapterKey === key ? 'selected' : ''}`}
+              onClick={() => onChainAdapterChange(key)}
+            >
+              <div className="as-card-top">
+                <span className="as-card-name">{cfg.label}</span>
+                <span className={`as-card-status as-status-${cfg.status}`}>
+                  {cfg.status === 'live' ? 'Live' : cfg.status === 'preview' ? 'Preview' : 'Soon'}
+                </span>
+              </div>
+              <div className="as-card-desc">{cfg.description}</div>
+              {cfg.note && <div className="as-card-note">{cfg.note}</div>}
+            </button>
+          ))}
+        </div>
+        <div className="as-picker-hint">
+          Choose between mock (for development) or real Midnight network via browser wallet connector.
+        </div>
+      </div>
+
       <div className="pp-connect-btns">
-        <button className="pp-btn pp-btn-primary" onClick={() => handleConnect('metamask')} disabled={!!loading}>
-          {loading === 'connect' ? <Spinner /> : '🦊'} Connect MetaMask
-        </button>
-        <button className="pp-btn pp-btn-ghost" onClick={() => handleConnect('demo')} disabled={!!loading}>
-          🧪 Demo Mode <span className="pp-btn-hint">No wallet needed</span>
+        <button className="pp-btn pp-btn-primary" onClick={handleConnect} disabled={!!loading}>
+          {loading === 'connect' ? <Spinner /> : '🔗'} Connect Wallet
         </button>
       </div>
       <div className="pp-privacy-note">
         <span className="pp-privacy-icon">🛡</span>
-        Your encryption key is derived from your wallet signature and never leaves your device.
+        {storageAdapterKey === 'arweave-local'
+          ? '⚠️ Auto-minting test AR tokens for local testing…'
+          : 'Your encryption key is derived from your wallet signature and never leaves your device.'}
       </div>
     </div>
   );
