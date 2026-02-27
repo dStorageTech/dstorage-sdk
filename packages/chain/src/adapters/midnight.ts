@@ -57,17 +57,39 @@ function trimNull(bytes: Uint8Array): string {
   return new TextDecoder().decode(nullIdx >= 0 ? bytes.slice(0, nullIdx) : bytes);
 }
 
-// ── Connector API types (minimal surface) ─────────────────────────────────────
+// ── Connector API types (minimal surface from dApp connector spec) ────────────
+// See: https://docs.midnight.network/api-reference/dapp-connector
 
+/** InitialAPI: exposed at window.midnight.{walletId} before connection. */
+interface WalletInitialAPI {
+  name: string;
+  icon: string;
+  apiVersion: string;
+  connect(networkId: string): Promise<ConnectedAPI>;
+}
+
+/** ConnectedAPI: returned by wallet.connect(networkId). */
 interface ConnectedAPI {
-  // Balance unsealed transaction (step 2 of the pipeline)
-  balanceUnsealedTransaction(hex: string): Promise<string>;
-  // Submit balanced transaction (step 3 of the pipeline)
-  submitTransaction(hex: string): Promise<string>; // returns txId
-  // Get shielded addresses
+  // Configuration
+  getConfiguration(): Promise<{
+    proofServerUrl?: string;
+    indexerUrl?: string;
+    indexerWsUrl?: string;
+    nodeUrl?: string;
+    networkId?: string;
+  }>;
+  // Wallet state
+  getShieldedBalances?(): Promise<unknown>;
+  getUnshieldedBalances?(): Promise<unknown>;
+  getDustBalance?(): Promise<unknown>;
   getShieldedAddresses(): Promise<{ address: string; publicKey: string }[]>;
-  // Get configuration (endpoints)
-  getConfiguration(): Promise<{ proofServerUrl: string; indexerUrl: string }>;
+  getUnshieldedAddress?(): Promise<string>;
+  getDustAddress?(): Promise<string>;
+  // Transaction methods
+  balanceUnsealedTransaction(tx: string): Promise<string>;
+  submitTransaction(tx: string): Promise<string>;
+  // Proving
+  getProvingProvider?(): Promise<unknown>;
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -421,8 +443,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       }
 
       // Step 1: Get the wallet's configured proof server URL (respects user preferences)
-      const config = await this.connectorAPI.getConfiguration();
-      const proofServerUrl = config.proofServerUrl;
+      const walletCfg = await this.connectorAPI.getConfiguration();
+      const proofServerUrl = walletCfg.proofServerUrl ?? this.config.proofServerEndpoint;
 
       // Step 2: Generate ZK proof using the connector's configured proof server
       const proven = await unproven.prove(proofServerUrl);
@@ -834,43 +856,81 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   /**
    * Initialize in connector mode: connect to browser wallet extension.
+   *
+   * Discovers available wallets by enumerating window.midnight, as per the
+   * dApp connector spec: https://docs.midnight.network/api-reference/dapp-connector
+   *
+   * Each wallet extension injects an InitialAPI at window.midnight.{walletId}
+   * with properties: name, icon, apiVersion, and a connect() method.
    */
   private async _initConnector(): Promise<WalletAddresses> {
-    // Access the window.midnight[connectorName] connector
     const windowAny = typeof window !== 'undefined' ? (window as any) : null;
-    if (!windowAny?.midnight?.[this.connectorName]) {
+    const midnightObj = windowAny?.midnight;
+
+    if (!midnightObj || typeof midnightObj !== 'object') {
       throw new Error(
-        `[dStorage/midnight] Browser wallet "${this.connectorName}" not found.\n` +
-          `  Check that the wallet extension is installed (e.g., Midnight Lace)\n` +
-          `  window.midnight.${this.connectorName} must be available`
+        '[dStorage/midnight] window.midnight is not available.\n' +
+          '  No Midnight wallet extension detected. Install Midnight Lace or another compatible wallet.'
       );
     }
 
-    const connector = windowAny.midnight[this.connectorName];
+    // Discover all wallets injected at window.midnight.{walletId}
+    // Each value should be an InitialAPI with { name, icon, apiVersion, connect() }
+    const availableWallets = Object.entries(midnightObj)
+      .filter(([, v]) => v && typeof v === 'object' && typeof (v as any).connect === 'function')
+      .map(([id, v]) => ({ id, wallet: v as { name?: string; apiVersion?: string; connect: (networkId: string) => Promise<ConnectedAPI> } }));
+
+    if (availableWallets.length === 0) {
+      throw new Error(
+        '[dStorage/midnight] No compatible wallets found at window.midnight.\n' +
+          '  Install a Midnight-compatible wallet extension (e.g., Midnight Lace).'
+      );
+    }
+
+    console.log(
+      `[dStorage/midnight] Found ${availableWallets.length} wallet(s): ` +
+        availableWallets.map(w => `${w.id} (${w.wallet.name ?? 'unknown'})`).join(', ')
+    );
+
+    // Select the wallet: prefer the configured connectorName, otherwise use the first available
+    let selected = availableWallets.find(w => w.id === this.connectorName);
+    if (!selected) {
+      console.warn(
+        `[dStorage/midnight] Configured wallet "${this.connectorName}" not found. ` +
+          `Using first available: "${availableWallets[0]!.id}"`
+      );
+      selected = availableWallets[0]!;
+    }
+
+    console.log(
+      `[dStorage/midnight] Connecting to wallet "${selected.id}" ` +
+        `(name: ${selected.wallet.name ?? 'unknown'}, apiVersion: ${selected.wallet.apiVersion ?? 'unknown'}) ` +
+        `on network "${this.config.network}"...`
+    );
 
     // Step 1: Connect to the wallet extension
     let connectedAPI: ConnectedAPI;
     try {
-      connectedAPI = await connector.connect(this.config.network);
+      connectedAPI = await selected.wallet.connect(this.config.network);
       this.connectorAPI = connectedAPI;
     } catch (err) {
       throw new Error(
-        `[dStorage/midnight] Failed to connect to wallet "${this.connectorName}": ` +
+        `[dStorage/midnight] Failed to connect to wallet "${selected.id}": ` +
           (err instanceof Error ? err.message : String(err))
       );
     }
 
+    console.log(`[dStorage/midnight] ✓ Connected to wallet "${selected.id}"`);
+
     // Step 2: Retrieve wallet configuration (respects user preferences for proof server, indexer, etc.)
-    let walletConfig: any;
     try {
-      walletConfig = await connectedAPI.getConfiguration();
+      const walletConfig = await connectedAPI.getConfiguration();
+      console.log('[dStorage/midnight] Wallet configuration:', walletConfig);
     } catch (err) {
       console.warn(
         '[dStorage/midnight] Failed to retrieve wallet configuration:',
         err instanceof Error ? err.message : String(err)
       );
-      // Continue with default config if getConfiguration() fails
-      walletConfig = null;
     }
 
     // Step 3: Extract addresses from connector
@@ -880,7 +940,6 @@ export class MidnightChainAdapter implements ChainAdapter {
         throw new Error('No shielded addresses available from wallet');
       }
 
-      // For now, use the first shielded address; a real app might let the user choose
       const firstAddr = shieldedAddresses[0];
       if (!firstAddr?.address) {
         throw new Error('Shielded address is missing or invalid');
@@ -893,16 +952,17 @@ export class MidnightChainAdapter implements ChainAdapter {
       try {
         unshieldedAddr = await (connectedAPI as any).getUnshieldedAddress?.() ?? '';
         dustAddr = await (connectedAPI as any).getDustAddress?.() ?? '';
-      } catch (err) {
+      } catch {
         console.warn('[dStorage/midnight] Could not retrieve unshielded/dust addresses from connector');
       }
 
       this.addresses = {
         shielded: firstAddress,
-        unshielded: unshieldedAddr || '', // May not be available from connector
-        dust: dustAddr || '',               // May not be available from connector
+        unshielded: unshieldedAddr || '',
+        dust: dustAddr || '',
       };
 
+      console.log(`[dStorage/midnight] Wallet addresses — shielded: ${firstAddress.slice(0, 16)}…`);
       return this.addresses;
     } catch (err) {
       throw new Error(
