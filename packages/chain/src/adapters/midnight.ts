@@ -935,34 +935,60 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Step 3: Extract addresses from connector
     try {
-      const shieldedAddresses = await connectedAPI.getShieldedAddresses();
-      if (!shieldedAddresses || shieldedAddresses.length === 0) {
-        throw new Error('No shielded addresses available from wallet');
+      // Shielded address — the return shape varies across connector versions:
+      // could be string[], { address }[], or accessed via a different method name.
+      let shieldedAddr = '';
+      try {
+        const shieldedResult = await connectedAPI.getShieldedAddresses();
+        console.log('[dStorage/midnight] getShieldedAddresses() returned:', shieldedResult);
+
+        if (Array.isArray(shieldedResult) && shieldedResult.length > 0) {
+          const first = shieldedResult[0];
+          // Could be a plain string or an object with address/publicKey
+          shieldedAddr = typeof first === 'string' ? first : (first?.address ?? '');
+        } else if (typeof shieldedResult === 'string') {
+          shieldedAddr = shieldedResult;
+        }
+      } catch (err) {
+        console.warn('[dStorage/midnight] getShieldedAddresses() failed:', err);
       }
 
-      const firstAddr = shieldedAddresses[0];
-      if (!firstAddr?.address) {
-        throw new Error('Shielded address is missing or invalid');
-      }
-      const firstAddress = firstAddr.address;
-
-      // Try to get other addresses from the connector
+      // Unshielded address
       let unshieldedAddr = '';
+      try {
+        const result = await (connectedAPI as any).getUnshieldedAddress?.();
+        console.log('[dStorage/midnight] getUnshieldedAddress() returned:', result);
+        unshieldedAddr = typeof result === 'string' ? result : (result?.address ?? '');
+      } catch {
+        console.warn('[dStorage/midnight] Could not retrieve unshielded address');
+      }
+
+      // Dust address
       let dustAddr = '';
       try {
-        unshieldedAddr = await (connectedAPI as any).getUnshieldedAddress?.() ?? '';
-        dustAddr = await (connectedAPI as any).getDustAddress?.() ?? '';
+        const result = await (connectedAPI as any).getDustAddress?.();
+        console.log('[dStorage/midnight] getDustAddress() returned:', result);
+        dustAddr = typeof result === 'string' ? result : (result?.address ?? '');
       } catch {
-        console.warn('[dStorage/midnight] Could not retrieve unshielded/dust addresses from connector');
+        console.warn('[dStorage/midnight] Could not retrieve dust address');
+      }
+
+      // Use whatever we got — at least one address should be available
+      if (!shieldedAddr && !unshieldedAddr && !dustAddr) {
+        throw new Error('No addresses available from wallet');
       }
 
       this.addresses = {
-        shielded: firstAddress,
-        unshielded: unshieldedAddr || '',
-        dust: dustAddr || '',
+        shielded: shieldedAddr,
+        unshielded: unshieldedAddr,
+        dust: dustAddr,
       };
 
-      console.log(`[dStorage/midnight] Wallet addresses — shielded: ${firstAddress.slice(0, 16)}…`);
+      console.log('[dStorage/midnight] Wallet addresses:', {
+        shielded: shieldedAddr ? `${shieldedAddr.slice(0, 20)}…` : '(none)',
+        unshielded: unshieldedAddr ? `${unshieldedAddr.slice(0, 20)}…` : '(none)',
+        dust: dustAddr ? `${dustAddr.slice(0, 20)}…` : '(none)',
+      });
       return this.addresses;
     } catch (err) {
       throw new Error(
