@@ -84,6 +84,7 @@ export default function App() {
   const [drawerMode, setDrawerMode]         = useState<'metatx' | 'zkproof'>('metatx');
   const [storageAdapterKey, setStorageAdapterKey] = useState<StorageAdapterKey>('mock');
   const [chainAdapterKey, setChainAdapterKey] = useState<ChainAdapterKey>('mock');
+  const [chainAdapter, setChainAdapter]     = useState<any>(null);
 
   const buildSDK = useCallback((storageKey: StorageAdapterKey, chainKey: ChainAdapterKey) => {
     const storageAdapter =
@@ -118,6 +119,7 @@ export default function App() {
     return {
       sdk: new DStorage(dstorageConfig),
       storageAdapter,
+      chainAdapter,
       chainKey
     };
   }, []);
@@ -128,7 +130,14 @@ export default function App() {
    */
   const handleConnect = async () => {
     try {
-      const { sdk, storageAdapter } = buildSDK(storageAdapterKey, chainAdapterKey);
+      const { sdk, storageAdapter, chainAdapter: newChainAdapter } = buildSDK(storageAdapterKey, chainAdapterKey);
+
+      // Initialize the chain adapter if it's a real Midnight connector
+      if (chainAdapterKey === 'midnight-connector') {
+        console.log('[Demo] Initializing Midnight Chain Adapter (connector mode)...');
+        await newChainAdapter.init();
+        console.log('[Demo] ✅ Midnight connector initialized');
+      }
 
       // For Arweave Local, get ArConnect address first to fund the right wallet
       let arweaveAddress: string | null = null;
@@ -172,6 +181,7 @@ export default function App() {
       await sdk.connect(wallet);
       setWallet(wallet);
       setDStorage(sdk);
+      setChainAdapter(newChainAdapter);
       setStep('upload');
     } catch (err) {
       console.error('Connection failed:', err);
@@ -208,9 +218,18 @@ export default function App() {
     setVerified(result.proofValid); setVerifying(false);
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
+    try {
+      // Stop the chain adapter if it's a Midnight connector
+      if (chainAdapterKey === 'midnight-connector' && chainAdapter) {
+        await chainAdapter.stop();
+      }
+    } catch (err) {
+      console.warn('[Demo] Error stopping chain adapter:', err);
+    }
+
     dstorage?.disconnect();
-    setWallet(null); setDStorage(null); setStep('connect');
+    setWallet(null); setDStorage(null); setChainAdapter(null); setStep('connect');
     setRecord(null); setProof(null); setVerified(null);
     setDrawerOpen(false); setMetaTxProgress(null); setZkProgress(null);
   };
@@ -228,7 +247,7 @@ export default function App() {
         <StepIndicator step={step} />
         <div className="hv-header-right">
           <div className="hv-sdk-badge">Powered by <strong>dStorage SDK</strong></div>
-          {wallet && <button className="hv-reset-btn" onClick={handleReset}>New Session</button>}
+          {wallet && <button className="hv-reset-btn" onClick={() => handleReset()}>New Session</button>}
         </div>
       </header>
 
