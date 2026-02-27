@@ -391,8 +391,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     let sdk: { Contract: new (abi: unknown, address: string, opts: unknown) => unknown };
     try {
-      const sdkId = '@midnight-ntwrk/midnight-js-contracts';
-      sdk = await import(/* @vite-ignore */ sdkId);
+      sdk = await import('@midnight-ntwrk/midnight-js-contracts' as string);
     } catch {
       throw new Error(
         '[dStorage/midnight] @midnight-ntwrk/midnight-js-contracts is not installed.\n' +
