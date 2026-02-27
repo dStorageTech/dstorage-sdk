@@ -405,11 +405,9 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Returns the transaction receipt.
    */
   private async executeTransaction(unproven: UnprovenTx): Promise<TxReceipt> {
-    // Step 1: Generate ZK proof via proof server
-    const proven = await unproven.prove(this.config.proofServerEndpoint);
-
     if (this.walletMode === 'facade') {
-      // Facade mode: attach DUST fees and submit via WalletFacade
+      // Facade mode: prove → balance via facade → submit
+      const proven = await unproven.prove(this.config.proofServerEndpoint);
       if (!this.facade) {
         throw new Error('[dStorage/midnight] Wallet not initialized. Call await chain.init() first.');
       }
@@ -417,21 +415,26 @@ export class MidnightChainAdapter implements ChainAdapter {
       const receipt = await balanced.submit();
       return receipt;
     } else {
-      // Connector mode: serialize, balance via connector, submit via connector
+      // Connector mode: use the wallet's configured proof server and connector API
       if (!this.connectorAPI) {
         throw new Error('[dStorage/midnight] Connector not initialized. Call await chain.init() first.');
       }
 
-      // Serialize the proven transaction to hex
-      // The proven transaction object has a toJSON() method that returns the serialized form
-      const provenHex = (proven as any).toJSON?.()
-        ? JSON.stringify((proven as any).toJSON())
-        : Buffer.from(JSON.stringify(proven)).toString('hex');
+      // Step 1: Get the wallet's configured proof server URL (respects user preferences)
+      const config = await this.connectorAPI.getConfiguration();
+      const proofServerUrl = config.proofServerUrl;
 
-      // Step 2: Balance via connector
+      // Step 2: Generate ZK proof using the connector's configured proof server
+      const proven = await unproven.prove(proofServerUrl);
+
+      // Step 3: Serialize proven transaction and balance via connector
+      // The proven transaction is converted to its serialized form (JSON string in hex format)
+      const provenHex = JSON.stringify((proven as any).toJSON?.() ?? proven);
+
+      // Step 4: Balance the transaction via connector
       const balancedHex = await this.connectorAPI.balanceUnsealedTransaction(provenHex);
 
-      // Step 3: Submit via connector
+      // Step 5: Submit the balanced transaction via connector
       const txId = await this.connectorAPI.submitTransaction(balancedHex);
 
       // Return a receipt-like object; the actual blockHeight may not be available immediately
@@ -845,7 +848,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     const connector = windowAny.midnight[this.connectorName];
 
-    // Connect to the wallet extension
+    // Step 1: Connect to the wallet extension
     let connectedAPI: ConnectedAPI;
     try {
       connectedAPI = await connector.connect(this.config.network);
@@ -857,7 +860,20 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
 
-    // Extract addresses from connector
+    // Step 2: Retrieve wallet configuration (respects user preferences for proof server, indexer, etc.)
+    let walletConfig: any;
+    try {
+      walletConfig = await connectedAPI.getConfiguration();
+    } catch (err) {
+      console.warn(
+        '[dStorage/midnight] Failed to retrieve wallet configuration:',
+        err instanceof Error ? err.message : String(err)
+      );
+      // Continue with default config if getConfiguration() fails
+      walletConfig = null;
+    }
+
+    // Step 3: Extract addresses from connector
     try {
       const shieldedAddresses = await connectedAPI.getShieldedAddresses();
       if (!shieldedAddresses || shieldedAddresses.length === 0) {
@@ -871,13 +887,20 @@ export class MidnightChainAdapter implements ChainAdapter {
       }
       const firstAddress = firstAddr.address;
 
-      // The connector doesn't provide unshielded/dust addresses directly
-      // In a real connector, these would be derived separately or obtained from the connector
-      // For now, use placeholder values (the actual addresses would come from the connector API)
+      // Try to get other addresses from the connector
+      let unshieldedAddr = '';
+      let dustAddr = '';
+      try {
+        unshieldedAddr = await (connectedAPI as any).getUnshieldedAddress?.() ?? '';
+        dustAddr = await (connectedAPI as any).getDustAddress?.() ?? '';
+      } catch (err) {
+        console.warn('[dStorage/midnight] Could not retrieve unshielded/dust addresses from connector');
+      }
+
       this.addresses = {
         shielded: firstAddress,
-        unshielded: '', // Not available from connector in v3.x
-        dust: '',       // Not available from connector in v3.x
+        unshielded: unshieldedAddr || '', // May not be available from connector
+        dust: dustAddr || '',               // May not be available from connector
       };
 
       return this.addresses;
