@@ -166,6 +166,10 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return [...refs.entries()].map(([refId, ref]) => ({ refId, ref }));
   }
 
+  async listReferences(): Promise<Array<{ refId: string; ref: ChainReference }>> {
+    return this.getAllReferences();
+  }
+
   // ── Generic circuit API ───────────────────────────────────────────────────
 
   async callCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {

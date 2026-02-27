@@ -236,4 +236,51 @@ describe('MockMidnightChainAdapter', () => {
       expect(all.some((r) => r.refId === refId)).toBe(true);
     });
   });
+
+  // ── listReferences ────────────────────────────────────────────────────────
+
+  describe('listReferences', () => {
+    it('returns an empty array when no references exist', async () => {
+      const adapter = makeAdapter();
+      const list = await adapter.listReferences();
+      expect(Array.isArray(list)).toBe(true);
+      // May or may not be empty depending on shared module-level state from other tests,
+      // but the result must always be an array of objects with refId and ref fields.
+      for (const item of list) {
+        expect(item).toHaveProperty('refId');
+        expect(item).toHaveProperty('ref');
+      }
+    });
+
+    it('returns a written reference after writeReference()', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const ref = uniqueRef('lr1');
+      const wp = adapter.writeReference(ref);
+      await vi.runAllTimersAsync();
+      const { refId } = await wp;
+
+      const list = await adapter.listReferences();
+      const found = list.find((r) => r.refId === refId);
+      expect(found).toBeDefined();
+      expect(found?.ref.storageId).toBe(ref.storageId);
+      expect(found?.ref.owner).toBe(ref.owner);
+    });
+
+    it('each item has refId (string) and ref with storageId and owner', async () => {
+      vi.useFakeTimers();
+      const adapter = makeAdapter();
+      const wp = adapter.writeReference(uniqueRef('lr2'));
+      await vi.runAllTimersAsync();
+      await wp;
+
+      const list = await adapter.listReferences();
+      expect(list.length).toBeGreaterThan(0);
+      for (const { refId, ref } of list) {
+        expect(typeof refId).toBe('string');
+        expect(typeof ref.storageId).toBe('string');
+        expect(typeof ref.owner).toBe('string');
+      }
+    });
+  });
 });

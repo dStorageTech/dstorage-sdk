@@ -27,6 +27,36 @@ import type {
   CircuitCallResult,
 } from '../types.js';
 
+// ── Public types ──────────────────────────────────────────────────────────────
+
+export interface WalletAddresses {
+  unshielded: string;
+  shielded: string;
+  dust: string;
+}
+
+export interface WalletBalances {
+  night: bigint;   // unshielded NIGHT token balance
+  dust: bigint;    // DUST fee token balance
+}
+
+// ── Internal types ────────────────────────────────────────────────────────────
+
+/** Shape of a decoded NoteEntry from the compiled contract's ledger. */
+interface NoteEntry {
+  storageId: Uint8Array;
+  storageProvider: Uint8Array;
+  owner: Uint8Array;
+  dataLabel: Uint8Array;
+  createdAt: bigint;
+}
+
+/** Decode a null-padded fixed-size byte array to a UTF-8 string. */
+function trimNull(bytes: Uint8Array): string {
+  const nullIdx = bytes.indexOf(0);
+  return new TextDecoder().decode(nullIdx >= 0 ? bytes.slice(0, nullIdx) : bytes);
+}
+
 // ── Config ─────────────────────────────────────────────────────────────────────
 
 export interface MidnightChainAdapterConfig {
@@ -58,17 +88,31 @@ export interface MidnightChainAdapterConfig {
   contractAddress: string;
   /**
    * Compiled contract output from compactc.
-   * Import the managed JS output and pass the contract class/object here.
-   * E.g.: import { TodoList } from './contracts/managed/TodoList/index.js'
+   *
+   * Preferred: pass the **full module** (all named exports).
+   * E.g.: `import * as compiledContract from './contracts/managed/todoList/contract/index.js'`
+   *
+   * The full module contains both the `Contract` class (used for tx calls) and the
+   * `ledger()` function (used by `listReferences()` to decode on-chain state).
+   *
+   * Legacy: passing just the `Contract` class still works for write/read/grant operations
+   * but `listReferences()` will throw if the `ledger` function is absent.
    */
   compiledContract: object;
   /**
-   * Connected wallet object.
-   * - Browser: the ConnectedAPI returned by connectMidnightWallet()
-   * - Node.js: a WalletBuilder instance from @midnight-ntwrk/wallet
-   * This object is used to balance transactions (attach DUST fees) and submit them.
+   * Target network. Controls wallet networkId, address format, and fee overhead.
    */
-  wallet: unknown;
+  network: 'testnet' | 'preprod' | 'undeployed';
+
+  /**
+   * Wallet credentials. Provide exactly one of mnemonic or seedHex.
+   * Used by init() to derive Midnight signing keys.
+   */
+  credentials: {
+    mnemonic?: string;  // BIP-39 mnemonic
+    seedHex?: string;   // 64 or 128 hex chars
+  };
+
   /**
    * Optional remapping from built-in operation names to the actual circuit names
    * used in your compiled contract.
@@ -91,6 +135,27 @@ export interface MidnightChainAdapterConfig {
     hasAccess?:      string; // default: 'hasAccess'
     readReference?:  string; // default: 'getReference'
   };
+  /**
+   * Decodes the hex-encoded contract state (returned by the indexer) into a
+   * `ChargedState` that can be passed to the compiled contract's `ledger()` function.
+   *
+   * Required for ledger read operations (`readLedgerEntry`, `listReferences`) because
+   * `@midnight-ntwrk/compact-runtime` must be imported from the consumer's module context
+   * — the package resolution starting from `@dstorage/chain`'s install location may not
+   * find it.
+   *
+   * @example
+   * ```ts
+   * import { ContractState } from '@midnight-ntwrk/compact-runtime';
+   *
+   * new MidnightChainAdapter({
+   *   ...
+   *   stateDecoder: (hexState) =>
+   *     ContractState.deserialize(Buffer.from(hexState, 'hex')).data,
+   * });
+   * ```
+   */
+  stateDecoder?(hexState: string): unknown;
 }
 
 // ── Circuit name defaults ───────────────────────────────────────────────────────
@@ -133,6 +198,9 @@ interface TxReceipt {
 export class MidnightChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = 'midnight';
 
+  private facade: unknown | null = null;
+  private addresses: WalletAddresses | null = null;
+
   private readonly config: {
     nodeEndpoint: string;
     indexerEndpoint: string;
@@ -140,8 +208,10 @@ export class MidnightChainAdapter implements ChainAdapter {
     proofServerEndpoint: string;
     contractAddress: string;
     compiledContract: object;
-    wallet: unknown;
+    network: 'testnet' | 'preprod' | 'undeployed';
+    credentials: { mnemonic?: string; seedHex?: string };
     circuitNames?: MidnightChainAdapterConfig['circuitNames'];
+    stateDecoder?: MidnightChainAdapterConfig['stateDecoder'];
   };
 
   constructor(config: MidnightChainAdapterConfig) {
@@ -157,10 +227,14 @@ export class MidnightChainAdapter implements ChainAdapter {
           'Import the compactc output and pass the contract class/object here.'
       );
     }
-    if (!config.wallet) {
+    if (!config.credentials?.mnemonic && !config.credentials?.seedHex) {
       throw new Error(
-        '[dStorage/midnight] wallet is required. ' +
-          'Call connectMidnightWallet() and pass walletInfo.walletApi.'
+        '[dStorage/midnight] credentials.mnemonic or credentials.seedHex is required.'
+      );
+    }
+    if (!config.network) {
+      throw new Error(
+        '[dStorage/midnight] network is required.'
       );
     }
 
@@ -174,8 +248,10 @@ export class MidnightChainAdapter implements ChainAdapter {
       proofServerEndpoint: config.proofServerEndpoint ?? 'http://localhost:6300',
       contractAddress: config.contractAddress,
       compiledContract: config.compiledContract,
-      wallet: config.wallet,
+      network: config.network,
+      credentials: config.credentials,
       ...(config.circuitNames !== undefined ? { circuitNames: config.circuitNames } : {}),
+      ...(config.stateDecoder !== undefined ? { stateDecoder: config.stateDecoder } : {}),
     };
   }
 
@@ -238,7 +314,9 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Throws a descriptive error if the SDK is missing.
    */
   private async getContract(): Promise<unknown> {
-    const abi = this.config.compiledContract;
+    // Support both a full module object ({ Contract, ledger, ... }) and a bare class.
+    const moduleOrClass = this.config.compiledContract as { Contract?: unknown };
+    const abi = moduleOrClass.Contract ?? this.config.compiledContract;
 
     let sdk: { Contract: new (abi: unknown, address: string, opts: unknown) => unknown };
     try {
@@ -275,11 +353,15 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Returns the transaction receipt.
    */
   private async executeTransaction(unproven: UnprovenTx): Promise<TxReceipt> {
+    if (!this.facade) {
+      throw new Error('[dStorage/midnight] Wallet not initialized. Call await chain.init() first.');
+    }
+
     // Step 1: Generate ZK proof via proof server
     const proven = await unproven.prove(this.config.proofServerEndpoint);
 
     // Step 2: Attach DUST fees via the connected wallet
-    const balanced = await proven.balance(this.config.wallet);
+    const balanced = await proven.balance(this.facade);
 
     // Step 3: Submit to the Midnight network and wait for block inclusion
     const receipt = await balanced.submit();
@@ -414,6 +496,110 @@ export class MidnightChainAdapter implements ChainAdapter {
     return fn(refId, wallet);
   }
 
+  /**
+   * Decode the contract's ledger state from the indexer into a plain JS object.
+   * Returns `null` when the contract is not found on the indexer.
+   *
+   * Requires the compiled module (with a `ledger()` export) to be passed as
+   * `compiledContract`, and `@midnight-ntwrk/compact-runtime` to be installed.
+   * Works with ANY Compact contract — the shape of the returned object matches
+   * whatever ledger fields the compiled contract declares.
+   */
+  private async decodeLedger(): Promise<Record<string, unknown> | null> {
+    const action = await this.fetchIndexerContractState();
+    if (!action) return null;
+
+    const compiledModule = this.config.compiledContract as {
+      ledger?(state: unknown): Record<string, unknown>;
+    };
+
+    if (typeof compiledModule.ledger !== 'function') {
+      throw new Error(
+        '[dStorage/midnight] compiledContract does not expose a ledger() function.\n' +
+          '  Pass the full compiled module instead of just the Contract class:\n' +
+          '  import * as compiledContract from "./contracts/managed/.../contract/index.js"'
+      );
+    }
+
+    let chargedState: unknown;
+    if (this.config.stateDecoder) {
+      // Consumer-provided decoder — runs in the caller's module context where
+      // @midnight-ntwrk/compact-runtime is resolvable.
+      chargedState = this.config.stateDecoder(action.state);
+    } else {
+      // Fallback: try a dynamic import (works only when compact-runtime is
+      // resolvable from @dstorage/chain's install location).
+      let ContractStateClass: { deserialize(raw: Uint8Array): { data: unknown } };
+      try {
+        const runtimeId = '@midnight-ntwrk/compact-runtime';
+        const runtime = await import(/* @vite-ignore */ runtimeId) as {
+          ContractState: { deserialize(raw: Uint8Array): { data: unknown } };
+        };
+        ContractStateClass = runtime.ContractState;
+      } catch {
+        throw new Error(
+          '[dStorage/midnight] Cannot decode ledger state: @midnight-ntwrk/compact-runtime ' +
+            'is not resolvable from @dstorage/chain.\n' +
+            '  Pass a stateDecoder in the adapter config:\n' +
+            '    import { ContractState } from \'@midnight-ntwrk/compact-runtime\';\n' +
+            '    stateDecoder: (hex) => ContractState.deserialize(Buffer.from(hex, \'hex\')).data'
+        );
+      }
+      chargedState = ContractStateClass.deserialize(Buffer.from(action.state, 'hex')).data;
+    }
+
+    return compiledModule.ledger(chargedState);
+  }
+
+  async readLedgerEntry(entryName: string): Promise<unknown> {
+    const ledger = await this.decodeLedger();
+    if (ledger === null) {
+      throw new Error(
+        `[dStorage/midnight] Contract not found at "${this.config.contractAddress}".\n` +
+          `  • Verify the address is correct\n` +
+          `  • Confirm the contract is deployed on this network`
+      );
+    }
+    if (!(entryName in ledger)) {
+      throw new Error(
+        `[dStorage/midnight] Ledger entry '${entryName}' not found.\n` +
+          `  Available entries: ${Object.keys(ledger).join(', ')}`
+      );
+    }
+    return ledger[entryName];
+  }
+
+  async listReferences(): Promise<Array<{ refId: string; ref: ChainReference }>> {
+    const ledger = await this.decodeLedger();
+    if (!ledger) return [];
+
+    const notes = ledger['notes'] as {
+      [Symbol.iterator](): Iterator<[Uint8Array, NoteEntry]>;
+    } | undefined;
+
+    if (!notes || typeof notes[Symbol.iterator] !== 'function') {
+      // Contract has no iterable 'notes' map — not a dStorage todoList contract.
+      return [];
+    }
+
+    const results: Array<{ refId: string; ref: ChainReference }> = [];
+    for (const [refIdBytes, entry] of notes) {
+      results.push({
+        refId: Buffer.from(refIdBytes).toString('hex'),
+        ref: {
+          storageId:       trimNull(entry.storageId),
+          storageProvider: trimNull(entry.storageProvider),
+          owner:           trimNull(entry.owner),
+          ...(entry.dataLabel.some((b: number) => b !== 0)
+            ? { dataLabel: trimNull(entry.dataLabel) }
+            : {}),
+          createdAt: Number(entry.createdAt),
+        },
+      });
+    }
+    return results;
+  }
+
   // ── Generic circuit API ───────────────────────────────────────────────────
 
   async callCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {
@@ -446,5 +632,160 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
 
     return fn(...inputs);
+  }
+
+  // ── Wallet lifecycle ───────────────────────────────────────────────────────
+
+  /**
+   * Initialize the wallet: derive keys, build WalletFacade, wait for sync.
+   * Must be called before write operations or getBalances().
+   *
+   * All Midnight wallet SDK imports are dynamic to avoid hard build-time failures
+   * when these optional peers are absent.
+   */
+  async init(): Promise<WalletAddresses> {
+    // 1. Set global network ID (required by Midnight JS SDK)
+    const { setNetworkId } = await import('@midnight-ntwrk/midnight-js-network-id' as string);
+    setNetworkId(this.config.network);
+
+    // 2. Derive signing key seeds
+    const { KeyDeriver } = await import('@dstorage/crypto');
+    const deriver = new KeyDeriver(this.config.credentials);
+    const { zswapSeed, dustSeed, nightExternalSeed } =
+      await deriver.deriveMidnightSigningKeys();
+
+    // 3. Derive typed secret keys
+    const ledger = await import('@midnight-ntwrk/ledger-v7' as string);
+    const shieldedSecretKeys = (ledger as any).ZswapSecretKeys.fromSeed(zswapSeed);
+    const dustSecretKey = (ledger as any).DustSecretKey.fromSeed(dustSeed);
+
+    // 4. Derive unshielded keystore
+    const {
+      createKeystore,
+      InMemoryTransactionHistoryStorage,
+      PublicKey: UnshieldedPublicKey,
+      UnshieldedWallet,
+    } = await import('@midnight-ntwrk/wallet-sdk-unshielded-wallet' as string);
+    const unshieldedKeystore = (createKeystore as any)(nightExternalSeed, this.config.network);
+
+    // 5. Build wallet config
+    const feeOverhead =
+      this.config.network === 'undeployed'
+        ? 500_000_000_000_000_000n
+        : 300_000_000_000_000_000n;
+    const walletCfg = {
+      networkId: this.config.network,
+      costParameters: { additionalFeeOverhead: feeOverhead, feeBlocksMargin: 5 },
+      relayURL: new URL(this.config.nodeEndpoint),
+      provingServerUrl: new URL(this.config.proofServerEndpoint),
+      indexerClientConnection: {
+        indexerHttpUrl: this.config.indexerEndpoint,
+        indexerWsUrl: this.config.indexerWsEndpoint ?? '',
+      },
+      indexerUrl: this.config.indexerWsEndpoint ?? '',
+    };
+
+    // 6. Construct the three wallet parts
+    const { ShieldedWallet } = await import('@midnight-ntwrk/wallet-sdk-shielded' as string);
+    const { DustWallet } = await import('@midnight-ntwrk/wallet-sdk-dust-wallet' as string);
+
+    const shielded = (ShieldedWallet as any)(walletCfg).startWithSecretKeys(shieldedSecretKeys);
+    const dust = (DustWallet as any)(walletCfg).startWithSecretKey(
+      dustSecretKey,
+      (ledger as any).LedgerParameters.initialParameters().dust
+    );
+    const unshielded = (UnshieldedWallet as any)({
+      ...walletCfg,
+      txHistoryStorage: new (InMemoryTransactionHistoryStorage as any)(),
+    }).startWithPublicKey(
+      (UnshieldedPublicKey as any).fromKeyStore(unshieldedKeystore)
+    );
+
+    // 7. Start WalletFacade
+    const { WalletFacade } = await import('@midnight-ntwrk/wallet-sdk-facade' as string);
+    const facade = new (WalletFacade as any)(shielded, unshielded, dust);
+    await facade.start(shieldedSecretKeys, dustSecretKey);
+    this.facade = facade;
+
+    // 8. Derive wallet addresses from keys (synchronous, no sync needed)
+    const {
+      ShieldedCoinPublicKey,
+      ShieldedEncryptionPublicKey,
+      ShieldedAddress,
+      DustAddress,
+    } = await import('@midnight-ntwrk/wallet-sdk-address-format' as string);
+
+    const cpk = (ShieldedCoinPublicKey as any).fromHexString(
+      shieldedSecretKeys.coinPublicKey
+    );
+    const epk = (ShieldedEncryptionPublicKey as any).fromHexString(
+      shieldedSecretKeys.encryptionPublicKey
+    );
+    this.addresses = {
+      unshielded: unshieldedKeystore.getBech32Address().toString(),
+      shielded: (ShieldedAddress as any).codec
+        .encode(this.config.network, new (ShieldedAddress as any)(cpk, epk))
+        .toString(),
+      dust: (DustAddress as any).encodePublicKey(this.config.network, dustSecretKey.publicKey),
+    };
+
+    // 9. Wait for wallet sync with indexer
+    const { firstValueFrom, filter } = await import('rxjs' as string);
+    await (firstValueFrom as any)(
+      facade.state().pipe(
+        filter((s: { isSynced?: boolean }) => s.isSynced === true)
+      )
+    );
+
+    return this.addresses;
+  }
+
+  /**
+   * Return wallet addresses derived during init().
+   * Throws if init() not yet called.
+   */
+  getAddresses(): WalletAddresses {
+    if (!this.addresses) {
+      throw new Error('[dStorage/midnight] getAddresses() called before init().');
+    }
+    return this.addresses;
+  }
+
+  /**
+   * Read NIGHT and DUST balances from synced wallet state.
+   */
+  async getBalances(): Promise<WalletBalances> {
+    if (!this.facade) {
+      throw new Error('[dStorage/midnight] getBalances() called before init().');
+    }
+
+    const { firstValueFrom } = await import('rxjs' as string);
+    const ledger = await import('@midnight-ntwrk/ledger-v7' as string);
+
+    const state = await (firstValueFrom as any)(
+      ((this.facade as any).state as () => any)()
+    );
+    const nightToken = (ledger as any).unshieldedToken();
+
+    return {
+      night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
+      dust: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
+    };
+  }
+
+  /**
+   * Stop the wallet and release resources. No-op if init() was never called.
+   */
+  async stop(): Promise<void> {
+    if (!this.facade) return;
+
+    const stopFn = ((this.facade as any).stop as (() => Promise<void>) | undefined);
+    await Promise.race([
+      stopFn?.() ?? Promise.resolve(),
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+    ]).catch(() => undefined);
+
+    this.facade = null;
+    this.addresses = null;
   }
 }

@@ -24,7 +24,7 @@ import {
   deriveKeyFromSignature,
 } from '@dstorage/crypto';
 
-import type { CircuitCallResult } from '@dstorage/chain';
+import type { ChainReference, CircuitCallResult } from '@dstorage/chain';
 import type { DStorageConfig, RetrieveResult, UploadResult, WalletInfo } from './types.js';
 import { MetaTransaction } from './metaTransaction.js';
 import type { MetaTxConfig, MetaTxProgress, MetaTxReceipt } from './metaTransaction.js';
@@ -247,6 +247,25 @@ export class DStorage {
 
     metaTx.onProgress(onProgress);
     return metaTx.execute(file, config);
+  }
+
+  // ── List references ────────────────────────────────────────────────────────
+
+  /**
+   * List all references stored in the contract ledger.
+   *
+   * Requires the chain adapter to support `listReferences()` (e.g.
+   * `MidnightChainAdapter` with the full compiled module, or `MockMidnightChainAdapter`).
+   * Does not require a connected wallet — reading the ledger is unauthenticated.
+   */
+  async listReferences(): Promise<Array<{ refId: string; ref: ChainReference }>> {
+    if (!this.config.chainAdapter.listReferences) {
+      throw new Error(
+        '[dStorage] The current chain adapter does not support listReferences(). ' +
+          'Use MidnightChainAdapter or MockMidnightChainAdapter.'
+      );
+    }
+    return this.config.chainAdapter.listReferences();
   }
 
   // ── Custom circuit calls ───────────────────────────────────────────────────

@@ -2,15 +2,11 @@
  * dStorage Midnight Console Demo
  *
  * A real working CLI that:
- *  1. Accepts a BIP-39 mnemonic (or 32/64-byte hex seed) and derives Midnight wallet keys
- *  2. Builds a full Midnight wallet: ShieldedWallet + DustWallet + UnshieldedWallet → WalletFacade
- *  3. Connects to the Midnight indexer and waits for wallet sync
- *  4. Checks NIGHT and DUST balances (displays funding address if empty)
- *  5. Reads a TodoList contract reference via MidnightChainAdapter
- *
- * Reference implementations:
- *   - bricktowers/midnight-local-network: src/utils.ts (wallet construction)
- *   - midnightntwrk/example-bboard: bboard-cli/src/wallet-utils.ts (sync + balances)
+ *  1. Accepts a BIP-39 mnemonic (or 32/64-byte hex seed)
+ *  2. Initializes MidnightChainAdapter with credentials
+ *  3. Calls chain.init() which derives keys, builds wallet, and syncs
+ *  4. Displays wallet addresses and balances
+ *  5. Reads a Counter contract reference via MidnightChainAdapter
  */
 
 // ── WebSocket polyfill ────────────────────────────────────────────────────────
@@ -23,37 +19,21 @@ globalThis.WebSocket = WebSocket;
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
-import { KeyDeriver } from '@dstorage/crypto';
 import { MidnightChainAdapter } from '@dstorage/chain';
-
-import * as ledger from '@midnight-ntwrk/ledger-v7';
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import {
-  DustAddress,
-  ShieldedAddress,
-  ShieldedCoinPublicKey,
-  ShieldedEncryptionPublicKey,
-} from '@midnight-ntwrk/wallet-sdk-address-format';
-import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
-import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
-import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
-import {
-  createKeystore,
-  InMemoryTransactionHistoryStorage,
-  PublicKey as UnshieldedPublicKey,
-  UnshieldedWallet,
-} from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
-import { firstValueFrom, filter } from 'rxjs';
+import { ContractState } from '@midnight-ntwrk/compact-runtime';
 
 // ── Compiled contract ─────────────────────────────────────────────────────────
 // Loaded from the compactc-generated output. Run `npm run compile:contract` first.
 // Using a dynamic import so missing output causes a clear runtime error rather
 // than a build failure.
-let compiledTodoList: object | null = null;
+// The full module is imported (not just the Contract class) so that listReferences()
+// can use the module's ledger() function to decode on-chain state.
+let compiledCounter: object | null = null;
 try {
   // @ts-ignore — file only exists after running compile:contract
   const managed = await import('../contracts/managed/todoList/contract/index.js');
-  compiledTodoList = managed.Contract ?? managed.default ?? null;
+  // Pass the full module (has Contract class + ledger() decoder + pureCircuits).
+  compiledCounter = (typeof managed === 'object' && managed !== null) ? managed : null;
 } catch (err) {
   // Will be handled in main() with a user-friendly message.
   // Log here so import failures (e.g. missing @midnight-ntwrk/compact-runtime) are visible.
@@ -94,11 +74,52 @@ async function withTicker<T>(statusLine: () => string, fn: () => Promise<T>): Pr
   }
 }
 
+// ── Ledger value formatter ─────────────────────────────────────────────────────
+// Converts raw decoded ledger values into human-readable strings.
+// Handles bigint, boolean, Uint8Array, iterable Maps, and plain objects.
+
+function formatLedgerValue(value: unknown, depth = 0): string {
+  if (value === null || value === undefined) return '(null)';
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'boolean') return value.toString();
+  if (typeof value === 'string') return value;
+  if (value instanceof Uint8Array) return Buffer.from(value).toString('hex');
+
+  if (typeof value === 'object') {
+    // Iterable (Map-like) — show size and first few entries
+    const iter = (value as Record<symbol, unknown>)[Symbol.iterator];
+    if (typeof iter === 'function') {
+      const sizeFn = (value as Record<string, unknown>)['size'];
+      const size = typeof sizeFn === 'function' ? (sizeFn as () => bigint)() : '?';
+      if (depth > 0) return `Map(${size})`;
+      const entries: string[] = [];
+      for (const entry of value as Iterable<unknown>) {
+        if (entries.length >= 3) { entries.push('…'); break; }
+        if (Array.isArray(entry) && entry.length === 2) {
+          const k = formatLedgerValue(entry[0], depth + 1);
+          const v = formatLedgerValue(entry[1], depth + 1);
+          entries.push(`${k} → ${v}`);
+        } else {
+          entries.push(formatLedgerValue(entry, depth + 1));
+        }
+      }
+      return `Map(${size}) { ${entries.join(', ')} }`;
+    }
+    // Plain object — show key: value pairs
+    const pairs = Object.entries(value as Record<string, unknown>).map(
+      ([k, v]) => `${k}: ${formatLedgerValue(v, depth + 1)}`
+    );
+    return `{ ${pairs.join(', ')} }`;
+  }
+
+  return String(value);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   let rl = createInterface({ input, output });
-  let facade: WalletFacade | undefined;
+  let chain: MidnightChainAdapter | undefined;
 
   try {
     console.log('\n=== dStorage Midnight Console Demo ===\n');
@@ -113,10 +134,7 @@ async function main(): Promise<void> {
     const networkName = networkInput as NetworkName;
     const defaults = NETWORKS[networkName];
 
-    // Map user-facing network names to Midnight SDK network IDs
-    const networkId = networkName === 'undeployed' ? 'undeployed' : networkName;
-    setNetworkId(networkId);
-    console.log(`Network: ${networkName} (networkId: ${networkId})\n`);
+    console.log(`Network: ${networkName}\n`);
 
     // ── 2. Endpoints ────────────────────────────────────────────────────────
     const nodeEndpoint =
@@ -132,196 +150,116 @@ async function main(): Promise<void> {
       defaults.proofServer;
 
     // ── 3. Mnemonic or hex seed ─────────────────────────────────────────────
-    console.log('\nEnter your BIP-39 mnemonic phrase (12 or 24 words) or a hex seed (64 or 128 hex chars).');
-
-    // Close readline BEFORE entering raw mode so that rl's stdin listener
-    // doesn't conflict with promptSecret's direct stdin.setRawMode() use.
+    console.log('\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).');
     rl.close();
     const seedInput = await promptSecret('Mnemonic / hex seed: ');
-    // Recreate readline with a clean stdin state.
     rl = createInterface({ input, output });
-    process.stdout.write('\n'); // ensure terminal is on a fresh line after raw-mode input
+    process.stdout.write('\n');
+    if (!seedInput) throw new Error('Mnemonic or seed is required.');
 
-    if (!seedInput) {
-      throw new Error('Mnemonic or seed is required.');
-    }
-
-    // Detect hex seed vs mnemonic.
-    // Accept both 64-char (32-byte) and 128-char (64-byte) hex strings.
     const trimmed = seedInput.trim();
-    const isHex64 = /^[0-9a-fA-F]{64}$/.test(trimmed);
-    const isHex128 = /^[0-9a-fA-F]{128}$/.test(trimmed);
-    const deriver = (isHex64 || isHex128)
-      ? new KeyDeriver({ seedHex: trimmed })
-      : new KeyDeriver({ mnemonic: trimmed });
+    const isHex = /^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed);
+    const credentials = isHex ? { seedHex: trimmed } : { mnemonic: trimmed };
 
-    console.log('\nDeriving Midnight signing keys...');
-    const { zswapSeed, dustSeed, nightExternalSeed } = await deriver.deriveMidnightSigningKeys();
-    console.log('Key derivation successful.');
-
-    // ── 4. Build wallet ─────────────────────────────────────────────────────
-    console.log('\nBuilding Midnight wallet...');
-
-    const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(zswapSeed);
-    const dustSecretKey = ledger.DustSecretKey.fromSeed(dustSeed);
-    const unshieldedKeystore = createKeystore(nightExternalSeed, networkId);
-
-    const walletConfig = {
-      networkId,
-      costParameters: {
-        additionalFeeOverhead:
-          networkName === 'undeployed' ? 500_000_000_000_000_000n : 300_000_000_000_000_000n,
-        feeBlocksMargin: 5,
-      },
-      relayURL: new URL(nodeEndpoint),
-      provingServerUrl: new URL(proofServerEndpoint),
-      indexerClientConnection: {
-        indexerHttpUrl: indexerHttp,
-        indexerWsUrl: indexerWs,
-      },
-      // Used by DustWallet internals
-      indexerUrl: indexerWs,
-    };
-
-    const shielded = ShieldedWallet(walletConfig).startWithSecretKeys(shieldedSecretKeys);
-    const dust = DustWallet(walletConfig).startWithSecretKey(
-      dustSecretKey,
-      ledger.LedgerParameters.initialParameters().dust
-    );
-    const unshielded = UnshieldedWallet({
-      ...walletConfig,
-      txHistoryStorage: new InMemoryTransactionHistoryStorage(),
-    }).startWithPublicKey(UnshieldedPublicKey.fromKeyStore(unshieldedKeystore));
-
-    facade = new WalletFacade(shielded, unshielded, dust);
-    console.log('Starting wallet (connecting to indexer)...');
-    await facade.start(shieldedSecretKeys, dustSecretKey);
-    console.log('Wallet started.');
-
-    // ── 5. Display addresses ────────────────────────────────────────────────
-    // Derive all three addresses directly from the keys — no sync needed.
-    const unshieldedAddr = unshieldedKeystore.getBech32Address().toString();
-    const cpk = ShieldedCoinPublicKey.fromHexString(shieldedSecretKeys.coinPublicKey);
-    const epk = ShieldedEncryptionPublicKey.fromHexString(shieldedSecretKeys.encryptionPublicKey);
-    const shieldedAddr = ShieldedAddress.codec
-      .encode(networkId, new ShieldedAddress(cpk, epk))
-      .toString();
-    const dustAddr = DustAddress.encodePublicKey(networkId, dustSecretKey.publicKey);
-
-    console.log('\nWallet addresses:');
-    console.log(`  Unshielded: ${unshieldedAddr}`);
-    console.log(`  Shielded:   ${shieldedAddr}`);
-    console.log(`  Dust:       ${dustAddr}`);
-
-    // ── 6. Wait for sync ────────────────────────────────────────────────────
-    console.log('\nSyncing wallet with indexer...');
-    await withTicker(
-      () => 'Syncing...',
-      () => firstValueFrom(facade!.state().pipe(filter((s: { isSynced?: boolean }) => s.isSynced === true)))
-    );
-    console.log('Wallet synced.');
-
-    // ── 7. Balance checks ───────────────────────────────────────────────────
-    const syncedState = await firstValueFrom(facade.state());
-
-    // NIGHT balance (unshielded token) — matches bboard reference: unshieldedToken().raw
-    const nightToken = ledger.unshieldedToken();
-    const nightBalance: bigint = syncedState.unshielded?.balances?.[nightToken.raw] ?? 0n;
-    if (nightBalance === 0n) {
-      console.log(`\nNo NIGHT tokens found. Send NIGHT to:\n  ${unshieldedAddr}`);
-      console.log('Waiting for funds (Ctrl+C to abort)...');
-      await withTicker(
-        () => 'Waiting for NIGHT funds',
-        () =>
-          firstValueFrom(
-            facade!
-              .state()
-              .pipe(filter((s) => (s.unshielded?.balances?.[ledger.unshieldedToken().raw] ?? 0n) > 0n))
-          )
-      );
-      console.log('NIGHT funds detected!');
-    } else {
-      console.log(`\nNIGHT balance: ${nightBalance} (unshielded)`);
-    }
-
-    // DUST balance (needed for transaction fees)
-    const dustBalance: bigint = syncedState.dust?.walletBalance?.(new Date()) ?? 0n;
-    if (dustBalance === 0n) {
-      console.log('Warning: No DUST found. DUST is required to pay transaction fees.');
-      console.log('Generate DUST by shielding NIGHT, or use a funded wallet.');
-    } else {
-      console.log(`DUST balance: ${dustBalance}`);
-    }
-
-    // ── 8. Contract interaction ─────────────────────────────────────────────
-    if (!compiledTodoList) {
+    // ── 4. Compiled contract check ──────────────────────────────────────────
+    if (!compiledCounter) {
       throw new Error(
-        'TodoList contract is not compiled.\n' +
+        'Compiled contract not found.\n' +
         '  Run: npm run compile:contract\n' +
         '  Then restart the demo.'
       );
     }
 
     const contractAddress = (
-      await rl.question('\nDeployed contract address on Midnight (required): ')
+      await rl.question('\nDeployed contract address: ')
     ).trim();
     if (!contractAddress) {
       throw new Error('A contract address is required.');
     }
 
-    const refId = (
-      await rl.question('Reference ID to read (press Enter to skip): ')
-    ).trim();
-
-    console.log('\nInitialising chain adapter...');
-    const chain = new MidnightChainAdapter({
+    chain = new MidnightChainAdapter({
+      network: networkName,
+      credentials,
       contractAddress,
-      compiledContract: compiledTodoList,
-      wallet: facade,
+      compiledContract: compiledCounter,
       nodeEndpoint,
       indexerEndpoint: indexerHttp,
       indexerWsEndpoint: indexerWs,
       proofServerEndpoint,
+      stateDecoder: (hexState) =>
+        ContractState.deserialize(Buffer.from(hexState, 'hex')).data,
     });
 
-    if (refId) {
-      console.log(`Querying contract state for reference "${refId}"...`);
-      const reference = await withTicker(
-        () => 'Querying indexer...',
-        () => chain.readReference(refId)
-      );
-      console.log('Reference found:');
-      console.log(JSON.stringify(reference, null, 2));
+    // ── 5. Init (derives keys, builds wallet, waits for sync) ────────────────
+    console.log('\nInitialising wallet and syncing...');
+    const addresses = await withTicker(
+      () => 'Building wallet and syncing...',
+      () => chain.init()
+    );
+    console.log('Wallet synced.');
+
+    console.log('\nWallet addresses:');
+    console.log(`  Unshielded: ${addresses.unshielded}`);
+    console.log(`  Shielded:   ${addresses.shielded}`);
+    console.log(`  Dust:       ${addresses.dust}`);
+
+    // ── 6. Balances ──────────────────────────────────────────────────────────
+    const balances = await chain.getBalances();
+    if (balances.night === 0n) {
+      console.log(`\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`);
     } else {
-      // No refId — at least confirm the contract exists on-chain.
-      console.log('Checking contract exists on-chain...');
-      const action = await withTicker(
-        () => 'Querying indexer...',
-        () => chain.fetchIndexerContractState()
-      );
-      if (action === null) {
-        console.log(
-          `\nNo contract found at "${contractAddress}".\n` +
-          `  • Verify the address is correct\n` +
-          `  • Confirm the contract is deployed on this network\n` +
-          `  • Check you are connected to the right network (undeployed vs preprod)`
+      console.log(`\nNIGHT balance: ${balances.night}`);
+    }
+    if (balances.dust === 0n) {
+      console.log('Warning: No DUST found. DUST is required for transaction fees.');
+    } else {
+      console.log(`DUST balance: ${balances.dust}`);
+    }
+
+    // ── 7. Contract interaction ─────────────────────────────────────────────
+
+    const ledgerEntry = (
+      await rl.question('Ledger entry name to read (e.g. "round" for the counter contract): ')
+    ).trim();
+    if (!ledgerEntry) {
+      throw new Error('A ledger entry name is required.');
+    }
+
+    console.log('\n─── Contract ledger ────────────────────────────────────────────────────');
+
+    // Action menu loop
+    let done = false;
+    while (!done) {
+      console.log(`\nReading ledger entry "${ledgerEntry}"...`);
+      try {
+        const value = await withTicker(
+          () => 'Querying indexer...',
+          () => chain.readLedgerEntry(ledgerEntry)
         );
-      } else {
-        const stateBytes = action.state.length / 2;
-        console.log(`Contract exists at ${action.address} (state: ${stateBytes} bytes).`);
-        console.log('Pass a reference ID to query specific data.');
+        console.log(`${ledgerEntry} = ${formatLedgerValue(value)}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(msg);
+      }
+
+      console.log('\nWhat would you like to do?');
+      console.log('  [r] Read again (refresh)');
+      console.log('  [q] Quit');
+
+      const choice = (await rl.question('Choice: ')).trim().toLowerCase();
+      if (choice === 'q' || choice === '') {
+        done = true;
+      } else if (choice !== 'r') {
+        console.log('Unknown choice. Enter r or q.');
       }
     }
 
     console.log('\nDone.\n');
   } finally {
     rl.close();
-    if (facade) {
+    if (chain) {
       console.log('Shutting down wallet...');
-      await Promise.race([
-        facade.stop(),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ]).catch(() => undefined);
+      await chain.stop();
     }
   }
 }

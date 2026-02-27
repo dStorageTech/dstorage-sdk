@@ -83,6 +83,25 @@ export interface ChainAdapter {
   hasAccess(refId: string, wallet: string): Promise<boolean>;
 
   /**
+   * Read a single entry from the contract's decoded ledger state by name.
+   * Returns the raw TypeScript value as decoded by the compiled contract's ledger() function.
+   *
+   * Works with any contract whose compiled module exposes a `ledger()` function
+   * (i.e. the full module is passed as `compiledContract`, not just the Contract class).
+   * Requires `@midnight-ntwrk/compact-runtime` to be installed.
+   *
+   * Optional — not all adapters support ledger decoding.
+   */
+  readLedgerEntry?(entryName: string): Promise<unknown>;
+
+  /**
+   * List all references stored in the contract ledger.
+   * Optional — requires a live chain adapter with ledger decode support.
+   * Returns the full compiled module's ledger by decoding on-chain state via compact-runtime.
+   */
+  listReferences?(): Promise<Array<{ refId: string; ref: ChainReference }>>;
+
+  /**
    * Call a custom ZK circuit by name, running the full prove → balance → submit pipeline.
    * Optional — not all adapters support ZK proving (e.g. plain mock adapters).
    */
@@ -93,4 +112,21 @@ export interface ChainAdapter {
    * Optional — not all adapters support direct contract state queries.
    */
   queryCircuit?<T = unknown>(queryName: string, inputs: unknown[]): Promise<T>;
+
+  /** Initialize the wallet: derive keys, build WalletFacade, wait for sync.
+   *  Must be called before write operations or getBalances().
+   *  Optional — only for adapters that manage wallet lifecycle (e.g. Midnight). */
+  init?(): Promise<import('./adapters/midnight.js').WalletAddresses>;
+
+  /** Return wallet addresses derived during init(). Throws if init() not yet called.
+   *  Optional — only for adapters that manage wallet lifecycle. */
+  getAddresses?(): import('./adapters/midnight.js').WalletAddresses;
+
+  /** Read NIGHT and DUST balances from synced wallet state.
+   *  Optional — only for adapters that manage wallet lifecycle. */
+  getBalances?(): Promise<import('./adapters/midnight.js').WalletBalances>;
+
+  /** Stop the wallet and release resources. No-op if init() was never called.
+   *  Optional — only for adapters that manage wallet lifecycle. */
+  stop?(): Promise<void>;
 }

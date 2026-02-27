@@ -8,6 +8,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MockMidnightChainAdapter } from '../adapters/mockMidnight.js';
 import { MidnightChainAdapter } from '../adapters/midnight.js';
 
+const MOCK_CREDENTIALS = { mnemonic: 'test test test test test test test test test test test junk' };
+const MOCK_NETWORK = 'undeployed' as const;
+
 afterEach(() => vi.useRealTimers());
 
 // ── MockMidnightChainAdapter ─────────────────────────────────────────────────
@@ -143,7 +146,8 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
     const adapterDefault = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
-      wallet: MOCK_WALLET,
+      network: MOCK_NETWORK,
+      credentials: MOCK_CREDENTIALS,
     });
     await expect(
       adapterDefault.writeReference({
@@ -159,7 +163,8 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
     const adapterRemapped = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
-      wallet: MOCK_WALLET,
+      network: MOCK_NETWORK,
+      credentials: MOCK_CREDENTIALS,
       circuitNames: { writeReference: 'saveRecord' },
     });
     await expect(
@@ -178,7 +183,8 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
         new MidnightChainAdapter({
           contractAddress: '0xContract',
           compiledContract: {},
-          wallet: MOCK_WALLET,
+          network: MOCK_NETWORK,
+      credentials: MOCK_CREDENTIALS,
           circuitNames: {
             writeReference: 'saveRecord',
             grantAccess:    'allowViewer',
@@ -196,7 +202,8 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
         new MidnightChainAdapter({
           contractAddress: '0xContract',
           compiledContract: {},
-          wallet: MOCK_WALLET,
+          network: MOCK_NETWORK,
+      credentials: MOCK_CREDENTIALS,
           circuitNames: { writeReference: 'storeInsuranceRecord' },
         })
     ).not.toThrow();
@@ -206,7 +213,8 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
     const adapter = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
-      wallet: MOCK_WALLET,
+      network: MOCK_NETWORK,
+      credentials: MOCK_CREDENTIALS,
     });
     await expect(adapter.callCircuit('verifyAge', [19860101])).rejects.toThrow(
       'midnight-js-contracts'
@@ -217,7 +225,8 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
     const adapter = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
-      wallet: MOCK_WALLET,
+      network: MOCK_NETWORK,
+      credentials: MOCK_CREDENTIALS,
     });
     await expect(adapter.queryCircuit('checkCoverage', ['pid'])).rejects.toThrow(
       'midnight-js-contracts'
