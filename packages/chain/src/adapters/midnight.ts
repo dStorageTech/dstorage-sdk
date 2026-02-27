@@ -72,19 +72,19 @@ interface WalletInitialAPI {
 interface ConnectedAPI {
   // Configuration
   getConfiguration(): Promise<{
-    proofServerUrl?: string;
-    indexerUrl?: string;
-    indexerWsUrl?: string;
-    nodeUrl?: string;
     networkId?: string;
+    indexerUri?: string;
+    indexerWsUri?: string;
+    proverServerUri?: string;
+    substrateNodeUri?: string;
   }>;
   // Wallet state
   getShieldedBalances?(): Promise<unknown>;
   getUnshieldedBalances?(): Promise<unknown>;
   getDustBalance?(): Promise<unknown>;
-  getShieldedAddresses(): Promise<{ address: string; publicKey: string }[]>;
-  getUnshieldedAddress?(): Promise<string>;
-  getDustAddress?(): Promise<string>;
+  getShieldedAddresses(): Promise<{ shieldedAddress: string; shieldedCoinPublicKey: string; shieldedEncryptionPublicKey: string } | unknown>;
+  getUnshieldedAddress?(): Promise<{ unshieldedAddress: string } | string>;
+  getDustAddress?(): Promise<{ dustAddress: string } | string>;
   // Transaction methods
   balanceUnsealedTransaction(tx: string): Promise<string>;
   submitTransaction(tx: string): Promise<string>;
@@ -444,7 +444,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
       // Step 1: Get the wallet's configured proof server URL (respects user preferences)
       const walletCfg = await this.connectorAPI.getConfiguration();
-      const proofServerUrl = walletCfg.proofServerUrl ?? this.config.proofServerEndpoint;
+      const proofServerUrl = walletCfg.proverServerUri ?? this.config.proofServerEndpoint;
 
       // Step 2: Generate ZK proof using the connector's configured proof server
       const proven = await unproven.prove(proofServerUrl);
@@ -935,40 +935,32 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Step 3: Extract addresses from connector
     try {
-      // Shielded address — the return shape varies across connector versions:
-      // could be string[], { address }[], or accessed via a different method name.
+      // Extract addresses from the connector.
+      // Lace returns: { shieldedAddress, shieldedCoinPublicKey, shieldedEncryptionPublicKey }
+      //               { unshieldedAddress }
+      //               { dustAddress }
       let shieldedAddr = '';
       try {
-        const shieldedResult = await connectedAPI.getShieldedAddresses();
-        console.log('[dStorage/midnight] getShieldedAddresses() returned:', shieldedResult);
-
-        if (Array.isArray(shieldedResult) && shieldedResult.length > 0) {
-          const first = shieldedResult[0];
-          // Could be a plain string or an object with address/publicKey
-          shieldedAddr = typeof first === 'string' ? first : (first?.address ?? '');
-        } else if (typeof shieldedResult === 'string') {
-          shieldedAddr = shieldedResult;
-        }
+        const r = await connectedAPI.getShieldedAddresses();
+        // Could be a single object or an array
+        const obj = Array.isArray(r) ? r[0] : r;
+        shieldedAddr = (obj as any)?.shieldedAddress ?? (obj as any)?.address ?? (typeof obj === 'string' ? obj : '');
       } catch (err) {
         console.warn('[dStorage/midnight] getShieldedAddresses() failed:', err);
       }
 
-      // Unshielded address
       let unshieldedAddr = '';
       try {
-        const result = await (connectedAPI as any).getUnshieldedAddress?.();
-        console.log('[dStorage/midnight] getUnshieldedAddress() returned:', result);
-        unshieldedAddr = typeof result === 'string' ? result : (result?.address ?? '');
+        const r = await (connectedAPI as any).getUnshieldedAddress?.();
+        unshieldedAddr = (r as any)?.unshieldedAddress ?? (typeof r === 'string' ? r : '');
       } catch {
         console.warn('[dStorage/midnight] Could not retrieve unshielded address');
       }
 
-      // Dust address
       let dustAddr = '';
       try {
-        const result = await (connectedAPI as any).getDustAddress?.();
-        console.log('[dStorage/midnight] getDustAddress() returned:', result);
-        dustAddr = typeof result === 'string' ? result : (result?.address ?? '');
+        const r = await (connectedAPI as any).getDustAddress?.();
+        dustAddr = (r as any)?.dustAddress ?? (typeof r === 'string' ? r : '');
       } catch {
         console.warn('[dStorage/midnight] Could not retrieve dust address');
       }
