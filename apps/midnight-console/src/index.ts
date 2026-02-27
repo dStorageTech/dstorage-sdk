@@ -28,12 +28,14 @@ import { ContractState } from '@midnight-ntwrk/compact-runtime';
 // than a build failure.
 // The full module is imported (not just the Contract class) so that listReferences()
 // can use the module's ledger() function to decode on-chain state.
-let compiledCounter: object | null = null;
+let compiledContract: object | null = null;
+let contractName = 'Unknown';
 try {
   // @ts-ignore — file only exists after running compile:contract
-  const managed = await import('../contracts/managed/todoList/contract/index.js');
+  contractName = '../contracts/managed/bboard/contract/index.js';
+  const managed = await import(contractName);
   // Pass the full module (has Contract class + ledger() decoder + pureCircuits).
-  compiledCounter = (typeof managed === 'object' && managed !== null) ? managed : null;
+  compiledContract = (typeof managed === 'object' && managed !== null) ? managed : null;
 } catch (err) {
   // Will be handled in main() with a user-friendly message.
   // Log here so import failures (e.g. missing @midnight-ntwrk/compact-runtime) are visible.
@@ -162,7 +164,7 @@ async function main(): Promise<void> {
     const credentials = isHex ? { seedHex: trimmed } : { mnemonic: trimmed };
 
     // ── 4. Compiled contract check ──────────────────────────────────────────
-    if (!compiledCounter) {
+    if (!compiledContract) {
       throw new Error(
         'Compiled contract not found.\n' +
         '  Run: npm run compile:contract\n' +
@@ -177,11 +179,13 @@ async function main(): Promise<void> {
       throw new Error('A contract address is required.');
     }
 
+    console.log(`Contract: ${contractName}`);
+
     chain = new MidnightChainAdapter({
       network: networkName,
       credentials,
       contractAddress,
-      compiledContract: compiledCounter,
+      compiledContract: compiledContract,
       nodeEndpoint,
       indexerEndpoint: indexerHttp,
       indexerWsEndpoint: indexerWs,
@@ -218,8 +222,8 @@ async function main(): Promise<void> {
 
     // ── 7. Contract interaction ─────────────────────────────────────────────
 
-    const ledgerEntry = (
-      await rl.question('Ledger entry name to read (e.g. "round" for the counter contract): ')
+    let ledgerEntry = (
+      await rl.question('Ledger entry name to read: ')
     ).trim();
     if (!ledgerEntry) {
       throw new Error('A ledger entry name is required.');
@@ -246,11 +250,11 @@ async function main(): Promise<void> {
       console.log('  [r] Read again (refresh)');
       console.log('  [q] Quit');
 
-      const choice = (await rl.question('Choice: ')).trim().toLowerCase();
-      if (choice === 'q' || choice === '') {
+      ledgerEntry = (await rl.question('Choice: ')).trim().toLowerCase();
+      if (ledgerEntry === 'q' || ledgerEntry === '') {
         done = true;
-      } else if (choice !== 'r') {
-        console.log('Unknown choice. Enter r or q.');
+      } else if (ledgerEntry !== 'r') {
+        console.log('Unknown ledgerEntry. Enter r or q.');
       }
     }
 
