@@ -18,7 +18,12 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint packages/*/src apps/*/src --ext .ts,.tsx"
   },
+  "dependencies": {
+    "pino": "^10.3.1"
+  },
   "devDependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.14.0",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^3.1.0",
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^8.57.0",
     "jsdom": "^25.0.1",

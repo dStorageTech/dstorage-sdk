@@ -170,6 +170,28 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return this.getAllReferences();
   }
 
+  // ── DataRegistry deployment stubs ─────────────────────────────────────────
+
+  setContractAddress(_address: string): void {
+    // No-op for mock — contract address is not used
+  }
+
+  async deployDataRegistry(): Promise<string> {
+    await this.proofServer.generateProof('constructor', {});
+    await sleep(150 + Math.random() * 100);
+    const addr = `mock_contract_${Date.now()}`;
+    console.log(`[dStorage/mock-midnight] DataRegistry deployed at: ${addr}`);
+    return addr;
+  }
+
+  async getEncryptionKey(): Promise<CryptoKey> {
+    const { KeyDeriver } = await import('@dstorage/crypto');
+    // Fixed test mnemonic for deterministic mock encryption key
+    return new KeyDeriver({
+      mnemonic: 'test test test test test test test test test test test junk',
+    }).deriveEncryptionKey();
+  }
+
   // ── Generic circuit API ───────────────────────────────────────────────────
 
   async callCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {

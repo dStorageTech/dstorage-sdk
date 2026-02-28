@@ -33,9 +33,54 @@ export class DStorage {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
   private encryptionKey: CryptoKey | null = null;
+  private _initialized = false;
 
   constructor(config: DStorageConfig) {
     this.config = config;
+  }
+
+  // ── Initialization (new API) ────────────────────────────────────────────────
+
+  /**
+   * Initialize the SDK:
+   *   1. Initialize the chain adapter wallet (if supported).
+   *   2. Deploy a new DataRegistry contract, or connect to an existing one.
+   *   3. Derive an encryption key from the chain adapter's credentials (if supported).
+   *
+   * Returns the address of the DataRegistry contract in use.
+   * Call this instead of connect() when using MidnightChainAdapter directly.
+   */
+  async init(): Promise<{ dataRegistryAddress: string }> {
+    // 1. Initialize chain adapter wallet (derives keys, syncs wallet, etc.)
+    if (this.config.chainAdapter.init) {
+      await this.config.chainAdapter.init();
+    }
+
+    // 2. Deploy or connect to DataRegistry contract
+    let dataRegistryAddress: string;
+    if (this.config.dataRegistryAddress) {
+      // Use existing contract
+      this.config.chainAdapter.setContractAddress?.(this.config.dataRegistryAddress);
+      dataRegistryAddress = this.config.dataRegistryAddress;
+      console.log(`[dStorage] Connected to existing DataRegistry: ${dataRegistryAddress}`);
+    } else if (this.config.chainAdapter.deployDataRegistry) {
+      // Auto-deploy new contract
+      dataRegistryAddress = await this.config.chainAdapter.deployDataRegistry();
+      console.log(`[dStorage] DataRegistry deployed at: ${dataRegistryAddress}`);
+    } else {
+      throw new Error(
+        '[dStorage] Chain adapter does not support deployDataRegistry(). ' +
+          'Pass dataRegistryAddress in the config to use an existing contract.'
+      );
+    }
+
+    // 3. Derive encryption key from chain adapter credentials (facade mode)
+    if (this.config.chainAdapter.getEncryptionKey) {
+      this.encryptionKey = await this.config.chainAdapter.getEncryptionKey();
+    }
+
+    this._initialized = true;
+    return { dataRegistryAddress };
   }
 
   // ── Connection ──────────────────────────────────────────────────────────────
@@ -64,11 +109,12 @@ export class DStorage {
   disconnect(): void {
     this.wallet = null;
     this.encryptionKey = null;
+    this._initialized = false;
     console.log('[dStorage] Disconnected — encryption key cleared from memory.');
   }
 
   get isConnected(): boolean {
-    return this.wallet !== null && this.encryptionKey !== null;
+    return (this.wallet !== null && this.encryptionKey !== null) || this._initialized;
   }
 
   get connectedAddress(): string | null {
@@ -96,17 +142,23 @@ export class DStorage {
         ? new TextEncoder().encode(content)
         : content;
 
-    // 1. Encrypt client-side — plaintext never leaves this function unencrypted
-    const payload = await encrypt(this.encryptionKey!, bytes);
-    const serialized = serializePayload(payload);
+    // 1. Encrypt client-side if key is available; otherwise store as UTF-8 text
+    let serialized: string;
+    if (this.encryptionKey) {
+      const payload = await encrypt(this.encryptionKey, bytes);
+      serialized = serializePayload(payload);
+    } else {
+      serialized = new TextDecoder().decode(bytes);
+    }
 
-    // 2. Upload encrypted payload to chosen storage network
+    // 2. Upload to chosen storage network
+    const ownerAddress = this.wallet?.address ?? '';
     const storageResult = await this.config.storageAdapter.upload(
       serialized,
       {
         ...metadata,
         'dstorage-version': '0.1.0',
-        'dstorage-owner': this.wallet!.address,
+        ...(ownerAddress ? { 'dstorage-owner': ownerAddress } : {}),
       }
     );
 
@@ -115,19 +167,21 @@ export class DStorage {
     const chainResult = await this.config.chainAdapter.writeReference({
       storageId: storageResult.id,
       storageProvider: storageResult.provider,
-      owner: this.wallet!.address,
+      owner: ownerAddress,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       createdAt: Date.now(),
     });
 
-    const dataId = `${storageResult.id}::${chainResult.refId}`;
+    const refId = chainResult.refId;
+    const dataId = `${storageResult.id}::${refId}`;
 
-    console.log(`[dStorage] Upload complete → dataId: ${dataId}`);
+    console.log(`[dStorage] Upload complete → refId: ${refId}`);
 
     return {
+      refId,
       dataId,
       storageId: storageResult.id,
-      chainRefId: chainResult.refId,
+      chainRefId: refId,
       storageProvider: storageResult.provider,
       chainProvider: chainResult.provider,
       uploadedAt: storageResult.uploadedAt,
@@ -147,61 +201,28 @@ export class DStorage {
 
     const storageId = parseStorageId(dataId);
 
-    // 1. Fetch encrypted blob from storage
+    // 1. Fetch blob from storage
     const serialized = await this.config.storageAdapter.retrieve(storageId);
 
-    // 2. Deserialize and decrypt locally
-    const payload = deserializePayload(serialized);
-    const decryptedBytes = await decrypt(this.encryptionKey!, payload);
+    // 2. Deserialize and decrypt if an encryption key is available
+    let decryptedBytes: Uint8Array;
+    if (this.encryptionKey) {
+      const payload = deserializePayload(serialized);
+      decryptedBytes = await decrypt(this.encryptionKey, payload);
+    } else {
+      // No encryption key — content was stored as unencrypted UTF-8 text
+      decryptedBytes = new TextEncoder().encode(serialized);
+    }
+
     const content = new TextDecoder().decode(decryptedBytes);
 
-    console.log(`[dStorage] Retrieved and decrypted → dataId: ${dataId}`);
+    console.log(`[dStorage] Retrieved → dataId: ${dataId}`);
 
     return {
       content,
       bytes: decryptedBytes,
       metadata: {},
     };
-  }
-
-  // ── Permissions ────────────────────────────────────────────────────────────
-
-  /**
-   * Grant another wallet address read access to a specific dataId.
-   * Writes a permission record on-chain.
-   */
-  async grant(dataId: string, recipientAddress: string): Promise<string> {
-    this.assertConnected();
-
-    const chainRefId = parseChainRefId(dataId);
-
-    const permId = await this.config.chainAdapter.grantAccess({
-      refId: chainRefId,
-      grantee: recipientAddress,
-    });
-
-    console.log(`[dStorage] Access granted: ${recipientAddress} → ${dataId}`);
-    return permId;
-  }
-
-  /**
-   * Revoke a previously granted permission.
-   */
-  async revoke(dataId: string, recipientAddress: string): Promise<void> {
-    this.assertConnected();
-
-    const chainRefId = parseChainRefId(dataId);
-    await this.config.chainAdapter.revokeAccess(chainRefId, recipientAddress);
-
-    console.log(`[dStorage] Access revoked: ${recipientAddress} → ${dataId}`);
-  }
-
-  /**
-   * Check if a wallet address has access to a dataId.
-   */
-  async hasAccess(dataId: string, walletAddress: string): Promise<boolean> {
-    const chainRefId = parseChainRefId(dataId);
-    return this.config.chainAdapter.hasAccess(chainRefId, walletAddress);
   }
 
   // ── Cost estimation ────────────────────────────────────────────────────────
@@ -236,11 +257,18 @@ export class DStorage {
   ): Promise<MetaTxReceipt> {
     this.assertConnected();
 
+    if (!this.encryptionKey) {
+      throw new Error(
+        '[dStorage] executeMetaTransaction() requires an encryption key. ' +
+          'Call connect() with wallet credentials, or use init() with a facade-mode chain adapter.'
+      );
+    }
+
     const metaTx = new MetaTransaction(
       this.config.storageAdapter,
       this.config.chainAdapter,
-      this.encryptionKey!,
-      this.wallet!.address,
+      this.encryptionKey,
+      this.wallet?.address ?? '',
       this.config.storagePaymentAdapter,
       this.config.chainPaymentAdapter
     );
@@ -296,7 +324,7 @@ export class DStorage {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private assertConnected(): void {
-    if (!this.isConnected) {
+    if (!this._initialized && this.wallet === null) {
       throw new Error(
         '[dStorage] Not connected. Call dStorage.connect(walletInfo) first.'
       );

@@ -8,15 +8,17 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "compile:contract": "compactc contracts/TodoList.compact contracts/managed"
+    "compile:contract": "compact compile contracts/bboard.compact contracts/managed/bboard"
   },
   "dependencies": {
     "@dstorage/chain": "*",
     "@dstorage/core": "*",
     "@dstorage/crypto": "*",
     "@dstorage/storage": "*",
-    "@midnight-ntwrk/compact-runtime": "^0.9.0",
+    "@midnight-ntwrk/compact-runtime": "^0.14.0",
     "@midnight-ntwrk/midnight-js-contracts": "^3.1.0",
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "^3.1.0",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^3.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

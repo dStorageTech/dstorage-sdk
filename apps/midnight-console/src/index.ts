@@ -3,10 +3,15 @@
  *
  * A real working CLI that:
  *  1. Accepts a BIP-39 mnemonic (or 32/64-byte hex seed)
- *  2. Initializes MidnightChainAdapter with credentials
- *  3. Calls chain.init() which derives keys, builds wallet, and syncs
+ *  2. Accepts an (optional) deployed DataRegistry contract address
+ *  3. Initialises the DStorage SDK — which internally:
+ *       a. Derives keys, builds WalletFacade, and waits for sync
+ *       b. Deploys a new DataRegistry if no address was given (requires ZK artifacts)
+ *       c. Derives an AES-GCM encryption key from the seed
  *  4. Displays wallet addresses and balances
- *  5. Reads a Counter contract reference via MidnightChainAdapter
+ *  5. Upload loop: asks for a local file path, reads its contents, calls
+ *       sdk.upload(content) → encrypt → mock-store → write on-chain reference
+ *     and prints the refId returned by the DataRegistry circuit
  */
 
 // ── WebSocket polyfill ────────────────────────────────────────────────────────
@@ -18,27 +23,31 @@ globalThis.WebSocket = WebSocket;
 
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import path from 'node:path';
 
+import { DStorage } from '@dstorage/core';
+import { MockStorageAdapter } from '@dstorage/storage';
 import { MidnightChainAdapter } from '@dstorage/chain';
+import type { ChainReference } from '@dstorage/chain';
 import { ContractState } from '@midnight-ntwrk/compact-runtime';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 // ── Compiled contract ─────────────────────────────────────────────────────────
-// Loaded from the compactc-generated output. Run `npm run compile:contract` first.
-// Using a dynamic import so missing output causes a clear runtime error rather
-// than a build failure.
-// The full module is imported (not just the Contract class) so that listReferences()
-// can use the module's ledger() function to decode on-chain state.
+// Uses the todoList contract — it has a storeReference circuit compatible with
+// the SDK's writeReference() operation. The circuitArgMapper (below) translates
+// ChainReference into the todoList circuit's 4-arg format.
+//
+// Run `npm run compile:contract` to rebuild the ZK artifacts if needed.
 let compiledContract: object | null = null;
-let contractName = 'Unknown';
+const contractPath = '../contracts/managed/todoList/contract/index.js';
 try {
-  // @ts-ignore — file only exists after running compile:contract
-  contractName = '../contracts/managed/bboard/contract/index.js';
-  const managed = await import(contractName);
-  // Pass the full module (has Contract class + ledger() decoder + pureCircuits).
+  const managed = await import(contractPath);
   compiledContract = (typeof managed === 'object' && managed !== null) ? managed : null;
 } catch (err) {
-  // Will be handled in main() with a user-friendly message.
-  // Log here so import failures (e.g. missing @midnight-ntwrk/compact-runtime) are visible.
   console.error('[dStorage] Failed to load compiled contract:', err);
 }
 
@@ -76,45 +85,13 @@ async function withTicker<T>(statusLine: () => string, fn: () => Promise<T>): Pr
   }
 }
 
-// ── Ledger value formatter ─────────────────────────────────────────────────────
-// Converts raw decoded ledger values into human-readable strings.
-// Handles bigint, boolean, Uint8Array, iterable Maps, and plain objects.
+// ── Pad a UTF-8 string into a fixed-size Uint8Array ──────────────────────────
 
-function formatLedgerValue(value: unknown, depth = 0): string {
-  if (value === null || value === undefined) return '(null)';
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'boolean') return value.toString();
-  if (typeof value === 'string') return value;
-  if (value instanceof Uint8Array) return Buffer.from(value).toString('hex');
-
-  if (typeof value === 'object') {
-    // Iterable (Map-like) — show size and first few entries
-    const iter = (value as Record<symbol, unknown>)[Symbol.iterator];
-    if (typeof iter === 'function') {
-      const sizeFn = (value as Record<string, unknown>)['size'];
-      const size = typeof sizeFn === 'function' ? (sizeFn as () => bigint)() : '?';
-      if (depth > 0) return `Map(${size})`;
-      const entries: string[] = [];
-      for (const entry of value as Iterable<unknown>) {
-        if (entries.length >= 3) { entries.push('…'); break; }
-        if (Array.isArray(entry) && entry.length === 2) {
-          const k = formatLedgerValue(entry[0], depth + 1);
-          const v = formatLedgerValue(entry[1], depth + 1);
-          entries.push(`${k} → ${v}`);
-        } else {
-          entries.push(formatLedgerValue(entry, depth + 1));
-        }
-      }
-      return `Map(${size}) { ${entries.join(', ')} }`;
-    }
-    // Plain object — show key: value pairs
-    const pairs = Object.entries(value as Record<string, unknown>).map(
-      ([k, v]) => `${k}: ${formatLedgerValue(v, depth + 1)}`
-    );
-    return `{ ${pairs.join(', ')} }`;
-  }
-
-  return String(value);
+function padBytes(str: string, size: number): Uint8Array {
+  const b = new TextEncoder().encode(str);
+  const out = new Uint8Array(size);
+  out.set(b.slice(0, size));
+  return out;
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -163,52 +140,77 @@ async function main(): Promise<void> {
     const isHex = /^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed);
     const credentials = isHex ? { seedHex: trimmed } : { mnemonic: trimmed };
 
-    // ── 4. Compiled contract check ──────────────────────────────────────────
+    // ── 4. Contract address ─────────────────────────────────────────────────
     if (!compiledContract) {
       throw new Error(
-        'Compiled contract not found.\n' +
+        'Compiled todoList contract not found.\n' +
         '  Run: npm run compile:contract\n' +
         '  Then restart the demo.'
       );
     }
 
-    const contractAddress = (
-      await rl.question('\nDeployed contract address: ')
+    const contractAddressInput = (
+      await rl.question('\nDeployed DataRegistry contract address (leave blank to auto-deploy): ')
     ).trim();
-    if (!contractAddress) {
-      throw new Error('A contract address is required.');
-    }
 
-    console.log(`Contract: ${contractName}`);
-
+    // ── 5. Build the chain adapter ──────────────────────────────────────────
     chain = new MidnightChainAdapter({
       network: networkName,
       credentials,
-      contractAddress,
-      compiledContract: compiledContract,
+      ...(contractAddressInput ? { contractAddress: contractAddressInput } : {}),
+      compiledContract,
       nodeEndpoint,
       indexerEndpoint: indexerHttp,
       indexerWsEndpoint: indexerWs,
       proofServerEndpoint,
+      // ZK artifacts for the todoList contract (storeReference, grantAccess, …)
+      zkArtifactsPath: path.resolve(__dirname, '../contracts/managed/todoList'),
       stateDecoder: (hexState) =>
         ContractState.deserialize(Buffer.from(hexState, 'hex')).data,
+      // Map ChainReference → todoList storeReference(storageId: Bytes<64>, storageProvider: Bytes<16>, owner: Bytes<64>, dataLabel: Bytes<32>)
+      circuitArgMapper: (ref: ChainReference): unknown[] => [
+        padBytes(ref.storageId, 64),
+        padBytes(ref.storageProvider, 16),
+        padBytes(ref.owner, 64),
+        padBytes(ref.dataLabel ?? '', 32),
+      ],
+      // deriveNoteId witness: SHA-256(storageId ++ count) → 32 bytes
+      witnesses: {
+        deriveNoteId: (...args: unknown[]): unknown => {
+          const [ctx, storageId, count] = args as [{ privateState: unknown }, Uint8Array, bigint];
+          const countBuf = Buffer.alloc(8);
+          countBuf.writeBigUInt64BE(count, 0);
+          const digest = createHash('sha256').update(storageId).update(countBuf).digest();
+          return [ctx.privateState, new Uint8Array(digest)];
+        },
+      },
+    });
+    const activeChain = chain;
+
+    // ── 6. Initialise the DStorage SDK ──────────────────────────────────────
+    // sdk.init() calls chain.init() (wallet sync), then sets/deploys the contract,
+    // and derives an AES-GCM encryption key from the seed.
+    const sdk = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: activeChain,
+      ...(contractAddressInput ? { dataRegistryAddress: contractAddressInput } : {}),
     });
 
-    // ── 5. Init (derives keys, builds wallet, waits for sync) ────────────────
-    console.log('\nInitialising wallet and syncing...');
-    const addresses = await withTicker(
+    console.log('\nInitialising wallet, syncing, and preparing contract...');
+    const { dataRegistryAddress } = await withTicker(
       () => 'Building wallet and syncing...',
-      () => chain.init()
+      () => sdk.init()
     );
-    console.log('Wallet synced.');
+    console.log(`\nContract:   ${dataRegistryAddress}`);
 
+    // ── 7. Display addresses and balances ───────────────────────────────────
+    const addresses = activeChain.getAddresses();
     console.log('\nWallet addresses:');
     console.log(`  Unshielded: ${addresses.unshielded}`);
     console.log(`  Shielded:   ${addresses.shielded}`);
     console.log(`  Dust:       ${addresses.dust}`);
 
-    // ── 6. Balances ──────────────────────────────────────────────────────────
-    const balances = await chain.getBalances();
+    const balances = await activeChain.getBalances();
     if (balances.night === 0n) {
       console.log(`\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`);
     } else {
@@ -217,44 +219,52 @@ async function main(): Promise<void> {
     if (balances.dust === 0n) {
       console.log('Warning: No DUST found. DUST is required for transaction fees.');
     } else {
-      console.log(`DUST balance: ${balances.dust}`);
+      console.log(`DUST balance:  ${balances.dust}`);
     }
 
-    // ── 7. Contract interaction ─────────────────────────────────────────────
+    // ── 8. File upload loop ─────────────────────────────────────────────────
 
-    let ledgerEntry = (
-      await rl.question('Ledger entry name to read: ')
-    ).trim();
-    if (!ledgerEntry) {
-      throw new Error('A ledger entry name is required.');
-    }
+    console.log('\n─── File upload ───────────────────────────────────────────────────────');
+    console.log('The SDK will encrypt your file, store it (mock), and write a reference on-chain.\n');
 
-    console.log('\n─── Contract ledger ────────────────────────────────────────────────────');
-
-    // Action menu loop
     let done = false;
     while (!done) {
-      console.log(`\nReading ledger entry "${ledgerEntry}"...`);
-      try {
-        const value = await withTicker(
-          () => 'Querying indexer...',
-          () => chain.readLedgerEntry(ledgerEntry)
-        );
-        console.log(`${ledgerEntry} = ${formatLedgerValue(value)}`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.log(msg);
+      const filePath = (await rl.question('File path to upload (or leave blank to quit): ')).trim();
+
+      if (!filePath) {
+        done = true;
+        continue;
       }
 
-      console.log('\nWhat would you like to do?');
-      console.log('  [r] Read again (refresh)');
-      console.log('  [q] Quit');
+      // Read file from disk
+      let fileContent: Uint8Array;
+      try {
+        const buf = await readFile(filePath);
+        fileContent = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`  Error reading file: ${msg}`);
+        continue;
+      }
 
-      ledgerEntry = (await rl.question('Choice: ')).trim().toLowerCase();
-      if (ledgerEntry === 'q' || ledgerEntry === '') {
-        done = true;
-      } else if (ledgerEntry !== 'r') {
-        console.log('Unknown ledgerEntry. Enter r or q.');
+      console.log(`\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes)`);
+      console.log('  Encrypting, uploading to mock storage, and writing on-chain reference...');
+
+      try {
+        const result = await withTicker(
+          () => 'Generating ZK proof and submitting reference...',
+          () => sdk.upload(fileContent)
+        );
+
+        console.log('\n  ✓ Upload complete!');
+        console.log(`  refId:          ${result.refId}`);
+        console.log(`  storageId:      ${result.storageId}`);
+        console.log(`  storageProvider: ${result.storageProvider}`);
+        console.log(`  chainProvider:  ${result.chainProvider}`);
+        console.log(`  uploadedAt:     ${new Date(result.uploadedAt).toISOString()}\n`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`\n  Error during upload: ${msg}\n`);
       }
     }
 

@@ -68,21 +68,6 @@ export interface ChainAdapter {
   readReference(refId: string): Promise<ChainReference>;
 
   /**
-   * Grant read access for a specific reference to another wallet.
-   */
-  grantAccess(permission: ChainPermission): Promise<string>;
-
-  /**
-   * Revoke previously granted access.
-   */
-  revokeAccess(refId: string, grantee: string): Promise<void>;
-
-  /**
-   * Check if a wallet has access to a reference.
-   */
-  hasAccess(refId: string, wallet: string): Promise<boolean>;
-
-  /**
    * Read a single entry from the contract's decoded ledger state by name.
    * Returns the raw TypeScript value as decoded by the compiled contract's ledger() function.
    *
@@ -116,17 +101,30 @@ export interface ChainAdapter {
   /** Initialize the wallet: derive keys, build WalletFacade, wait for sync.
    *  Must be called before write operations or getBalances().
    *  Optional — only for adapters that manage wallet lifecycle (e.g. Midnight). */
-  init?(): Promise<import('./adapters/midnight.js').WalletAddresses>;
+  init?(): Promise<import('./adapters/midnight/midnight.js').WalletAddresses>;
 
   /** Return wallet addresses derived during init(). Throws if init() not yet called.
    *  Optional — only for adapters that manage wallet lifecycle. */
-  getAddresses?(): import('./adapters/midnight.js').WalletAddresses;
+  getAddresses?(): import('./adapters/midnight/midnight.js').WalletAddresses;
 
   /** Read NIGHT and DUST balances from synced wallet state.
    *  Optional — only for adapters that manage wallet lifecycle. */
-  getBalances?(): Promise<import('./adapters/midnight.js').WalletBalances>;
+  getBalances?(): Promise<import('./adapters/midnight/midnight.js').WalletBalances>;
 
   /** Stop the wallet and release resources. No-op if init() was never called.
    *  Optional — only for adapters that manage wallet lifecycle. */
   stop?(): Promise<void>;
+
+  /** Deploy the DataRegistry contract and return the deployed contract address.
+   *  Optional — only for adapters that support on-chain deployment. */
+  deployDataRegistry?(): Promise<string>;
+
+  /** Set the contract address to use for subsequent operations.
+   *  Called by the SDK after deploy or when connecting to an existing contract.
+   *  Optional — only for adapters that manage contract address lifecycle. */
+  setContractAddress?(address: string): void;
+
+  /** Derive a deterministic AES-GCM encryption key from the adapter's credentials.
+   *  Optional — only for adapters that hold wallet credentials (e.g. facade mode). */
+  getEncryptionKey?(): Promise<CryptoKey>;
 }

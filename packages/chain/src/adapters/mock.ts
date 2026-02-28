@@ -114,4 +114,25 @@ export class MockChainAdapter implements ChainAdapter {
   getAllReferences(): Array<{ refId: string; ref: ChainReference }> {
     return [...refs.entries()].map(([refId, ref]) => ({ refId, ref }));
   }
+
+  // ── DataRegistry deployment stubs ─────────────────────────────────────────
+
+  setContractAddress(_address: string): void {
+    // No-op for mock — contract address is not used
+  }
+
+  async deployDataRegistry(): Promise<string> {
+    const addr = `mock_contract_${Date.now()}`;
+    console.log(`[dStorage/mock-chain] DataRegistry deployed at: ${addr}`);
+    return addr;
+  }
+
+  async getEncryptionKey(): Promise<CryptoKey> {
+    // Generate a random ephemeral key — fine for mocking purposes
+    return globalThis.crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
 }

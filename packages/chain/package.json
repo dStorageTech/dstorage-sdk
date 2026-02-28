@@ -14,14 +14,18 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts",
-    "compile:contract": "compactc src/contracts/DataRegistry.compact src/contracts/managed"
+    "compile:contract": "compact compile src/adapters/midnight/contracts/DataRegistry.compact src/adapters/midnight/contracts/managed"
   },
   "dependencies": {
     "@dstorage/crypto": "*"
   },
   "peerDependencies": {
+    "@midnight-ntwrk/compact-js": "^2.0.0",
     "@midnight-ntwrk/midnight-js-contracts": "^3.1.0",
-    "@midnight-ntwrk/compact-runtime": "^0.9.0",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^3.1.0",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^3.1.0",
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "^3.1.0",
+    "@midnight-ntwrk/compact-runtime": "^0.14.0",
     "@midnight-ntwrk/dapp-connector-api": "^3.0.0",
     "@midnight-ntwrk/ledger-v7": "7.0.0",
     "@midnight-ntwrk/midnight-js-network-id": "^3.1.0",
@@ -33,7 +37,11 @@
     "rxjs": "^7.8.1"
   },
   "peerDependenciesMeta": {
+    "@midnight-ntwrk/compact-js": { "optional": true },
     "@midnight-ntwrk/midnight-js-contracts": { "optional": true },
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": { "optional": true },
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": { "optional": true },
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": { "optional": true },
     "@midnight-ntwrk/compact-runtime": { "optional": true },
     "@midnight-ntwrk/dapp-connector-api": { "optional": true },
     "@midnight-ntwrk/ledger-v7": { "optional": true },

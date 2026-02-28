@@ -10,14 +10,16 @@ interface Props {
   record: StoredRecord | null;
   storageAdapterKey: StorageAdapterKey;
   chainAdapterKey: ChainAdapterKey;
+  contractAddress: string;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onChainAdapterChange: (key: ChainAdapterKey) => void;
+  onContractAddressChange: (addr: string) => void;
   onConnect: () => Promise<void>;
   onUpload: (file: File) => Promise<void>;
   onGenerateProof: (claimId: string) => Promise<void>;
 }
 
-export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAdapterKey, onStorageAdapterChange, onChainAdapterChange, onConnect, onUpload, onGenerateProof }: Props) {
+export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAdapterKey, contractAddress, onStorageAdapterChange, onChainAdapterChange, onContractAddressChange, onConnect, onUpload, onGenerateProof }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -119,8 +121,25 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
         </div>
       </div>
 
+      {chainAdapterKey === 'midnight-connector' && (
+        <div className="pp-contract-addr">
+          <label className="pp-contract-addr-label" htmlFor="contract-address">
+            Deployed Contract Address
+          </label>
+          <input
+            id="contract-address"
+            type="text"
+            className="pp-contract-addr-input"
+            placeholder="Enter deployed contract address"
+            value={contractAddress}
+            onChange={e => onContractAddressChange(e.target.value)}
+          />
+        </div>
+      )}
+
       <div className="pp-connect-btns">
-        <button className="pp-btn pp-btn-primary" onClick={handleConnect} disabled={!!loading}>
+        <button className="pp-btn pp-btn-primary" onClick={handleConnect}
+          disabled={!!loading || (chainAdapterKey === 'midnight-connector' && !contractAddress.trim())}>
           {loading === 'connect' ? <Spinner /> : '🔗'} Connect Wallet
         </button>
       </div>

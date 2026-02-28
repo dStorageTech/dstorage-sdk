@@ -34,6 +34,28 @@
   --shadow-md: 0 4px 16px rgba(26,103,181,0.10), 0 2px 6px rgba(0,0,0,0.06);
   --drawer-h: 320px;
 }
+
+.hv-root[data-theme='dark'] {
+  --c-bg:         #0D1520;
+  --c-surface:    #162231;
+  --c-surface-2:  #1B2B3C;
+  --c-border:     #2A3E52;
+  --c-border-2:   #38536C;
+  --c-blue:       #4AA3FF;
+  --c-blue-dark:  #2E7CCC;
+  --c-blue-light: #1A2D42;
+  --c-blue-mid:   #2B4F72;
+  --c-green:      #35D087;
+  --c-green-bg:   #153428;
+  --c-red:        #FF8A80;
+  --c-red-bg:     #432020;
+  --c-text:       #DCE8F3;
+  --c-text-2:     #AFC3D6;
+  --c-text-3:     #7F9AB2;
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.25), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25);
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
 body { font-family: var(--font-body); background: var(--c-bg); color: var(--c-text); -webkit-font-smoothing: antialiased; }
@@ -73,6 +95,24 @@ code   { font-family: var(--font-mono); }
 .hv-step-line.past { background: var(--c-blue); }
 
 .hv-header-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; margin-left: auto; }
+.hv-theme-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--c-bg); border: 1px solid var(--c-border);
+  border-radius: 999px; padding: 4px 9px 4px 5px;
+  color: var(--c-text-2); font-size: 11px; font-weight: 700;
+}
+.hv-theme-track {
+  width: 34px; height: 18px; border-radius: 999px;
+  background: var(--c-border); position: relative; transition: background 0.2s;
+}
+.hv-theme-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--c-surface); border: 1px solid var(--c-border-2);
+  position: absolute; top: 2px; left: 2px; transition: transform 0.2s;
+}
+.hv-theme-thumb.is-dark { transform: translateX(16px); }
+.hv-theme-label { min-width: 30px; text-align: left; }
+
 .hv-sdk-badge { font-size: 11px; color: var(--c-text-3); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 99px; padding: 4px 10px; }
 .hv-sdk-badge strong { color: var(--c-blue); }
 .hv-reset-btn { font-size: 12px; color: var(--c-text-2); background: none; border: 1px solid var(--c-border); border-radius: var(--radius); padding: 5px 12px; transition: all 0.15s; }
@@ -95,6 +135,12 @@ code   { font-family: var(--font-mono); }
 .pp-intro-icon  { font-size: 36px; margin-bottom: 12px; }
 .pp-intro-title { font-size: 20px; font-weight: 700; color: var(--c-text); margin-bottom: 10px; letter-spacing: -0.02em; }
 .pp-intro-body  { font-size: 14px; color: var(--c-text-2); line-height: 1.65; }
+.pp-contract-addr { display: flex; flex-direction: column; gap: 6px; }
+.pp-contract-addr-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--c-text-3); }
+.pp-contract-addr-input { padding: 10px 12px; border-radius: var(--radius); border: 2px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: 13px; font-family: var(--font-mono, monospace); transition: border-color 0.15s; }
+.pp-contract-addr-input:focus { outline: none; border-color: var(--c-blue); }
+.pp-contract-addr-input::placeholder { color: var(--c-text-3); font-family: inherit; }
+
 .pp-connect-btns { display: flex; flex-direction: column; gap: 10px; }
 
 .pp-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 20px; border-radius: var(--radius); font-size: 14px; font-weight: 600; border: none; transition: all 0.15s; }

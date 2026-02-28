@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MidnightChainAdapter } from '../adapters/midnight.js';
+import { MidnightChainAdapter } from '../adapters/midnight/midnight.js';
 
 const MOCK_CREDENTIALS = { mnemonic: 'test test test test test test test test test test test junk' };
 const MOCK_NETWORK = 'undeployed' as const;
@@ -235,7 +235,7 @@ describe('MidnightChainAdapter', () => {
   // ── Runtime errors when Midnight SDK is not installed ─────────────────────
 
   describe('runtime behaviour when Midnight SDK is not installed', () => {
-    it('writeReference throws about the missing SDK', async () => {
+    it('writeReference throws about missing zkArtifactsPath in facade mode', async () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
         compiledContract: {},
@@ -249,7 +249,7 @@ describe('MidnightChainAdapter', () => {
           owner: '0xOwner',
           createdAt: Date.now(),
         })
-      ).rejects.toThrow('midnight-js-contracts');
+      ).rejects.toThrow('zkArtifactsPath');
     });
 
     it('readReference throws "Contract not found" when indexer returns null', async () => {
@@ -280,7 +280,7 @@ describe('MidnightChainAdapter', () => {
       expect(msg).toContain('deployed');
     });
 
-    it('readReference reports contract FOUND but cannot decode when SDK is missing', async () => {
+    it('readReference throws when compiledContract has no ledger() function', async () => {
       mockFetchReturnsAction();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
@@ -288,10 +288,12 @@ describe('MidnightChainAdapter', () => {
         network: MOCK_NETWORK,
         credentials: MOCK_CREDENTIALS,
       });
-      await expect(adapter.readReference('ref_abc')).rejects.toThrow('Contract FOUND');
+      await expect(adapter.readReference('ref_abc')).rejects.toThrow(
+        'compiledContract does not expose a ledger() function'
+      );
     });
 
-    it('readReference error mentions midnight-js-contracts when contract exists but SDK is missing', async () => {
+    it('readReference error tells user to pass the full compiled module', async () => {
       mockFetchReturnsAction();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
@@ -299,10 +301,10 @@ describe('MidnightChainAdapter', () => {
         network: MOCK_NETWORK,
         credentials: MOCK_CREDENTIALS,
       });
-      await expect(adapter.readReference('ref_abc')).rejects.toThrow('midnight-js-contracts');
+      await expect(adapter.readReference('ref_abc')).rejects.toThrow('compiledContract');
     });
 
-    it('grantAccess throws about the missing SDK', async () => {
+    it('grantAccess throws about missing zkArtifactsPath in facade mode', async () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
         compiledContract: {},
@@ -311,7 +313,7 @@ describe('MidnightChainAdapter', () => {
       });
       await expect(
         adapter.grantAccess({ refId: 'ref_abc', grantee: '0xBob' })
-      ).rejects.toThrow('midnight-js-contracts');
+      ).rejects.toThrow('zkArtifactsPath');
     });
   });
 
@@ -357,7 +359,7 @@ describe('MidnightChainAdapter', () => {
       expect(msg).toContain('import *');
     });
 
-    it('throws about missing compact-runtime when ledger() is present but runtime is absent', async () => {
+    it('throws a deserialization error when ledger() is present but the state hex is invalid', async () => {
       mockFetchReturnsAction();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
@@ -366,7 +368,7 @@ describe('MidnightChainAdapter', () => {
         network: MOCK_NETWORK,
         credentials: MOCK_CREDENTIALS,
       });
-      await expect(adapter.listReferences()).rejects.toThrow('compact-runtime');
+      await expect(adapter.listReferences()).rejects.toThrow('deserialize');
     });
   });
 
@@ -397,7 +399,7 @@ describe('MidnightChainAdapter', () => {
       );
     });
 
-    it('throws about missing compact-runtime when ledger() is present', async () => {
+    it('throws a deserialization error when ledger() is present but the state hex is invalid', async () => {
       mockFetchReturnsAction();
       const adapter = new MidnightChainAdapter({
         contractAddress: '0xContract',
@@ -405,7 +407,7 @@ describe('MidnightChainAdapter', () => {
         network: MOCK_NETWORK,
         credentials: MOCK_CREDENTIALS,
       });
-      await expect(adapter.readLedgerEntry('round')).rejects.toThrow('compact-runtime');
+      await expect(adapter.readLedgerEntry('round')).rejects.toThrow('deserialize');
     });
 
     it('throws with available entry names when the requested entry is missing', async () => {

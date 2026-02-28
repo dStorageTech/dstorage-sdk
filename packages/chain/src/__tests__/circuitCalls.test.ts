@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MockMidnightChainAdapter } from '../adapters/mockMidnight.js';
-import { MidnightChainAdapter } from '../adapters/midnight.js';
+import { MidnightChainAdapter } from '../adapters/midnight/midnight.js';
 
 const MOCK_CREDENTIALS = { mnemonic: 'test test test test test test test test test test test junk' };
 const MOCK_NETWORK = 'undeployed' as const;
@@ -139,10 +139,11 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
     // Stub the dynamic import to return a constructor that yields fakeContract
     vi.stubGlobal('__midnight_contract__', fakeContract);
     // We can't easily stub dynamic imports in vitest, so instead we test
-    // the circuitName resolution path via the error it throws (circuit not found
-    // vs SDK not found) when the SDK is absent but the wrong name would be used.
+    // the circuitName resolution path via the error it throws.
+    // Both paths go through _submitCircuitCall → _buildZkConfigProvider which
+    // requires zkArtifactsPath in facade mode — so both fail the same way.
 
-    // When circuitNames is NOT set → looks for 'storeReference' → SDK error
+    // When circuitNames is NOT set → uses default 'storeReference' → zkArtifactsPath error
     const adapterDefault = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
@@ -156,10 +157,10 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
         owner: '0xOwner',
         createdAt: Date.now(),
       })
-    ).rejects.toThrow('midnight-js-contracts');
+    ).rejects.toThrow('zkArtifactsPath');
 
-    // When circuitNames.writeReference is set to a custom name → same SDK-missing
-    // error (both paths go through getContract() which fails without the SDK).
+    // When circuitNames.writeReference is set to a custom name → same error
+    // (both paths require zkArtifactsPath before any SDK imports).
     const adapterRemapped = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
@@ -174,7 +175,7 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
         owner: '0xOwner',
         createdAt: Date.now(),
       })
-    ).rejects.toThrow('midnight-js-contracts');
+    ).rejects.toThrow('zkArtifactsPath');
   });
 
   it('constructor accepts circuitNames config without throwing', () => {
@@ -209,7 +210,7 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
     ).not.toThrow();
   });
 
-  it('callCircuit throws SDK missing error (not "circuit not found") when SDK is absent', async () => {
+  it('callCircuit throws about missing zkArtifactsPath (not "circuit not found") when config is incomplete', async () => {
     const adapter = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
@@ -217,11 +218,11 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
       credentials: MOCK_CREDENTIALS,
     });
     await expect(adapter.callCircuit('verifyAge', [19860101])).rejects.toThrow(
-      'midnight-js-contracts'
+      'zkArtifactsPath'
     );
   });
 
-  it('queryCircuit throws SDK missing error when SDK is absent', async () => {
+  it('queryCircuit throws "not found in pureCircuits" when circuit is absent in compiled contract', async () => {
     const adapter = new MidnightChainAdapter({
       contractAddress: '0xContract',
       compiledContract: {},
@@ -229,7 +230,7 @@ describe('MidnightChainAdapter circuitNames remapping', () => {
       credentials: MOCK_CREDENTIALS,
     });
     await expect(adapter.queryCircuit('checkCoverage', ['pid'])).rejects.toThrow(
-      'midnight-js-contracts'
+      'pureCircuits'
     );
   });
 });

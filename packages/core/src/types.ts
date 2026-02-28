@@ -21,7 +21,7 @@ export interface WalletInfo {
   walletApi?: unknown;
 }
 
-/** Configuration passed to dStorage.init() */
+/** Configuration passed to dStorage constructor */
 export interface DStorageConfig {
   /** Storage adapter to use (MockStorageAdapter | ArweaveStorageAdapter | ...) */
   storageAdapter: StorageAdapter;
@@ -39,10 +39,20 @@ export interface DStorageConfig {
   chainPaymentAdapter?: PaymentAdapter;
   /** Optional label for the type of data being stored */
   defaultDataLabel?: string;
+  /**
+   * On-chain address of an already-deployed DataRegistry contract.
+   * If omitted, sdk.init() will deploy a new contract and return its address.
+   */
+  dataRegistryAddress?: string;
 }
 
 /** Result returned from dStorage.upload() */
 export interface UploadResult {
+  /**
+   * The primary on-chain reference ID, as computed by the circuit.
+   * Use this to retrieve or share the stored data.
+   */
+  refId: string;
   /**
    * The dStorage dataId — pass this to retrieve() or grant().
    * Format: "<storageId>::<chainRefId>"
@@ -50,7 +60,7 @@ export interface UploadResult {
   dataId: string;
   /** The storage network content ID */
   storageId: string;
-  /** The on-chain reference ID */
+  /** The on-chain reference ID (same as refId, kept for backward compatibility) */
   chainRefId: string;
   /** Storage provider used */
   storageProvider: StorageProviderName;
