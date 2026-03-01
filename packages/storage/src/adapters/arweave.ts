@@ -158,23 +158,23 @@ export class ArweaveStorageAdapter implements StorageAdapter {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private resolveWallet(): any {
-    const isNode = typeof window === 'undefined';
-
-    if (isNode) {
-      if (!this.walletKey || Object.keys(this.walletKey).length === 0) {
-        throw new Error(
-          '[dStorage/arweave] Node.js usage requires a JWK walletKey.\n' +
-          'Pass it in the constructor:\n' +
-          '  new ArweaveStorageAdapter({\n' +
-          '    walletKey: JSON.parse(fs.readFileSync("wallet.json", "utf8")),\n' +
-          '  })'
-        );
-      }
-      // Cast is safe: we've verified the key is non-empty above.
+    // If a walletKey was provided, use it directly — works in both Node.js and browser.
+    if (this.walletKey && Object.keys(this.walletKey).length > 0) {
       return this.walletKey as Record<string, string>;
     }
 
-    // Browser — verify ArConnect is installed before proceeding.
+    if (typeof window === 'undefined') {
+      // Node.js without walletKey.
+      throw new Error(
+        '[dStorage/arweave] Node.js usage requires a JWK walletKey.\n' +
+        'Pass it in the constructor:\n' +
+        '  new ArweaveStorageAdapter({\n' +
+        '    walletKey: JSON.parse(fs.readFileSync("wallet.json", "utf8")),\n' +
+        '  })'
+      );
+    }
+
+    // Browser without walletKey — delegate signing to ArConnect.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).arweaveWallet === 'undefined') {
       throw new Error(

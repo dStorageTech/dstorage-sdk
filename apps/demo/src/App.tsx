@@ -9,7 +9,6 @@ import {
   MockPaymentAdapter,
 } from '@dstorage/core';
 // MidnightChainAdapter is loaded lazily (Node.js-only deps — not bundled for browser).
-import { ArweaveLocalHelper } from '@dstorage/storage';
 import type { WalletInfo, MetaTxProgress, ZkProofResult, ZkProofProgress } from '@dstorage/core';
 import { PatientPanel } from './components/PatientPanel.tsx';
 import { VerifierPanel } from './components/VerifierPanel.tsx';
@@ -99,11 +98,17 @@ export default function App() {
   }, [theme]);
 
   const buildSDK = useCallback(async (storageKey: StorageAdapterKey, chainKey: ChainAdapterKey, addr: string) => {
-    const storageAdapter =
-      storageKey === 'arweave-local' ? new ArweaveLocalStorageAdapter() :
-      storageKey === 'arweave'       ? new ArweaveStorageAdapter() :
-      storageKey === 'autonomi'      ? new AutonomiStorageAdapter() :
-      new MockStorageAdapter();
+    let storageAdapter;
+    if (storageKey === 'arweave-local') {
+      // Auto-generate a test JWK wallet and mint AR tokens via arlocal — no ArConnect needed.
+      const { adapter } = await ArweaveLocalStorageAdapter.createWithTestWallet();
+      storageAdapter = adapter;
+    } else {
+      storageAdapter =
+        storageKey === 'arweave'   ? new ArweaveStorageAdapter() :
+        storageKey === 'autonomi'  ? new AutonomiStorageAdapter() :
+        new MockStorageAdapter();
+    }
 
     let chainAdapter;
     if (chainKey === 'midnight-connector') {
@@ -127,12 +132,7 @@ export default function App() {
       chainPaymentAdapter,
     };
 
-    return {
-      sdk: new DStorage(dstorageConfig),
-      storageAdapter,
-      chainAdapter,
-      chainKey
-    };
+    return { sdk: new DStorage(dstorageConfig) };
   }, []);
 
   /**
@@ -141,43 +141,7 @@ export default function App() {
    */
   const handleConnect = async () => {
     try {
-      const { sdk, storageAdapter, chainAdapter: newChainAdapter } = await buildSDK(storageAdapterKey, chainAdapterKey, contractAddress);
-
-      // For Arweave Local, get ArConnect address first to fund the right wallet
-      let arweaveAddress: string | null = null;
-      if (storageAdapterKey === 'arweave-local' || storageAdapterKey === 'arweave') {
-        try {
-          // Request ArConnect connection to get the wallet address
-          const wallet = typeof window !== 'undefined' ? (window as any).arweaveWallet : null;
-          if (wallet) {
-            await wallet.connect(['SIGN_TRANSACTION']);
-            arweaveAddress = await wallet.getActiveAddress();
-            console.log(`[Demo] ArConnect connected: ${arweaveAddress}`);
-          } else if (storageAdapterKey === 'arweave-local') {
-            // For local testing without ArConnect, use a common test address
-            console.warn('[Demo] ArConnect not available — using fallback test address for minting');
-            arweaveAddress = 'rJ9qkRpkWlAiLKY_J_5KfIjFfv0O6hYXFrE9wN6qHCE';
-          }
-        } catch (connectErr) {
-          console.warn('[Demo] ArConnect connection failed (will try without it):', connectErr);
-          arweaveAddress = 'rJ9qkRpkWlAiLKY_J_5KfIjFfv0O6hYXFrE9wN6qHCE';
-        }
-      }
-
-      // Auto-mint for local Arweave testing
-      if (storageAdapterKey === 'arweave-local' && arweaveAddress) {
-        try {
-          console.log(`[Demo] Auto-minting test AR tokens to ${arweaveAddress}...`);
-          const helper = new ArweaveLocalHelper();
-          await helper.mintTokens(arweaveAddress, 10_000_000_000_000n); // 10 AR
-          console.log(`[Demo] ✅ Minted 10 AR to ${arweaveAddress.slice(0, 8)}…`);
-        } catch (mintErr) {
-          console.warn(
-            '[Demo] ⚠️ Auto-mint failed (arlocal may not be running):\n' +
-            (mintErr instanceof Error ? mintErr.message : String(mintErr))
-          );
-        }
-      }
+      const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey, contractAddress);
 
       // Use demo wallet for encryption key derivation
       const wallet = await connectDemoWallet();
