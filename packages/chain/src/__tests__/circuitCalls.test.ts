@@ -1,7 +1,7 @@
 /**
  * Tests for the generic circuit call API:
  *  - MockMidnightChainAdapter.callCircuit() / queryCircuit()
- *  - MidnightChainAdapter.circuitNames config remapping
+ *  - MidnightChainAdapter.callCircuit / queryCircuit (throws "not supported")
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -117,120 +117,24 @@ describe('MockMidnightChainAdapter.queryCircuit', () => {
   });
 });
 
-// ── MidnightChainAdapter — circuitNames remapping ────────────────────────────
+// ── MidnightChainAdapter — callCircuit / queryCircuit not supported ───────────
 
-const MOCK_WALLET = { connect: async () => {} };
-
-describe('MidnightChainAdapter circuitNames remapping', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it('calls "saveRecord" instead of "storeReference" when remapped', async () => {
-    // Build a fake compiled contract with saveRecord but NOT storeReference
-    const saveRecord = vi.fn().mockResolvedValue({
-      prove: vi.fn().mockResolvedValue({
-        balance: vi.fn().mockResolvedValue({
-          submit: vi.fn().mockResolvedValue({ txHash: 'tx-save-001', blockHeight: 100 }),
-        }),
-      }),
-    });
-
-    const fakeContract = { call: { saveRecord }, query: {} };
-
-    // Stub the dynamic import to return a constructor that yields fakeContract
-    vi.stubGlobal('__midnight_contract__', fakeContract);
-    // We can't easily stub dynamic imports in vitest, so instead we test
-    // the circuitName resolution path via the error it throws.
-    // Both paths go through _submitCircuitCall → _buildZkConfigProvider which
-    // requires zkArtifactsPath in facade mode — so both fail the same way.
-
-    // When circuitNames is NOT set → uses default 'storeReference' → zkArtifactsPath error
-    const adapterDefault = new MidnightChainAdapter({
-      contractAddress: '0xContract',
-      compiledContract: {},
-      network: MOCK_NETWORK,
-      credentials: MOCK_CREDENTIALS,
-    });
-    await expect(
-      adapterDefault.writeReference({
-        storageId: 'sid',
-        storageProvider: 'mock',
-        owner: '0xOwner',
-        createdAt: Date.now(),
-      })
-    ).rejects.toThrow('zkArtifactsPath');
-
-    // When circuitNames.writeReference is set to a custom name → same error
-    // (both paths require zkArtifactsPath before any SDK imports).
-    const adapterRemapped = new MidnightChainAdapter({
-      contractAddress: '0xContract',
-      compiledContract: {},
-      network: MOCK_NETWORK,
-      credentials: MOCK_CREDENTIALS,
-      circuitNames: { writeReference: 'saveRecord' },
-    });
-    await expect(
-      adapterRemapped.writeReference({
-        storageId: 'sid',
-        storageProvider: 'mock',
-        owner: '0xOwner',
-        createdAt: Date.now(),
-      })
-    ).rejects.toThrow('zkArtifactsPath');
-  });
-
-  it('constructor accepts circuitNames config without throwing', () => {
-    expect(
-      () =>
-        new MidnightChainAdapter({
-          contractAddress: '0xContract',
-          compiledContract: {},
-          network: MOCK_NETWORK,
-      credentials: MOCK_CREDENTIALS,
-          circuitNames: {
-            writeReference: 'saveRecord',
-            grantAccess:    'allowViewer',
-            revokeAccess:   'denyViewer',
-            hasAccess:      'canView',
-            readReference:  'fetchRecord',
-          },
-        })
-    ).not.toThrow();
-  });
-
-  it('constructor accepts partial circuitNames config', () => {
-    expect(
-      () =>
-        new MidnightChainAdapter({
-          contractAddress: '0xContract',
-          compiledContract: {},
-          network: MOCK_NETWORK,
-      credentials: MOCK_CREDENTIALS,
-          circuitNames: { writeReference: 'storeInsuranceRecord' },
-        })
-    ).not.toThrow();
-  });
-
-  it('callCircuit throws about missing zkArtifactsPath (not "circuit not found") when config is incomplete', async () => {
+describe('MidnightChainAdapter.callCircuit and queryCircuit', () => {
+  it('callCircuit throws "not supported" for any circuit name', async () => {
     const adapter = new MidnightChainAdapter({
       contractAddress: '0xContract',
-      compiledContract: {},
       network: MOCK_NETWORK,
       credentials: MOCK_CREDENTIALS,
     });
-    await expect(adapter.callCircuit('verifyAge', [19860101])).rejects.toThrow(
-      'zkArtifactsPath'
-    );
+    await expect(adapter.callCircuit('saveRecord', [])).rejects.toThrow('not supported');
   });
 
-  it('queryCircuit throws "not found in pureCircuits" when circuit is absent in compiled contract', async () => {
+  it('queryCircuit throws "not supported" for any query name', async () => {
     const adapter = new MidnightChainAdapter({
       contractAddress: '0xContract',
-      compiledContract: {},
       network: MOCK_NETWORK,
       credentials: MOCK_CREDENTIALS,
     });
-    await expect(adapter.queryCircuit('checkCoverage', ['pid'])).rejects.toThrow(
-      'pureCircuits'
-    );
+    await expect(adapter.queryCircuit('checkCoverage', ['pid'])).rejects.toThrow('not supported');
   });
 });

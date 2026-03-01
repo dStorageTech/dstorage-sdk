@@ -23,14 +23,13 @@ export interface DeployedDataRegistryAPI {
   readonly deployedContractAddress: ContractAddress;
   readonly state$: Observable<DataRegistryDerivedState>;
 
-  storeReference: (storageId: Uint8Array, storageProvider: string) => Promise<void>;
+  storeReference: (storageId: Uint8Array, storageProvider: string) => Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }>;
 }
 
 /**
  * Provides an implementation of {@link DeployedDataRegistryAPI} by adapting a deployed DataRegistry
  * contract.
  */
-// TODO: Update DataRegistryAPI to use contract level private state storage.
 export class DataRegistryAPI implements DeployedDataRegistryAPI {
   /** @internal */
   private constructor(
@@ -97,18 +96,27 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
    */
   readonly state$: Observable<DataRegistryDerivedState>;
 
-  async storeReference(storageId: Uint8Array, storageProvider: string): Promise<void> {
+  async storeReference(storageId: Uint8Array, storageProvider: string): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
     this.logger?.info(`storing reference: ${storageId}`);
 
     const txData = await this.deployedContract.callTx.storeReference(storageId, storageProvider);
 
+    const txHash: string = (txData as any).public?.txHash ?? (txData as any).public?.txId ?? '';
+    const blockHeight: number = Number((txData as any).public?.blockHeight ?? 0);
+    // Try to extract the circuit-computed refId (Bytes<32> return value from storeReference).
+    // Falls back to an empty 32-byte array if the runtime doesn't expose private results.
+    const circuitResult = (txData as any).private?.result;
+    const refId: Uint8Array = circuitResult instanceof Uint8Array ? circuitResult : new Uint8Array(32);
+
     this.logger?.trace({
       transactionAdded: {
         circuit: 'storeReference',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
+        txHash,
+        blockHeight,
       },
     });
+
+    return { refId, txHash, blockHeight };
   }
 
   /**

@@ -12,6 +12,9 @@
  *  5. Upload loop: asks for a local file path, reads its contents, calls
  *       sdk.upload(content) → encrypt → mock-store → write on-chain reference
  *     and prints the refId returned by the DataRegistry circuit
+ *
+ * Prerequisite: run `npm run compile:contract` from packages/chain to build the
+ * DataRegistry ZK artifacts before using this demo.
  */
 
 // ── WebSocket polyfill ────────────────────────────────────────────────────────
@@ -25,31 +28,21 @@ import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 import { DStorage } from '@dstorage/core';
 import { MockStorageAdapter } from '@dstorage/storage';
 import { MidnightChainAdapter } from '@dstorage/chain';
-import type { ChainReference } from '@dstorage/chain';
-import { ContractState } from '@midnight-ntwrk/compact-runtime';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ── Compiled contract ─────────────────────────────────────────────────────────
-// Uses the todoList contract — it has a storeReference circuit compatible with
-// the SDK's writeReference() operation. The circuitArgMapper (below) translates
-// ChainReference into the todoList circuit's 4-arg format.
-//
-// Run `npm run compile:contract` to rebuild the ZK artifacts if needed.
-let compiledContract: object | null = null;
-const contractPath = '../contracts/managed/todoList/contract/index.js';
-try {
-  const managed = await import(contractPath);
-  compiledContract = (typeof managed === 'object' && managed !== null) ? managed : null;
-} catch (err) {
-  console.error('[dStorage] Failed to load compiled contract:', err);
-}
+// ZK artifacts for the DataRegistry contract.
+// Built by running: npm run compile:contract (from packages/chain)
+// Resolves to: <monorepo-root>/packages/chain/src/adapters/midnight/contracts/managed/contract/
+const DATA_REGISTRY_ZK_PATH = path.resolve(
+  __dirname,
+  '../../../packages/chain/src/adapters/midnight/contracts/managed/contract'
+);
 
 // ── Network defaults ───────────────────────────────────────────────────────────
 
@@ -83,15 +76,6 @@ async function withTicker<T>(statusLine: () => string, fn: () => Promise<T>): Pr
   } finally {
     clearInterval(id);
   }
-}
-
-// ── Pad a UTF-8 string into a fixed-size Uint8Array ──────────────────────────
-
-function padBytes(str: string, size: number): Uint8Array {
-  const b = new TextEncoder().encode(str);
-  const out = new Uint8Array(size);
-  out.set(b.slice(0, size));
-  return out;
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -140,15 +124,7 @@ async function main(): Promise<void> {
     const isHex = /^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed);
     const credentials = isHex ? { seedHex: trimmed } : { mnemonic: trimmed };
 
-    // ── 4. Contract address ─────────────────────────────────────────────────
-    if (!compiledContract) {
-      throw new Error(
-        'Compiled todoList contract not found.\n' +
-        '  Run: npm run compile:contract\n' +
-        '  Then restart the demo.'
-      );
-    }
-
+    // ── 4. Contract address (optional) ──────────────────────────────────────
     const contractAddressInput = (
       await rl.question('\nDeployed DataRegistry contract address (leave blank to auto-deploy): ')
     ).trim();
@@ -158,32 +134,12 @@ async function main(): Promise<void> {
       network: networkName,
       credentials,
       ...(contractAddressInput ? { contractAddress: contractAddressInput } : {}),
-      compiledContract,
       nodeEndpoint,
       indexerEndpoint: indexerHttp,
       indexerWsEndpoint: indexerWs,
       proofServerEndpoint,
-      // ZK artifacts for the todoList contract (storeReference, grantAccess, …)
-      zkArtifactsPath: path.resolve(__dirname, '../contracts/managed/todoList'),
-      stateDecoder: (hexState) =>
-        ContractState.deserialize(Buffer.from(hexState, 'hex')).data,
-      // Map ChainReference → todoList storeReference(storageId: Bytes<64>, storageProvider: Bytes<16>, owner: Bytes<64>, dataLabel: Bytes<32>)
-      circuitArgMapper: (ref: ChainReference): unknown[] => [
-        padBytes(ref.storageId, 64),
-        padBytes(ref.storageProvider, 16),
-        padBytes(ref.owner, 64),
-        padBytes(ref.dataLabel ?? '', 32),
-      ],
-      // deriveNoteId witness: SHA-256(storageId ++ count) → 32 bytes
-      witnesses: {
-        deriveNoteId: (...args: unknown[]): unknown => {
-          const [ctx, storageId, count] = args as [{ privateState: unknown }, Uint8Array, bigint];
-          const countBuf = Buffer.alloc(8);
-          countBuf.writeBigUInt64BE(count, 0);
-          const digest = createHash('sha256').update(storageId).update(countBuf).digest();
-          return [ctx.privateState, new Uint8Array(digest)];
-        },
-      },
+      // ZK artifacts for the DataRegistry storeReference circuit
+      zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
     });
     const activeChain = chain;
 
@@ -257,11 +213,11 @@ async function main(): Promise<void> {
         );
 
         console.log('\n  ✓ Upload complete!');
-        console.log(`  refId:          ${result.refId}`);
-        console.log(`  storageId:      ${result.storageId}`);
+        console.log(`  refId:           ${result.refId}`);
+        console.log(`  storageId:       ${result.storageId}`);
         console.log(`  storageProvider: ${result.storageProvider}`);
-        console.log(`  chainProvider:  ${result.chainProvider}`);
-        console.log(`  uploadedAt:     ${new Date(result.uploadedAt).toISOString()}\n`);
+        console.log(`  chainProvider:   ${result.chainProvider}`);
+        console.log(`  uploadedAt:      ${new Date(result.uploadedAt).toISOString()}\n`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`\n  Error during upload: ${msg}\n`);

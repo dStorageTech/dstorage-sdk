@@ -8,9 +8,8 @@ import * as Witnesses from "./witnesses.js";
 export const CompiledDataRegistryContractContract = CompiledContract.make<
   CompiledDataRegistryContract.Contract<Witnesses.DataRegistryPrivateState>
 >(
-  "Counter",
+  "DataRegistry",
   CompiledDataRegistryContract.Contract<Witnesses.DataRegistryPrivateState>,
 ).pipe(
   CompiledContract.withWitnesses(Witnesses.witnesses),
-  CompiledContract.withCompiledFileAssets("./compiled/counter"),
 );
