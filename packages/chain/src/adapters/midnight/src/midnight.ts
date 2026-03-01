@@ -28,22 +28,10 @@ import type {
   ChainWriteResult,
 } from '../../../types.js';
 
-import path from 'node:path';
 import type { DataRegistryAPI, PrivateStateId } from './api.js';
 import type { DataRegistryProviders } from './common-types.js';
-import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
-import { DataRegistryPrivateState} from '../contracts/src/index.js';
-import { type WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
-import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
-import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
-import { MidnightWalletProvider } from './wallet-provider';
-import { EnvironmentConfiguration } from '@midnight-ntwrk/testkit-js';
-import { firstValueFrom } from 'rxjs';
-import { waitForUnshieldedFunds } from './wallet-utils';
-import { unshieldedToken } from '@midnight-ntwrk/ledger-v7';
-import { ShieldedAddress, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
-import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import type { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
+import type { EnvironmentConfiguration } from '@midnight-ntwrk/testkit-js';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -294,7 +282,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Facade (Node.js): reads ZK artifact files from the local filesystem via zkArtifactsPath.
    * Connector (browser): fetches ZK artifacts over HTTP via zkConfigBaseUrl.
    */
-  private async _buildZkConfigProvider(): Promise<NodeZkConfigProvider<'storeReference'>> {
+  private async _buildZkConfigProvider(): Promise<any> {
     if (!this._zkArtifactsPath) {
       throw new Error(
         '[dStorage/midnight] zkArtifactsPath is required in facade mode.\n' +
@@ -305,7 +293,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     const zkConfigPath = this._zkArtifactsPath;
     console.log(`[dStorage/midnight] ZK artifacts path: ${zkConfigPath}`);
 
-    return new NodeZkConfigProvider<'storeReference'>(zkConfigPath);
+    const { NodeZkConfigProvider } = await import(/* @vite-ignore */ '@midnight-ntwrk/midnight-js-node-zk-config-provider');
+    return new NodeZkConfigProvider(zkConfigPath);
 
     /*if (this.walletMode === 'facade') {
       const zkArtifactsPath = this.config.zkArtifactsPath;
@@ -478,11 +467,13 @@ export class MidnightChainAdapter implements ChainAdapter {
   private async _buildDataRegistryProviders(): Promise<DataRegistryProviders> {
     const zkConfigProvider = await this._buildZkConfigProvider();
 
+    const { MidnightWalletProvider } = await import(/* @vite-ignore */ './wallet-provider.js');
     const walletProvider = await MidnightWalletProvider.build(this.config, this._credentials.seedHex);
-    //providersToBeStopped.push(walletProvider);
     const walletFacade: WalletFacade = walletProvider.wallet;
     await walletProvider.start();
 
+    const { waitForUnshieldedFunds } = await import(/* @vite-ignore */ './wallet-utils.js');
+    const { unshieldedToken } = await import(/* @vite-ignore */ '@midnight-ntwrk/ledger-v7');
     const unshieldedState = await waitForUnshieldedFunds(
       walletFacade,
       this.config,
@@ -496,7 +487,10 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
     console.log(`Your NIGHT wallet balance is: ${nightBalance}`);
 
+    const { firstValueFrom } = await import('rxjs');
     const facadeState = await firstValueFrom((walletFacade as any).state() as any);
+    const { ShieldedAddress, UnshieldedAddress } = await import(/* @vite-ignore */ '@midnight-ntwrk/wallet-sdk-address-format');
+    const { getNetworkId } = await import(/* @vite-ignore */ '@midnight-ntwrk/midnight-js-network-id');
     this.addresses = {
       shielded: ShieldedAddress.codec.encode(getNetworkId(), (facadeState as any).shielded.address).toString(),
       unshielded: UnshieldedAddress.codec.encode(getNetworkId(), (facadeState as any).unshielded.address).toString(),
@@ -504,7 +498,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     };
 
     const privateStateStoreName = 'data-registry-private-state';
-    const basePrivateStateProvider = levelPrivateStateProvider<PrivateStateId, DataRegistryPrivateState>({
+    const { levelPrivateStateProvider } = await import(/* @vite-ignore */ '@midnight-ntwrk/midnight-js-level-private-state-provider');
+    const basePrivateStateProvider = (levelPrivateStateProvider as any)({
       privateStateStoreName,
       signingKeyStoreName: `${privateStateStoreName}-signing-keys`,
       privateStoragePasswordProvider: () => {
@@ -516,6 +511,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     const privateStateProvider = Object.assign(basePrivateStateProvider, {
       setContractAddress: (_address: string) => { /* no-op: levelDb scopes by privateStateId */ },
     });
+    const { indexerPublicDataProvider } = await import(/* @vite-ignore */ '@midnight-ntwrk/midnight-js-indexer-public-data-provider');
+    const { httpClientProofProvider } = await import(/* @vite-ignore */ '@midnight-ntwrk/midnight-js-http-client-proof-provider');
     const providers: DataRegistryProviders = {
       privateStateProvider: privateStateProvider as unknown as DataRegistryProviders['privateStateProvider'],
       publicDataProvider: indexerPublicDataProvider(this.config.indexer, this.config.indexerWS),
@@ -821,6 +818,8 @@ export class MidnightChainAdapter implements ChainAdapter {
         throw new Error('[dStorage/midnight] getBalances() called before init().');
       }
 
+      const { firstValueFrom } = await import('rxjs');
+      const { unshieldedToken } = await import(/* @vite-ignore */ '@midnight-ntwrk/ledger-v7');
       const state = await firstValueFrom(
         (this.facade as any).state() as any
       );

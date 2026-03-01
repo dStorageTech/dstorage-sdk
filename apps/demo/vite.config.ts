@@ -6,14 +6,22 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react(), wasm()],
   resolve: {
+    // Prefer browser-specific builds for packages that ship both Node.js and browser versions.
+    mainFields: ['browser', 'module', 'main'],
     alias: {
       '@dstorage/crypto': resolve(__dirname, '../../packages/crypto/src/index.ts'),
       '@dstorage/storage': resolve(__dirname, '../../packages/storage/src/index.ts'),
-      '@dstorage/chain': resolve(__dirname, '../../packages/chain/src/index.ts'),
+      // Browser-safe chain entry: mock adapters only.
+      // MidnightChainAdapter is excluded (its deps are Node.js-only).
+      '@dstorage/chain': resolve(__dirname, '../../packages/chain/src/browser.ts'),
       '@dstorage/payment': resolve(__dirname, '../../packages/payment/src/index.ts'),
       '@dstorage/core': resolve(__dirname, '../../packages/core/src/index.ts'),
-      // Node.js built-ins imported by midnight-js-contracts (side-effect only,
-      // not actually used in browser) — alias to empty modules.
+      // Node.js built-ins imported by Midnight SDK packages.
+      // More-specific entries MUST come before less-specific ones (first-match wins).
+      'node:fs/promises': resolve(__dirname, 'src/polyfills/empty.js'),
+      'node:fs': resolve(__dirname, 'src/polyfills/empty.js'),
+      'node:path': resolve(__dirname, 'src/polyfills/empty.js'),
+      'fs/promises': resolve(__dirname, 'src/polyfills/empty.js'),
       'fs': resolve(__dirname, 'src/polyfills/empty.js'),
       'path': resolve(__dirname, 'src/polyfills/empty.js'),
     },
@@ -21,8 +29,6 @@ export default defineConfig({
   optimizeDeps: {
     // Force Vite to pre-bundle these so esbuild converts their CJS exports to
     // ESM named exports (e.g. `buffer` exports Buffer only via module.exports).
-    // midnight-js-contracts and compact-runtime also need pre-bundling so their
-    // CJS deps are converted to ESM for the browser.
     include: [
       '@midnight-ntwrk/midnight-js-contracts',
       '@midnight-ntwrk/midnight-js-indexer-public-data-provider',
@@ -36,6 +42,7 @@ export default defineConfig({
     // Midnight SDK packages that contain WASM or mixed CJS/ESM that esbuild
     // can't pre-bundle. Loaded at runtime via dynamic import; vite-plugin-wasm
     // handles the .wasm files when the browser requests them.
+    // Also exclude Node.js-only Midnight packages so esbuild doesn't choke on them.
     exclude: [
       '@midnight-ntwrk/compact-runtime',
       '@midnight-ntwrk/onchain-runtime',
@@ -46,6 +53,14 @@ export default defineConfig({
       '@midnight-ntwrk/compact-js',
       '@midnight-ntwrk/platform-js',
       '@midnight-ntwrk/ledger-v7',
+      '@midnight-ntwrk/midnight-js-node-zk-config-provider',
+      '@midnight-ntwrk/midnight-js-level-private-state-provider',
+      '@midnight-ntwrk/testkit-js',
+      '@midnight-ntwrk/wallet-sdk-facade',
+      '@midnight-ntwrk/wallet-sdk-shielded',
+      '@midnight-ntwrk/wallet-sdk-unshielded-wallet',
+      '@midnight-ntwrk/wallet-sdk-abstractions',
+      '@midnight-ntwrk/wallet-sdk-dust-wallet',
     ],
   },
 });
