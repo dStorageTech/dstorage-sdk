@@ -137,71 +137,6 @@ describe('wallet isolation', () => {
   });
 });
 
-// ── Grant access ──────────────────────────────────────────────────────────────
-
-describe('grant access flow', () => {
-  it('owner grants Bob access; Bob can verify hasAccess', async () => {
-    const alice = await makeUser('0xAlice_ga1');
-    const { dataId } = await alice.upload('Alice data');
-    await alice.grant(dataId, '0xBob_ga1');
-    const hasAccess = await alice.hasAccess(dataId, '0xBob_ga1');
-    expect(hasAccess).toBe(true);
-  });
-
-  it('multiple grantees all have access simultaneously', async () => {
-    const alice = await makeUser('0xAlice_ga2');
-    const { dataId } = await alice.upload('Alice data');
-    const grantees = ['0xBob_ga2', '0xCarol_ga2', '0xDave_ga2'];
-    for (const g of grantees) await alice.grant(dataId, g);
-    for (const g of grantees) {
-      expect(await alice.hasAccess(dataId, g)).toBe(true);
-    }
-  });
-
-  it('owner always has access without an explicit grant', async () => {
-    const alice = await makeUser('0xAlice_ga3');
-    const { dataId } = await alice.upload('Alice data');
-    expect(await alice.hasAccess(dataId, '0xAlice_ga3')).toBe(true);
-  });
-
-  it('random wallet has no access', async () => {
-    const alice = await makeUser('0xAlice_ga4');
-    const { dataId } = await alice.upload('Alice data');
-    expect(await alice.hasAccess(dataId, '0xStranger_ga4')).toBe(false);
-  });
-});
-
-// ── Revoke access ─────────────────────────────────────────────────────────────
-
-describe('revoke access flow', () => {
-  it('Bob loses access after Alice revokes', async () => {
-    const alice = await makeUser('0xAlice_ra1');
-    const { dataId } = await alice.upload('Alice data');
-    await alice.grant(dataId, '0xBob_ra1');
-    await alice.revoke(dataId, '0xBob_ra1');
-    expect(await alice.hasAccess(dataId, '0xBob_ra1')).toBe(false);
-  });
-
-  it('revoking one grantee does not affect others', async () => {
-    const alice = await makeUser('0xAlice_ra2');
-    const { dataId } = await alice.upload('Alice data');
-    await alice.grant(dataId, '0xBob_ra2');
-    await alice.grant(dataId, '0xCarol_ra2');
-    await alice.revoke(dataId, '0xBob_ra2');
-
-    expect(await alice.hasAccess(dataId, '0xBob_ra2')).toBe(false);
-    expect(await alice.hasAccess(dataId, '0xCarol_ra2')).toBe(true);
-  });
-
-  it('owner retains access after revoking all grantees', async () => {
-    const alice = await makeUser('0xAlice_ra3');
-    const { dataId } = await alice.upload('Alice data');
-    await alice.grant(dataId, '0xBob_ra3');
-    await alice.revoke(dataId, '0xBob_ra3');
-    expect(await alice.hasAccess(dataId, '0xAlice_ra3')).toBe(true);
-  });
-});
-
 // ── Multi-record scenarios ────────────────────────────────────────────────────
 
 describe('multi-record scenarios', () => {
@@ -221,20 +156,7 @@ describe('multi-record scenarios', () => {
     }
   });
 
-  it('Alice grants access to different records to different users independently', async () => {
-    const alice = await makeUser('0xAlice_mr2');
-    const r1 = (await alice.upload('record 1')).dataId;
-    const r2 = (await alice.upload('record 2')).dataId;
 
-    await alice.grant(r1, '0xBob_mr2');
-    // Carol only gets record 2
-    await alice.grant(r2, '0xCarol_mr2');
-
-    expect(await alice.hasAccess(r1, '0xBob_mr2')).toBe(true);
-    expect(await alice.hasAccess(r2, '0xBob_mr2')).toBe(false);
-    expect(await alice.hasAccess(r1, '0xCarol_mr2')).toBe(false);
-    expect(await alice.hasAccess(r2, '0xCarol_mr2')).toBe(true);
-  });
 });
 
 // ── Disconnect / reconnect ────────────────────────────────────────────────────

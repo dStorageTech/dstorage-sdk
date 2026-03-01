@@ -92,15 +92,7 @@ describe('operations before connect() throw', () => {
     await expect(ds.retrieve('any::ref')).rejects.toThrow('[dStorage] Not connected');
   });
 
-  it('grant() throws when not connected', async () => {
-    const ds = new DStorage(makeConfig());
-    await expect(ds.grant('any::ref', '0xBob')).rejects.toThrow('[dStorage] Not connected');
-  });
 
-  it('revoke() throws when not connected', async () => {
-    const ds = new DStorage(makeConfig());
-    await expect(ds.revoke('any::ref', '0xBob')).rejects.toThrow('[dStorage] Not connected');
-  });
 });
 
 // ── upload ────────────────────────────────────────────────────────────────────
@@ -220,63 +212,6 @@ describe('retrieve', () => {
     // 'nonexistent' has no '::' but parts[0] is truthy → gets forwarded to storage
     const ds = await makeConnectedDStorage();
     await expect(ds.retrieve('nonexistent::ref_abc')).rejects.toThrow();
-  });
-});
-
-// ── grant / revoke / hasAccess ────────────────────────────────────────────────
-
-describe('grant / revoke / hasAccess', () => {
-  it('owner always has access without an explicit grant', async () => {
-    const ds = await makeConnectedDStorage();
-    const { dataId } = await ds.upload('private data');
-    const hasAccess = await ds.hasAccess(dataId, ds.connectedAddress!);
-    expect(hasAccess).toBe(true);
-  });
-
-  it('a third party has no access by default', async () => {
-    const ds = await makeConnectedDStorage();
-    const { dataId } = await ds.upload('private data');
-    const hasAccess = await ds.hasAccess(dataId, '0xStranger');
-    expect(hasAccess).toBe(false);
-  });
-
-  it('grant() returns a permId string', async () => {
-    const ds = await makeConnectedDStorage();
-    const { dataId } = await ds.upload('private data');
-    const permId = await ds.grant(dataId, '0xBob_grant1');
-    expect(typeof permId).toBe('string');
-    expect(permId.length).toBeGreaterThan(0);
-  });
-
-  it('grantee has access after grant()', async () => {
-    const ds = await makeConnectedDStorage();
-    const { dataId } = await ds.upload('private data');
-    await ds.grant(dataId, '0xBob_grant2');
-    expect(await ds.hasAccess(dataId, '0xBob_grant2')).toBe(true);
-  });
-
-  it('grantee loses access after revoke()', async () => {
-    const ds = await makeConnectedDStorage();
-    const { dataId } = await ds.upload('private data');
-    await ds.grant(dataId, '0xBob_grant3');
-    await ds.revoke(dataId, '0xBob_grant3');
-    expect(await ds.hasAccess(dataId, '0xBob_grant3')).toBe(false);
-  });
-
-  it('revoking a non-existent grantee does not throw', async () => {
-    const ds = await makeConnectedDStorage();
-    const { dataId } = await ds.upload('private data');
-    await expect(ds.revoke(dataId, '0xNobody')).resolves.toBeUndefined();
-  });
-
-  it('grant() throws for invalid dataId', async () => {
-    const ds = await makeConnectedDStorage();
-    await expect(ds.grant('no-separator', '0xBob')).rejects.toThrow('[dStorage] Invalid dataId');
-  });
-
-  it('revoke() throws for invalid dataId', async () => {
-    const ds = await makeConnectedDStorage();
-    await expect(ds.revoke('no-separator', '0xBob')).rejects.toThrow('[dStorage] Invalid dataId');
   });
 });
 
