@@ -6,10 +6,6 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MockMidnightChainAdapter } from '../adapters/mockMidnight.js';
-import { MidnightChainAdapter } from '../adapters/midnight/midnight.js';
-
-const MOCK_CREDENTIALS = { mnemonic: 'test test test test test test test test test test test junk' };
-const MOCK_NETWORK = 'undeployed' as const;
 
 afterEach(() => vi.useRealTimers());
 
@@ -117,24 +113,3 @@ describe('MockMidnightChainAdapter.queryCircuit', () => {
   });
 });
 
-// ── MidnightChainAdapter — callCircuit / queryCircuit not supported ───────────
-
-describe('MidnightChainAdapter.callCircuit and queryCircuit', () => {
-  it('callCircuit throws "not supported" for any circuit name', async () => {
-    const adapter = new MidnightChainAdapter({
-      contractAddress: '0xContract',
-      network: MOCK_NETWORK,
-      credentials: MOCK_CREDENTIALS,
-    });
-    await expect(adapter.callCircuit('saveRecord', [])).rejects.toThrow('not supported');
-  });
-
-  it('queryCircuit throws "not supported" for any query name', async () => {
-    const adapter = new MidnightChainAdapter({
-      contractAddress: '0xContract',
-      network: MOCK_NETWORK,
-      credentials: MOCK_CREDENTIALS,
-    });
-    await expect(adapter.queryCircuit('checkCoverage', ['pid'])).rejects.toThrow('not supported');
-  });
-});

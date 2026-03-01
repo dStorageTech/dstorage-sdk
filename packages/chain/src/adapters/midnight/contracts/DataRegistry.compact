@@ -30,7 +30,7 @@ export ledger refCounter: Counter;
 // The creator of this contract becomes the owner
 export ledger owner: Bytes<32>;
 
-witness localSecretKey(): Bytes<32>;
+//witness localSecretKey(): Bytes<32>;
 
 // Derive a deterministic refId from the storage ID and a monotonic counter.
 // Using hash(storageId ++ counter) guarantees uniqueness and ties the refId

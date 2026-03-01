@@ -107,6 +107,7 @@ const MAINNET: ArweaveGatewayConfig = {
 
 export class ArweaveStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = 'arweave';
+  readonly providerName: string = 'Arweave';
 
   private readonly gateway:               ArweaveGatewayConfig;
   private readonly walletKey:             Record<string, string> | undefined;

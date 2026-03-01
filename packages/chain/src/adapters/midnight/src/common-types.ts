@@ -1,6 +1,6 @@
 import { type MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
 import { type FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import type { DataRegistryPrivateState, ReferenceEntry, Contract, Witnesses } from './contracts/src/index';
+import type { DataRegistryPrivateState, ReferenceEntry, Contract, Witnesses } from '../contracts/src/index';
 
 export const dataRegistryPrivateStateKey = 'DataRegistryPrivateState';
 export type PrivateStateId = typeof dataRegistryPrivateStateKey;

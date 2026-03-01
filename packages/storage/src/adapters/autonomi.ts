@@ -26,6 +26,7 @@ export interface AutonomiAdapterConfig {
 
 export class AutonomiStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = 'autonomi';
+  readonly providerName: string = 'Autonomi';
 
   private config: AutonomiAdapterConfig;
 

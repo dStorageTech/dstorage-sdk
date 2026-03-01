@@ -1,8 +1,8 @@
 import { CompiledContract } from "@midnight-ntwrk/compact-js";
-export * from "../managed/contract/index.js";
+export * from "../dataregistry/managed/contract/index.js";
 export * from "./witnesses.js";
 
-import * as CompiledDataRegistryContract from "../managed/contract/index.js";
+import * as CompiledDataRegistryContract from "../dataregistry/managed/contract/index.js";
 import * as Witnesses from "./witnesses.js";
 
 export const CompiledDataRegistryContractContract = CompiledContract.make<
@@ -11,5 +11,7 @@ export const CompiledDataRegistryContractContract = CompiledContract.make<
   "DataRegistry",
   CompiledDataRegistryContract.Contract<Witnesses.DataRegistryPrivateState>,
 ).pipe(
-  CompiledContract.withWitnesses(Witnesses.witnesses),
+  //CompiledContract.withWitnesses(Witnesses.witnesses),
+  CompiledContract.withVacantWitnesses,
+  CompiledContract.withCompiledFileAssets("/home/bochaco/night/dstorage-sdk/packages/chain/src/adapters/midnight/contracts/dataregistry/managed"),
 );

@@ -40,6 +40,7 @@ function storeGet(key: string): string | null {
 
 export class MockStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = 'mock';
+  readonly providerName: string = 'Mock-Storage-Adapter';
 
   async upload(
     data: string,

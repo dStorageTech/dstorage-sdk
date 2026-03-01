@@ -54,6 +54,7 @@ function load<T>(key: string): T | null {
 
 export class MockChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = 'mock';
+  readonly providerName: string = 'Mock-Chain-Adapter';
 
   constructor() {
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
@@ -119,6 +120,10 @@ export class MockChainAdapter implements ChainAdapter {
 
   setContractAddress(_address: string): void {
     // No-op for mock — contract address is not used
+  }
+
+  getContractAddress(): string {
+    return 'mock-contract-address';
   }
 
   async deployDataRegistry(): Promise<string> {

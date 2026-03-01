@@ -1,7 +1,7 @@
 /**
  * @dstorage/chain — adapters/midnight.ts
  *
- * Real Midnight Network chain adapter.
+ * Midnight Network chain adapter.
  *
  * Uses DataRegistryAPI (deployContract / findDeployedContract / callTx) from
  * @midnight-ntwrk/midnight-js-contracts via the api.ts wrapper, so that
@@ -26,12 +26,24 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
-  CircuitCallResult,
-} from '../../types.js';
+} from '../../../types.js';
 
-import type { DataRegistryAPI } from './api.js';
+import path from 'node:path';
+import type { DataRegistryAPI, PrivateStateId } from './api.js';
 import type { DataRegistryProviders } from './common-types.js';
-import { dataRegistryPrivateStateKey } from './common-types.js';
+import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
+import { DataRegistryPrivateState} from '../contracts/src/index.js';
+import { type WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
+import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
+import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
+import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
+import { MidnightWalletProvider } from './wallet-provider';
+import { EnvironmentConfiguration } from '@midnight-ntwrk/testkit-js';
+import { firstValueFrom } from 'rxjs';
+import { waitForUnshieldedFunds } from './wallet-utils';
+import { unshieldedToken } from '@midnight-ntwrk/ledger-v7';
+import { ShieldedAddress, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -83,26 +95,26 @@ interface ConnectedAPI {
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
+const FACADE_WALLET_SYNC_TIMEOUT = 600_000;
+
 interface BaseConfig {
   /**
    * Midnight node RPC endpoint.
-   * Default: Midnight testnet-02 public node.
    */
-  nodeEndpoint?: string;
+  nodeEndpoint: string;
+  nodeWsEndpoint: string;
   /**
    * Midnight indexer HTTP (GraphQL) endpoint for state queries.
-   * Default: Midnight testnet-02 public indexer.
    */
-  indexerEndpoint?: string;
+  indexerEndpoint: string;
   /**
    * Midnight indexer WebSocket endpoint for real-time subscriptions.
    */
-  indexerWsEndpoint?: string;
+  indexerWsEndpoint: string;
   /**
    * Proof server URL.
-   * Default: http://localhost:6300 (local proof server).
    */
-  proofServerEndpoint?: string;
+  proofServerEndpoint: string;
   /**
    * On-chain address of the deployed DataRegistry contract.
    * Optional — if omitted, call deployDataRegistry() (or sdk.init()) to deploy a new contract.
@@ -111,7 +123,7 @@ interface BaseConfig {
   /**
    * Target network. Controls wallet networkId, address format, and fee overhead.
    */
-  network: 'testnet' | 'preprod' | 'undeployed';
+  network: 'preprod' | 'undeployed';
 }
 
 export type MidnightChainAdapterConfig = BaseConfig & (
@@ -120,11 +132,11 @@ export type MidnightChainAdapterConfig = BaseConfig & (
        * Wallet mode. Default: 'facade' (uses wallet-sdk-facade for Node.js CLI).
        * Set to 'connector' to use browser wallet extension (e.g., Midnight Lace).
        */
-      walletMode?: 'facade';
+      walletMode: 'facade';
       /**
        * Wallet credentials. Provide exactly one of mnemonic or seedHex.
        * Used by init() to derive Midnight signing keys in facade mode.
-       * Required only when walletMode is 'facade' or not specified.
+       * Required only when walletMode is 'facade'.
        */
       credentials: {
         mnemonic?: string;  // BIP-39 mnemonic
@@ -169,6 +181,7 @@ export type MidnightChainAdapterConfig = BaseConfig & (
 
 export class MidnightChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = 'midnight';
+  readonly providerName: string = 'Midnight';
 
   private facade: unknown | null = null;
   private connectorAPI: ConnectedAPI | null = null;
@@ -194,26 +207,16 @@ export class MidnightChainAdapter implements ChainAdapter {
   private readonly connectorName: string;
 
   private _contractAddress: string | undefined;
+  private _zkArtifactsPath: string | undefined;
+  private _initialized = false;
 
   // DataRegistry API — lazily initialized by _getAPI().
   // Reset to null when contract address changes (setContractAddress) or on stop().
   private _api: DataRegistryAPI | null = null;
 
-  // In-memory private state store for DataRegistry circuit witness (localSecretKey).
-  // Key: 'DataRegistryPrivateState', Value: { secretKey: Uint8Array }
-  private _privateStateMap: Map<string, unknown> = new Map();
+  private readonly _credentials: { mnemonic?: string; seedHex?: string };
 
-  private readonly config: {
-    nodeEndpoint: string;
-    indexerEndpoint: string;
-    indexerWsEndpoint?: string;
-    proofServerEndpoint: string;
-    contractAddress?: string;
-    network: 'testnet' | 'preprod' | 'undeployed';
-    credentials?: { mnemonic?: string; seedHex?: string };
-    zkConfigBaseUrl?: string;   // connector mode
-    zkArtifactsPath?: string;   // facade mode
-  };
+  private readonly config: EnvironmentConfiguration;
 
   constructor(config: MidnightChainAdapterConfig) {
     if (config.contractAddress !== undefined && !config.contractAddress) {
@@ -246,7 +249,12 @@ export class MidnightChainAdapter implements ChainAdapter {
       : '';
 
     this._contractAddress = config.contractAddress;
+    this._credentials = (walletMode === 'facade' && 'credentials' in config) ? config.credentials : {};
+    this._zkArtifactsPath = (walletMode === 'facade' && 'zkArtifactsPath' in config)
+      ? (config as Extract<MidnightChainAdapterConfig, { walletMode: 'facade' }>).zkArtifactsPath
+      : undefined;
 
+    /*
     this.config = {
       nodeEndpoint: config.nodeEndpoint ?? 'https://rpc.testnet-02.midnight.network',
       indexerEndpoint:
@@ -265,6 +273,17 @@ export class MidnightChainAdapter implements ChainAdapter {
         ? { zkArtifactsPath: (config as any).zkArtifactsPath }
         : {}),
     };
+    */
+    this.config = {
+      walletNetworkId: config.network,
+      networkId: config.network,
+      indexer: config.indexerEndpoint,
+      indexerWS: config.indexerWsEndpoint,
+      node: config.nodeEndpoint,
+      nodeWS: config.nodeWsEndpoint,
+      faucet: 'https://faucet.preprod.midnight.network/api/request-tokens',
+      proofServer: config.proofServerEndpoint
+    };
   }
 
   // ── ZK config provider ─────────────────────────────────────────────────────
@@ -275,8 +294,20 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Facade (Node.js): reads ZK artifact files from the local filesystem via zkArtifactsPath.
    * Connector (browser): fetches ZK artifacts over HTTP via zkConfigBaseUrl.
    */
-  private async _buildZkConfigProvider(): Promise<unknown> {
-    if (this.walletMode === 'facade') {
+  private async _buildZkConfigProvider(): Promise<NodeZkConfigProvider<'storeReference'>> {
+    if (!this._zkArtifactsPath) {
+      throw new Error(
+        '[dStorage/midnight] zkArtifactsPath is required in facade mode.\n' +
+          '  Set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.\n' +
+          '  Example: zkArtifactsPath: path.resolve(__dirname, \'../packages/chain/src/adapters/midnight/contracts/dataregistry/managed\')'
+      );
+    }
+    const zkConfigPath = this._zkArtifactsPath;
+    console.log(`[dStorage/midnight] ZK artifacts path: ${zkConfigPath}`);
+
+    return new NodeZkConfigProvider<'storeReference'>(zkConfigPath);
+
+    /*if (this.walletMode === 'facade') {
       const zkArtifactsPath = this.config.zkArtifactsPath;
       if (!zkArtifactsPath) {
         throw new Error(
@@ -320,11 +351,13 @@ export class MidnightChainAdapter implements ChainAdapter {
       }
       return new FetchZkConfigProvider(zkConfigBaseUrl, fetch.bind(globalThis));
     }
+    */
   }
 
   /**
    * Build the full set of Midnight providers needed by DataRegistryAPI.
    */
+  /*
   private async _buildProviders(zkConfigProvider: unknown): Promise<{
     publicDataProvider: unknown;
     zkConfigProvider: unknown;
@@ -411,8 +444,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       const connectorEncPublicKey = this.connectorEncPublicKey;
 
       const { toHex, fromHex } = await import('@midnight-ntwrk/midnight-js-utils');
-      const ledger = await import(/* @vite-ignore */ '@midnight-ntwrk/ledger-v7');
-
+      const ledger = await import(/* @vite-ignore  '@midnight-ntwrk/ledger-v7');
+/*
       const walletProvider = {
         getCoinPublicKey: () => connectorCoinPublicKey,
         getEncryptionPublicKey: () => connectorEncPublicKey,
@@ -436,6 +469,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       return { publicDataProvider, zkConfigProvider, proofProvider, walletProvider, midnightProvider };
     }
   }
+  */
 
   /**
    * Build a DataRegistryProviders object by combining the Midnight providers
@@ -443,13 +477,56 @@ export class MidnightChainAdapter implements ChainAdapter {
    */
   private async _buildDataRegistryProviders(): Promise<DataRegistryProviders> {
     const zkConfigProvider = await this._buildZkConfigProvider();
-    const providers = await this._buildProviders(zkConfigProvider);
-    const map = this._privateStateMap;
-    const privateStateProvider = {
-      get: (key: string) => Promise.resolve(map.get(key) ?? null),
-      set: (key: string, state: unknown) => { map.set(key, state); return Promise.resolve(); },
+
+    const walletProvider = await MidnightWalletProvider.build(this.config, this._credentials.seedHex);
+    //providersToBeStopped.push(walletProvider);
+    const walletFacade: WalletFacade = walletProvider.wallet;
+    await walletProvider.start();
+
+    const unshieldedState = await waitForUnshieldedFunds(
+      walletFacade,
+      this.config,
+      unshieldedToken(),
+      false
+    );
+    const nightBalance = unshieldedState.balances[unshieldedToken().raw];
+    if (nightBalance === undefined) {
+      console.log('No funds received, exiting...');
+      throw new Error('[dStorage/midnight] No NIGHT funds received/detected.');
+    }
+    console.log(`Your NIGHT wallet balance is: ${nightBalance}`);
+
+    const facadeState = await firstValueFrom((walletFacade as any).state() as any);
+    this.addresses = {
+      shielded: ShieldedAddress.codec.encode(getNetworkId(), (facadeState as any).shielded.address).toString(),
+      unshielded: UnshieldedAddress.codec.encode(getNetworkId(), (facadeState as any).unshielded.address).toString(),
+      dust: (facadeState as any).dust.dustAddress,
     };
-    return { ...providers, privateStateProvider } as unknown as DataRegistryProviders;
+
+    const privateStateStoreName = 'data-registry-private-state';
+    const basePrivateStateProvider = levelPrivateStateProvider<PrivateStateId, DataRegistryPrivateState>({
+      privateStateStoreName,
+      signingKeyStoreName: `${privateStateStoreName}-signing-keys`,
+      privateStoragePasswordProvider: () => {
+        return 'key-just-for-testing-here!';
+      },
+    });
+    // midnight-js-contracts calls setContractAddress() which is not yet in the
+    // levelPrivateStateProvider implementation — add a no-op shim.
+    const privateStateProvider = Object.assign(basePrivateStateProvider, {
+      setContractAddress: (_address: string) => { /* no-op: levelDb scopes by privateStateId */ },
+    });
+    const providers: DataRegistryProviders = {
+      privateStateProvider: privateStateProvider as unknown as DataRegistryProviders['privateStateProvider'],
+      publicDataProvider: indexerPublicDataProvider(this.config.indexer, this.config.indexerWS),
+      zkConfigProvider,
+      proofProvider: httpClientProofProvider(this.config.proofServer, zkConfigProvider as any),
+      walletProvider: walletProvider as unknown as DataRegistryProviders['walletProvider'],
+      midnightProvider: walletProvider,
+    };
+
+    this.facade = walletFacade;
+    return providers;
   }
 
   /**
@@ -460,32 +537,24 @@ export class MidnightChainAdapter implements ChainAdapter {
   private async _getAPI(): Promise<DataRegistryAPI> {
     if (this._api) return this._api;
 
-    // Check wallet initialization early, before any provider building that could throw
-    // unrelated errors (e.g., "Invalid URL" from empty WebSocket URL).
-    if (this.walletMode === 'facade' && !this.facade) {
-      throw new Error('[dStorage/midnight] Wallet not initialized. Call await chain.init() first.');
-    }
-    if (this.walletMode === 'connector' && !this.connectorAPI) {
-      throw new Error('[dStorage/midnight] Connector not initialized. Call await chain.init() first.');
-    }
-
-    const addr = this._contractAddress ?? this.config.contractAddress;
-    if (!addr) {
-      throw new Error(
-        '[dStorage/midnight] No contract address configured. ' +
-          'Call sdk.init() to auto-deploy, or pass contractAddress in the adapter config.'
-      );
-    }
-
-    // Seed the private state with the dust seed in facade mode for deterministic witness.
-    if (this.walletMode === 'facade' && this.facadeDustSeed && !this._privateStateMap.has(dataRegistryPrivateStateKey)) {
-      const { createDataRegistryPrivateState } = await import('./contracts/src/index.js');
-      this._privateStateMap.set(dataRegistryPrivateStateKey, createDataRegistryPrivateState(this.facadeDustSeed.slice(0, 32)));
+    // Guard: must call init() before any operation that needs the API.
+    if (!this._initialized) {
+      throw new Error('[dStorage/midnight] Not initialized. Call await chain.init() first.');
     }
 
     const providers = await this._buildDataRegistryProviders();
-    const { DataRegistryAPI: API } = await import('./api.js');
-    this._api = await API.join(providers, addr);
+    
+    const { DataRegistryAPI } = await import('./api.js');
+    if (!this._contractAddress) {
+      console.log('[dStorage/midnight] Deploying DataRegistry contract…');
+      this._api = await DataRegistryAPI.deploy(providers);
+      this._contractAddress = this._api.deployedContractAddress;
+      console.log(`[dStorage/midnight] DataRegistry deployed at: ${this._contractAddress}`);
+    } else {
+      this._api = await DataRegistryAPI.join(providers, this._contractAddress);
+      console.log(`[dStorage/midnight] DataRegistry joined at: ${this._contractAddress}`);
+    }
+
     return this._api;
   }
 
@@ -498,6 +567,13 @@ export class MidnightChainAdapter implements ChainAdapter {
   setContractAddress(address: string): void {
     this._contractAddress = address;
     this._api = null;
+  }
+
+  /**
+   * Get the contract address
+   */
+  getContractAddress(): string {
+    return this._contractAddress ?? '';
   }
 
   // ── ChainAdapter implementation ────────────────────────────────────────────
@@ -534,109 +610,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     return new Uint8Array(hashBuffer);
   }
 
-  async readReference(refId: string): Promise<ChainReference> {
-    const api = await this._getAPI();
-    const { firstValueFrom } = await import(/* @vite-ignore */ 'rxjs');
-    const state = await (firstValueFrom as any)(api.state$);
-
-    const entry = state.references.get(refId) as
-      | { storageId: Uint8Array | string; storageProvider: string | Uint8Array }
-      | undefined;
-
-    if (!entry) {
-      throw new Error(`[dStorage/midnight] No reference found on-chain for refId: ${refId}`);
-    }
-
-    const storageId = entry.storageId instanceof Uint8Array
-      ? Buffer.from(entry.storageId).toString('hex')
-      : String(entry.storageId);
-    const storageProvider = typeof entry.storageProvider === 'string'
-      ? entry.storageProvider
-      : new TextDecoder().decode(entry.storageProvider as Uint8Array);
-
-    return { storageId, storageProvider, owner: '', createdAt: 0 };
-  }
-
-  async listReferences(): Promise<Array<{ refId: string; ref: ChainReference }>> {
-    const api = await this._getAPI();
-    const { firstValueFrom } = await import(/* @vite-ignore */ 'rxjs');
-    const state = await (firstValueFrom as any)(api.state$);
-
-    const results: Array<{ refId: string; ref: ChainReference }> = [];
-    for (const [refId, entry] of state.references as Map<string, unknown>) {
-      const e = entry as { storageId: Uint8Array | string; storageProvider: string | Uint8Array };
-      const storageId = e.storageId instanceof Uint8Array
-        ? Buffer.from(e.storageId).toString('hex')
-        : String(e.storageId);
-      const storageProvider = typeof e.storageProvider === 'string'
-        ? e.storageProvider
-        : new TextDecoder().decode(e.storageProvider as Uint8Array);
-      results.push({
-        refId,
-        ref: { storageId, storageProvider, owner: '', createdAt: 0 },
-      });
-    }
-    return results;
-  }
-
-  // ── Generic circuit API (still part of ChainAdapter interface) ────────────
-
-  async callCircuit(circuitName: string, _inputs: unknown[]): Promise<CircuitCallResult> {
-    throw new Error(
-      `[dStorage/midnight] callCircuit('${circuitName}') is not supported. ` +
-        'Use the DataRegistry-specific methods (writeReference, listReferences) instead.'
-    );
-  }
-
-  async queryCircuit<T = unknown>(_queryName: string, _inputs: unknown[]): Promise<T> {
-    throw new Error(
-      '[dStorage/midnight] queryCircuit() is not supported. ' +
-        'Use listReferences() or readReference() to query DataRegistry state.'
-    );
-  }
-
   // ── DataRegistry deployment ────────────────────────────────────────────────
-
-  /**
-   * Deploy the DataRegistry contract and return the deployed address.
-   *
-   * In facade mode: uses the wallet's dust seed to seed the private state,
-   *   which provides the localSecretKey witness during circuit execution.
-   * In connector mode: deployment is not supported — pass contractAddress instead.
-   *
-   * Must be called after init() (facade mode).
-   */
-  async deployDataRegistry(): Promise<string> {
-    if (this.walletMode === 'connector') {
-      throw new Error(
-        '[dStorage/midnight] deployDataRegistry() is not supported in connector mode.\n' +
-          '  Deploy the DataRegistry contract manually and pass contractAddress in the adapter config.'
-      );
-    }
-
-    if (!this.facade) {
-      throw new Error('[dStorage/midnight] deployDataRegistry() called before init().');
-    }
-
-    // Seed private state with dust seed for deterministic witness execution.
-    const { createDataRegistryPrivateState } = await import('./contracts/src/index.js');
-    this._privateStateMap.set(
-      dataRegistryPrivateStateKey,
-      createDataRegistryPrivateState(this.facadeDustSeed!.slice(0, 32))
-    );
-
-    const providers = await this._buildDataRegistryProviders();
-    const { DataRegistryAPI: API } = await import('./api.js');
-
-    console.log('[dStorage/midnight] Deploying DataRegistry contract…');
-
-    const api = await API.deploy(providers);
-    this._api = api;
-    this._contractAddress = api.deployedContractAddress;
-
-    console.log(`[dStorage/midnight] DataRegistry deployed at: ${api.deployedContractAddress}`);
-    return api.deployedContractAddress;
-  }
 
   /**
    * Derive a deterministic AES-GCM encryption key from the adapter's credentials.
@@ -644,9 +618,9 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Throws in connector mode (credentials are held by the wallet extension).
    */
   async getEncryptionKey(): Promise<CryptoKey> {
-    if (this.walletMode === 'facade' && this.config.credentials) {
+    if (this.walletMode === 'facade' && this._credentials) {
       const { KeyDeriver } = await import('@dstorage/crypto');
-      return new KeyDeriver(this.config.credentials).deriveEncryptionKey();
+      return new KeyDeriver(this._credentials).deriveEncryptionKey();
     }
     throw new Error(
       '[dStorage/midnight] getEncryptionKey() is not available in connector mode.\n' +
@@ -665,138 +639,33 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Must be called before write operations or getBalances().
    * All Midnight wallet SDK imports are dynamic to avoid hard build-time failures.
    */
-  async init(): Promise<WalletAddresses> {
+  async init(): Promise<string> {
+    this._initialized = true;
+
     // Set global network ID (required by Midnight JS SDK)
     const { setNetworkId } = await import(/* @vite-ignore */ '@midnight-ntwrk/midnight-js-network-id');
-    setNetworkId(this.config.network);
+    setNetworkId(this.config.networkId);
 
-    if (this.walletMode === 'facade') {
+    await this._getAPI();
+
+    /*if (this.walletMode === 'facade') {     
       return this._initFacade();
     } else {
       return this._initConnector();
-    }
+    }*/
+
+    return this._contractAddress ?? '';
   }
 
   /**
    * Initialize in facade mode: derive keys, build WalletFacade, wait for sync.
    */
   private async _initFacade(): Promise<WalletAddresses> {
-    // Credentials are guaranteed by constructor validation
-    const credentials = this.config.credentials!;
-
-    // 1. Derive signing key seeds
-    const { KeyDeriver } = await import('@dstorage/crypto');
-    const deriver = new KeyDeriver(credentials);
-    const { zswapSeed, dustSeed, nightExternalSeed } =
-      await deriver.deriveMidnightSigningKeys();
-
-    // 2. Derive typed secret keys
-    const ledger = await import(/* @vite-ignore */ '@midnight-ntwrk/ledger-v7');
-    const shieldedSecretKeys = (ledger as any).ZswapSecretKeys.fromSeed(zswapSeed);
-    const dustSecretKey = (ledger as any).DustSecretKey.fromSeed(dustSeed);
-
-    // Store raw hex public keys for walletProvider.getCoinPublicKey/getEncryptionPublicKey.
-    this.facadeCoinPublicKey = shieldedSecretKeys.coinPublicKey as string;
-    this.facadeEncPublicKey = shieldedSecretKeys.encryptionPublicKey as string;
-    // Store 32-byte dust seed as a default witness key for the DataRegistry localSecretKey witness.
-    this.facadeDustSeed = (dustSeed as Uint8Array).slice(0, 32);
-    // Store full secret key objects for WalletFacade.balanceUnboundTransaction.
-    this.facadeShieldedSecretKeys = shieldedSecretKeys;
-    this.facadeDustSecretKey = dustSecretKey;
-
-    // 3. Derive unshielded keystore
-    const {
-      createKeystore,
-      InMemoryTransactionHistoryStorage,
-      PublicKey: UnshieldedPublicKey,
-      UnshieldedWallet,
-    } = await import(/* @vite-ignore */ '@midnight-ntwrk/wallet-sdk-unshielded-wallet');
-    const unshieldedKeystore = (createKeystore as any)(nightExternalSeed, this.config.network);
-
-    // 4. Build wallet config
-    const feeOverhead =
-      this.config.network === 'undeployed'
-        ? 500_000_000_000_000_000n
-        : 300_000_000_000_000_000n;
-    const walletCfg = {
-      networkId: this.config.network,
-      costParameters: { additionalFeeOverhead: feeOverhead, feeBlocksMargin: 5 },
-      relayURL: new URL(this.config.nodeEndpoint),
-      provingServerUrl: new URL(this.config.proofServerEndpoint),
-      indexerClientConnection: {
-        indexerHttpUrl: this.config.indexerEndpoint,
-        indexerWsUrl: this.config.indexerWsEndpoint ?? '',
-      },
-      indexerUrl: this.config.indexerWsEndpoint ?? '',
+    return {
+      shielded: 'shieldedAddr',
+      unshielded: 'unshieldedAddr',
+      dust: 'dustAddr',
     };
-
-    // 5. Construct the three wallet parts
-    const { ShieldedWallet } = await import(/* @vite-ignore */ '@midnight-ntwrk/wallet-sdk-shielded');
-    const { DustWallet } = await import(/* @vite-ignore */ '@midnight-ntwrk/wallet-sdk-dust-wallet');
-
-    const shielded = (ShieldedWallet as any)(walletCfg).startWithSecretKeys(shieldedSecretKeys);
-    const dust = (DustWallet as any)(walletCfg).startWithSecretKey(
-      dustSecretKey,
-      (ledger as any).LedgerParameters.initialParameters().dust
-    );
-    const unshielded = (UnshieldedWallet as any)({
-      ...walletCfg,
-      txHistoryStorage: new (InMemoryTransactionHistoryStorage as any)(),
-    }).startWithPublicKey(
-      (UnshieldedPublicKey as any).fromKeyStore(unshieldedKeystore)
-    );
-
-    // 6. Start WalletFacade
-    const { WalletFacade } = await import(/* @vite-ignore */ '@midnight-ntwrk/wallet-sdk-facade');
-    const facade = new (WalletFacade as any)(shielded, unshielded, dust);
-    await facade.start(shieldedSecretKeys, dustSecretKey);
-    this.facade = facade;
-
-    // 7. Derive wallet addresses from keys
-    const {
-      ShieldedCoinPublicKey,
-      ShieldedEncryptionPublicKey,
-      ShieldedAddress,
-      DustAddress,
-    } = await import(/* @vite-ignore */ '@midnight-ntwrk/wallet-sdk-address-format');
-
-    const cpk = (ShieldedCoinPublicKey as any).fromHexString(
-      shieldedSecretKeys.coinPublicKey
-    );
-    const epk = (ShieldedEncryptionPublicKey as any).fromHexString(
-      shieldedSecretKeys.encryptionPublicKey
-    );
-    this.addresses = {
-      unshielded: unshieldedKeystore.getBech32Address().toString(),
-      shielded: (ShieldedAddress as any).codec
-        .encode(this.config.network, new (ShieldedAddress as any)(cpk, epk))
-        .toString(),
-      dust: (DustAddress as any).encodePublicKey(this.config.network, dustSecretKey.publicKey),
-    };
-
-    // 8. Wait for wallet sync with indexer (60 s timeout)
-    const { firstValueFrom, filter, timeout } = await import(/* @vite-ignore */ 'rxjs');
-    try {
-      await (firstValueFrom as any)(
-        facade.state().pipe(
-          filter((s: { isSynced?: boolean }) => s.isSynced === true),
-          (timeout as any)(60_000)
-        )
-      );
-    } catch (err) {
-      const isTimeout = (err as any)?.name === 'TimeoutError';
-      if (isTimeout) {
-        throw new Error(
-          '[dStorage/midnight] Wallet sync timed out after 60 s.\n' +
-          '  Make sure the Midnight node and indexer are running:\n' +
-          `  Node:    ${this.config.nodeEndpoint}\n` +
-          `  Indexer: ${this.config.indexerEndpoint}`
-        );
-      }
-      throw err;
-    }
-
-    return this.addresses;
   }
 
   /**
@@ -846,13 +715,13 @@ export class MidnightChainAdapter implements ChainAdapter {
     console.log(
       `[dStorage/midnight] Connecting to wallet "${selected.id}" ` +
         `(name: ${selected.wallet.name ?? 'unknown'}, apiVersion: ${selected.wallet.apiVersion ?? 'unknown'}) ` +
-        `on network "${this.config.network}"...`
+        `on network "${this.config.networkId}"...`
     );
 
     // Step 1: Connect to the wallet extension
     let connectedAPI: ConnectedAPI;
     try {
-      connectedAPI = await selected.wallet.connect(this.config.network);
+      connectedAPI = await selected.wallet.connect(this.config.networkId);
       this.connectorAPI = connectedAPI;
     } catch (err) {
       throw new Error(
@@ -867,9 +736,9 @@ export class MidnightChainAdapter implements ChainAdapter {
     try {
       const walletConfig = await connectedAPI.getConfiguration();
       console.log('[dStorage/midnight] Wallet configuration:', walletConfig);
-      this.connectorIndexerHttp = walletConfig.indexerUri ?? this.config.indexerEndpoint;
-      this.connectorIndexerWs = walletConfig.indexerWsUri ?? this.config.indexerWsEndpoint ?? null;
-      this.connectorProofServer = walletConfig.proverServerUri ?? this.config.proofServerEndpoint;
+      this.connectorIndexerHttp = walletConfig.indexerUri ?? this.config.indexer;
+      this.connectorIndexerWs = walletConfig.indexerWsUri ?? this.config.indexerWS ?? null;
+      this.connectorProofServer = walletConfig.proverServerUri ?? this.config.proofServer;
     } catch (err) {
       console.warn(
         '[dStorage/midnight] Failed to retrieve wallet configuration:',
@@ -952,13 +821,10 @@ export class MidnightChainAdapter implements ChainAdapter {
         throw new Error('[dStorage/midnight] getBalances() called before init().');
       }
 
-      const { firstValueFrom } = await import(/* @vite-ignore */ 'rxjs');
-      const ledger = await import(/* @vite-ignore */ '@midnight-ntwrk/ledger-v7');
-
-      const state = await (firstValueFrom as any)(
-        ((this.facade as any).state as () => any)()
+      const state = await firstValueFrom(
+        (this.facade as any).state() as any
       );
-      const nightToken = (ledger as any).unshieldedToken();
+      const nightToken = unshieldedToken();
 
       return {
         night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
@@ -973,43 +839,5 @@ export class MidnightChainAdapter implements ChainAdapter {
         dust: 0n,
       };
     }
-  }
-
-  /**
-   * Stop the wallet and release resources. No-op if init() was never called.
-   * - Facade mode: stops the WalletFacade
-   * - Connector mode: disconnects from the browser wallet (if available)
-   */
-  async stop(): Promise<void> {
-    if (this.walletMode === 'facade') {
-      if (!this.facade) return;
-
-      const stopFn = ((this.facade as any).stop as (() => Promise<void>) | undefined);
-      await Promise.race([
-        stopFn?.() ?? Promise.resolve(),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ]).catch(() => undefined);
-
-      this.facade = null;
-      this.facadeCoinPublicKey = null;
-      this.facadeEncPublicKey = null;
-      this.facadeDustSeed = null;
-      this.facadeShieldedSecretKeys = null;
-      this.facadeDustSecretKey = null;
-    } else {
-      if (this.connectorAPI && typeof (this.connectorAPI as any).disconnect === 'function') {
-        try {
-          await (this.connectorAPI as any).disconnect();
-        } catch {
-          // Ignore disconnection errors
-        }
-      }
-      this.connectorAPI = null;
-    }
-
-    // Reset DataRegistry API state
-    this._api = null;
-    this._privateStateMap.clear();
-    this.addresses = null;
   }
 }

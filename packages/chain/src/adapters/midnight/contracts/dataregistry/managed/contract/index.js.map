@@ -1,7 +1,7 @@
 {
   "version": 3,
   "file": "index.js",
-  "sourceRoot": "../../../../../../",
+  "sourceRoot": "../../../../../../../",
   "sources": ["src/adapters/midnight/contracts/DataRegistry.compact", "compiler/standard-library.compact"],
   "names": [],
   "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;EAyCA;;;;;;;;;;MAJA,AAAA,WAEC;;OAAA;MAiBD,AAAA,cAUC;;;;;cAV6B,WAAoB;cAAE,iBAAiC;;;;;;;;;;;;;;;;;;yCAAvD,WAAoB,+BAAE,iBAAiC;;;;;;;;;gDAAvD,WAAoB;gDAAE,iBAAiC;;;OAUpF;;;GAvBA;EAFD;;;;;;;;;;;;;;;;;;;;;;;;;;;;IAjBA;;;;;;;;;;yEAAyD;IAGzD;;;;;;;;;yEAAkC;IAGlC;;;;;;;;;yEAA+B;UAY7B,KAAU;IAAV;;;;;;;;;;6FAAA,KAAU;;;;wEAAA;;;;;;;GACX;EC3CD,AAAA,kBAAA;oEAAA;;;EDqCA,AAAA,cAEC,CAF0B,WAAoB,EAAE,YAAqB;;mCACG,WAAS;mCAAE,YAAU;GAC7F;EAiBD,AAAA,iBAUC,4BAV6B,WAAoB,EAAE,iBAAiC;UAC7E,OAAuD,uBAAnC,WAAS;;qGAAE;;;;;;;;;;;0KAAU;;qDACvC;;;;;;;;;;;4KAA2B,OAAK;;;;0HAAtB;;UAGZ,OAAsD,gBAA7B,WAAS,mBAAE,iBAAe;IACzD;;;;;;;;;;2HAA2B,OAAK;;;2HAAY,OAAK;;;wEAAvC;UAEV,KAAU;IAAV;;;;;;;;;;6FAAA,KAAU;;;;wEAAA;WACH,OAAK;GACb;;;;;;;;;;;;;;;;IA1CD;;;;;uCAAA;;;;;;;;;;;;;;;;4GAAyD;;;;;;uCAAzD;;;;;;;;;;;;4GAAyD;;;;;;;;;;;;;;uCAAzD;;;;;;;;;;;;;;;4GAAyD;;;;;;;;;;;;;;uCAAzD;;;;;;;;;;;;;;;;;4GAAyD;;;;;;;;;KAAA;IAGzD;qCAAA;;;;;;;;;;;0GAAkC;KAAA;IAGlC;qCAAA;;;;;;;;;;;0GAA+B;KAAA;;;;;;;;EAO/B,AAAA,WAEC;;;;UAF0B,WAAoB;UAAE,YAAqB;;;;;;;;;;;;;;;yCAA3C,WAAoB,EAAE,YAAqB;GAErE;;;;"

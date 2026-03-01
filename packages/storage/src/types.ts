@@ -24,6 +24,7 @@ export interface UploadResult {
 /** Every storage adapter must implement this interface. */
 export interface StorageAdapter {
   readonly name: StorageProviderName;
+  readonly providerName: string;
 
   /**
    * Upload raw bytes to the storage network.

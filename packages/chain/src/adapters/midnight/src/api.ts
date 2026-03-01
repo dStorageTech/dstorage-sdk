@@ -1,4 +1,4 @@
-import * as DataRegistry from './contracts/managed/contract/index.js';
+import * as DataRegistry from '../contracts/dataregistry/managed/contract/index.js';
 
 import { type ContractAddress, convertFieldToBytes } from '@midnight-ntwrk/compact-runtime';
 import { type Logger } from 'pino';
@@ -9,7 +9,7 @@ import {
   type DeployedDataRegistryContract,
   dataRegistryPrivateStateKey,
 } from './common-types.js';
-import { ReferenceEntry, CompiledDataRegistryContractContract,createDataRegistryPrivateState, DataRegistryPrivateState } from './contracts/src/index';
+import { ReferenceEntry, CompiledDataRegistryContractContract,createDataRegistryPrivateState, DataRegistryPrivateState } from '../contracts/src/index';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { combineLatest, map, tap, from, type Observable } from 'rxjs';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
@@ -129,7 +129,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
    */
   static async deploy(providers: DataRegistryProviders, logger?: Logger): Promise<DataRegistryAPI> {
     logger?.info('deployContract');
-
+    
     const deployedDataRegistryContract = await deployContract(providers, {
       compiledContract: CompiledDataRegistryContractContract,
       privateStateId: dataRegistryPrivateStateKey,

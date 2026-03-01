@@ -284,6 +284,7 @@ export interface ArweaveLocalAdapterConfig extends Omit<ArweaveAdapterConfig, 'g
  */
 export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   override readonly name: StorageProviderName = 'arweave';
+  override readonly providerName: string = 'Arweave-Local';
 
   /** Access arlocal control methods: mint, mine, balance, reset. */
   readonly testnet: ArweaveLocalHelper;

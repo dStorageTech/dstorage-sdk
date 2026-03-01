@@ -38,23 +38,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ZK artifacts for the DataRegistry contract.
 // Built by running: npm run compile:contract (from packages/chain)
-// Resolves to: <monorepo-root>/packages/chain/src/adapters/midnight/contracts/managed/contract/
+// Resolves to: <monorepo-root>/packages/chain/src/adapters/midnight/contracts/dataregistry/managed/
 const DATA_REGISTRY_ZK_PATH = path.resolve(
   __dirname,
-  '../../../packages/chain/src/adapters/midnight/contracts/managed/contract'
+  '../../../packages/chain/src/adapters/midnight/contracts/dataregistry/managed'
 );
 
 // ── Network defaults ───────────────────────────────────────────────────────────
 
 const NETWORKS = {
   preprod: {
-    node: 'wss://rpc.preprod.midnight.network',
+    node: 'https://rpc.preprod.midnight.network',
+    nodeWs: 'wss://rpc.preprod.midnight.network',
     indexerHttp: 'https://indexer.preprod.midnight.network/api/v3/graphql',
     indexerWs: 'wss://indexer.preprod.midnight.network/api/v3/graphql/ws',
     proofServer: 'http://127.0.0.1:6300',
   },
   undeployed: {
-    node: 'ws://127.0.0.1:9944',
+    node: 'https://127.0.0.1:9944',
+    nodeWs: 'wss://127.0.0.1:9944',
     indexerHttp: 'http://127.0.0.1:8088/api/v3/graphql',
     indexerWs: 'ws://127.0.0.1:8088/api/v3/graphql/ws',
     proofServer: 'http://127.0.0.1:6300',
@@ -102,6 +104,8 @@ async function main(): Promise<void> {
     // ── 2. Endpoints ────────────────────────────────────────────────────────
     const nodeEndpoint =
       (await rl.question(`Node RPC endpoint [${defaults.node}]: `)).trim() || defaults.node;
+    const nodeWsEndpoint =
+      (await rl.question(`Node WS endpoint [${defaults.nodeWs}]: `)).trim() || defaults.nodeWs;
     const indexerHttp =
       (await rl.question(`Indexer HTTP endpoint [${defaults.indexerHttp}]: `)).trim() ||
       defaults.indexerHttp;
@@ -116,6 +120,7 @@ async function main(): Promise<void> {
     console.log('\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).');
     rl.close();
     const seedInput = await promptSecret('Mnemonic / hex seed: ');
+
     rl = createInterface({ input, output });
     process.stdout.write('\n');
     if (!seedInput) throw new Error('Mnemonic or seed is required.');
@@ -132,9 +137,11 @@ async function main(): Promise<void> {
     // ── 5. Build the chain adapter ──────────────────────────────────────────
     chain = new MidnightChainAdapter({
       network: networkName,
+      walletMode: 'facade',
       credentials,
       ...(contractAddressInput ? { contractAddress: contractAddressInput } : {}),
       nodeEndpoint,
+      nodeWsEndpoint,
       indexerEndpoint: indexerHttp,
       indexerWsEndpoint: indexerWs,
       proofServerEndpoint,
@@ -142,24 +149,26 @@ async function main(): Promise<void> {
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
     });
     const activeChain = chain;
+    const storageAdapter = new MockStorageAdapter();
 
     // ── 6. Initialise the DStorage SDK ──────────────────────────────────────
     // sdk.init() calls chain.init() (wallet sync), then sets/deploys the contract,
     // and derives an AES-GCM encryption key from the seed.
     const sdk = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
+      storageAdapter,
       chainAdapter: activeChain,
       ...(contractAddressInput ? { dataRegistryAddress: contractAddressInput } : {}),
     });
 
     console.log('\nInitialising wallet, syncing, and preparing contract...');
-    const { dataRegistryAddress } = await withTicker(
+    const dataRegistryAddress = await withTicker(
       () => 'Building wallet and syncing...',
       () => sdk.init()
     );
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
     // ── 7. Display addresses and balances ───────────────────────────────────
+    // TODO!!! this should be called on the SDK somehow abstracted
     const addresses = activeChain.getAddresses();
     console.log('\nWallet addresses:');
     console.log(`  Unshielded: ${addresses.unshielded}`);
@@ -181,7 +190,7 @@ async function main(): Promise<void> {
     // ── 8. File upload loop ─────────────────────────────────────────────────
 
     console.log('\n─── File upload ───────────────────────────────────────────────────────');
-    console.log('The SDK will encrypt your file, store it (mock), and write a reference on-chain.\n');
+    console.log(`The SDK will encrypt your file, store it (${storageAdapter.providerName}), and write a reference on-chain (${activeChain.providerName}).\n`);
 
     let done = false;
     while (!done) {
@@ -204,7 +213,7 @@ async function main(): Promise<void> {
       }
 
       console.log(`\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes)`);
-      console.log('  Encrypting, uploading to mock storage, and writing on-chain reference...');
+      console.log(`  Encrypting, uploading to ${storageAdapter.name} storage, and writing on-chain (${activeChain.name}) reference...`);
 
       try {
         const result = await withTicker(
@@ -229,7 +238,7 @@ async function main(): Promise<void> {
     rl.close();
     if (chain) {
       console.log('Shutting down wallet...');
-      await chain.stop();
+      //await chain.stop();
     }
   }
 }

@@ -68,7 +68,8 @@ let mockBlockHeight = 1_000_000 + Math.floor(Math.random() * 10_000);
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MockMidnightChainAdapter implements ChainAdapter {
-  readonly name: ChainProviderName = 'midnight';
+  readonly name: ChainProviderName = 'mock';
+  readonly providerName: string = 'Midnight-Mock';
 
   private readonly proofServer: MockProofServer;
 
@@ -130,37 +131,6 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return ref;
   }
 
-  async grantAccess(permission: ChainPermission): Promise<string> {
-    const { refId, grantee } = permission;
-
-    // Simulate a lightweight proof for the access-grant circuit
-    await this.proofServer.generateProof('grantAccess', { refId, grantee });
-
-    if (!permissions.has(refId)) permissions.set(refId, new Set());
-    permissions.get(refId)!.add(grantee);
-
-    // Persist
-    const allPerms: Record<string, string[]> = {};
-    for (const [k, v] of permissions.entries()) allPerms[k] = [...v];
-    persist('dstorage:midnight:perms', allPerms);
-
-    const permId = `perm_${refId}_${grantee}`;
-    console.log(`[dStorage/mock-midnight] Access granted: ${grantee} → ${refId}`);
-    return permId;
-  }
-
-  async revokeAccess(refId: string, grantee: string): Promise<void> {
-    permissions.get(refId)?.delete(grantee);
-    console.log(`[dStorage/mock-midnight] Access revoked: ${grantee} → ${refId}`);
-  }
-
-  async hasAccess(refId: string, wallet: string): Promise<boolean> {
-    const ref = refs.get(refId);
-    // Owner always has access
-    if (ref?.owner === wallet) return true;
-    return permissions.get(refId)?.has(wallet) ?? false;
-  }
-
   /** List all references (useful for demo UI) */
   getAllReferences(): Array<{ refId: string; ref: ChainReference }> {
     return [...refs.entries()].map(([refId, ref]) => ({ refId, ref }));
@@ -174,6 +144,10 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
   setContractAddress(_address: string): void {
     // No-op for mock — contract address is not used
+  }
+
+  getContractAddress(): string {
+    return 'mock-midnight-contract-address';
   }
 
   async deployDataRegistry(): Promise<string> {

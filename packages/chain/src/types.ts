@@ -55,6 +55,7 @@ export interface CircuitCallResult {
 /** Every chain adapter must implement this interface */
 export interface ChainAdapter {
   readonly name: ChainProviderName;
+  readonly providerName: string;
 
   /**
    * Write an encrypted data reference to the blockchain.
@@ -65,55 +66,20 @@ export interface ChainAdapter {
   /**
    * Retrieve a reference by its on-chain ID.
    */
-  readReference(refId: string): Promise<ChainReference>;
-
-  /**
-   * Read a single entry from the contract's decoded ledger state by name.
-   * Returns the raw TypeScript value as decoded by the compiled contract's ledger() function.
-   *
-   * Works with any contract whose compiled module exposes a `ledger()` function
-   * (i.e. the full module is passed as `compiledContract`, not just the Contract class).
-   * Requires `@midnight-ntwrk/compact-runtime` to be installed.
-   *
-   * Optional — not all adapters support ledger decoding.
-   */
-  readLedgerEntry?(entryName: string): Promise<unknown>;
-
-  /**
-   * List all references stored in the contract ledger.
-   * Optional — requires a live chain adapter with ledger decode support.
-   * Returns the full compiled module's ledger by decoding on-chain state via compact-runtime.
-   */
-  listReferences?(): Promise<Array<{ refId: string; ref: ChainReference }>>;
-
-  /**
-   * Call a custom ZK circuit by name, running the full prove → balance → submit pipeline.
-   * Optional — not all adapters support ZK proving (e.g. plain mock adapters).
-   */
-  callCircuit?(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult>;
-
-  /**
-   * Query read-only contract state by circuit/query name without generating a proof.
-   * Optional — not all adapters support direct contract state queries.
-   */
-  queryCircuit?<T = unknown>(queryName: string, inputs: unknown[]): Promise<T>;
+  //readReference(refId: string): Promise<ChainReference>;
 
   /** Initialize the wallet: derive keys, build WalletFacade, wait for sync.
    *  Must be called before write operations or getBalances().
    *  Optional — only for adapters that manage wallet lifecycle (e.g. Midnight). */
-  init?(): Promise<import('./adapters/midnight/midnight.js').WalletAddresses>;
+  init?(): Promise<string>;
 
   /** Return wallet addresses derived during init(). Throws if init() not yet called.
    *  Optional — only for adapters that manage wallet lifecycle. */
-  getAddresses?(): import('./adapters/midnight/midnight.js').WalletAddresses;
+  getAddresses?(): import('./adapters/midnight/src/midnight.js').WalletAddresses;
 
   /** Read NIGHT and DUST balances from synced wallet state.
    *  Optional — only for adapters that manage wallet lifecycle. */
-  getBalances?(): Promise<import('./adapters/midnight/midnight.js').WalletBalances>;
-
-  /** Stop the wallet and release resources. No-op if init() was never called.
-   *  Optional — only for adapters that manage wallet lifecycle. */
-  stop?(): Promise<void>;
+  getBalances?(): Promise<import('./adapters/midnight/src/midnight.js').WalletBalances>;
 
   /** Deploy the DataRegistry contract and return the deployed contract address.
    *  Optional — only for adapters that support on-chain deployment. */
@@ -123,6 +89,9 @@ export interface ChainAdapter {
    *  Called by the SDK after deploy or when connecting to an existing contract.
    *  Optional — only for adapters that manage contract address lifecycle. */
   setContractAddress?(address: string): void;
+
+  /** Get the contract address. **/
+  getContractAddress(): string;
 
   /** Derive a deterministic AES-GCM encryption key from the adapter's credentials.
    *  Optional — only for adapters that hold wallet credentials (e.g. facade mode). */

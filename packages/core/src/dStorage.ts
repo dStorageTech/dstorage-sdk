@@ -43,44 +43,26 @@ export class DStorage {
 
   /**
    * Initialize the SDK:
-   *   1. Initialize the chain adapter wallet (if supported).
-   *   2. Deploy a new DataRegistry contract, or connect to an existing one.
-   *   3. Derive an encryption key from the chain adapter's credentials (if supported).
+   *   1. Initialize the chain adapter wallet (if supported), and
+   *      deploy a new DataRegistry contract, or connect to an existing one.
+   *   2. Derive an encryption key from the chain adapter's credentials (if supported).
    *
    * Returns the address of the DataRegistry contract in use.
    * Call this instead of connect() when using MidnightChainAdapter directly.
    */
-  async init(): Promise<{ dataRegistryAddress: string }> {
+  async init() {
     // 1. Initialize chain adapter wallet (derives keys, syncs wallet, etc.)
     if (this.config.chainAdapter.init) {
       await this.config.chainAdapter.init();
     }
 
-    // 2. Deploy or connect to DataRegistry contract
-    let dataRegistryAddress: string;
-    if (this.config.dataRegistryAddress) {
-      // Use existing contract
-      this.config.chainAdapter.setContractAddress?.(this.config.dataRegistryAddress);
-      dataRegistryAddress = this.config.dataRegistryAddress;
-      console.log(`[dStorage] Connected to existing DataRegistry: ${dataRegistryAddress}`);
-    } else if (this.config.chainAdapter.deployDataRegistry) {
-      // Auto-deploy new contract
-      dataRegistryAddress = await this.config.chainAdapter.deployDataRegistry();
-      console.log(`[dStorage] DataRegistry deployed at: ${dataRegistryAddress}`);
-    } else {
-      throw new Error(
-        '[dStorage] Chain adapter does not support deployDataRegistry(). ' +
-          'Pass dataRegistryAddress in the config to use an existing contract.'
-      );
-    }
-
-    // 3. Derive encryption key from chain adapter credentials (facade mode)
-    if (this.config.chainAdapter.getEncryptionKey) {
+    // 2. Derive encryption key from chain adapter credentials (facade mode)
+    /*if (this.config.chainAdapter.getEncryptionKey) {
       this.encryptionKey = await this.config.chainAdapter.getEncryptionKey();
-    }
+    }*/
 
     this._initialized = true;
-    return { dataRegistryAddress };
+    return this.config.chainAdapter.getContractAddress();
   }
 
   // ── Connection ──────────────────────────────────────────────────────────────
@@ -275,50 +257,6 @@ export class DStorage {
 
     metaTx.onProgress(onProgress);
     return metaTx.execute(file, config);
-  }
-
-  // ── List references ────────────────────────────────────────────────────────
-
-  /**
-   * List all references stored in the contract ledger.
-   *
-   * Requires the chain adapter to support `listReferences()` (e.g.
-   * `MidnightChainAdapter` with the full compiled module, or `MockMidnightChainAdapter`).
-   * Does not require a connected wallet — reading the ledger is unauthenticated.
-   */
-  async listReferences(): Promise<Array<{ refId: string; ref: ChainReference }>> {
-    if (!this.config.chainAdapter.listReferences) {
-      throw new Error(
-        '[dStorage] The current chain adapter does not support listReferences(). ' +
-          'Use MidnightChainAdapter or MockMidnightChainAdapter.'
-      );
-    }
-    return this.config.chainAdapter.listReferences();
-  }
-
-  // ── Custom circuit calls ───────────────────────────────────────────────────
-
-  /**
-   * Call a custom ZK circuit on the connected chain adapter.
-   *
-   * Runs the full prove → balance → submit pipeline for the named circuit.
-   * Only available when using an adapter that supports ZK proving
-   * (e.g. MidnightChainAdapter or MockMidnightChainAdapter).
-   *
-   * @param circuitName  The exact circuit name as compiled by compactc
-   * @param inputs       Positional arguments forwarded to the circuit call
-   */
-  async executeCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {
-    this.assertConnected();
-
-    if (!this.config.chainAdapter.callCircuit) {
-      throw new Error(
-        '[dStorage] The current chain adapter does not support callCircuit(). ' +
-          'Use MidnightChainAdapter or MockMidnightChainAdapter.'
-      );
-    }
-
-    return this.config.chainAdapter.callCircuit(circuitName, inputs);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

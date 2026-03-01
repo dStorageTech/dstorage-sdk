@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { MidnightChainAdapter } from '../adapters/midnight/midnight.js';
+import { MidnightChainAdapter } from '../adapters/midnight/src/midnight.js';
 
 const MOCK_CREDENTIALS = { mnemonic: 'test test test test test test test test test test test junk' };
 const MOCK_NETWORK = 'undeployed' as const;
@@ -150,24 +150,6 @@ describe('MidnightChainAdapter', () => {
         })
       ).rejects.toThrow('init()');
     });
-
-    it('readReference throws about wallet not initialized (facade mode)', async () => {
-      const adapter = new MidnightChainAdapter({
-        contractAddress: '0xContract',
-        network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
-      });
-      await expect(adapter.readReference('ref_abc')).rejects.toThrow('init()');
-    });
-
-    it('listReferences throws about wallet not initialized (facade mode)', async () => {
-      const adapter = new MidnightChainAdapter({
-        contractAddress: '0xContract',
-        network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
-      });
-      await expect(adapter.listReferences()).rejects.toThrow('init()');
-    });
   });
 
   // ── setContractAddress ────────────────────────────────────────────────────
@@ -180,49 +162,6 @@ describe('MidnightChainAdapter', () => {
         credentials: MOCK_CREDENTIALS,
       });
       expect(() => adapter.setContractAddress('0xNew')).not.toThrow();
-    });
-  });
-
-  // ── deployDataRegistry ────────────────────────────────────────────────────
-
-  describe('deployDataRegistry', () => {
-    it('throws when called before init()', async () => {
-      const adapter = new MidnightChainAdapter({
-        network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
-      });
-      await expect(adapter.deployDataRegistry()).rejects.toThrow('before init()');
-    });
-
-    it('throws in connector mode', async () => {
-      const adapter = new MidnightChainAdapter({
-        contractAddress: '0xContract',
-        network: MOCK_NETWORK,
-        walletMode: 'connector',
-      });
-      await expect(adapter.deployDataRegistry()).rejects.toThrow('connector mode');
-    });
-  });
-
-  // ── callCircuit / queryCircuit (not supported) ────────────────────────────
-
-  describe('callCircuit and queryCircuit', () => {
-    it('callCircuit throws "not supported"', async () => {
-      const adapter = new MidnightChainAdapter({
-        contractAddress: '0xContract',
-        network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
-      });
-      await expect(adapter.callCircuit('anyCircuit', [])).rejects.toThrow('not supported');
-    });
-
-    it('queryCircuit throws "not supported"', async () => {
-      const adapter = new MidnightChainAdapter({
-        contractAddress: '0xContract',
-        network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
-      });
-      await expect(adapter.queryCircuit('anyQuery', [])).rejects.toThrow('not supported');
     });
   });
 });
