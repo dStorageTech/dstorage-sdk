@@ -99,7 +99,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   async storeReference(storageId: Uint8Array, storageProvider: string): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
     this.logger?.info(`storing reference: ${storageId}`);
     if (storageId.length !== 32) {
-      throw new Error(`Storage Id is not 32 bytes long: ${storageId}`);
+      throw new Error(`Storage Id is not 32 bytes long but instead ${storageId.length}`);
     }
     const txData = await this.deployedContract.callTx.storeReference(storageId, storageProvider);
 

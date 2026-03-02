@@ -2,13 +2,12 @@ import { useState, useCallback, useEffect } from 'react';
 import {
   DStorage,
   MockStorageAdapter, ArweaveStorageAdapter, ArweaveLocalStorageAdapter, AutonomiStorageAdapter,
-  MockMidnightChainAdapter,
+  MockMidnightChainAdapter, MidnightChainAdapter,
   connectDemoWallet,
   INSURANCE_CLAIMS,
   simulateZkProof,
   MockPaymentAdapter,
 } from '@dstorage/core';
-// MidnightChainAdapter is loaded lazily (Node.js-only deps — not bundled for browser).
 import type { WalletInfo, MetaTxProgress, ZkProofResult, ZkProofProgress } from '@dstorage/core';
 import { PatientPanel } from './components/PatientPanel.tsx';
 import { VerifierPanel } from './components/VerifierPanel.tsx';
@@ -20,6 +19,8 @@ type ThemeMode = 'light' | 'dark';
 
 export type StorageAdapterKey = 'mock' | 'arweave-local' | 'arweave' | 'autonomi';
 export type ChainAdapterKey = 'mock' | 'midnight-connector';
+
+const DATA_REGISTRY_CNTRACT_ADDR = 'e4ca9d7f3ee5ac206b0808cb1a2de992ece1369b1bb18753e728665724eaecd9';
 
 export const ADAPTER_CONFIGS: Record<StorageAdapterKey, {
   label: string;
@@ -131,25 +132,33 @@ export default function App() {
     }
 
     let chainAdapter;
+    let chainPaymentAdapter;
     if (chainKey === 'midnight-connector') {
-      // MidnightChainAdapter has Node.js-only dependencies (testkit-js, wallet-sdk-facade, etc.)
-      // and cannot be bundled for the browser. It must be loaded lazily at runtime.
-      // For now the connector path throws a clear error; real Midnight support
-      // requires a separate browser-compatible wallet integration.
-      throw new Error(
-        'Midnight Connector mode is not yet available in the browser demo.\n' +
-        'Select "Mock Midnight" to use the simulated chain adapter.'
-      );
+      // MidnightChainAdapter in connector mode is browser-safe.
+      // All Node.js-only imports inside midnight.ts are /* @vite-ignore */ dynamic
+      // imports that are never executed in connector mode.
+      chainAdapter = new MidnightChainAdapter({
+        walletMode: 'connector',
+        network: 'preprod',
+        contractAddress: DATA_REGISTRY_CNTRACT_ADDR,
+        nodeEndpoint: '',
+        nodeWsEndpoint: '',
+        indexerEndpoint: '',
+        indexerWsEndpoint: '',
+        proofServerEndpoint: 'http://127.0.0.1:6300',
+        // ZK artifacts are served from public/keys/ and public/zkir/
+        zkConfigBaseUrl: window.location.origin,
+      });
+      // Midnight fees are managed internally by the Lace wallet — no separate payment adapter.
     } else {
       chainAdapter = new MockMidnightChainAdapter();
+      chainPaymentAdapter = new MockPaymentAdapter({ token: 'DUST' });
     }
-
-    const chainPaymentAdapter = new MockPaymentAdapter({ token: 'DUST' });
 
     const dstorageConfig: any = {
       storageAdapter,
       chainAdapter,
-      chainPaymentAdapter,
+      ...(chainPaymentAdapter ? { chainPaymentAdapter } : {}),
     };
 
     return { sdk: new DStorage(dstorageConfig) };
@@ -158,14 +167,20 @@ export default function App() {
   /**
    * Smart connect: uses the selected adapters without forcing a specific wallet.
    * For Arweave adapters, requests ArConnect to get the real wallet address for minting.
+   * For Midnight connector: calls sdk.init() which connects to the Lace wallet and
+   * deploys/joins the DataRegistry contract, then uses a demo wallet for encryption.
    */
   const handleStartUploadFlow = async () => {
     try {
       const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey);
 
-      // Use demo wallet for encryption key derivation
-      const wallet = await connectDemoWallet();
+      if (chainAdapterKey === 'midnight-connector') {
+        // Connect to Lace wallet, then deploy or join the DataRegistry contract.
+        const deployedAddr = await sdk.init();
+      }
 
+      // Use demo wallet for encryption key derivation (works for all adapter types).
+      const wallet = await connectDemoWallet();
       await sdk.connect(wallet);
       setWallet(wallet);
       setDStorage(sdk);

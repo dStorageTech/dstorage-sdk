@@ -1,15 +1,14 @@
 /**
  * @dstorage/chain — browser-safe entry
  *
- * Exports only the mock chain adapters. MidnightChainAdapter is excluded
- * because its dependencies (testkit-js, wallet-sdk-facade, etc.) are
- * Node.js-only and cannot be bundled for the browser.
- *
- * For real Midnight chain integration in a browser dApp, the MidnightChainAdapter
- * must be imported dynamically and all Midnight wallet SDK packages need to be
- * resolved separately (e.g., via the Lace wallet connector).
+ * Exports mock adapters plus MidnightChainAdapter in connector mode.
+ * In connector mode, MidnightChainAdapter only uses browser-compatible packages.
+ * Node.js-only facade-mode imports use @vite-ignore dynamic imports and are
+ * never executed in connector mode, so they are safe to include in the browser bundle.
  */
 export * from './types.js';
 export * from './adapters/mock.js';
 export * from './adapters/mockMidnight.js';
 export * from './mockProofServer.js';
+export { MidnightChainAdapter } from './adapters/midnight/src/midnight.js';
+export type { MidnightChainAdapterConfig, WalletAddresses, WalletBalances } from './adapters/midnight/src/midnight.js';

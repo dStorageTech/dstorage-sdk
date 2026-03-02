@@ -31,12 +31,12 @@ export {
   MockChainAdapter,
   MockMidnightChainAdapter,
   MockProofServer,
-  // MidnightChainAdapter is intentionally not re-exported here — it has Node.js-only
-  // dependencies (testkit-js, wallet-sdk-facade, etc.) that cannot be bundled for browser.
-  // Import it directly from '@dstorage/chain' in Node.js environments only.
+  // MidnightChainAdapter connector mode is browser-compatible (Node.js-only facade imports
+  // are dynamic with /* @vite-ignore */ and are never executed in connector mode).
+  MidnightChainAdapter,
 } from '@dstorage/chain';
 
-export type { ChainReference, CircuitCallResult } from '@dstorage/chain';
+export type { ChainReference, CircuitCallResult, MidnightChainAdapterConfig } from '@dstorage/chain';
 
 export {
   MockPaymentAdapter,

@@ -171,6 +171,38 @@ export type MidnightChainAdapterConfig = BaseConfig & (
     }
 );
 
+// ── Browser-safe byte/encoding helpers ────────────────────────────────────────
+
+/** Convert a Uint8Array to a lowercase hex string (browser-safe, no Buffer). */
+function uint8ArrayToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Decode a base64url string to a Uint8Array (browser-safe, no Buffer). */
+function base64urlToBytes(b64url: string): Uint8Array {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  const binary = atob(padded);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+/** Encode a Uint8Array to a base64url string (browser-safe, no Buffer). */
+function bytesToBase64url(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/** Convert a lowercase hex string to a Uint8Array (browser-safe, no Buffer). */
+function hexToUint8Array(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MidnightChainAdapter implements ChainAdapter {
@@ -202,6 +234,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   private _contractAddress: string | undefined;
   private _zkArtifactsPath: string | undefined;
+  private _zkConfigBaseUrl: string | undefined;
   private _initialized = false;
 
   // DataRegistry API — lazily initialized by _getAPI().
@@ -247,27 +280,10 @@ export class MidnightChainAdapter implements ChainAdapter {
     this._zkArtifactsPath = (walletMode === 'facade' && 'zkArtifactsPath' in config)
       ? (config as Extract<MidnightChainAdapterConfig, { walletMode: 'facade' }>).zkArtifactsPath
       : undefined;
+    this._zkConfigBaseUrl = (walletMode === 'connector' && 'zkConfigBaseUrl' in config)
+      ? (config as Extract<MidnightChainAdapterConfig, { walletMode: 'connector' }>).zkConfigBaseUrl
+      : undefined;
 
-    /*
-    this.config = {
-      nodeEndpoint: config.nodeEndpoint ?? 'https://rpc.testnet-02.midnight.network',
-      indexerEndpoint:
-        config.indexerEndpoint ?? 'https://indexer.testnet-02.midnight.network/api/v1/graphql',
-      ...(config.indexerWsEndpoint !== undefined
-        ? { indexerWsEndpoint: config.indexerWsEndpoint }
-        : {}),
-      proofServerEndpoint: config.proofServerEndpoint ?? 'http://localhost:6300',
-      ...(config.contractAddress !== undefined ? { contractAddress: config.contractAddress } : {}),
-      network: config.network,
-      ...(walletMode === 'facade' && 'credentials' in config ? { credentials: config.credentials } : {}),
-      ...(walletMode === 'connector' && 'zkConfigBaseUrl' in config && config.zkConfigBaseUrl !== undefined
-        ? { zkConfigBaseUrl: config.zkConfigBaseUrl }
-        : {}),
-      ...(walletMode === 'facade' && 'zkArtifactsPath' in config && (config as any).zkArtifactsPath !== undefined
-        ? { zkArtifactsPath: (config as any).zkArtifactsPath }
-        : {}),
-    };
-    */
     this.config = {
       walletNetworkId: config.network,
       networkId: config.network,
@@ -289,6 +305,25 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Connector (browser): fetches ZK artifacts over HTTP via zkConfigBaseUrl.
    */
   private async _buildZkConfigProvider(): Promise<any> {
+    if (this.walletMode === 'connector') {
+      // Browser mode: fetch ZK artifacts via HTTP from the app's origin or a configured base URL.
+      const baseUrl = this._zkConfigBaseUrl ??
+        (typeof window !== 'undefined' ? window.location.origin : '');
+      if (!baseUrl) {
+        throw new Error(
+          '[dStorage/midnight] zkConfigBaseUrl is required in connector mode.\n' +
+          '  Set it to the base URL where keys/ and zkir/ are served.\n' +
+          '  In a Vite app: copy compiled keys/ and zkir/ to public/, then set\n' +
+          '    zkConfigBaseUrl: window.location.origin'
+        );
+      }
+      console.log(`[dStorage/midnight] ZK artifacts base URL: ${baseUrl}`);
+      const { FetchZkConfigProvider } = await import('@midnight-ntwrk/midnight-js-fetch-zk-config-provider');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new (FetchZkConfigProvider as any)(baseUrl, fetch.bind(globalThis));
+    }
+
+    // Facade mode: read ZK artifact files from the local filesystem.
     if (!this._zkArtifactsPath) {
       throw new Error(
         '[dStorage/midnight] zkArtifactsPath is required in facade mode.\n' +
@@ -467,10 +502,85 @@ export class MidnightChainAdapter implements ChainAdapter {
   */
 
   /**
+   * Build providers for connector (browser) mode.
+   * Uses in-memory private state, FetchZkConfigProvider, and the Lace wallet connector API.
+   */
+  private async _buildConnectorProviders(): Promise<DataRegistryProviders> {
+    if (!this.connectorAPI) {
+      throw new Error('[dStorage/midnight] Connector not initialized. Call await chain.init() first.');
+    }
+
+    const zkConfigProvider = await this._buildZkConfigProvider();
+
+    const { createInMemoryPrivateStateProvider } = await import('./in-memory-private-state.js');
+    const privateStateProvider = createInMemoryPrivateStateProvider();
+
+    // Use browser-safe helpers defined at module level — compact-runtime's toHex/fromHex
+    // use Buffer internally and are not safe in the browser.
+    const { Transaction } = await import('@midnight-ntwrk/ledger-v7');
+    const { httpClientProofProvider } = await import('@midnight-ntwrk/midnight-js-http-client-proof-provider');
+    const { indexerPublicDataProvider } = await import('@midnight-ntwrk/midnight-js-indexer-public-data-provider');
+
+    const connectorAPI = this.connectorAPI;
+    const coinPublicKey  = this.connectorCoinPublicKey  ?? '';
+    const encPublicKey   = this.connectorEncPublicKey   ?? '';
+    const indexerHttp    = this.connectorIndexerHttp    ?? this.config.indexer;
+    const indexerWs      = this.connectorIndexerWs      ?? this.config.indexerWS ?? '';
+    const proofServer    = this.connectorProofServer    ?? this.config.proofServer;
+
+    const walletProvider = {
+      getCoinPublicKey: () => coinPublicKey,
+      getEncryptionPublicKey: () => encPublicKey,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      balanceTx: async (tx: any, _ttl?: Date): Promise<any> => {
+        const serializedTx = uint8ArrayToHex((tx as any).serialize());
+        console.log(`[dStorage/midnight] balanceTx: serialized tx length=${serializedTx.length}`);
+        const received = await connectorAPI.balanceUnsealedTransaction(serializedTx);
+        const balancedHex = typeof received === 'string' ? received : (received as any).tx;
+        console.log(`[dStorage/midnight] balanceTx: received balanced tx length=${balancedHex?.length}`);
+        // Transaction.deserialize takes (sigType, proofType, bindingType, bytes) — see ledger-v7 API.
+        return (Transaction as any).deserialize('signature', 'proof', 'binding', hexToUint8Array(balancedHex));
+      },
+    };
+
+    const midnightProvider = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      submitTx: async (tx: any): Promise<any> => {
+        const serializedTx = uint8ArrayToHex((tx as any).serialize());
+        console.log(`[dStorage/midnight] submitTx: submitting tx length=${serializedTx.length}`);
+        await connectorAPI.submitTransaction(serializedTx);
+        return (tx as any).identifiers?.()[0] ?? '';
+      },
+    };
+
+    // midnight-js-contracts calls setContractAddress() which is not yet in the
+    // levelPrivateStateProvider implementation — add a no-op shim.
+    const privateStateProviderUpdated = Object.assign(privateStateProvider, {
+      setContractAddress: (_address: string) => { /* no-op: levelDb scopes by privateStateId */ },
+    });
+
+    const providers: DataRegistryProviders = {
+      privateStateProvider: privateStateProviderUpdated as unknown as DataRegistryProviders['privateStateProvider'],
+      publicDataProvider: indexerPublicDataProvider(indexerHttp, indexerWs),
+      zkConfigProvider: zkConfigProvider as DataRegistryProviders['zkConfigProvider'],
+      proofProvider: httpClientProofProvider(proofServer, zkConfigProvider as any),
+      walletProvider: walletProvider as unknown as DataRegistryProviders['walletProvider'],
+      midnightProvider: midnightProvider as unknown as DataRegistryProviders['midnightProvider'],
+    };
+
+    return providers;
+  }
+
+  /**
    * Build a DataRegistryProviders object by combining the Midnight providers
    * (wallet, proof server, indexer, node) with an in-memory private state store.
    */
   private async _buildDataRegistryProviders(): Promise<DataRegistryProviders> {
+    if (this.walletMode === 'connector') {
+      return this._buildConnectorProviders();
+    }
+
+    // Facade mode (Node.js CLI only — uses WalletFacade and levelDb private state).
     const zkConfigProvider = await this._buildZkConfigProvider();
 
     const { MidnightWalletProvider } = await import(/* @vite-ignore */ './wallet-provider.js');
@@ -623,22 +733,30 @@ export class MidnightChainAdapter implements ChainAdapter {
   // ── ChainAdapter implementation ────────────────────────────────────────────
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
-    const api = await this._getAPI();
-    const encodedStorageId = await this._encodeStorageId(ref.storageId);
-    console.log(`[dStorage/midnight] File stored with storageId: ${Buffer.from(encodedStorageId).toString('hex')}`);
+    console.log(`[dStorage/midnight] writeReference() called — storageId: ${ref.storageId}, provider: ${ref.storageProvider}`);
+    try {
+      const api = await this._getAPI();
+      console.log('[dStorage/midnight] Encoding storageId…');
+      const encodedStorageId = await this._encodeStorageId(ref.storageId);
 
-    const { refId, txHash: _, blockHeight } = await api.storeReference(encodedStorageId, ref.storageProvider);
-    const refIdHex = Buffer.from(refId).toString('hex');
-    console.log(
-      `[dStorage/midnight] Reference written at block ${blockHeight} → refId: ${refIdHex}`
-    );
+      console.log(`[dStorage/midnight] Storing reference for storageId: ${uint8ArrayToHex(encodedStorageId)}`);
+      const { refId, txHash: _, blockHeight } = await api.storeReference(encodedStorageId, ref.storageProvider);
+      const refIdHex = uint8ArrayToHex(refId);
 
-    return {
-      refId: refIdHex,
-      provider: this.name,
-      blockHeight,
-      writtenAt: Date.now(),
-    };
+      console.log(
+        `[dStorage/midnight] Reference written at block ${blockHeight} → refId: ${refIdHex}`
+      );
+
+      return {
+        refId: refIdHex,
+        provider: this.name,
+        blockHeight,
+        writtenAt: Date.now(),
+      };
+    } catch (err) {
+      console.error('[dStorage/midnight] writeReference() failed:', err);
+      throw err;
+    }
   }
 
   /**
@@ -657,7 +775,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Arweave txIds: exactly 43 base64url characters → 32 bytes when decoded
     if (/^[A-Za-z0-9_-]{43}$/.test(id)) {
-      return new Uint8Array(Buffer.from(id, 'base64url'));
+      return base64urlToBytes(id);
     }
     // Generic fallback: SHA-256 hash to fit any string into 32 bytes
     const bytes = new TextEncoder().encode(id);
@@ -675,9 +793,9 @@ export class MidnightChainAdapter implements ChainAdapter {
    */
   private _decodeStorageId(bytes: Uint8Array, storageProvider: string): string {
     if (storageProvider === 'arweave') {
-      return Buffer.from(bytes).toString('base64url');
+      return bytesToBase64url(bytes);
     }
-    return Buffer.from(bytes).toString('hex');
+    return uint8ArrayToHex(bytes);
   }
 
   // ── DataRegistry deployment ────────────────────────────────────────────────
@@ -712,17 +830,18 @@ export class MidnightChainAdapter implements ChainAdapter {
   async init(): Promise<string> {
     this._initialized = true;
 
-    // Set global network ID (required by Midnight JS SDK)
-    const { setNetworkId } = await import(/* @vite-ignore */ '@midnight-ntwrk/midnight-js-network-id');
+    // Set global network ID (required by Midnight JS SDK).
+    // No /* @vite-ignore */ — midnight-js-network-id is browser-compatible.
+    const { setNetworkId } = await import('@midnight-ntwrk/midnight-js-network-id');
     setNetworkId(this.config.networkId);
 
-    await this._getAPI();
+    // Connector mode: connect to Lace wallet first so connectorAPI is available
+    // before _getAPI() tries to build providers.
+    if (this.walletMode === 'connector') {
+      await this._initConnector();
+    }
 
-    /*if (this.walletMode === 'facade') {     
-      return this._initFacade();
-    } else {
-      return this._initConnector();
-    }*/
+    await this._getAPI();
 
     return this._contractAddress ?? '';
   }
