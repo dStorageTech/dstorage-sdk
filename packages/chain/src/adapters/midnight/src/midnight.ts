@@ -46,6 +46,12 @@ export interface WalletBalances {
   dust: bigint;    // DUST fee token balance
 }
 
+export interface DataRegistryReferenceSummary {
+  refId: string;
+  storageId: string;
+  storageProvider: string;
+}
+
 // ── Connector API types (minimal surface from dApp connector spec) ────────────
 // See: https://docs.midnight.network/api-reference/dapp-connector
 
@@ -573,6 +579,25 @@ export class MidnightChainAdapter implements ChainAdapter {
     return this._contractAddress ?? '';
   }
 
+  /**
+   * List references currently stored in the joined/deployed DataRegistry contract.
+   * Returns storageId as hex (Bytes<32> as persisted on-chain).
+   */
+  async listReferences(): Promise<DataRegistryReferenceSummary[]> {
+    const api = await this._getAPI();
+
+    const { firstValueFrom } = await import('rxjs');
+    const state = await firstValueFrom(api.state$);
+
+    return Array.from(state.references.entries())
+      .map(([refId, entry]) => ({
+        refId,
+        storageId: Buffer.from(entry.storageId).toString('hex'),
+        storageProvider: entry.storageProvider,
+      }))
+      .sort((a, b) => a.refId.localeCompare(b.refId));
+  }
+
   // ── ChainAdapter implementation ────────────────────────────────────────────
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
@@ -591,7 +616,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     return {
       refId: refIdHex,
-      provider: 'midnight',
+      provider: this.name,
       blockHeight,
       writtenAt: Date.now(),
     };

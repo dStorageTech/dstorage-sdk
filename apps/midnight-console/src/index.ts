@@ -187,19 +187,47 @@ async function main(): Promise<void> {
       console.log(`DUST balance:  ${balances.dust}`);
     }
 
-    // ── 8. File upload loop ─────────────────────────────────────────────────
+    // ── 8. Action loop: upload files or list DataRegistry references ───────
 
-    console.log('\n─── File upload ───────────────────────────────────────────────────────');
-    console.log(`The SDK will encrypt your file, store it (${storageAdapter.providerName}), and write a reference on-chain (${activeChain.providerName}).\n`);
+    console.log('\n─── Actions ──────────────────────────────────────────────────────────');
+    console.log(`The SDK will encrypt files, store them (${storageAdapter.providerName}), and write references on-chain (${activeChain.providerName}).`);
+    console.log('You can also list references currently stored on the DataRegistry contract.\n');
 
     let done = false;
     while (!done) {
-      const filePath = (await rl.question('File path to upload (or leave blank to quit): ')).trim();
+      const action = (
+        await rl.question('\nChoose action [1=upload file, 2=list references, 3=quit, default: 1]: ')
+      ).trim() || '1';
 
-      if (!filePath) {
+      if (action === '3' || action.toLowerCase() === 'q' || action.toLowerCase() === 'quit') {
         done = true;
         continue;
       }
+
+      if (action === '2' || action.toLowerCase() === 'list') {
+        try {
+          const refs = await activeChain.listReferences();
+          console.log(`\n  Stored references on contract ${activeChain.getContractAddress()}: ${refs.length}`);
+          if (refs.length === 0) {
+            console.log('  (none)\n');
+            continue;
+          }
+          for (let i = 0; i < refs.length; i += 1) {
+            const ref = refs[i]!;
+            console.log(`  [${i + 1}] refId=${ref.refId}`);
+            console.log(`      storageProvider=${ref.storageProvider}`);
+            console.log(`      storageId(hash)=${ref.storageId}`);
+          }
+          console.log('');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`\n  Error listing references: ${msg}\n`);
+        }
+        continue;
+      }
+
+      const filePath = (await rl.question('File path to upload (or leave blank to cancel): ')).trim();
+      if (!filePath) continue;
 
       // Read file from disk
       let fileContent: Uint8Array;
