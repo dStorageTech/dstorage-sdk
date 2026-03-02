@@ -221,9 +221,9 @@ async function main(): Promise<void> {
           }
           for (let i = 0; i < refs.length; i += 1) {
             const ref = refs[i]!;
-            console.log(`  [${i + 1}] refId=${ref.refId}`);
-            console.log(`      storageProvider=${ref.storageProvider}`);
-            console.log(`      storageId=${ref.storageId}`);
+            console.log(`  [${i + 1}] refId = ${ref.refId}`);
+            console.log(`      storageProvider = ${ref.storageProvider}`);
+            console.log(`      storageId = ${ref.storageId}`);
           }
           console.log('');
         } catch (err) {

@@ -625,13 +625,10 @@ export class MidnightChainAdapter implements ChainAdapter {
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
     const api = await this._getAPI();
     const encodedStorageId = await this._encodeStorageId(ref.storageId);
-    const { refId, txHash, blockHeight } = await api.storeReference(encodedStorageId, ref.storageProvider);
+    console.log(`[dStorage/midnight] File stored with storageId: ${Buffer.from(encodedStorageId).toString('hex')}`);
 
-    // Use circuit-computed refId if non-zero, otherwise fall back to txHash.
-    const refIdHex = refId.some(b => b !== 0)
-      ? Buffer.from(refId).toString('hex')
-      : txHash;
-
+    const { refId, txHash: _, blockHeight } = await api.storeReference(encodedStorageId, ref.storageProvider);
+    const refIdHex = Buffer.from(refId).toString('hex');
     console.log(
       `[dStorage/midnight] Reference written at block ${blockHeight} → refId: ${refIdHex}`
     );
@@ -653,6 +650,11 @@ export class MidnightChainAdapter implements ChainAdapter {
    * For all other IDs (e.g. mock UUIDs, Autonomi addresses), we fall back to SHA-256 hashing.
    */
   private async _encodeStorageId(id: string): Promise<Uint8Array> {
+    // FIXME!!!
+    // We have to encrypt the storage id not only for privacy reasons but also
+    // to be able to then retrieve the stored content using its id,
+    // using a hash as we do in the fallback case is not reversible
+
     // Arweave txIds: exactly 43 base64url characters → 32 bytes when decoded
     if (/^[A-Za-z0-9_-]{43}$/.test(id)) {
       return new Uint8Array(Buffer.from(id, 'base64url'));
