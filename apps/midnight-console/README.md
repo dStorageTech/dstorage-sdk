@@ -1,7 +1,7 @@
 # Midnight Console Demo
 
 A real working CLI that connects to the Midnight network, derives wallet keys from a BIP-39
-mnemonic (or hex seed), and uploads local files through the dStorage SDK (encrypt + store + on-chain reference).
+mnemonic (or hex seed), and uploads/retrieves local files through the dStorage SDK.
 
 ## What it does
 
@@ -12,7 +12,10 @@ mnemonic (or hex seed), and uploads local files through the dStorage SDK (encryp
 5. Builds a full Midnight wallet (shielded + unshielded + dust)
 6. Connects to the Midnight indexer and waits for wallet sync
 7. Checks NIGHT and DUST balances; waits for funding if needed
-8. Upload loop: encrypts each selected local file, stores it via `MockStorageAdapter`, and writes a `DataRegistry` on-chain reference via `MidnightChainAdapter`
+8. Action menu:
+   - upload a local file (encrypt + store + write on-chain reference)
+   - list references currently stored in `DataRegistry`
+   - retrieve content by `refId` (resolve chain reference + fetch/decrypt from storage)
 
 ## Requirements
 
@@ -20,6 +23,9 @@ mnemonic (or hex seed), and uploads local files through the dStorage SDK (encryp
 - For `undeployed` (local) network: a running `midnight-local-network` instance
   - Default ports: node `9944`, indexer `8088`, proof server `6300`
 - For `preprod`: network access to `*.preprod.midnight.network` endpoints
+- Local storage backend uses **Arweave Local** in the current CLI code:
+  - Run arlocal (for example: `docker run -d --rm -p 1984:1984 textury/arlocal`)
+  - Provide `test-arweave-wallet-key.json` in the repo root (used by `ArweaveLocalStorageAdapter`)
 
 ### NIGHT and DUST
 
@@ -31,6 +37,13 @@ mnemonic (or hex seed), and uploads local files through the dStorage SDK (encryp
 ## Run
 
 ```bash
+# from repo root, ensure contract artifacts exist
+npm run compile:contract -w packages/chain
+
+# build SDK packages
+npm run build
+
+# run console demo
 npm run demo:midnight
 ```
 
@@ -58,4 +71,4 @@ npm run demo:midnight
 
 - Uses `@dstorage/crypto`'s `KeyDeriver` for key derivation (BIP-39 → Midnight signing keys)
 - Uses `@dstorage/chain`'s `MidnightChainAdapter` for on-chain reference writes
-- Uses `MockStorageAdapter` for encrypted blob storage during demo uploads
+- Uses `ArweaveLocalStorageAdapter` for encrypted blob storage in the current CLI implementation
