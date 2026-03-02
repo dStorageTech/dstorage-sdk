@@ -207,6 +207,68 @@ export class DStorage {
     };
   }
 
+  // ── Retrieve by refId ─────────────────────────────────────────────────────
+
+  /**
+   * Retrieve and decrypt data using only its on-chain reference ID.
+   *
+   * Flow:
+   *   1. Look up the reference on-chain by refId to obtain the storage network ID.
+   *   2. Fetch the blob from the storage network.
+   *   3. Decrypt locally if an encryption key is available.
+   *
+   * Requires the chain adapter to support getReference() (MidnightChainAdapter)
+   * or readReference() (MockChainAdapter).
+   *
+   * @param refId  The refId returned from upload()
+   */
+  async retrieveByRefId(refId: string): Promise<RetrieveResult> {
+    this.assertConnected();
+
+    // 1. Resolve the original storage network ID from the on-chain reference
+    const adapter = this.config.chainAdapter as unknown as {
+      getReference?: (refId: string) => Promise<{ storageId: string; storageProvider: string } | null>;
+      readReference?: (refId: string) => Promise<{ storageId: string }>;
+    };
+
+    let storageId: string;
+    if (typeof adapter.getReference === 'function') {
+      const ref = await adapter.getReference(refId);
+      if (!ref) throw new Error(`[dStorage] No on-chain reference found for refId: ${refId}`);
+      storageId = ref.storageId;
+    } else if (typeof adapter.readReference === 'function') {
+      const ref = await adapter.readReference(refId);
+      storageId = ref.storageId;
+    } else {
+      throw new Error(
+        '[dStorage] retrieveByRefId() requires the chain adapter to implement ' +
+          'getReference() or readReference().'
+      );
+    }
+
+    // 2. Fetch blob from storage
+    const serialized = await this.config.storageAdapter.retrieve(storageId);
+
+    // 3. Deserialize and decrypt if an encryption key is available
+    let decryptedBytes: Uint8Array;
+    if (this.encryptionKey) {
+      const payload = deserializePayload(serialized);
+      decryptedBytes = await decrypt(this.encryptionKey, payload);
+    } else {
+      decryptedBytes = new TextEncoder().encode(serialized);
+    }
+
+    const content = new TextDecoder().decode(decryptedBytes);
+
+    console.log(`[dStorage] Retrieved by refId → storageId: ${storageId}`);
+
+    return {
+      content,
+      bytes: decryptedBytes,
+      metadata: {},
+    };
+  }
+
   // ── Cost estimation ────────────────────────────────────────────────────────
 
   /**

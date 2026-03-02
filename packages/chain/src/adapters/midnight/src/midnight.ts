@@ -581,7 +581,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   /**
    * List references currently stored in the joined/deployed DataRegistry contract.
-   * Returns storageId as hex (Bytes<32> as persisted on-chain).
+   * For Arweave references, storageId is the original txId string.
+   * For other providers, storageId is the hex of the stored Bytes<32>.
    */
   async listReferences(): Promise<DataRegistryReferenceSummary[]> {
     const api = await this._getAPI();
@@ -592,10 +593,31 @@ export class MidnightChainAdapter implements ChainAdapter {
     return Array.from(state.references.entries())
       .map(([refId, entry]) => ({
         refId,
-        storageId: Buffer.from(entry.storageId).toString('hex'),
+        storageId: this._decodeStorageId(entry.storageId, entry.storageProvider),
         storageProvider: entry.storageProvider,
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
+  }
+
+  /**
+   * Look up a single reference by its refId.
+   * Returns { storageId, storageProvider } with the storageId decoded to the
+   * original storage network identifier (e.g. Arweave txId), or null if not found.
+   */
+  async getReference(refId: string): Promise<DataRegistryReferenceSummary | null> {
+    const api = await this._getAPI();
+
+    const { firstValueFrom } = await import('rxjs');
+    const state = await firstValueFrom(api.state$);
+
+    const entry = state.references.get(refId);
+    if (!entry) return null;
+
+    return {
+      refId,
+      storageId: this._decodeStorageId(entry.storageId, entry.storageProvider),
+      storageProvider: entry.storageProvider,
+    };
   }
 
   // ── ChainAdapter implementation ────────────────────────────────────────────
@@ -623,13 +645,37 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
-   * Encode a storage ID string as a 32-byte SHA-256 hash.
-   * Used to fit arbitrary storage IDs (Arweave txId, etc.) into the contract's Bytes<32> field.
+   * Encode a storage ID string into a 32-byte Uint8Array for the contract's Bytes<32> field.
+   *
+   * Arweave txIds are 43-character base64url strings that decode to exactly 32 bytes,
+   * so we store the raw bytes directly — this allows lossless recovery of the original txId.
+   *
+   * For all other IDs (e.g. mock UUIDs, Autonomi addresses), we fall back to SHA-256 hashing.
    */
   private async _encodeStorageId(id: string): Promise<Uint8Array> {
+    // Arweave txIds: exactly 43 base64url characters → 32 bytes when decoded
+    if (/^[A-Za-z0-9_-]{43}$/.test(id)) {
+      return new Uint8Array(Buffer.from(id, 'base64url'));
+    }
+    // Generic fallback: SHA-256 hash to fit any string into 32 bytes
     const bytes = new TextEncoder().encode(id);
     const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', bytes);
     return new Uint8Array(hashBuffer);
+  }
+
+  /**
+   * Decode a 32-byte storageId (as stored on-chain) back to the original storage ID string.
+   *
+   * For Arweave: the raw 32 bytes were the base64url-decoded txId, so we base64url-encode
+   * them back to recover the original 43-character Arweave txId.
+   * For other providers: return the hex representation (the original ID is not recoverable
+   * if it was SHA-256 hashed).
+   */
+  private _decodeStorageId(bytes: Uint8Array, storageProvider: string): string {
+    if (storageProvider === 'arweave') {
+      return Buffer.from(bytes).toString('base64url');
+    }
+    return Buffer.from(bytes).toString('hex');
   }
 
   // ── DataRegistry deployment ────────────────────────────────────────────────

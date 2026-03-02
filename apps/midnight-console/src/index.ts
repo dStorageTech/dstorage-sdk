@@ -5,10 +5,11 @@
  *  1. Accepts a BIP-39 mnemonic (or 32/64-byte hex seed)
  *  2. Accepts an (optional) deployed DataRegistry contract address
  *  3. Initialises the DStorage SDK — which internally:
- *       a. Derives keys, builds WalletFacade, and waits for sync
- *       b. Deploys a new DataRegistry if no address was given (requires ZK artifacts)
- *       c. Derives an AES-GCM encryption key from the seed
- *  4. Displays wallet addresses and balances
+ *       a. Build chain and storage adapters
+ *       b. Derives keys, builds WalletFacade, and waits for sync
+ *       c. Deploys a new DataRegistry if no address was given (requires ZK artifacts)
+ *       d. Derives an AES-GCM encryption key from the seed
+ *  4. Displays chain wallet addresses and balances
  *  5. Upload loop: asks for a local file path, reads its contents, calls
  *       sdk.upload(content) → encrypt → mock-store → write on-chain reference
  *     and prints the refId returned by the DataRegistry circuit
@@ -29,9 +30,10 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import fs  from  'fs';
 
 import { DStorage } from '@dstorage/core';
-import { MockStorageAdapter } from '@dstorage/storage';
+import { ArweaveLocalStorageAdapter, MockStorageAdapter } from '@dstorage/storage';
 import { MidnightChainAdapter } from '@dstorage/chain';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -134,7 +136,13 @@ async function main(): Promise<void> {
       await rl.question('\nDeployed DataRegistry contract address (leave blank to auto-deploy): ')
     ).trim();
 
-    // ── 5. Build the chain adapter ──────────────────────────────────────────
+    // ── 5. Build the storage adapter ──────────────────────────────────────────
+    //const storageAdapter = new MockStorageAdapter();
+    const storageAdapter = new ArweaveLocalStorageAdapter({
+      walletKey: JSON.parse(fs.readFileSync('test-arweave-wallet-key.json', 'utf8'))
+    });
+
+    // ── 6. Build the chain adapter ──────────────────────────────────────────
     chain = new MidnightChainAdapter({
       network: networkName,
       walletMode: 'facade',
@@ -149,9 +157,8 @@ async function main(): Promise<void> {
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
     });
     const activeChain = chain;
-    const storageAdapter = new MockStorageAdapter();
 
-    // ── 6. Initialise the DStorage SDK ──────────────────────────────────────
+    // ── 7. Initialise the DStorage SDK ──────────────────────────────────────
     // sdk.init() calls chain.init() (wallet sync), then sets/deploys the contract,
     // and derives an AES-GCM encryption key from the seed.
     const sdk = new DStorage({
@@ -167,7 +174,7 @@ async function main(): Promise<void> {
     );
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
-    // ── 7. Display addresses and balances ───────────────────────────────────
+    // ── 8. Display addresses and balances ───────────────────────────────────
     // TODO!!! this should be called on the SDK somehow abstracted
     const addresses = activeChain.getAddresses();
     console.log('\nWallet addresses:');
@@ -187,7 +194,7 @@ async function main(): Promise<void> {
       console.log(`DUST balance:  ${balances.dust}`);
     }
 
-    // ── 8. Action loop: upload files or list DataRegistry references ───────
+    // ── 9. Action loop: upload files or list DataRegistry references ───────
 
     console.log('\n─── Actions ──────────────────────────────────────────────────────────');
     console.log(`The SDK will encrypt files, store them (${storageAdapter.providerName}), and write references on-chain (${activeChain.providerName}).`);
@@ -196,10 +203,10 @@ async function main(): Promise<void> {
     let done = false;
     while (!done) {
       const action = (
-        await rl.question('\nChoose action [1=upload file, 2=list references, 3=quit, default: 1]: ')
+        await rl.question('\nChoose action [1=upload file, 2=list references, 3=retrieve by refId, 4=quit, default: 1]: ')
       ).trim() || '1';
 
-      if (action === '3' || action.toLowerCase() === 'q' || action.toLowerCase() === 'quit') {
+      if (action === '4' || action.toLowerCase() === 'q' || action.toLowerCase() === 'quit') {
         done = true;
         continue;
       }
@@ -216,12 +223,58 @@ async function main(): Promise<void> {
             const ref = refs[i]!;
             console.log(`  [${i + 1}] refId=${ref.refId}`);
             console.log(`      storageProvider=${ref.storageProvider}`);
-            console.log(`      storageId(hash)=${ref.storageId}`);
+            console.log(`      storageId=${ref.storageId}`);
           }
           console.log('');
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`\n  Error listing references: ${msg}\n`);
+        }
+        continue;
+      }
+
+      if (action === '3' || action.toLowerCase() === 'retrieve') {
+        const refId = (await rl.question('  Enter refId to retrieve: ')).trim();
+        if (!refId) {
+          console.log('  (cancelled)\n');
+          continue;
+        }
+
+        try {
+          console.log(`\n  Resolving on-chain reference for refId: ${refId}`);
+          const result = await withTicker(
+            () => 'Fetching reference from chain and retrieving from storage...',
+            () => sdk.retrieveByRefId(refId)
+          );
+
+          const outputPath = (
+            await rl.question('  Save to file (leave blank to print to console): ')
+          ).trim();
+
+          if (outputPath) {
+            const { writeFile } = await import('node:fs/promises');
+            await writeFile(outputPath, result.bytes);
+            console.log(`\n  ✓ Retrieved and saved to: ${outputPath}`);
+            console.log(`  Size: ${result.bytes.byteLength} bytes\n`);
+          } else {
+            // Print as text; if it looks like binary data, show a hex preview
+            const looksLikeBinary = result.bytes.some(b => b < 9 || (b > 13 && b < 32));
+            if (looksLikeBinary) {
+              const preview = Buffer.from(result.bytes.slice(0, 64)).toString('hex');
+              console.log(`\n  ✓ Retrieved (binary, ${result.bytes.byteLength} bytes)`);
+              console.log(`  Hex preview (first 64 bytes): ${preview}${result.bytes.byteLength > 64 ? '…' : ''}\n`);
+            } else {
+              const preview = result.content.slice(0, 512);
+              const truncated = result.content.length > 512 ? '…' : '';
+              console.log(`\n  ✓ Retrieved (${result.bytes.byteLength} bytes):`);
+              console.log('  ─────────────────────────────────────');
+              console.log(`  ${preview}${truncated}`);
+              console.log('  ─────────────────────────────────────\n');
+            }
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`\n  Error during retrieve: ${msg}\n`);
         }
         continue;
       }
@@ -241,7 +294,7 @@ async function main(): Promise<void> {
       }
 
       console.log(`\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes)`);
-      console.log(`  Encrypting, uploading to ${storageAdapter.name} storage, and writing on-chain (${activeChain.name}) reference...`);
+      console.log(`  Uploading to ${storageAdapter.name} storage and writing on-chain (${activeChain.name}) reference...`);
 
       try {
         const result = await withTicker(
