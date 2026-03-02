@@ -11,18 +11,18 @@ Deliver a **privacy-first, developer-friendly data layer** combining **Midnight 
 Instead of dApps collecting and storing user data on centralised servers, dStorage shifts data ownership to the user:
 
 - **Encrypts** data client-side using wallet-derived keys (AES-GCM 256)
-- **Pays** storage and chain networks using their native tokens (AR, ANT, DUST, ETH…)
+- **Pays** storage and chain networks using adapter-defined tokens (MOCK, AR, DUST)
 - **Stores** encrypted blobs on decentralised storage (Arweave, Autonomi)
-- **Writes** cryptographic references on-chain (Midnight, EVM chains)
+- **Writes** cryptographic references on-chain (Mock, Midnight)
 - **Decrypts** locally — the application never sees raw user data
 
 Privacy becomes an **architectural guarantee**, not a compliance promise.
 
 Most applications store user data on servers they control. That means users have to trust that the service provider won't read, sell, or lose their data — and history shows that trust is often misplaced. dStorage takes a different approach: data is encrypted on the user's device before it ever leaves, stored on a decentralised network where no single party has control, and a tamper-proof on-chain record ties the data back to its owner. The service provider never sees the plaintext. Neither does anyone else.
 
-The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from their wallet — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Autonomi, or a mock for development). A lightweight reference — just a storage ID and the owner's address — is then written to a blockchain, giving the owner a permanent, verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob, decrypt it locally. At no point does any server hold an unencrypted copy.
+The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from their wallet — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID and the owner's address — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob, decrypt it locally. At no point does any server hold an unencrypted copy.
 
-For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, connect a wallet, and call `upload` and `retrieve`. Access control — granting or revoking read permissions for other addresses — is a single method call. You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in real adapters for production when you are ready. If you are building on Midnight specifically, there is built-in support for ZK proof generation, DUST fee handling, and full wallet construction from a seed phrase.
+For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, connect a wallet, and call `upload` and `retrieve` (or `retrieveByRefId`). You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready. If you are building on Midnight, the SDK supports wallet lifecycle management, contract deployment/join, reference listing/lookups, and fee handling in adapter flows.
 
 ---
 
@@ -42,7 +42,7 @@ Note: Any time you modify `packages/crypto` or `packages/chain`, run `npm run bu
 npm run build --workspace=@dstorage/crypto
 npm run build --workspace=@dstorage/chain
 
-# 3. Run Midnight-only console demo (no storage integration)
+# 3. Run Midnight console demo
 npm run demo:midnight
 ```
 
@@ -51,9 +51,9 @@ Open http://localhost:5173 and choose a path:
 - or jump directly to proof generation from a mock list of previously uploaded certificates
 
 For terminal-only testing, `npm run demo:midnight` starts a CLI that:
-- asks for a passphrase and derives deterministic key material
-- initializes the SDK's `MidnightChainAdapter` only
-- uses `MockStorageAdapter` for encrypted blob storage during uploads
+- asks for network + wallet seed/mnemonic and initializes `MidnightChainAdapter`
+- uses Arweave Local storage in the current CLI implementation
+- provides actions to upload files, list on-chain references, and retrieve content by `refId`
 
 ---
 
@@ -63,7 +63,7 @@ For terminal-only testing, `npm run demo:midnight` starts a CLI that:
 
 ---
 
-## SDK Usage (3 lines to get started)
+## SDK Usage
 
 ```typescript
 import {
@@ -90,18 +90,16 @@ const { dataId } = await ds.upload("Hello, private world!");
 const { content } = await ds.retrieve(dataId);
 console.log(content); // "Hello, private world!"
 
-// 5. Grant selective access to another wallet
-await ds.grant(dataId, "0xRecipientAddress");
-
-// 6. Revoke access
-await ds.revoke(dataId, "0xRecipientAddress");
+// 5. Retrieve by on-chain reference ID
+const { content: byRef } = await ds.retrieveByRefId("your-ref-id");
+console.log(byRef);
 ```
 
 ---
 
 ## Payments
 
-Every upload involves two real costs — paying the storage network to hold your data and paying the chain network to record the reference. The SDK handles both transparently.
+Every upload involves two costs — paying storage and chain operations. The SDK orchestrates this through pluggable payment adapters. Depending on adapter choice, payments can be simulated (mock/preview) or real.
 
 ### How it works
 
@@ -126,12 +124,10 @@ console.log(receipt.chainPayment);     // Payment receipt for chain tx
 
 | Token | Network | Used for |
 |-------|---------|----------|
-| `AR` | Arweave | Storage — permanent, pay once |
-| `ANT` | Autonomi | Storage — permanent, pay once |
-| `DUST` | Midnight | Chain tx fees |
-| `ETH` | Ethereum | Chain tx fees |
-| `MATIC` | Polygon | Chain tx fees |
-| `MOCK` | Mock | Development & testing (no real cost) |
+| `AR` | Arweave | Storage payment adapter (preview/simulated mode) |
+| `DUST` | Midnight | Chain payment adapter (preview/simulated mode) |
+| `MOCK` | Mock | Development & testing (simulated) |
+| `ANT` / `ETH` / `MATIC` | Token registry | Defined token metadata for future/override use |
 
 Tokens are selected automatically based on your chosen adapters, or you can override them explicitly:
 
@@ -142,12 +138,11 @@ await ds.executeMetaTransaction(file, onProgress, {
 });
 ```
 
-### Pricing model
+### Pricing model (current adapters)
 
-- **Arweave**: ~$0.004/MB — real cost fetched from Arweave pricing API
-- **Autonomi**: ~$0.001/MB — one-time ANT payment for permanent storage
-- **Midnight**: ~$0.01 per tx — DUST fee via `createBalancedTx`
-- **EVM**: ~$2 per tx — gas estimate (planned Sprint 3)
+- **MockPaymentAdapter**: simulated values, no real transfers
+- **ArweavePaymentAdapter**: preview pricing + simulated payment flow
+- **MidnightPaymentAdapter**: preview pricing + simulated payment flow
 
 ---
 
@@ -156,9 +151,9 @@ await ds.executeMetaTransaction(file, onProgress, {
 ```
 @dstorage/core          ← Developer-facing API (this is what you import)
     ├── @dstorage/crypto    ← AES-GCM encryption, wallet key derivation
-    ├── @dstorage/storage   ← Storage adapters: Mock | Arweave | Autonomi
-    ├── @dstorage/chain     ← Chain adapters:   Mock | Midnight | (EVM coming)
-    └── @dstorage/payment   ← Cost estimation + payment abstraction (AR, ANT, DUST, ETH…)
+    ├── @dstorage/storage   ← Storage adapters: Mock | Arweave | Arweave Local | Autonomi(stub)
+    ├── @dstorage/chain     ← Chain adapters:   Mock | MockMidnight | Midnight
+    └── @dstorage/payment   ← Payment adapters: Mock | Arweave(preview) | Midnight(preview)
 ```
 
 ### Data Flow
@@ -204,7 +199,8 @@ User input
 ### Storage
 | Provider | Status | Notes |
 |----------|--------|-------|
-| Mock (localStorage) | ✅ Live | Perfect for development & demos |
+| Mock (localStorage/memory) | ✅ Live | Perfect for development & demos |
+| Arweave Local | ✅ Live | Local arlocal integration testing |
 | Arweave | 🟡 Preview | Requires `arweave` package + ArConnect wallet |
 | Autonomi | 🔵 Stub | Awaiting Autonomi JS SDK stability |
 
@@ -212,8 +208,8 @@ User input
 | Chain | Status | Notes |
 |-------|--------|-------|
 | Mock | ✅ Live | Simulates on-chain references locally |
-| Midnight | 🟡 Preview | Awaiting Midnight.js v1 |
-| EVM chains | 🗓 Planned | Sprint N |
+| MockMidnight | ✅ Live | Simulated Midnight-like chain behavior |
+| Midnight | ✅ Live | Connector + facade modes supported |
 
 ---
 

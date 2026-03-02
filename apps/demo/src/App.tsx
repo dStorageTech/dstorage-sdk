@@ -14,7 +14,14 @@ import { VerifierPanel } from './components/VerifierPanel.tsx';
 import { SdkDrawer } from './components/SdkDrawer.tsx';
 
 export type AppStep = 'connect' | 'upload' | 'uploaded' | 'prove' | 'done';
-export interface StoredRecord { dataId: string; fileName: string; uploadedAt: number; chainRefId: string; }
+export interface StoredRecord {
+  dataId: string;
+  storageId: string;
+  refId: string;
+  fileName: string;
+  uploadedAt: number;
+  chainRefId: string;
+}
 type ThemeMode = 'light' | 'dark';
 
 export type StorageAdapterKey = 'mock' | 'arweave-local' | 'arweave' | 'autonomi';
@@ -64,9 +71,9 @@ export const CHAIN_ADAPTER_CONFIGS: Record<ChainAdapterKey, {
     status: 'live',
   },
   'midnight-connector': {
-    label: 'Midnight Connector (Browser)',
+    label: 'Midnight Network',
     description: 'Real Midnight network via browser wallet extension.',
-    status: 'preview',
+    status: 'live',
     note: 'Requires Midnight Lace wallet extension',
   },
 };
@@ -74,18 +81,24 @@ export const CHAIN_ADAPTER_CONFIGS: Record<ChainAdapterKey, {
 const MOCK_UPLOADED_CERTIFICATES: StoredRecord[] = [
   {
     dataId: 'mock-doc-1',
+    storageId: 'QmMockStorageIdAetna2025w9f3u2k7n1x',
+    refId: 'midnight:ref:7f3b8c21a9e44d8ab31f0c2f9e11a101',
     fileName: 'Aetna-Insurance-Certificate-2025.pdf',
     uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 7,
     chainRefId: 'midnight:ref:7f3b8c21a9e44d8ab31f0c2f9e11a101',
   },
   {
     dataId: 'mock-doc-2',
+    storageId: 'QmMockStorageIdBlueCrossQ42025m8v4r1z6p',
+    refId: 'midnight:ref:2bc9d550fa1041d48ec5b69241f2c5a7',
     fileName: 'BlueCross-Coverage-Letter-Q4-2025.pdf',
     uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 20,
     chainRefId: 'midnight:ref:2bc9d550fa1041d48ec5b69241f2c5a7',
   },
   {
     dataId: 'mock-doc-3',
+    storageId: 'QmMockStorageIdUnitedRenewalx3s6n9b2k5q',
+    refId: 'midnight:ref:d19a7e0b9e7f4cd1a0478d94ccfd1162',
     fileName: 'UnitedHealthcare-ID-Card-Renewal.png',
     uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 35,
     chainRefId: 'midnight:ref:d19a7e0b9e7f4cd1a0478d94ccfd1162',
@@ -214,7 +227,14 @@ export default function App() {
         metadata: { 'record-type': 'insurance', 'app': 'healthvault' },
       }
     );
-    setRecord({ dataId: receipt.dataId, fileName: receipt.file.name, uploadedAt: receipt.completedAt, chainRefId: receipt.chainRefId });
+    setRecord({
+      dataId: receipt.dataId,
+      storageId: receipt.storageId,
+      refId: receipt.refId,
+      fileName: receipt.file.name,
+      uploadedAt: receipt.completedAt,
+      chainRefId: receipt.chainRefId,
+    });
     setStep('uploaded');
   };
 

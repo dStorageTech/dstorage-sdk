@@ -1,6 +1,6 @@
 # HealthVault — dStorage SDK Demo
 
-HealthVault is a browser demo showing how the dStorage SDK works end-to-end. It simulates a patient uploading an insurance card, encrypting it, storing it on a decentralised backend, and then generating a ZK proof that proves insurance coverage to a clinic — without the clinic ever seeing the underlying file.
+HealthVault is a browser demo showing how the dStorage SDK works end-to-end. It simulates a patient uploading an insurance certificate, encrypting it, storing it on a decentralised backend, and then generating a ZK proof that proves insurance coverage to a clinic without sharing the underlying file.
 
 The whole point is to make the SDK's core promise tangible: data stays private, only the owner controls access, and claims can be verified without revealing anything.
 
@@ -15,7 +15,7 @@ No wallet extension is required for the default mock flow.
 
 ## What to look for
 
-### Start options + storage adapter switcher
+### Start options + adapter switchers
 
 On the first screen, the demo provides two paths:
 - **A** Upload a new health insurance certificate
@@ -48,7 +48,21 @@ storageAdapter: new ArweaveStorageAdapter()
 storageAdapter: new AutonomiStorageAdapter()
 ```
 
-The SDK takes care of everything else: encryption, cost estimation, on-chain references, access control. The application logic doesn't change.
+The SDK takes care of everything else: encryption, cost estimation, and on-chain references. The application logic doesn't change.
+
+You can also pick the chain backend:
+
+| Adapter | Status | What it does |
+|---|---|---|
+| **Mock Midnight** | Live | Simulated on-chain reference writes for local development |
+| **Midnight Network** | Live | Browser connector flow using `MidnightChainAdapter` |
+
+### Upload summary
+
+After upload completes, the patient sees a dedicated summary step before proof generation that shows:
+- selected storage adapter and chain adapter
+- full `storageId`
+- full `refId`
 
 ### The SDK drawer
 
@@ -71,9 +85,9 @@ HealthVault (React)
     │
     └── DStorage SDK (@dstorage/core)
             ├── @dstorage/crypto   — AES-GCM encryption, key derivation
-            ├── @dstorage/storage  — MockStorageAdapter / ArweaveStorageAdapter / AutonomiStorageAdapter
-            ├── @dstorage/chain    — MockMidnightChainAdapter (simulated ZK proofs)
-            └── @dstorage/payment  — MockPaymentAdapter (simulated fees)
+            ├── @dstorage/storage  — Mock / Arweave Local / Arweave / Autonomi adapters
+            ├── @dstorage/chain    — MockMidnightChainAdapter or MidnightChainAdapter (connector mode)
+            └── @dstorage/payment  — Mock payment (and wallet-managed flow when using Midnight connector)
 ```
 
 ## File structure

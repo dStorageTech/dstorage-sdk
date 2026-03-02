@@ -250,7 +250,14 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
 
       <div className="pp-privacy-guarantee">
         <div className="pp-pg-row"><span className="pp-pg-icon">📄</span><span>{record?.fileName ?? 'Insurance certificate'}</span></div>
-        <div className="pp-pg-row"><span className="pp-pg-icon">🔗</span><span>Reference: {record?.chainRefId.slice(0, 28)}…</span></div>
+        <div className="pp-id-block">
+          <div className="pp-id-label">Storage ID</div>
+          <div className="pp-id-value">{record?.storageId ?? '(unknown)'}</div>
+        </div>
+        <div className="pp-id-block">
+          <div className="pp-id-label">Reference ID (refId)</div>
+          <div className="pp-id-value">{record?.refId ?? record?.chainRefId ?? '(unknown)'}</div>
+        </div>
         <div className="pp-pg-row">
           <span className="pp-pg-icon">📦</span>
           <span>
