@@ -11,7 +11,7 @@ interface Props {
 export function VerifierPanel({ step, proof, verifying, verified }: Props) {
 
   // ── Waiting state ──────────────────────────────────────────────────────────
-  if (step === 'connect' || step === 'upload') return (
+  if (step === 'connect' || step === 'upload' || step === 'uploaded') return (
     <div className="vp-waiting">
       <div className="vp-waiting-icon">🏥</div>
       <div className="vp-waiting-title">Riverside General Clinic</div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { validateFile, INSURANCE_CLAIMS } from '@dstorage/core';
 import type { WalletInfo } from '@dstorage/core';
 import type { AppStep, StoredRecord, StorageAdapterKey, ChainAdapterKey } from '../App.tsx';
@@ -10,28 +10,42 @@ interface Props {
   record: StoredRecord | null;
   storageAdapterKey: StorageAdapterKey;
   chainAdapterKey: ChainAdapterKey;
-  contractAddress: string;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onChainAdapterChange: (key: ChainAdapterKey) => void;
-  onContractAddressChange: (addr: string) => void;
-  onConnect: () => Promise<void>;
+  mockRecords: StoredRecord[];
+  onStartUploadFlow: () => Promise<void>;
+  onUseExistingRecord: (dataId: string) => void;
+  onContinueToProof: () => void;
   onUpload: (file: File) => Promise<void>;
   onGenerateProof: (claimId: string) => Promise<void>;
 }
 
-export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAdapterKey, contractAddress, onStorageAdapterChange, onChainAdapterChange, onContractAddressChange, onConnect, onUpload, onGenerateProof }: Props) {
+export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAdapterKey, onStorageAdapterChange, onChainAdapterChange, mockRecords, onStartUploadFlow, onUseExistingRecord, onContinueToProof, onUpload, onGenerateProof }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedClaim, setSelectedClaim] = useState(INSURANCE_CLAIMS[0]!.id);
+  const [selectedMockRecordId, setSelectedMockRecordId] = useState('');
 
   const activeAdapter = ADAPTER_CONFIGS[storageAdapterKey];
+  const activeChainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
 
-  const handleConnect = async () => {
-    setLoading('connect');
-    try { await onConnect(); } finally { setLoading(null); }
+  useEffect(() => {
+    if (!selectedMockRecordId && mockRecords.length > 0) {
+      setSelectedMockRecordId(mockRecords[0]!.dataId);
+    }
+  }, [mockRecords, selectedMockRecordId]);
+
+  const handleStartUploadFlow = async () => {
+    setLoading('start-upload');
+    try { await onStartUploadFlow(); } finally { setLoading(null); }
+  };
+
+  const handleUseExistingRecord = () => {
+    if (!selectedMockRecordId) return;
+    onUseExistingRecord(selectedMockRecordId);
   };
 
   const handleFile = (file: File) => {
@@ -65,7 +79,7 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
         <div className="pp-intro-icon">🔐</div>
         <h2 className="pp-intro-title">Your Health Records, Under Your Control</h2>
         <p className="pp-intro-body">
-          Connect your wallet to encrypt and store your insurance records on decentralised storage.
+          Choose your workflow to either upload a new insurance certificate or use an existing one.
           Only you decide who can access your data — and you can prove coverage to any clinic
           without ever sharing your personal details.
         </p>
@@ -121,26 +135,28 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
         </div>
       </div>
 
-      {chainAdapterKey === 'midnight-connector' && (
-        <div className="pp-contract-addr">
-          <label className="pp-contract-addr-label" htmlFor="contract-address">
-            Deployed Contract Address
-          </label>
-          <input
-            id="contract-address"
-            type="text"
-            className="pp-contract-addr-input"
-            placeholder="Enter deployed contract address"
-            value={contractAddress}
-            onChange={e => onContractAddressChange(e.target.value)}
-          />
-        </div>
-      )}
+      <div className="pp-connect-btns">
+        <button className="pp-btn pp-btn-primary pp-btn-full" onClick={handleStartUploadFlow}
+          disabled={!!loading}>
+          {loading === 'start-upload' ? <Spinner /> : ''} Upload a health insurance certificate
+        </button>
+      </div>
 
       <div className="pp-connect-btns">
-        <button className="pp-btn pp-btn-primary" onClick={handleConnect}
-          disabled={!!loading || (chainAdapterKey === 'midnight-connector' && !contractAddress.trim())}>
-          {loading === 'connect' ? <Spinner /> : '🔗'} Connect Wallet
+        <select
+          className="pp-contract-addr-input"
+          value={selectedMockRecordId}
+          onChange={(e) => setSelectedMockRecordId(e.target.value)}
+        >
+          {mockRecords.map((doc) => (
+            <option key={doc.dataId} value={doc.dataId}>
+              {doc.fileName} ({new Date(doc.uploadedAt).toLocaleDateString()})
+            </option>
+          ))}
+        </select>
+        <button className="pp-btn pp-btn-primary pp-btn-full" onClick={handleUseExistingRecord}
+          disabled={!!loading || !selectedMockRecordId}>
+          Generate a ZK-proof from uploaded certificate
         </button>
       </div>
       <div className="pp-privacy-note">
@@ -195,7 +211,7 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
         ) : (
           <div className="pp-drop-prompt">
             <div className="pp-drop-icon">↑</div>
-            <div className="pp-drop-text">{dragOver ? 'Drop to upload' : 'Drop insurance card or click to browse'}</div>
+            <div className="pp-drop-text">{dragOver ? 'Drop to upload' : 'Drop health insurance certificate or click to browse'}</div>
             <div className="pp-drop-hint">PDF, image, JSON · max 10 MB</div>
           </div>
         )}
@@ -216,7 +232,47 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
 
       <button className="pp-btn pp-btn-primary pp-btn-full" onClick={handleUpload}
         disabled={!selectedFile || !!loading}>
-        {loading === 'upload' ? <><Spinner /> Encrypting & Storing…</> : '🔒 Encrypt & Store Record'}
+        {loading === 'upload' ? <><Spinner /> Encrypting & Storing…</> : '🔒 Encrypt & Store Certificate'}
+      </button>
+    </div>
+  );
+
+  // ── Step: Uploaded summary ────────────────────────────────────────────────
+  if (step === 'uploaded') return (
+    <div className="pp-section">
+      <div className="pp-done">
+        <div className="pp-done-icon">✓</div>
+        <div className="pp-done-title">Certificate Uploaded</div>
+        <div className="pp-done-body">
+          Your certificate is encrypted, stored, and referenced on-chain.
+        </div>
+      </div>
+
+      <div className="pp-privacy-guarantee">
+        <div className="pp-pg-row"><span className="pp-pg-icon">📄</span><span>{record?.fileName ?? 'Insurance certificate'}</span></div>
+        <div className="pp-pg-row"><span className="pp-pg-icon">🔗</span><span>Reference: {record?.chainRefId.slice(0, 28)}…</span></div>
+        <div className="pp-pg-row">
+          <span className="pp-pg-icon">📦</span>
+          <span>
+            Storage adapter: <strong>{activeAdapter.label}</strong>{' '}
+            <span className={`as-badge as-badge-${activeAdapter.status}`} style={{ fontSize: '10px' }}>
+              {activeAdapter.status === 'live' ? 'Live' : activeAdapter.status === 'preview' ? 'Preview' : 'Soon'}
+            </span>
+          </span>
+        </div>
+        <div className="pp-pg-row">
+          <span className="pp-pg-icon">⛓</span>
+          <span>
+            Chain adapter: <strong>{activeChainAdapter.label}</strong>{' '}
+            <span className={`as-badge as-badge-${activeChainAdapter.status}`} style={{ fontSize: '10px' }}>
+              {activeChainAdapter.status === 'live' ? 'Live' : activeChainAdapter.status === 'preview' ? 'Preview' : 'Soon'}
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <button className="pp-btn pp-btn-primary pp-btn-full" onClick={onContinueToProof}>
+        ⚡ Continue to Generate Proof
       </button>
     </div>
   );

@@ -79,8 +79,16 @@ code   { font-family: var(--font-mono); }
 .hv-logo-name { font-size: 18px; font-weight: 700; color: var(--c-text); letter-spacing: -0.02em; }
 .hv-logo-sub  { font-size: 11px; color: var(--c-text-3); margin-top: 1px; }
 
-.hv-stepper { display: flex; align-items: center; flex: 1; justify-content: center; }
-.hv-step    { display: flex; align-items: center; gap: 8px; }
+.hv-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  max-width: 500px;
+  width: 100%;
+  margin: 0 auto;
+}
+.hv-step    { display: flex; align-items: center; gap: 5px; }
 .hv-step-dot {
   width: 26px; height: 26px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -89,9 +97,10 @@ code   { font-family: var(--font-mono); }
 .hv-step-dot.past   { background: var(--c-blue); color: white; font-size: 13px; }
 .hv-step-dot.active { background: var(--c-blue); color: white; box-shadow: 0 0 0 4px var(--c-blue-mid); }
 .hv-step-dot.future { background: var(--c-border); color: var(--c-text-3); }
-.hv-step-lbl { font-size: 12px; color: var(--c-text-3); white-space: nowrap; }
+.hv-step-text { display: flex; flex-direction: column; line-height: 1.05; min-width: 54px; }
+.hv-step-lbl { font-size: 10px; color: var(--c-text-3); white-space: nowrap; }
 .hv-step-lbl.active { color: var(--c-blue); font-weight: 600; }
-.hv-step-line { width: 32px; height: 2px; background: var(--c-border); margin: 0 4px; flex-shrink: 0; transition: background 0.3s; }
+.hv-step-line { width: 12px; height: 2px; background: var(--c-border); margin: 0 1px; flex-shrink: 0; transition: background 0.3s; }
 .hv-step-line.past { background: var(--c-blue); }
 
 .hv-header-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; margin-left: auto; }

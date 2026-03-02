@@ -68,7 +68,7 @@ let mockBlockHeight = 1_000_000 + Math.floor(Math.random() * 10_000);
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MockMidnightChainAdapter implements ChainAdapter {
-  readonly name: ChainProviderName = 'mock';
+  readonly name: ChainProviderName = 'midnight';
   readonly providerName: string = 'Midnight-Mock';
 
   private readonly proofServer: MockProofServer;

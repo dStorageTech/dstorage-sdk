@@ -14,7 +14,7 @@ import { PatientPanel } from './components/PatientPanel.tsx';
 import { VerifierPanel } from './components/VerifierPanel.tsx';
 import { SdkDrawer } from './components/SdkDrawer.tsx';
 
-export type AppStep = 'connect' | 'upload' | 'prove' | 'done';
+export type AppStep = 'connect' | 'upload' | 'uploaded' | 'prove' | 'done';
 export interface StoredRecord { dataId: string; fileName: string; uploadedAt: number; chainRefId: string; }
 type ThemeMode = 'light' | 'dark';
 
@@ -70,6 +70,27 @@ export const CHAIN_ADAPTER_CONFIGS: Record<ChainAdapterKey, {
   },
 };
 
+const MOCK_UPLOADED_CERTIFICATES: StoredRecord[] = [
+  {
+    dataId: 'mock-doc-1',
+    fileName: 'Aetna-Insurance-Certificate-2025.pdf',
+    uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 7,
+    chainRefId: 'midnight:ref:7f3b8c21a9e44d8ab31f0c2f9e11a101',
+  },
+  {
+    dataId: 'mock-doc-2',
+    fileName: 'BlueCross-Coverage-Letter-Q4-2025.pdf',
+    uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 20,
+    chainRefId: 'midnight:ref:2bc9d550fa1041d48ec5b69241f2c5a7',
+  },
+  {
+    dataId: 'mock-doc-3',
+    fileName: 'UnitedHealthcare-ID-Card-Renewal.png',
+    uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 35,
+    chainRefId: 'midnight:ref:d19a7e0b9e7f4cd1a0478d94ccfd1162',
+  },
+];
+
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'light';
@@ -89,7 +110,6 @@ export default function App() {
   const [drawerMode, setDrawerMode]         = useState<'metatx' | 'zkproof'>('metatx');
   const [storageAdapterKey, setStorageAdapterKey] = useState<StorageAdapterKey>('mock');
   const [chainAdapterKey, setChainAdapterKey] = useState<ChainAdapterKey>('mock');
-  const [contractAddress, setContractAddress] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -97,7 +117,7 @@ export default function App() {
     }
   }, [theme]);
 
-  const buildSDK = useCallback(async (storageKey: StorageAdapterKey, chainKey: ChainAdapterKey, addr: string) => {
+  const buildSDK = useCallback(async (storageKey: StorageAdapterKey, chainKey: ChainAdapterKey) => {
     let storageAdapter;
     if (storageKey === 'arweave-local') {
       // Auto-generate a test JWK wallet and mint AR tokens via arlocal — no ArConnect needed.
@@ -139,9 +159,9 @@ export default function App() {
    * Smart connect: uses the selected adapters without forcing a specific wallet.
    * For Arweave adapters, requests ArConnect to get the real wallet address for minting.
    */
-  const handleConnect = async () => {
+  const handleStartUploadFlow = async () => {
     try {
-      const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey, contractAddress);
+      const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey);
 
       // Use demo wallet for encryption key derivation
       const wallet = await connectDemoWallet();
@@ -157,19 +177,33 @@ export default function App() {
     }
   };
 
+  const handleUseExistingRecord = (dataId: string) => {
+    const selected = MOCK_UPLOADED_CERTIFICATES.find((doc) => doc.dataId === dataId);
+    if (!selected) return;
+    setRecord(selected);
+    setProof(null);
+    setVerified(null);
+    setVerifying(false);
+    setStep('prove');
+  };
+
   const handleUpload = async (file: File) => {
     if (!dstorage) return;
     setDrawerMode('metatx'); setMetaTxProgress(null); setDrawerOpen(true);
     const receipt = await dstorage.executeMetaTransaction(file,
       (p) => setMetaTxProgress({ ...p }),
       {
-        contractAddress: contractAddress || 'midnight:mock-contract',
+        contractAddress: 'midnight:mock-contract',
         contractName: 'Midnight Identity Registry',
         circuitId: 'storeReference', circuitName: 'Store Reference',
         metadata: { 'record-type': 'insurance', 'app': 'healthvault' },
       }
     );
     setRecord({ dataId: receipt.dataId, fileName: receipt.file.name, uploadedAt: receipt.completedAt, chainRefId: receipt.chainRefId });
+    setStep('uploaded');
+  };
+
+  const handleContinueToProof = () => {
     setStep('prove');
   };
 
@@ -218,7 +252,7 @@ export default function App() {
             <span className="hv-theme-label">{theme === 'dark' ? 'Dark' : 'Light'}</span>
           </button>
           <div className="hv-sdk-badge">Powered by <strong>dStorage SDK</strong></div>
-          {wallet && <button className="hv-reset-btn" onClick={() => handleReset()}>New Session</button>}
+          {(wallet || step !== 'connect') && <button className="hv-reset-btn" onClick={() => handleReset()}>New Session</button>}
         </div>
       </header>
 
@@ -228,11 +262,13 @@ export default function App() {
           <PatientPanel step={step} wallet={wallet} record={record}
             storageAdapterKey={storageAdapterKey}
             chainAdapterKey={chainAdapterKey}
-            contractAddress={contractAddress}
             onStorageAdapterChange={setStorageAdapterKey}
             onChainAdapterChange={setChainAdapterKey}
-            onContractAddressChange={setContractAddress}
-            onConnect={handleConnect} onUpload={handleUpload} onGenerateProof={handleGenerateProof} />
+            mockRecords={MOCK_UPLOADED_CERTIFICATES}
+            onStartUploadFlow={handleStartUploadFlow}
+            onUseExistingRecord={handleUseExistingRecord}
+            onContinueToProof={handleContinueToProof}
+            onUpload={handleUpload} onGenerateProof={handleGenerateProof} />
         </div>
         <div className="hv-divider">
           <div className="hv-div-line" /><div className="hv-div-icon">⇄</div><div className="hv-div-line" />
@@ -252,23 +288,33 @@ export default function App() {
 
 function StepIndicator({ step }: { step: AppStep }) {
   const steps = [
-    { id: 'connect', label: 'Connect Wallet' },
+    { id: 'connect', label: 'Choose Path'   },
     { id: 'upload',  label: 'Upload Record'  },
+    { id: 'uploaded', label: 'Upload Summary' },
     { id: 'prove',   label: 'Generate Proof' },
     { id: 'done',    label: 'Verified'        },
   ] as const;
   const idx = steps.findIndex(s => s.id === step);
   return (
     <div className="hv-stepper">
-      {steps.map((s, i) => (
+      {steps.map((s, i) => {
+        const words = s.label.split(' ');
+        const splitAt = Math.ceil(words.length / 2);
+        const line1 = words.slice(0, splitAt).join(' ');
+        const line2 = words.slice(splitAt).join(' ');
+        return (
         <div key={s.id} className="hv-step">
           <div className={`hv-step-dot ${i < idx ? 'past' : i === idx ? 'active' : 'future'}`}>
             {i < idx ? '✓' : i + 1}
           </div>
-          <span className={`hv-step-lbl ${i === idx ? 'active' : ''}`}>{s.label}</span>
+          <div className="hv-step-text">
+            <span className={`hv-step-lbl ${i === idx ? 'active' : ''}`}>{line1}</span>
+            <span className={`hv-step-lbl ${i === idx ? 'active' : ''}`}>{line2 || '\u00A0'}</span>
+          </div>
           {i < steps.length - 1 && <div className={`hv-step-line ${i < idx ? 'past' : ''}`} />}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
