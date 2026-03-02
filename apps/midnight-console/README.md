@@ -1,18 +1,18 @@
 # Midnight Console Demo
 
 A real working CLI that connects to the Midnight network, derives wallet keys from a BIP-39
-mnemonic, and reads contract state via the dStorage SDK. No storage adapter is used.
+mnemonic (or hex seed), and uploads local files through the dStorage SDK (encrypt + store + on-chain reference).
 
 ## What it does
 
-1. Prompts for a Midnight network (`undeployed` local default, or `preprod`)
+1. Prompts for a Midnight network (`preprod` default, or `undeployed`)
 2. Configures node / indexer / proof server endpoints
 3. Accepts a BIP-39 mnemonic phrase (12 or 24 words) or a raw 64-byte hex seed
 4. Derives Midnight signing keys via `@dstorage/crypto` → `KeyDeriver`
 5. Builds a full Midnight wallet (shielded + unshielded + dust)
 6. Connects to the Midnight indexer and waits for wallet sync
 7. Checks NIGHT and DUST balances; waits for funding if needed
-8. Reads a `DataRegistry` contract reference via `MidnightChainAdapter`
+8. Upload loop: encrypts each selected local file, stores it via `MockStorageAdapter`, and writes a `DataRegistry` on-chain reference via `MidnightChainAdapter`
 
 ## Requirements
 
@@ -36,24 +36,26 @@ npm run demo:midnight
 
 ## Default endpoints (`undeployed` local network)
 
-| Service     | Default URL                              |
-|-------------|------------------------------------------|
-| Node RPC    | `ws://localhost:9944`                    |
-| Indexer HTTP | `http://localhost:8088/api/v3/graphql`  |
-| Indexer WS  | `ws://localhost:8088/api/v3/graphql/ws` |
-| Proof server | `http://localhost:6300`                 |
+| Service      | Default URL                              |
+|--------------|------------------------------------------|
+| Node RPC     | `https://127.0.0.1:9944`                 |
+| Node WS      | `wss://127.0.0.1:9944`                   |
+| Indexer HTTP | `http://127.0.0.1:8088/api/v3/graphql`   |
+| Indexer WS   | `ws://127.0.0.1:8088/api/v3/graphql/ws`  |
+| Proof server | `http://127.0.0.1:6300`                  |
 
 ## Default endpoints (`preprod`)
 
-| Service     | Default URL                                                          |
-|-------------|----------------------------------------------------------------------|
-| Node RPC    | `wss://rpc.preprod.midnight.network`                                 |
-| Indexer HTTP | `https://indexer.preprod.midnight.network/api/v3/graphql`           |
-| Indexer WS  | `wss://indexer.preprod.midnight.network/api/v3/graphql/ws`          |
-| Proof server | `http://localhost:6300` (must run locally)                          |
+| Service      | Default URL                                                          |
+|--------------|----------------------------------------------------------------------|
+| Node RPC     | `https://rpc.preprod.midnight.network`                               |
+| Node WS      | `wss://rpc.preprod.midnight.network`                                 |
+| Indexer HTTP | `https://indexer.preprod.midnight.network/api/v3/graphql`            |
+| Indexer WS   | `wss://indexer.preprod.midnight.network/api/v3/graphql/ws`           |
+| Proof server | `http://127.0.0.1:6300` (must run locally)                           |
 
 ## Notes
 
 - Uses `@dstorage/crypto`'s `KeyDeriver` for key derivation (BIP-39 → Midnight signing keys)
-- Uses `@dstorage/chain`'s `MidnightChainAdapter` for contract reads
-- No storage adapter is used in this demo
+- Uses `@dstorage/chain`'s `MidnightChainAdapter` for on-chain reference writes
+- Uses `MockStorageAdapter` for encrypted blob storage during demo uploads

@@ -11,13 +11,17 @@ npm run dev -w apps/demo
 # → http://localhost:5173
 ```
 
-No wallet extension required — use **Demo Mode** to skip wallet setup.
+No wallet extension is required for the default mock flow.
 
 ## What to look for
 
-### Storage adapter switcher
+### Start options + storage adapter switcher
 
-Before connecting your wallet, the demo lets you pick a storage backend:
+On the first screen, the demo provides two paths:
+- **A** Upload a new health insurance certificate
+- **B** Go directly to proof generation from a mock list of previously uploaded certificates
+
+You can also pick a storage backend:
 
 | Adapter | Status | What it does |
 |---|---|---|
@@ -78,7 +82,7 @@ HealthVault (React)
 apps/demo/src/
   App.tsx              — root state, adapter selection, SDK wiring
   components/
-    PatientPanel.tsx   — connect wallet, pick adapter, upload, generate proof
+    PatientPanel.tsx   — choose path, pick adapters, upload, upload summary, generate proof
     VerifierPanel.tsx  — receive and display the ZK proof result
     SdkDrawer.tsx      — live SDK activity feed + adapter config display
   index.css            — all styles

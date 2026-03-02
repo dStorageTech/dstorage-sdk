@@ -34,8 +34,11 @@ npm install
 
 # 2. Run the demo app
 npm run dev -w apps/demo
+```
 
-Note: Any time you modify packages/crypto or packages/chain, run `npm run build` (or per-package build) before running the demo, since the console app now uses the compiled dist files:
+Note: Any time you modify `packages/crypto` or `packages/chain`, run `npm run build` (or per-package build) before running the demo, since the demo app consumes compiled package outputs:
+
+```bash
 npm run build --workspace=@dstorage/crypto
 npm run build --workspace=@dstorage/chain
 
@@ -43,12 +46,14 @@ npm run build --workspace=@dstorage/chain
 npm run demo:midnight
 ```
 
-Open http://localhost:5173 — connect a wallet (or use Demo Mode) and try the full flow.
+Open http://localhost:5173 and choose a path:
+- upload a new health insurance certificate
+- or jump directly to proof generation from a mock list of previously uploaded certificates
 
 For terminal-only testing, `npm run demo:midnight` starts a CLI that:
 - asks for a passphrase and derives deterministic key material
 - initializes the SDK's `MidnightChainAdapter` only
-- does not configure or call any storage adapter
+- uses `MockStorageAdapter` for encrypted blob storage during uploads
 
 ---
 
