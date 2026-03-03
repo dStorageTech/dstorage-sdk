@@ -19,7 +19,7 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
-} from '../types.js';
+} from "../types.js";
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ const permissions = new Map<string, Set<string>>();
 
 function generateRefId(): string {
   const id =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `ref_${id}`;
@@ -53,12 +53,14 @@ function load<T>(key: string): T | null {
 }
 
 export class MockChainAdapter implements ChainAdapter {
-  readonly name: ChainProviderName = 'mock';
-  readonly providerName: string = 'Mock-Chain-Adapter';
+  readonly name: ChainProviderName = "mock";
+  readonly providerName: string = "Mock-Chain-Adapter";
 
   constructor() {
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
-    const savedRefs = load<Record<string, ChainReference>>('dstorage:chain:refs');
+    const savedRefs = load<Record<string, ChainReference>>(
+      "dstorage:chain:refs",
+    );
     if (savedRefs) {
       for (const [k, v] of Object.entries(savedRefs)) refs.set(k, v);
     }
@@ -71,15 +73,18 @@ export class MockChainAdapter implements ChainAdapter {
 
     // Persist to localStorage
     const allRefs = Object.fromEntries(refs);
-    persist('dstorage:chain:refs', allRefs);
+    persist("dstorage:chain:refs", allRefs);
 
     console.log(`[dStorage/mock-chain] Reference written → refId: ${refId}`);
-    return { refId, provider: 'mock', writtenAt: Date.now() };
+    return { refId, provider: "mock", writtenAt: Date.now() };
   }
 
   async readReference(refId: string): Promise<ChainReference> {
     const ref = refs.get(refId);
-    if (!ref) throw new Error(`[dStorage/mock-chain] No reference found for refId: ${refId}`);
+    if (!ref)
+      throw new Error(
+        `[dStorage/mock-chain] No reference found for refId: ${refId}`,
+      );
     return ref;
   }
 
@@ -92,7 +97,7 @@ export class MockChainAdapter implements ChainAdapter {
     // Persist
     const allPerms: Record<string, string[]> = {};
     for (const [k, v] of permissions.entries()) allPerms[k] = [...v];
-    persist('dstorage:chain:perms', allPerms);
+    persist("dstorage:chain:perms", allPerms);
 
     const permId = `perm_${refId}_${grantee}`;
     console.log(`[dStorage/mock-chain] Access granted: ${grantee} → ${refId}`);
@@ -123,7 +128,7 @@ export class MockChainAdapter implements ChainAdapter {
   }
 
   getContractAddress(): string {
-    return 'mock-contract-address';
+    return "mock-contract-address";
   }
 
   async deployDataRegistry(): Promise<string> {
@@ -135,9 +140,9 @@ export class MockChainAdapter implements ChainAdapter {
   async getEncryptionKey(): Promise<CryptoKey> {
     // Generate a random ephemeral key — fine for mocking purposes
     return globalThis.crypto.subtle.generateKey(
-      { name: 'AES-GCM', length: 256 },
+      { name: "AES-GCM", length: 256 },
       false,
-      ['encrypt', 'decrypt']
+      ["encrypt", "decrypt"],
     );
   }
 }

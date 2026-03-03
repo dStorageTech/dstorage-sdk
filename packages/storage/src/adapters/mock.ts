@@ -7,14 +7,21 @@
  * ⚠️  Not for production: data is local to the device and not decentralised.
  */
 
-import type { StorageAdapter, StorageProviderName, UploadResult } from '../types.js';
+import type {
+  StorageAdapter,
+  StorageProviderName,
+  UploadResult,
+} from "../types.js";
 
 // In Node.js (no localStorage), fall back to an in-memory map.
 const memoryStore = new Map<string, string>();
 
 function generateId(): string {
   // Use crypto.randomUUID if available, otherwise a simple fallback
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return `mock_${crypto.randomUUID()}`;
   }
   return `mock_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -39,12 +46,12 @@ function storeGet(key: string): string | null {
 }
 
 export class MockStorageAdapter implements StorageAdapter {
-  readonly name: StorageProviderName = 'mock';
-  readonly providerName: string = 'Mock-Storage-Adapter';
+  readonly name: StorageProviderName = "mock";
+  readonly providerName: string = "Mock-Storage-Adapter";
 
   async upload(
     data: string,
-    metadata: Record<string, string> = {}
+    metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const id = generateId();
 
@@ -55,8 +62,8 @@ export class MockStorageAdapter implements StorageAdapter {
 
     return {
       id,
-      provider: 'mock',
-      cost: '0 (mock)',
+      provider: "mock",
+      cost: "0 (mock)",
       uploadedAt: Date.now(),
     };
   }
@@ -66,7 +73,7 @@ export class MockStorageAdapter implements StorageAdapter {
 
     if (!raw) {
       throw new Error(
-        `[dStorage/mock] No data found for id: ${id}. Was it uploaded in this session?`
+        `[dStorage/mock] No data found for id: ${id}. Was it uploaded in this session?`,
       );
     }
 
@@ -76,7 +83,7 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   async estimateCost(_data: string): Promise<string> {
-    return '0 (mock — no real storage cost)';
+    return "0 (mock — no real storage cost)";
   }
 
   /** List all stored IDs (useful for debugging in the demo app) */
@@ -85,13 +92,15 @@ export class MockStorageAdapter implements StorageAdapter {
 
     // Always include in-memory items (Node.js fallback when localStorage is unavailable)
     for (const k of memoryStore.keys()) {
-      if (k.startsWith('dstorage:blob:')) ids.push(k.replace('dstorage:blob:', ''));
+      if (k.startsWith("dstorage:blob:"))
+        ids.push(k.replace("dstorage:blob:", ""));
     }
 
     // Also include browser localStorage items when available
     try {
       for (const k of Object.keys(localStorage)) {
-        if (k.startsWith('dstorage:blob:')) ids.push(k.replace('dstorage:blob:', ''));
+        if (k.startsWith("dstorage:blob:"))
+          ids.push(k.replace("dstorage:blob:", ""));
       }
     } catch {
       // localStorage not accessible — already covered by memoryStore above

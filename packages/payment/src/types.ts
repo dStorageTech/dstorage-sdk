@@ -11,7 +11,7 @@
 // ── Token definitions ─────────────────────────────────────────────────────────
 
 /** All tokens the SDK knows about. MOCK is used for development and testing. */
-export type TokenSymbol = 'AR' | 'ANT' | 'DUST' | 'ETH' | 'MATIC' | 'MOCK';
+export type TokenSymbol = "AR" | "ANT" | "DUST" | "ETH" | "MATIC" | "MOCK";
 
 /** Display metadata about a token — used for labels and cost conversion. */
 export interface Token {
@@ -24,18 +24,28 @@ export interface Token {
 
 /** Registry of all tokens the SDK knows about. */
 export const TOKENS: Record<TokenSymbol, Token> = {
-  AR:   { symbol: 'AR',   name: 'Arweave',     decimals: 12, approxUsdPrice: 22.50 },
-  ANT:  { symbol: 'ANT',  name: 'Autonomi',    decimals: 9,  approxUsdPrice: 0.08  },
-  DUST: { symbol: 'DUST', name: 'Midnight',    decimals: 6,  approxUsdPrice: 0.15  },
-  ETH:  { symbol: 'ETH',  name: 'Ethereum',    decimals: 18, approxUsdPrice: 3200  },
-  MATIC:{ symbol: 'MATIC',name: 'Polygon',     decimals: 18, approxUsdPrice: 0.95  },
-  MOCK: { symbol: 'MOCK', name: 'Mock Token',  decimals: 6,  approxUsdPrice: 1.00  },
+  AR: { symbol: "AR", name: "Arweave", decimals: 12, approxUsdPrice: 22.5 },
+  ANT: { symbol: "ANT", name: "Autonomi", decimals: 9, approxUsdPrice: 0.08 },
+  DUST: { symbol: "DUST", name: "Midnight", decimals: 6, approxUsdPrice: 0.15 },
+  ETH: { symbol: "ETH", name: "Ethereum", decimals: 18, approxUsdPrice: 3200 },
+  MATIC: {
+    symbol: "MATIC",
+    name: "Polygon",
+    decimals: 18,
+    approxUsdPrice: 0.95,
+  },
+  MOCK: {
+    symbol: "MOCK",
+    name: "Mock Token",
+    decimals: 6,
+    approxUsdPrice: 1.0,
+  },
 };
 
 // ── Provider name ─────────────────────────────────────────────────────────────
 
 /** Identifies which payment provider an adapter connects to. */
-export type PaymentProviderName = 'mock' | 'arweave' | 'midnight';
+export type PaymentProviderName = "mock" | "arweave" | "midnight";
 
 // ── PaymentQuote ──────────────────────────────────────────────────────────────
 
@@ -54,7 +64,7 @@ export interface PaymentQuote {
   /** Approximate USD equivalent — for display only */
   usd: string;
   /** Whether this covers a storage network fee or a chain transaction fee */
-  type: 'storage' | 'chain';
+  type: "storage" | "chain";
   /** File size used to derive this quote */
   dataSizeBytes: number;
   /** Unix timestamp after which this quote should be refreshed */
@@ -77,7 +87,7 @@ export interface PaymentReceipt {
   /** USD equivalent at time of payment */
   usd: string;
   /** What this payment covered */
-  type: 'storage' | 'chain';
+  type: "storage" | "chain";
   /**
    * true  — no real token transfer occurred (MockPaymentAdapter).
    * false — a real on-chain transaction was submitted.
@@ -119,7 +129,7 @@ export interface PaymentAdapter {
    * 'storage' — storage network fee (AR for Arweave, ANT for Autonomi).
    * 'chain'   — blockchain transaction fee (DUST for Midnight, ETH for Ethereum).
    */
-  readonly type: 'storage' | 'chain';
+  readonly type: "storage" | "chain";
 
   /**
    * Get a cost estimate for a payload of the given size.
@@ -144,6 +154,6 @@ export interface PaymentAdapter {
    */
   pay(
     quote: PaymentQuote,
-    onStatus?: (message: string) => void
+    onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt>;
 }

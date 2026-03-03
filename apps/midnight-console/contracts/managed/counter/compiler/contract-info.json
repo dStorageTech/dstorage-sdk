@@ -7,17 +7,13 @@
       "name": "increment",
       "pure": false,
       "proof": true,
-      "arguments": [
-      ],
+      "arguments": [],
       "result-type": {
         "type-name": "Tuple",
-        "types": [
-        ]
+        "types": []
       }
     }
   ],
-  "witnesses": [
-  ],
-  "contracts": [
-  ]
+  "witnesses": [],
+  "contracts": []
 }

@@ -3,9 +3,9 @@
  * Top-level types for the dStorage SDK public API.
  */
 
-import type { StorageAdapter, StorageProviderName } from '@dstorage/storage';
-import type { ChainAdapter, ChainProviderName } from '@dstorage/chain';
-import type { PaymentAdapter } from '@dstorage/payment';
+import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
+import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
+import type { PaymentAdapter } from "@dstorage/payment";
 
 /** Wallet connection info returned after connecting */
 export interface WalletInfo {

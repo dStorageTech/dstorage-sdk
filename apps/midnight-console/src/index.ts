@@ -21,20 +21,23 @@
 // ── WebSocket polyfill ────────────────────────────────────────────────────────
 // The Midnight indexer uses GraphQL subscriptions over WebSocket.
 // Node.js doesn't expose a global WebSocket; the `ws` package fills this gap.
-import WebSocket from 'ws';
+import WebSocket from "ws";
 // @ts-expect-error — ws type doesn't perfectly match the DOM WebSocket interface
 globalThis.WebSocket = WebSocket;
 
-import { stdin as input, stdout as output } from 'node:process';
-import { createInterface } from 'node:readline/promises';
-import { fileURLToPath } from 'node:url';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import fs  from  'fs';
+import { stdin as input, stdout as output } from "node:process";
+import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import fs from "fs";
 
-import { DStorage } from '@dstorage/core';
-import { ArweaveLocalStorageAdapter, MockStorageAdapter } from '@dstorage/storage';
-import { MidnightChainAdapter } from '@dstorage/chain';
+import { DStorage } from "@dstorage/core";
+import {
+  ArweaveLocalStorageAdapter,
+  MockStorageAdapter,
+} from "@dstorage/storage";
+import { MidnightChainAdapter } from "@dstorage/chain";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,25 +46,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolves to: <monorepo-root>/packages/chain/src/adapters/midnight/contracts/dataregistry/managed/
 const DATA_REGISTRY_ZK_PATH = path.resolve(
   __dirname,
-  '../../../packages/chain/src/adapters/midnight/contracts/dataregistry/managed'
+  "../../../packages/chain/src/adapters/midnight/contracts/dataregistry/managed",
 );
 
 // ── Network defaults ───────────────────────────────────────────────────────────
 
 const NETWORKS = {
   preprod: {
-    node: 'https://rpc.preprod.midnight.network',
-    nodeWs: 'wss://rpc.preprod.midnight.network',
-    indexerHttp: 'https://indexer.preprod.midnight.network/api/v3/graphql',
-    indexerWs: 'wss://indexer.preprod.midnight.network/api/v3/graphql/ws',
-    proofServer: 'http://127.0.0.1:6300',
+    node: "https://rpc.preprod.midnight.network",
+    nodeWs: "wss://rpc.preprod.midnight.network",
+    indexerHttp: "https://indexer.preprod.midnight.network/api/v3/graphql",
+    indexerWs: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
   },
   undeployed: {
-    node: 'https://127.0.0.1:9944',
-    nodeWs: 'wss://127.0.0.1:9944',
-    indexerHttp: 'http://127.0.0.1:8088/api/v3/graphql',
-    indexerWs: 'ws://127.0.0.1:8088/api/v3/graphql/ws',
-    proofServer: 'http://127.0.0.1:6300',
+    node: "https://127.0.0.1:9944",
+    nodeWs: "wss://127.0.0.1:9944",
+    indexerHttp: "http://127.0.0.1:8088/api/v3/graphql",
+    indexerWs: "ws://127.0.0.1:8088/api/v3/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
   },
 } as const;
 
@@ -69,7 +72,10 @@ type NetworkName = keyof typeof NETWORKS;
 
 // ── Progress ticker ────────────────────────────────────────────────────────────
 
-async function withTicker<T>(statusLine: () => string, fn: () => Promise<T>): Promise<T> {
+async function withTicker<T>(
+  statusLine: () => string,
+  fn: () => Promise<T>,
+): Promise<T> {
   const start = Date.now();
   const id = setInterval(() => {
     const elapsed = Math.round((Date.now() - start) / 1000);
@@ -89,14 +95,19 @@ async function main(): Promise<void> {
   let chain: MidnightChainAdapter | undefined;
 
   try {
-    console.log('\n=== dStorage Midnight Console Demo ===\n');
+    console.log("\n=== dStorage Midnight Console Demo ===\n");
 
     // ── 1. Network selection ────────────────────────────────────────────────
     const networkInput =
-      (await rl.question('Midnight network [preprod / undeployed, default: preprod]: ')).trim() ||
-      'preprod';
-    if (networkInput !== 'preprod' && networkInput !== 'undeployed') {
-      throw new Error(`Unknown network "${networkInput}". Choose preprod or undeployed.`);
+      (
+        await rl.question(
+          "Midnight network [preprod / undeployed, default: preprod]: ",
+        )
+      ).trim() || "preprod";
+    if (networkInput !== "preprod" && networkInput !== "undeployed") {
+      throw new Error(
+        `Unknown network "${networkInput}". Choose preprod or undeployed.`,
+      );
     }
     const networkName = networkInput as NetworkName;
     const defaults = NETWORKS[networkName];
@@ -105,49 +116,63 @@ async function main(): Promise<void> {
 
     // ── 2. Endpoints ────────────────────────────────────────────────────────
     const nodeEndpoint =
-      (await rl.question(`Node RPC endpoint [${defaults.node}]: `)).trim() || defaults.node;
+      (await rl.question(`Node RPC endpoint [${defaults.node}]: `)).trim() ||
+      defaults.node;
     const nodeWsEndpoint =
-      (await rl.question(`Node WS endpoint [${defaults.nodeWs}]: `)).trim() || defaults.nodeWs;
+      (await rl.question(`Node WS endpoint [${defaults.nodeWs}]: `)).trim() ||
+      defaults.nodeWs;
     const indexerHttp =
-      (await rl.question(`Indexer HTTP endpoint [${defaults.indexerHttp}]: `)).trim() ||
-      defaults.indexerHttp;
+      (
+        await rl.question(`Indexer HTTP endpoint [${defaults.indexerHttp}]: `)
+      ).trim() || defaults.indexerHttp;
     const indexerWs =
-      (await rl.question(`Indexer WS endpoint [${defaults.indexerWs}]: `)).trim() ||
-      defaults.indexerWs;
+      (
+        await rl.question(`Indexer WS endpoint [${defaults.indexerWs}]: `)
+      ).trim() || defaults.indexerWs;
     const proofServerEndpoint =
-      (await rl.question(`Proof server endpoint [${defaults.proofServer}]: `)).trim() ||
-      defaults.proofServer;
+      (
+        await rl.question(`Proof server endpoint [${defaults.proofServer}]: `)
+      ).trim() || defaults.proofServer;
 
     // ── 3. Mnemonic or hex seed ─────────────────────────────────────────────
-    console.log('\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).');
+    console.log(
+      "\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).",
+    );
     rl.close();
-    const seedInput = await promptSecret('Mnemonic / hex seed: ');
+    const seedInput = await promptSecret("Mnemonic / hex seed: ");
 
     rl = createInterface({ input, output });
-    process.stdout.write('\n');
-    if (!seedInput) throw new Error('Mnemonic or seed is required.');
+    process.stdout.write("\n");
+    if (!seedInput) throw new Error("Mnemonic or seed is required.");
 
     const trimmed = seedInput.trim();
-    const isHex = /^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed);
+    const isHex =
+      /^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed);
     const credentials = isHex ? { seedHex: trimmed } : { mnemonic: trimmed };
 
     // ── 4. Contract address (optional) ──────────────────────────────────────
     const contractAddressInput = (
-      await rl.question('\nDeployed DataRegistry contract address (leave blank to auto-deploy): ')
+      await rl.question(
+        "\nDeployed DataRegistry contract address (leave blank to auto-deploy): ",
+      )
     ).trim();
 
     // ── 5. Build the storage adapter ──────────────────────────────────────────
     //const storageAdapter = new MockStorageAdapter();
     const storageAdapter = new ArweaveLocalStorageAdapter({
-      walletKey: JSON.parse(fs.readFileSync('test-arweave-wallet-key.json', 'utf8'))
+      walletKey: JSON.parse(
+        fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
+      ),
     });
 
     // ── 6. Build the chain adapter ──────────────────────────────────────────
     chain = new MidnightChainAdapter({
       network: networkName,
-      walletMode: 'facade',
+      walletMode: "facade",
       credentials,
-      ...(contractAddressInput ? { contractAddress: contractAddressInput } : {}),
+      ...(contractAddressInput
+        ? { contractAddress: contractAddressInput }
+        : {}),
       nodeEndpoint,
       nodeWsEndpoint,
       indexerEndpoint: indexerHttp,
@@ -164,59 +189,80 @@ async function main(): Promise<void> {
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter: activeChain,
-      ...(contractAddressInput ? { dataRegistryAddress: contractAddressInput } : {}),
+      ...(contractAddressInput
+        ? { dataRegistryAddress: contractAddressInput }
+        : {}),
     });
 
-    console.log('\nInitialising wallet, syncing, and preparing contract...');
+    console.log("\nInitialising wallet, syncing, and preparing contract...");
     const dataRegistryAddress = await withTicker(
-      () => 'Building wallet and syncing...',
-      () => sdk.init()
+      () => "Building wallet and syncing...",
+      () => sdk.init(),
     );
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
     // ── 8. Display addresses and balances ───────────────────────────────────
     // TODO!!! this should be called on the SDK somehow abstracted
     const addresses = activeChain.getAddresses();
-    console.log('\nWallet addresses:');
+    console.log("\nWallet addresses:");
     console.log(`  Unshielded: ${addresses.unshielded}`);
     console.log(`  Shielded:   ${addresses.shielded}`);
     console.log(`  Dust:       ${addresses.dust}`);
 
     const balances = await activeChain.getBalances();
     if (balances.night === 0n) {
-      console.log(`\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`);
+      console.log(
+        `\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`,
+      );
     } else {
       console.log(`\nNIGHT balance: ${balances.night}`);
     }
     if (balances.dust === 0n) {
-      console.log('Warning: No DUST found. DUST is required for transaction fees.');
+      console.log(
+        "Warning: No DUST found. DUST is required for transaction fees.",
+      );
     } else {
       console.log(`DUST balance:  ${balances.dust}`);
     }
 
     // ── 9. Action loop: upload files or list DataRegistry references ───────
 
-    console.log('\n─── Actions ──────────────────────────────────────────────────────────');
-    console.log(`The SDK will encrypt files, store them (${storageAdapter.providerName}), and write references on-chain (${activeChain.providerName}).`);
-    console.log('You can also list references currently stored on the DataRegistry contract.\n');
+    console.log(
+      "\n─── Actions ──────────────────────────────────────────────────────────",
+    );
+    console.log(
+      `The SDK will encrypt files, store them (${storageAdapter.providerName}), and write references on-chain (${activeChain.providerName}).`,
+    );
+    console.log(
+      "You can also list references currently stored on the DataRegistry contract.\n",
+    );
 
     let done = false;
     while (!done) {
-      const action = (
-        await rl.question('\nChoose action [1=upload file, 2=list references, 3=retrieve by refId, 4=quit, default: 1]: ')
-      ).trim() || '1';
+      const action =
+        (
+          await rl.question(
+            "\nChoose action [1=upload file, 2=list references, 3=retrieve by refId, 4=quit, default: 1]: ",
+          )
+        ).trim() || "1";
 
-      if (action === '4' || action.toLowerCase() === 'q' || action.toLowerCase() === 'quit') {
+      if (
+        action === "4" ||
+        action.toLowerCase() === "q" ||
+        action.toLowerCase() === "quit"
+      ) {
         done = true;
         continue;
       }
 
-      if (action === '2' || action.toLowerCase() === 'list') {
+      if (action === "2" || action.toLowerCase() === "list") {
         try {
           const refs = await activeChain.listReferences();
-          console.log(`\n  Stored references on contract ${activeChain.getContractAddress()}: ${refs.length}`);
+          console.log(
+            `\n  Stored references on contract ${activeChain.getContractAddress()}: ${refs.length}`,
+          );
           if (refs.length === 0) {
-            console.log('  (none)\n');
+            console.log("  (none)\n");
             continue;
           }
           for (let i = 0; i < refs.length; i += 1) {
@@ -225,7 +271,7 @@ async function main(): Promise<void> {
             console.log(`      storageProvider = ${ref.storageProvider}`);
             console.log(`      storageId = ${ref.storageId}`);
           }
-          console.log('');
+          console.log("");
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`\n  Error listing references: ${msg}\n`);
@@ -233,43 +279,56 @@ async function main(): Promise<void> {
         continue;
       }
 
-      if (action === '3' || action.toLowerCase() === 'retrieve') {
-        const refId = (await rl.question('  Enter refId to retrieve: ')).trim();
+      if (action === "3" || action.toLowerCase() === "retrieve") {
+        const refId = (await rl.question("  Enter refId to retrieve: ")).trim();
         if (!refId) {
-          console.log('  (cancelled)\n');
+          console.log("  (cancelled)\n");
           continue;
         }
 
         try {
           console.log(`\n  Resolving on-chain reference for refId: ${refId}`);
           const result = await withTicker(
-            () => 'Fetching reference from chain and retrieving from storage...',
-            () => sdk.retrieveByRefId(refId)
+            () =>
+              "Fetching reference from chain and retrieving from storage...",
+            () => sdk.retrieveByRefId(refId),
           );
 
           const outputPath = (
-            await rl.question('  Save to file (leave blank to print to console): ')
+            await rl.question(
+              "  Save to file (leave blank to print to console): ",
+            )
           ).trim();
 
           if (outputPath) {
-            const { writeFile } = await import('node:fs/promises');
+            const { writeFile } = await import("node:fs/promises");
             await writeFile(outputPath, result.bytes);
             console.log(`\n  ✓ Retrieved and saved to: ${outputPath}`);
             console.log(`  Size: ${result.bytes.byteLength} bytes\n`);
           } else {
             // Print as text; if it looks like binary data, show a hex preview
-            const looksLikeBinary = result.bytes.some(b => b < 9 || (b > 13 && b < 32));
+            const looksLikeBinary = result.bytes.some(
+              (b) => b < 9 || (b > 13 && b < 32),
+            );
             if (looksLikeBinary) {
-              const preview = Buffer.from(result.bytes.slice(0, 64)).toString('hex');
-              console.log(`\n  ✓ Retrieved (binary, ${result.bytes.byteLength} bytes)`);
-              console.log(`  Hex preview (first 64 bytes): ${preview}${result.bytes.byteLength > 64 ? '…' : ''}\n`);
+              const preview = Buffer.from(result.bytes.slice(0, 64)).toString(
+                "hex",
+              );
+              console.log(
+                `\n  ✓ Retrieved (binary, ${result.bytes.byteLength} bytes)`,
+              );
+              console.log(
+                `  Hex preview (first 64 bytes): ${preview}${result.bytes.byteLength > 64 ? "…" : ""}\n`,
+              );
             } else {
               const preview = result.content.slice(0, 512);
-              const truncated = result.content.length > 512 ? '…' : '';
-              console.log(`\n  ✓ Retrieved (${result.bytes.byteLength} bytes):`);
-              console.log('  ─────────────────────────────────────');
+              const truncated = result.content.length > 512 ? "…" : "";
+              console.log(
+                `\n  ✓ Retrieved (${result.bytes.byteLength} bytes):`,
+              );
+              console.log("  ─────────────────────────────────────");
               console.log(`  ${preview}${truncated}`);
-              console.log('  ─────────────────────────────────────\n');
+              console.log("  ─────────────────────────────────────\n");
             }
           }
         } catch (err) {
@@ -279,46 +338,58 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const filePath = (await rl.question('File path to upload (or leave blank to cancel): ')).trim();
+      const filePath = (
+        await rl.question("File path to upload (or leave blank to cancel): ")
+      ).trim();
       if (!filePath) continue;
 
       // Read file from disk
       let fileContent: Uint8Array;
       try {
         const buf = await readFile(filePath);
-        fileContent = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+        fileContent = new Uint8Array(
+          buf.buffer,
+          buf.byteOffset,
+          buf.byteLength,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`  Error reading file: ${msg}`);
         continue;
       }
 
-      console.log(`\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes)`);
-      console.log(`  Uploading to ${storageAdapter.name} storage and writing on-chain (${activeChain.name}) reference...`);
+      console.log(
+        `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes)`,
+      );
+      console.log(
+        `  Uploading to ${storageAdapter.name} storage and writing on-chain (${activeChain.name}) reference...`,
+      );
 
       try {
         const result = await withTicker(
-          () => 'Generating ZK proof and submitting reference...',
-          () => sdk.upload(fileContent)
+          () => "Generating ZK proof and submitting reference...",
+          () => sdk.upload(fileContent),
         );
 
-        console.log('\n  ✓ Upload complete!');
+        console.log("\n  ✓ Upload complete!");
         console.log(`  refId:           ${result.refId}`);
         console.log(`  storageId:       ${result.storageId}`);
         console.log(`  storageProvider: ${result.storageProvider}`);
         console.log(`  chainProvider:   ${result.chainProvider}`);
-        console.log(`  uploadedAt:      ${new Date(result.uploadedAt).toISOString()}\n`);
+        console.log(
+          `  uploadedAt:      ${new Date(result.uploadedAt).toISOString()}\n`,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`\n  Error during upload: ${msg}\n`);
       }
     }
 
-    console.log('\nDone.\n');
+    console.log("\nDone.\n");
   } finally {
     rl.close();
     if (chain) {
-      console.log('Shutting down wallet...');
+      console.log("Shutting down wallet...");
       //await chain.stop();
     }
   }
@@ -327,7 +398,7 @@ async function main(): Promise<void> {
 // ── Masked input ───────────────────────────────────────────────────────────────
 
 async function promptSecret(prompt: string): Promise<string> {
-  if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== 'function') {
+  if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== "function") {
     const fallback = createInterface({ input, output });
     try {
       return (await fallback.question(prompt)).trim();
@@ -342,52 +413,54 @@ async function promptSecret(prompt: string): Promise<string> {
 
     out.write(prompt);
 
-    let value = '';
+    let value = "";
 
     const onData = (chunk: Buffer): void => {
-      const str = chunk.toString('utf8');
+      const str = chunk.toString("utf8");
 
-      if (str === '\r' || str === '\n') {
+      if (str === "\r" || str === "\n") {
         cleanup();
-        out.write('\n');
+        out.write("\n");
         resolve(value);
         return;
       }
 
-      if (str === '\u0003') {
+      if (str === "\u0003") {
         cleanup();
-        reject(new Error('Input cancelled.'));
+        reject(new Error("Input cancelled."));
         return;
       }
 
-      if (str === '\u007f' || str === '\b') {
+      if (str === "\u007f" || str === "\b") {
         if (value.length > 0) {
           value = value.slice(0, -1);
-          out.write('\b \b');
+          out.write("\b \b");
         }
         return;
       }
 
       value += str;
-      out.write('*'.repeat(str.length));
+      out.write("*".repeat(str.length));
     };
 
     const cleanup = (): void => {
       stdin.setRawMode(false);
       stdin.pause();
-      stdin.removeListener('data', onData);
+      stdin.removeListener("data", onData);
     };
 
     stdin.setRawMode(true);
     stdin.resume();
-    stdin.on('data', onData);
+    stdin.on("data", onData);
   });
 }
 
 // ── Entry ──────────────────────────────────────────────────────────────────────
 
 main()
-  .then(() => { process.exit(0); })
+  .then(() => {
+    process.exit(0);
+  })
   .catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`\n[Midnight Console Demo] ${message}\n`);

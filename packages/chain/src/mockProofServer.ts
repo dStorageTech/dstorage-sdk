@@ -25,18 +25,21 @@ export interface MockProof {
 
 function randomHex(bytes: number): string {
   const arr = new Uint8Array(bytes);
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.getRandomValues === "function"
+  ) {
     crypto.getRandomValues(arr);
   } else {
     for (let i = 0; i < bytes; i++) arr[i] = Math.floor(Math.random() * 256);
   }
   return Array.from(arr)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -68,21 +71,21 @@ export class MockProofServer {
 
     console.log(
       `[dStorage/proof-server] Generating proof for circuit "${circuit}"…`,
-      inputs
+      inputs,
     );
 
     await sleep(delay);
 
     const proof: MockProof = {
       commitment: `0x${randomHex(32)}`,
-      nullifier:  `0x${randomHex(32)}`,
+      nullifier: `0x${randomHex(32)}`,
       proofBytes: `0x${randomHex(64)}`,
       circuit,
       provingTimeMs: Date.now() - start,
     };
 
     console.log(
-      `[dStorage/proof-server] Proof generated in ${proof.provingTimeMs}ms ✓`
+      `[dStorage/proof-server] Proof generated in ${proof.provingTimeMs}ms ✓`,
     );
 
     return proof;

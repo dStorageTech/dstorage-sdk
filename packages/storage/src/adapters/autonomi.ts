@@ -10,7 +10,11 @@
  * When Autonomi's JS SDK is stable, replace the TODOs below with real calls.
  */
 
-import type { StorageAdapter, StorageProviderName, UploadResult } from '../types.js';
+import type {
+  StorageAdapter,
+  StorageProviderName,
+  UploadResult,
+} from "../types.js";
 
 export interface AutonomiAdapterConfig {
   /**
@@ -25,17 +29,17 @@ export interface AutonomiAdapterConfig {
 }
 
 export class AutonomiStorageAdapter implements StorageAdapter {
-  readonly name: StorageProviderName = 'autonomi';
-  readonly providerName: string = 'Autonomi';
+  readonly name: StorageProviderName = "autonomi";
+  readonly providerName: string = "Autonomi";
 
   private config: AutonomiAdapterConfig;
 
   constructor(config: AutonomiAdapterConfig = {}) {
     this.config = config;
     console.warn(
-      '[dStorage/autonomi] Autonomi adapter is in preview. ' +
-        'Real network integration pending JS SDK stability. ' +
-        'Data is stored in memory for now.'
+      "[dStorage/autonomi] Autonomi adapter is in preview. " +
+        "Real network integration pending JS SDK stability. " +
+        "Data is stored in memory for now.",
     );
   }
 
@@ -44,7 +48,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
 
   async upload(
     data: string,
-    _metadata: Record<string, string> = {}
+    _metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     /**
      * TODO: Replace with real Autonomi upload when JS SDK is stable.
@@ -67,8 +71,8 @@ export class AutonomiStorageAdapter implements StorageAdapter {
 
     return {
       id,
-      provider: 'autonomi',
-      cost: 'pending ANT pricing',
+      provider: "autonomi",
+      cost: "pending ANT pricing",
       uploadedAt: Date.now(),
     };
   }
@@ -94,6 +98,6 @@ export class AutonomiStorageAdapter implements StorageAdapter {
      * TODO: Autonomi uses one-time payment model (pay once, store forever).
      * When JS SDK is available: call client.quotePut(dataSize) → returns ANT cost.
      */
-    return 'One-time ANT payment (pricing pending SDK release)';
+    return "One-time ANT payment (pricing pending SDK release)";
   }
 }

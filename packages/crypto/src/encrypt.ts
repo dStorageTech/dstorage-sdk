@@ -15,15 +15,17 @@ export interface EncryptedPayload {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getCrypto(): Crypto {
-  if (typeof globalThis.crypto !== 'undefined') return globalThis.crypto;
-  throw new Error('[dStorage/crypto] WebCrypto not available in this environment.');
+  if (typeof globalThis.crypto !== "undefined") return globalThis.crypto;
+  throw new Error(
+    "[dStorage/crypto] WebCrypto not available in this environment.",
+  );
 }
 
 function bufferToBase64(buffer: ArrayBuffer): string {
   // Convert buffer to string in chunks to avoid "Maximum call stack size exceeded"
   // with large files. String.fromCharCode can only handle ~64KB arguments at a time.
   const bytes = new Uint8Array(buffer);
-  let binaryStr = '';
+  let binaryStr = "";
   const chunkSize = 8192; // Process 8KB at a time
 
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -49,15 +51,15 @@ function base64ToBuffer(b64: string): Uint8Array<ArrayBuffer> {
  */
 export async function encrypt(
   key: CryptoKey,
-  data: Uint8Array
+  data: Uint8Array,
 ): Promise<EncryptedPayload> {
   const crypto = getCrypto();
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
   const ciphertextBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: "AES-GCM", iv },
     key,
-    new Uint8Array(data)
+    new Uint8Array(data),
   );
 
   return {
@@ -71,14 +73,14 @@ export async function encrypt(
  */
 export async function decrypt(
   key: CryptoKey,
-  payload: EncryptedPayload
+  payload: EncryptedPayload,
 ): Promise<Uint8Array> {
   const crypto = getCrypto();
 
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64ToBuffer(payload.iv) },
+    { name: "AES-GCM", iv: base64ToBuffer(payload.iv) },
     key,
-    base64ToBuffer(payload.ciphertext)
+    base64ToBuffer(payload.ciphertext),
   );
 
   return new Uint8Array(plaintext);
@@ -97,12 +99,12 @@ export function serializePayload(payload: EncryptedPayload): string {
 export function deserializePayload(raw: string): EncryptedPayload {
   const parsed: unknown = JSON.parse(raw);
   if (
-    typeof parsed !== 'object' ||
+    typeof parsed !== "object" ||
     parsed === null ||
-    !('ciphertext' in parsed) ||
-    !('iv' in parsed)
+    !("ciphertext" in parsed) ||
+    !("iv" in parsed)
   ) {
-    throw new Error('[dStorage/crypto] Invalid payload format.');
+    throw new Error("[dStorage/crypto] Invalid payload format.");
   }
   return parsed as EncryptedPayload;
 }

@@ -5,21 +5,31 @@ import {
   type FinalizedTransaction,
   LedgerParameters,
   ZswapSecretKeys,
-} from '@midnight-ntwrk/ledger-v7';
-import { type MidnightProvider, UnboundTransaction, type WalletProvider } from '@midnight-ntwrk/midnight-js-types';
-import { ttlOneHour } from '@midnight-ntwrk/midnight-js-utils';
-import { type WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
+} from "@midnight-ntwrk/ledger-v7";
+import {
+  type MidnightProvider,
+  UnboundTransaction,
+  type WalletProvider,
+} from "@midnight-ntwrk/midnight-js-types";
+import { ttlOneHour } from "@midnight-ntwrk/midnight-js-utils";
+import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 //import type { Logger } from 'pino';
 
-import { getInitialShieldedState } from './wallet-utils';
-import { DustWalletOptions, EnvironmentConfiguration, FluentWalletBuilder } from '@midnight-ntwrk/testkit-js';
-import { NetworkId } from '@midnight-ntwrk/wallet-sdk-abstractions';
+import { getInitialShieldedState } from "./wallet-utils";
+import {
+  DustWalletOptions,
+  EnvironmentConfiguration,
+  FluentWalletBuilder,
+} from "@midnight-ntwrk/testkit-js";
+import { NetworkId } from "@midnight-ntwrk/wallet-sdk-abstractions";
 
 /**
  * Provider class that implements wallet functionality for the Midnight network.
  * Handles transaction balancing, submission, and wallet state management.
  */
-export class MidnightWalletProvider implements MidnightProvider, WalletProvider {
+export class MidnightWalletProvider
+  implements MidnightProvider, WalletProvider
+{
   readonly env: EnvironmentConfiguration;
   readonly wallet: WalletFacade;
   readonly zswapSecretKeys: ZswapSecretKeys;
@@ -45,10 +55,16 @@ export class MidnightWalletProvider implements MidnightProvider, WalletProvider 
     return this.zswapSecretKeys.encryptionPublicKey;
   }
 
-  async balanceTx(tx: UnboundTransaction, ttl: Date = ttlOneHour()): Promise<FinalizedTransaction> {
+  async balanceTx(
+    tx: UnboundTransaction,
+    ttl: Date = ttlOneHour(),
+  ): Promise<FinalizedTransaction> {
     const recipe = await this.wallet.balanceUnboundTransaction(
       tx,
-      { shieldedSecretKeys: this.zswapSecretKeys, dustSecretKey: this.dustSecretKey },
+      {
+        shieldedSecretKeys: this.zswapSecretKeys,
+        dustSecretKey: this.dustSecretKey,
+      },
       { ttl },
     );
     return await this.wallet.finalizeRecipe(recipe);
@@ -60,7 +76,7 @@ export class MidnightWalletProvider implements MidnightProvider, WalletProvider 
 
   // We do not wait for funds, it's done outside
   async start(): Promise<void> {
-    console.log('Starting wallet...');
+    console.log("Starting wallet...");
     await this.wallet.start(this.zswapSecretKeys, this.dustSecretKey);
   }
 
@@ -68,7 +84,10 @@ export class MidnightWalletProvider implements MidnightProvider, WalletProvider 
     return this.wallet.stop();
   }
 
-  static async build(env: EnvironmentConfiguration, seed?: string): Promise<MidnightWalletProvider> {
+  static async build(
+    env: EnvironmentConfiguration,
+    seed?: string,
+  ): Promise<MidnightWalletProvider> {
     const DEFAULT_DUST_OPTIONS: DustWalletOptions = {
       ledgerParams: LedgerParameters.initialParameters(),
       additionalFeeOverhead: 1_000n, // changed midnight-js code FROM 500_000_000_000_000_000n TO 1000n
@@ -78,9 +97,10 @@ export class MidnightWalletProvider implements MidnightProvider, WalletProvider 
       ...DEFAULT_DUST_OPTIONS,
     };
     if (env.walletNetworkId === NetworkId.NetworkId.Undeployed) {
-      dustOptions['additionalFeeOverhead'] = 500_000_000_000_000_000n;
+      dustOptions["additionalFeeOverhead"] = 500_000_000_000_000_000n;
     }
-    const builder = FluentWalletBuilder.forEnvironment(env).withDustOptions(dustOptions);
+    const builder =
+      FluentWalletBuilder.forEnvironment(env).withDustOptions(dustOptions);
     const buildResult = seed
       ? await builder.withSeed(seed).buildWithoutStarting()
       : await builder.withRandomSeed().buildWithoutStarting();

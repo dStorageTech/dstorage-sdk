@@ -29,8 +29,8 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
-} from '../types.js';
-import { TOKENS } from '../types.js';
+} from "../types.js";
+import { TOKENS } from "../types.js";
 
 export interface MidnightPaymentAdapterConfig {
   /**
@@ -52,23 +52,24 @@ export interface MidnightPaymentAdapterConfig {
 }
 
 export class MidnightPaymentAdapter implements PaymentAdapter {
-  readonly name: PaymentProviderName  = 'midnight';
-  readonly token: TokenSymbol          = 'DUST';
-  readonly type: 'storage' | 'chain'  = 'chain';
+  readonly name: PaymentProviderName = "midnight";
+  readonly token: TokenSymbol = "DUST";
+  readonly type: "storage" | "chain" = "chain";
 
   private config: MidnightPaymentAdapterConfig;
   private readonly quoteValidityMs: number;
 
   constructor(config: MidnightPaymentAdapterConfig = {}) {
     this.config = {
-      nodeEndpoint: config.nodeEndpoint ?? 'https://rpc.testnet-02.midnight.network',
-      wallet:       config.wallet,
+      nodeEndpoint:
+        config.nodeEndpoint ?? "https://rpc.testnet-02.midnight.network",
+      wallet: config.wallet,
     };
     this.quoteValidityMs = config.quoteValidityMs ?? 120_000;
 
     console.warn(
-      '[dStorage/midnight-payment] Midnight payment adapter preview mode — ' +
-      'real DUST fee deduction pending Midnight.js v1 integration.'
+      "[dStorage/midnight-payment] Midnight payment adapter preview mode — " +
+        "real DUST fee deduction pending Midnight.js v1 integration.",
     );
   }
 
@@ -96,17 +97,19 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     // Preview: flat ~$0.01 per chain tx.
     // On Midnight, the fee is circuit-cost-dominated, so dataSizeBytes is not proportional.
     void dataSizeBytes;
-    const chainUsd  = 0.01;
-    const amount    = (chainUsd / TOKENS['DUST'].approxUsdPrice).toFixed(4);
-    const usd       = chainUsd.toFixed(6);
+    const chainUsd = 0.01;
+    const amount = (chainUsd / TOKENS["DUST"].approxUsdPrice).toFixed(4);
+    const usd = chainUsd.toFixed(6);
 
-    console.log(`[dStorage/midnight-payment] (preview) Estimated: ${amount} DUST ≈ $${usd}`);
+    console.log(
+      `[dStorage/midnight-payment] (preview) Estimated: ${amount} DUST ≈ $${usd}`,
+    );
 
     return {
-      token: 'DUST',
+      token: "DUST",
       amount,
       usd,
-      type: 'chain',
+      type: "chain",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
     };
@@ -114,7 +117,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
 
   async pay(
     quote: PaymentQuote,
-    onStatus?: (message: string) => void
+    onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     /**
      * TODO: Replace with real Midnight fee payment:
@@ -145,26 +148,28 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
      */
 
     // Preview: simulate with delays
-    onStatus?.('Requesting DUST wallet authorisation… (preview)');
+    onStatus?.("Requesting DUST wallet authorisation… (preview)");
     await delay(600);
 
-    onStatus?.('Submitting balanced transaction to Midnight… (preview)');
+    onStatus?.("Submitting balanced transaction to Midnight… (preview)");
     await delay(900);
 
-    onStatus?.('Awaiting Midnight block confirmation… (preview)');
+    onStatus?.("Awaiting Midnight block confirmation… (preview)");
     await delay(700);
 
     const txHash = `midnight_preview_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    console.log(`[dStorage/midnight-payment] (preview) Chain fee payment → txHash: ${txHash}`);
+    console.log(
+      `[dStorage/midnight-payment] (preview) Chain fee payment → txHash: ${txHash}`,
+    );
 
     return {
       txHash,
-      token:     'DUST',
-      amount:    quote.amount,
-      usd:       quote.usd,
-      type:      'chain',
+      token: "DUST",
+      amount: quote.amount,
+      usd: quote.usd,
+      type: "chain",
       simulated: true, // ← becomes false once the TODO above is wired up
-      paidAt:    Date.now(),
+      paidAt: Date.now(),
     };
   }
 }

@@ -49,23 +49,23 @@ npm run demo:midnight
 
 ## Default endpoints (`undeployed` local network)
 
-| Service      | Default URL                              |
-|--------------|------------------------------------------|
-| Node RPC     | `https://127.0.0.1:9944`                 |
-| Node WS      | `wss://127.0.0.1:9944`                   |
-| Indexer HTTP | `http://127.0.0.1:8088/api/v3/graphql`   |
-| Indexer WS   | `ws://127.0.0.1:8088/api/v3/graphql/ws`  |
-| Proof server | `http://127.0.0.1:6300`                  |
+| Service      | Default URL                             |
+| ------------ | --------------------------------------- |
+| Node RPC     | `https://127.0.0.1:9944`                |
+| Node WS      | `wss://127.0.0.1:9944`                  |
+| Indexer HTTP | `http://127.0.0.1:8088/api/v3/graphql`  |
+| Indexer WS   | `ws://127.0.0.1:8088/api/v3/graphql/ws` |
+| Proof server | `http://127.0.0.1:6300`                 |
 
 ## Default endpoints (`preprod`)
 
-| Service      | Default URL                                                          |
-|--------------|----------------------------------------------------------------------|
-| Node RPC     | `https://rpc.preprod.midnight.network`                               |
-| Node WS      | `wss://rpc.preprod.midnight.network`                                 |
-| Indexer HTTP | `https://indexer.preprod.midnight.network/api/v3/graphql`            |
-| Indexer WS   | `wss://indexer.preprod.midnight.network/api/v3/graphql/ws`           |
-| Proof server | `http://127.0.0.1:6300` (must run locally)                           |
+| Service      | Default URL                                                |
+| ------------ | ---------------------------------------------------------- |
+| Node RPC     | `https://rpc.preprod.midnight.network`                     |
+| Node WS      | `wss://rpc.preprod.midnight.network`                       |
+| Indexer HTTP | `https://indexer.preprod.midnight.network/api/v3/graphql`  |
+| Indexer WS   | `wss://indexer.preprod.midnight.network/api/v3/graphql/ws` |
+| Proof server | `http://127.0.0.1:6300` (must run locally)                 |
 
 ## Notes
 

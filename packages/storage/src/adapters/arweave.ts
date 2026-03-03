@@ -38,14 +38,18 @@
  *     the AES-GCM encryption applied by @dstorage/crypto before reaching here.
  */
 
-import type { StorageAdapter, StorageProviderName, UploadResult } from '../types.js';
+import type {
+  StorageAdapter,
+  StorageProviderName,
+  UploadResult,
+} from "../types.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
 export interface ArweaveGatewayConfig {
-  host:     string;
-  port:     number;
-  protocol: 'http' | 'https';
+  host: string;
+  port: number;
+  protocol: "http" | "https";
 }
 
 export interface ArweaveAdapterConfig {
@@ -98,34 +102,35 @@ export interface ArweaveAdapterConfig {
 // ── Defaults ───────────────────────────────────────────────────────────────────
 
 const MAINNET: ArweaveGatewayConfig = {
-  host:     'arweave.net',
-  port:     443,
-  protocol: 'https',
+  host: "arweave.net",
+  port: 443,
+  protocol: "https",
 };
 
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class ArweaveStorageAdapter implements StorageAdapter {
-  readonly name: StorageProviderName = 'arweave';
-  readonly providerName: string = 'Arweave';
+  readonly name: StorageProviderName = "arweave";
+  readonly providerName: string = "Arweave";
 
-  private readonly gateway:               ArweaveGatewayConfig;
-  private readonly walletKey:             Record<string, string> | undefined;
-  private readonly maxRetries:            number;
-  private readonly shouldWaitForConfirm:  boolean;
-  private readonly confirmationPollMs:    number;
+  private readonly gateway: ArweaveGatewayConfig;
+  private readonly walletKey: Record<string, string> | undefined;
+  private readonly maxRetries: number;
+  private readonly shouldWaitForConfirm: boolean;
+  private readonly confirmationPollMs: number;
   private readonly confirmationTimeoutMs: number;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private arweaveClient: any; // typed as `any` to avoid a hard import at module level
 
   constructor(config: ArweaveAdapterConfig = {}) {
-    this.gateway               = config.gateway               ?? MAINNET;
-    this.walletKey             = config.walletKey;
-    this.maxRetries            = config.maxRetries            ?? 3;
-    this.shouldWaitForConfirm  = config.waitForConfirmation   ?? false;
-    this.confirmationPollMs    = config.confirmationPollMs    ?? 30_000;
-    this.confirmationTimeoutMs = config.confirmationTimeoutMs ?? 20 * 60 * 1_000;
+    this.gateway = config.gateway ?? MAINNET;
+    this.walletKey = config.walletKey;
+    this.maxRetries = config.maxRetries ?? 3;
+    this.shouldWaitForConfirm = config.waitForConfirmation ?? false;
+    this.confirmationPollMs = config.confirmationPollMs ?? 30_000;
+    this.confirmationTimeoutMs =
+      config.confirmationTimeoutMs ?? 20 * 60 * 1_000;
   }
 
   // ── Private: lazy Arweave client ──────────────────────────────────────────────
@@ -136,13 +141,13 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     try {
       // Dynamic import — arweave-js is only bundled when this adapter is used.
-      const { default: Arweave } = await import('arweave');
+      const { default: Arweave } = await import("arweave");
       this.arweaveClient = Arweave.init(this.gateway);
       return this.arweaveClient;
     } catch {
       throw new Error(
-        '[dStorage/arweave] arweave package not found.\n' +
-        'Install it with: npm install arweave'
+        "[dStorage/arweave] arweave package not found.\n" +
+          "Install it with: npm install arweave",
       );
     }
   }
@@ -163,52 +168,52 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       return this.walletKey as Record<string, string>;
     }
 
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       // Node.js without walletKey.
       throw new Error(
-        '[dStorage/arweave] Node.js usage requires a JWK walletKey.\n' +
-        'Pass it in the constructor:\n' +
-        '  new ArweaveStorageAdapter({\n' +
-        '    walletKey: JSON.parse(fs.readFileSync("wallet.json", "utf8")),\n' +
-        '  })'
+        "[dStorage/arweave] Node.js usage requires a JWK walletKey.\n" +
+          "Pass it in the constructor:\n" +
+          "  new ArweaveStorageAdapter({\n" +
+          '    walletKey: JSON.parse(fs.readFileSync("wallet.json", "utf8")),\n' +
+          "  })",
       );
     }
 
     // Browser without walletKey — delegate signing to ArConnect.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof (window as any).arweaveWallet === 'undefined') {
+    if (typeof (window as any).arweaveWallet === "undefined") {
       throw new Error(
-        '[dStorage/arweave] ArConnect extension not found in the browser.\n' +
-        'Install it from https://arconnect.io and reload the page.'
+        "[dStorage/arweave] ArConnect extension not found in the browser.\n" +
+          "Install it from https://arconnect.io and reload the page.",
       );
     }
 
     // 'use_wallet' is the arweave-js sentinel for "delegate signing to ArConnect".
-    return 'use_wallet';
+    return "use_wallet";
   }
 
   // ── upload ─────────────────────────────────────────────────────────────────────
 
   async upload(
     data: string,
-    metadata: Record<string, string> = {}
+    metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const arweave = await this.getClient();
-    const wallet  = this.resolveWallet();
+    const wallet = this.resolveWallet();
 
     // Pre-flight: estimate cost so callers can surface it in the UI.
-    const bytes    = new TextEncoder().encode(data).byteLength;
+    const bytes = new TextEncoder().encode(data).byteLength;
     const winstons = await arweave.transactions.getPrice(bytes);
-    const arCost   = arweave.ar.winstonToAr(winstons) as string;
+    const arCost = arweave.ar.winstonToAr(winstons) as string;
 
     // Build the transaction — data is already encrypted by @dstorage/crypto.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tx: any = await arweave.createTransaction({ data }, wallet);
 
     // Standard dStorage tags — queryable via the Arweave GraphQL gateway.
-    tx.addTag('App-Name',    'dStorage');
-    tx.addTag('App-Version', '0.1.0');
-    tx.addTag('Content-Type','application/octet-stream');
+    tx.addTag("App-Name", "dStorage");
+    tx.addTag("App-Version", "0.1.0");
+    tx.addTag("Content-Type", "application/octet-stream");
 
     // Caller-supplied metadata (e.g. dstorage-owner, dstorage-version).
     for (const [key, value] of Object.entries(metadata)) {
@@ -222,20 +227,22 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     await this.postWithRetry(arweave, tx);
 
     const txId = tx.id as string;
-    const url  = `${this.gateway.protocol}://${this.gateway.host}/${txId}`;
+    const url = `${this.gateway.protocol}://${this.gateway.host}/${txId}`;
 
-    console.log(`[dStorage/arweave] Uploaded → txId: ${txId}  cost: ~${arCost} AR`);
+    console.log(
+      `[dStorage/arweave] Uploaded → txId: ${txId}  cost: ~${arCost} AR`,
+    );
 
     // Optional: block until the transaction is included in a block.
     if (this.shouldWaitForConfirm) {
-      console.log('[dStorage/arweave] Waiting for on-chain confirmation…');
+      console.log("[dStorage/arweave] Waiting for on-chain confirmation…");
       await this.pollUntilConfirmed(arweave, txId);
     }
 
     return {
-      id:         txId,
-      provider:   'arweave',
-      cost:       `~${arCost} AR`,
+      id: txId,
+      provider: "arweave",
+      cost: `~${arCost} AR`,
       url,
       uploadedAt: Date.now(),
     };
@@ -254,8 +261,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     if (!raw) {
       throw new Error(
         `[dStorage/arweave] No data returned for txId: ${id}\n` +
-        'The transaction may still be pending — Arweave can take a few minutes to confirm.\n' +
-        `Check status at: https://viewblock.io/arweave/tx/${id}`
+          "The transaction may still be pending — Arweave can take a few minutes to confirm.\n" +
+          `Check status at: https://viewblock.io/arweave/tx/${id}`,
       );
     }
 
@@ -266,10 +273,10 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   // ── estimateCost ───────────────────────────────────────────────────────────────
 
   async estimateCost(data: string): Promise<string> {
-    const arweave  = await this.getClient();
-    const bytes    = new TextEncoder().encode(data).byteLength;
+    const arweave = await this.getClient();
+    const bytes = new TextEncoder().encode(data).byteLength;
     const winstons = await arweave.transactions.getPrice(bytes);
-    const arCost   = arweave.ar.winstonToAr(winstons) as string;
+    const arCost = arweave.ar.winstonToAr(winstons) as string;
     return `~${arCost} AR`;
   }
 
@@ -286,8 +293,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
       lastError = new Error(
         `[dStorage/arweave] Transaction post failed ` +
-        `(attempt ${attempt}/${this.maxRetries}): ` +
-        `HTTP ${response.status} ${response.statusText ?? ''}`.trimEnd()
+          `(attempt ${attempt}/${this.maxRetries}): ` +
+          `HTTP ${response.status} ${response.statusText ?? ""}`.trimEnd(),
       );
       console.warn(lastError.message);
 
@@ -316,7 +323,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         const block = status.confirmed?.block_height as number | undefined;
         console.log(
           `[dStorage/arweave] Confirmed: ${txId}` +
-          (block !== undefined ? ` (block ${block})` : '')
+            (block !== undefined ? ` (block ${block})` : ""),
         );
         return;
       }
@@ -324,15 +331,15 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       const remaining = Math.round((deadline - Date.now()) / 1_000);
       console.log(
         `[dStorage/arweave] Still pending (HTTP ${status.status}) — ` +
-        `retrying in ${this.confirmationPollMs / 1_000}s… ` +
-        `(timeout in ${remaining}s)`
+          `retrying in ${this.confirmationPollMs / 1_000}s… ` +
+          `(timeout in ${remaining}s)`,
       );
     }
 
     throw new Error(
       `[dStorage/arweave] Confirmation timeout for txId: ${txId}.\n` +
-      'The transaction may still be processed eventually — track it at:\n' +
-      `  https://viewblock.io/arweave/tx/${txId}`
+        "The transaction may still be processed eventually — track it at:\n" +
+        `  https://viewblock.io/arweave/tx/${txId}`,
     );
   }
 }

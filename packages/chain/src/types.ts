@@ -4,7 +4,7 @@
  * Chains store only cryptographic references — never raw user data.
  */
 
-export type ChainProviderName = 'mock' | 'midnight' | 'ethereum' | 'solana';
+export type ChainProviderName = "mock" | "midnight" | "ethereum" | "solana";
 
 /** An on-chain reference record — what gets written to the smart contract. */
 export interface ChainReference {
@@ -75,11 +75,13 @@ export interface ChainAdapter {
 
   /** Return wallet addresses derived during init(). Throws if init() not yet called.
    *  Optional — only for adapters that manage wallet lifecycle. */
-  getAddresses?(): import('./adapters/midnight/src/midnight.js').WalletAddresses;
+  getAddresses?(): import("./adapters/midnight/src/midnight.js").WalletAddresses;
 
   /** Read NIGHT and DUST balances from synced wallet state.
    *  Optional — only for adapters that manage wallet lifecycle. */
-  getBalances?(): Promise<import('./adapters/midnight/src/midnight.js').WalletBalances>;
+  getBalances?(): Promise<
+    import("./adapters/midnight/src/midnight.js").WalletBalances
+  >;
 
   /** Deploy the DataRegistry contract and return the deployed contract address.
    *  Optional — only for adapters that support on-chain deployment. */

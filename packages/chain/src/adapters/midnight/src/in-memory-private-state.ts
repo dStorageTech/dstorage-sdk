@@ -7,7 +7,10 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const createInMemoryPrivateStateProvider = <PSI extends string = string, PS = unknown>() => {
+export const createInMemoryPrivateStateProvider = <
+  PSI extends string = string,
+  PS = unknown,
+>() => {
   const record = new Map<PSI, PS>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const signingKeys: Record<string, any> = {};

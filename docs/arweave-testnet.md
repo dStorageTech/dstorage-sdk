@@ -13,13 +13,13 @@ costs real AR. For development and CI you need a local sandbox instead.
 **arlocal** ([github.com/textury/arlocal](https://github.com/textury/arlocal))
 is the standard solution:
 
-| Feature | arlocal (local) | arweave.net (mainnet) |
-|---|---|---|
-| AR tokens required | ❌ — mint instantly | ✅ — must purchase |
-| Confirmation time | instant (mine on demand) | 2–20 minutes |
-| Data persists | ❌ (resets on restart) | ✅ forever |
-| Works offline | ✅ | ❌ |
-| Safe for CI | ✅ | ❌ |
+| Feature            | arlocal (local)          | arweave.net (mainnet) |
+| ------------------ | ------------------------ | --------------------- |
+| AR tokens required | ❌ — mint instantly      | ✅ — must purchase    |
+| Confirmation time  | instant (mine on demand) | 2–20 minutes          |
+| Data persists      | ❌ (resets on restart)   | ✅ forever            |
+| Works offline      | ✅                       | ❌                    |
+| Safe for CI        | ✅                       | ❌                    |
 
 ---
 
@@ -64,6 +64,7 @@ npx arlocal --persist
 ```
 
 Either way you should see (or the container starts silently in the background):
+
 ```
 arlocal started on port 1984
 ```
@@ -78,14 +79,18 @@ You need a wallet to sign transactions. Generate one programmatically — no
 registration, no account, just a fresh cryptographic key pair:
 
 ```typescript
-import Arweave from 'arweave';
+import Arweave from "arweave";
 
-const arweave   = Arweave.init({ host: 'localhost', port: 1984, protocol: 'http' });
+const arweave = Arweave.init({
+  host: "localhost",
+  port: 1984,
+  protocol: "http",
+});
 const walletKey = await arweave.wallets.generate(); // returns a JWK object
-const address   = await arweave.wallets.jwkToAddress(walletKey);
+const address = await arweave.wallets.jwkToAddress(walletKey);
 
-console.log('Wallet address:', address);
-console.log('Save walletKey to a file for reuse, or regenerate each test run.');
+console.log("Wallet address:", address);
+console.log("Save walletKey to a file for reuse, or regenerate each test run.");
 ```
 
 > ⚠️ **Never use a real Arweave wallet for local testing** — and never commit
@@ -98,7 +103,7 @@ console.log('Save walletKey to a file for reuse, or regenerate each test run.');
 arlocal exposes a `/mint` endpoint that credits any wallet instantly:
 
 ```typescript
-import { ArweaveLocalHelper } from '@dstorage/storage';
+import { ArweaveLocalHelper } from "@dstorage/storage";
 // or: import { ArweaveLocalHelper } from '@dstorage/core';
 
 const helper = new ArweaveLocalHelper(); // defaults to localhost:1984
@@ -118,6 +123,7 @@ There is no daily limit, captcha, or API key — mint as much as you need.
 ## 5. Use `ArweaveLocalStorageAdapter`
 
 `ArweaveLocalStorageAdapter` is a dedicated testnet adapter that:
+
 - Pre-configures the gateway to `localhost:1984`
 - Extends `ArweaveStorageAdapter` with an identical API
 - Exposes a `.testnet` helper for minting, mining, and balance checks
@@ -127,8 +133,8 @@ There is no daily limit, captcha, or API key — mint as much as you need.
 The `createWithTestWallet()` factory handles steps 3 and 4 for you:
 
 ```typescript
-import { ArweaveLocalStorageAdapter, MockChainAdapter } from '@dstorage/core';
-import { DStorage } from '@dstorage/core';
+import { ArweaveLocalStorageAdapter, MockChainAdapter } from "@dstorage/core";
+import { DStorage } from "@dstorage/core";
 
 // Generates a wallet, mints 10 AR, returns a ready adapter
 const { adapter, walletKey, address } =
@@ -140,24 +146,24 @@ await adapter.testnet.mintTokens(address, 5_000_000_000_000n); // +5 AR
 // Plug in exactly where you'd use ArweaveStorageAdapter
 const ds = new DStorage({
   storageAdapter: adapter,
-  chainAdapter:   new MockChainAdapter(),
+  chainAdapter: new MockChainAdapter(),
 });
 ```
 
 ### Option B — Manual config
 
 ```typescript
-import Arweave from 'arweave';
+import Arweave from "arweave";
 import {
   ArweaveLocalStorageAdapter,
   ArweaveLocalHelper,
   ARWEAVE_LOCAL,
-} from '@dstorage/core';
+} from "@dstorage/core";
 
 // 1. Generate wallet
-const arweave   = Arweave.init(ARWEAVE_LOCAL);
+const arweave = Arweave.init(ARWEAVE_LOCAL);
 const walletKey = await arweave.wallets.generate();
-const address   = await arweave.wallets.jwkToAddress(walletKey);
+const address = await arweave.wallets.jwkToAddress(walletKey);
 
 // 2. Create adapter
 const adapter = new ArweaveLocalStorageAdapter({ walletKey });
@@ -168,7 +174,7 @@ await adapter.testnet.mintTokens(address, 10_000_000_000_000n); // 10 AR
 // 4. Use it
 const ds = new DStorage({
   storageAdapter: adapter,
-  chainAdapter:   new MockChainAdapter(),
+  chainAdapter: new MockChainAdapter(),
 });
 ```
 
@@ -179,14 +185,14 @@ const ds = new DStorage({
 The API is identical to the mainnet adapter:
 
 ```typescript
-import { connectDemoWallet } from '@dstorage/core';
+import { connectDemoWallet } from "@dstorage/core";
 
-const walletInfo = await connectDemoWallet('0xTestUser');
+const walletInfo = await connectDemoWallet("0xTestUser");
 await ds.connect(walletInfo);
 
 // Upload — sends an Arweave tx to arlocal (no real AR spent)
-const { id } = await ds.upload('My private test data');
-console.log('TX ID:', id);
+const { id } = await ds.upload("My private test data");
+console.log("TX ID:", id);
 // → [dStorage/arweave-local] ⚠️  Testnet upload — data is NOT on the real Arweave network.
 // → [dStorage/arweave-local] Mine a block to confirm: adapter.testnet.mine()
 
@@ -221,8 +227,8 @@ console.log(status.status); // 200
 // Or use waitForConfirmation with a short poll interval:
 const confirmingAdapter = new ArweaveLocalStorageAdapter({
   walletKey,
-  waitForConfirmation:   true,
-  confirmationPollMs:    200,  // poll every 200ms
+  waitForConfirmation: true,
+  confirmationPollMs: 200, // poll every 200ms
   confirmationTimeoutMs: 5_000,
 });
 // In parallel, mine a block so polling finds it confirmed:
@@ -235,7 +241,7 @@ const result = await confirmingAdapter.upload(data);
 ## 8. Custom gateway port
 
 ```typescript
-import { ArweaveLocalStorageAdapter, arlocalGateway } from '@dstorage/core';
+import { ArweaveLocalStorageAdapter, arlocalGateway } from "@dstorage/core";
 
 // arlocal running on port 1985
 const adapter = new ArweaveLocalStorageAdapter({
@@ -256,9 +262,9 @@ const helper = new ArweaveLocalHelper();
 
 if (!(await helper.isRunning())) {
   console.warn(
-    '⚠️  arlocal is not running.\n' +
-    '  Docker (recommended): docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal\n' +
-    '  npx:                  npx arlocal'
+    "⚠️  arlocal is not running.\n" +
+      "  Docker (recommended): docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal\n" +
+      "  npx:                  npx arlocal",
   );
   process.exit(1);
 }
@@ -306,35 +312,35 @@ jobs:
 Alternatively, via `npx` (no Docker required):
 
 ```yaml
-      - name: Start arlocal
-        run: npx arlocal &
-      - run: sleep 2   # give it a moment to boot
+- name: Start arlocal
+  run: npx arlocal &
+- run: sleep 2 # give it a moment to boot
 ```
 
 ### Or use vitest globalSetup
 
 ```typescript
 // vitest.config.ts
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    globalSetup: './test/setup-arlocal.ts',
+    globalSetup: "./test/setup-arlocal.ts",
   },
 });
 ```
 
 ```typescript
 // test/setup-arlocal.ts
-import { ArweaveLocalHelper } from '@dstorage/storage';
+import { ArweaveLocalHelper } from "@dstorage/storage";
 
 export async function setup() {
   const helper = new ArweaveLocalHelper();
   if (!(await helper.isRunning())) {
     throw new Error(
-      'arlocal must be running before tests.\n' +
-      '  Docker: docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal\n' +
-      '  npx:    npx arlocal'
+      "arlocal must be running before tests.\n" +
+        "  Docker: docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal\n" +
+        "  npx:    npx arlocal",
     );
   }
 }
@@ -348,10 +354,10 @@ One line change:
 
 ```typescript
 // Testnet (local arlocal)
-storageAdapter: new ArweaveLocalStorageAdapter({ walletKey: testJwk })
+storageAdapter: new ArweaveLocalStorageAdapter({ walletKey: testJwk });
 
 // Mainnet (real Arweave — needs real AR tokens)
-storageAdapter: new ArweaveStorageAdapter({ walletKey: realJwk })
+storageAdapter: new ArweaveStorageAdapter({ walletKey: realJwk });
 ```
 
 Everything else — `DStorage`, `ds.upload()`, `ds.retrieve()`, `ds.grant()` —
@@ -365,42 +371,42 @@ stays identical.
 
 Extends `ArweaveStorageAdapter`. Same upload / retrieve / estimateCost API.
 
-| Config | Type | Default | Description |
-|---|---|---|---|
-| `walletKey` | `Record<string,string>` | — | JWK wallet key for signing |
-| `gateway` | `ArweaveGatewayConfig` | `ARWEAVE_LOCAL` | Override arlocal host/port |
-| `maxRetries` | `number` | `3` | Retries on failed tx post |
-| `waitForConfirmation` | `boolean` | `false` | Block until tx confirmed |
-| `confirmationPollMs` | `number` | `30_000` | Polling interval (ms) |
-| `confirmationTimeoutMs` | `number` | `1_200_000` | Confirmation timeout (ms) |
+| Config                  | Type                    | Default         | Description                |
+| ----------------------- | ----------------------- | --------------- | -------------------------- |
+| `walletKey`             | `Record<string,string>` | —               | JWK wallet key for signing |
+| `gateway`               | `ArweaveGatewayConfig`  | `ARWEAVE_LOCAL` | Override arlocal host/port |
+| `maxRetries`            | `number`                | `3`             | Retries on failed tx post  |
+| `waitForConfirmation`   | `boolean`               | `false`         | Block until tx confirmed   |
+| `confirmationPollMs`    | `number`                | `30_000`        | Polling interval (ms)      |
+| `confirmationTimeoutMs` | `number`                | `1_200_000`     | Confirmation timeout (ms)  |
 
 **Static factory:**
 
 ```typescript
 const { adapter, walletKey, address } =
   await ArweaveLocalStorageAdapter.createWithTestWallet({
-    fundAr:  10,          // AR to mint into the wallet
+    fundAr: 10, // AR to mint into the wallet
     gateway: ARWEAVE_LOCAL, // override arlocal URL
   });
 ```
 
 ### `ArweaveLocalHelper`
 
-| Method | Returns | Description |
-|---|---|---|
-| `mintTokens(address, winstons?)` | `Promise<void>` | Credit a wallet. Default: 1 AR |
-| `mine(blocks?)` | `Promise<void>` | Fast-forward `n` blocks. Default: 1 |
-| `getBalance(address)` | `Promise<{ ar, winstons }>` | Query wallet balance |
-| `getInfo()` | `Promise<ArweaveLocalInfo>` | Node info (height, network, …) |
-| `isRunning()` | `Promise<boolean>` | Check if arlocal is reachable |
-| `reset()` | `Promise<void>` | Wipe all transactions |
+| Method                           | Returns                     | Description                         |
+| -------------------------------- | --------------------------- | ----------------------------------- |
+| `mintTokens(address, winstons?)` | `Promise<void>`             | Credit a wallet. Default: 1 AR      |
+| `mine(blocks?)`                  | `Promise<void>`             | Fast-forward `n` blocks. Default: 1 |
+| `getBalance(address)`            | `Promise<{ ar, winstons }>` | Query wallet balance                |
+| `getInfo()`                      | `Promise<ArweaveLocalInfo>` | Node info (height, network, …)      |
+| `isRunning()`                    | `Promise<boolean>`          | Check if arlocal is reachable       |
+| `reset()`                        | `Promise<void>`             | Wipe all transactions               |
 
 ### Gateway presets
 
 ```typescript
-import { ARWEAVE_MAINNET, ARWEAVE_LOCAL, arlocalGateway } from '@dstorage/core';
+import { ARWEAVE_MAINNET, ARWEAVE_LOCAL, arlocalGateway } from "@dstorage/core";
 
-ARWEAVE_MAINNET  // { host: 'arweave.net',  port: 443,  protocol: 'https' }
-ARWEAVE_LOCAL    // { host: 'localhost',     port: 1984, protocol: 'http'  }
-arlocalGateway(1985) // { host: 'localhost', port: 1985, protocol: 'http'  }
+ARWEAVE_MAINNET; // { host: 'arweave.net',  port: 443,  protocol: 'https' }
+ARWEAVE_LOCAL; // { host: 'localhost',     port: 1984, protocol: 'http'  }
+arlocalGateway(1985); // { host: 'localhost', port: 1985, protocol: 'http'  }
 ```

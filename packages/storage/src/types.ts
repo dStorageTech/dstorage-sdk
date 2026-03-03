@@ -5,7 +5,7 @@
  */
 
 /** Identifies which storage network an adapter represents. */
-export type StorageProviderName = 'mock' | 'arweave' | 'autonomi';
+export type StorageProviderName = "mock" | "arweave" | "autonomi";
 
 /** Metadata returned after a successful upload. */
 export interface UploadResult {
@@ -31,7 +31,10 @@ export interface StorageAdapter {
    * The data passed here is already encrypted — the adapter never sees plaintext.
    * @returns UploadResult containing the content ID needed to retrieve later
    */
-  upload(data: string, metadata?: Record<string, string>): Promise<UploadResult>;
+  upload(
+    data: string,
+    metadata?: Record<string, string>,
+  ): Promise<UploadResult>;
 
   /**
    * Retrieve raw bytes by the content ID returned from upload().

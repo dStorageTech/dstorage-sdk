@@ -38,9 +38,9 @@
  *   ArweaveLocalError          — typed error thrown by helper methods
  */
 
-import { ArweaveStorageAdapter } from './arweave.js';
-import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from './arweave.js';
-import type { StorageProviderName, UploadResult } from '../types.js';
+import { ArweaveStorageAdapter } from "./arweave.js";
+import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from "./arweave.js";
+import type { StorageProviderName, UploadResult } from "../types.js";
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 
@@ -51,9 +51,9 @@ import type { StorageProviderName, UploadResult } from '../types.js';
  * new ArweaveStorageAdapter({ gateway: ARWEAVE_MAINNET })
  */
 export const ARWEAVE_MAINNET: ArweaveGatewayConfig = {
-  host:     'arweave.net',
-  port:     443,
-  protocol: 'https',
+  host: "arweave.net",
+  port: 443,
+  protocol: "https",
 };
 
 /**
@@ -65,9 +65,9 @@ export const ARWEAVE_MAINNET: ArweaveGatewayConfig = {
  * new ArweaveLocalStorageAdapter({ walletKey: testJwk })
  */
 export const ARWEAVE_LOCAL: ArweaveGatewayConfig = {
-  host:     'localhost',
-  port:     1984,
-  protocol: 'http',
+  host: "localhost",
+  port: 1984,
+  protocol: "http",
 };
 
 /**
@@ -78,7 +78,7 @@ export const ARWEAVE_LOCAL: ArweaveGatewayConfig = {
  * new ArweaveLocalStorageAdapter({ gateway: gw, walletKey: testJwk })
  */
 export function arlocalGateway(port = 1984): ArweaveGatewayConfig {
-  return { host: 'localhost', port, protocol: 'http' };
+  return { host: "localhost", port, protocol: "http" };
 }
 
 // ── ArweaveLocalHelper ────────────────────────────────────────────────────────
@@ -89,13 +89,13 @@ export interface ArweaveLocalHelperConfig {
 }
 
 export interface ArweaveLocalInfo {
-  network:            string;
-  version:            number;
-  release:            number;
-  height:             number;
-  current:            string;
-  peers:              number;
-  queue_length:       number;
+  network: string;
+  version: number;
+  release: number;
+  height: number;
+  current: string;
+  peers: number;
+  queue_length: number;
   node_state_latency: number;
 }
 
@@ -103,7 +103,7 @@ export interface ArweaveLocalBalance {
   /** Raw balance in Winstons (1 AR = 1_000_000_000_000 Winstons). */
   winstons: string;
   /** Human-readable balance, e.g. "5" for 5 AR. */
-  ar:       string;
+  ar: string;
 }
 
 /**
@@ -122,7 +122,7 @@ export class ArweaveLocalHelper {
   private readonly baseUrl: string;
 
   constructor(config: ArweaveLocalHelperConfig = {}) {
-    this.baseUrl = (config.url ?? 'http://localhost:1984').replace(/\/$/, '');
+    this.baseUrl = (config.url ?? "http://localhost:1984").replace(/\/$/, "");
   }
 
   /**
@@ -135,13 +135,19 @@ export class ArweaveLocalHelper {
    * await helper.mintTokens(address, 5_000_000_000_000n); // 5 AR
    */
   async mintTokens(
-    address:  string,
+    address: string,
     winstons: bigint | number = 1_000_000_000_000n,
   ): Promise<void> {
-    const amount = typeof winstons === 'bigint' ? winstons.toString() : String(winstons);
-    const res    = await this.get(`/mint/${encodeURIComponent(address)}/${amount}`);
+    const amount =
+      typeof winstons === "bigint" ? winstons.toString() : String(winstons);
+    const res = await this.get(
+      `/mint/${encodeURIComponent(address)}/${amount}`,
+    );
     if (!res.ok) {
-      throw new ArweaveLocalError(`mint failed for ${address}: HTTP ${res.status} ${await res.text()}`, res.status);
+      throw new ArweaveLocalError(
+        `mint failed for ${address}: HTTP ${res.status} ${await res.text()}`,
+        res.status,
+      );
     }
   }
 
@@ -158,9 +164,12 @@ export class ArweaveLocalHelper {
    */
   async mine(blocks = 1): Promise<void> {
     for (let i = 0; i < blocks; i++) {
-      const res = await this.get('/mine');
+      const res = await this.get("/mine");
       if (!res.ok) {
-        throw new ArweaveLocalError(`mine failed: HTTP ${res.status} ${await res.text()}`, res.status);
+        throw new ArweaveLocalError(
+          `mine failed: HTTP ${res.status} ${await res.text()}`,
+          res.status,
+        );
       }
     }
   }
@@ -173,12 +182,17 @@ export class ArweaveLocalHelper {
    * console.log(`Balance: ${ar} AR (${winstons} winstons)`);
    */
   async getBalance(address: string): Promise<ArweaveLocalBalance> {
-    const res = await this.get(`/wallet/${encodeURIComponent(address)}/balance`);
+    const res = await this.get(
+      `/wallet/${encodeURIComponent(address)}/balance`,
+    );
     if (!res.ok) {
-      throw new ArweaveLocalError(`getBalance failed for ${address}: HTTP ${res.status}`, res.status);
+      throw new ArweaveLocalError(
+        `getBalance failed for ${address}: HTTP ${res.status}`,
+        res.status,
+      );
     }
     const winstons = (await res.text()).trim();
-    const ar       = (BigInt(winstons) / 1_000_000_000_000n).toString();
+    const ar = (BigInt(winstons) / 1_000_000_000_000n).toString();
     return { winstons, ar };
   }
 
@@ -187,9 +201,12 @@ export class ArweaveLocalHelper {
    * Useful for confirming the server is reachable before running tests.
    */
   async getInfo(): Promise<ArweaveLocalInfo> {
-    const res = await this.get('/info');
+    const res = await this.get("/info");
     if (!res.ok) {
-      throw new ArweaveLocalError(`getInfo failed: HTTP ${res.status}`, res.status);
+      throw new ArweaveLocalError(
+        `getInfo failed: HTTP ${res.status}`,
+        res.status,
+      );
     }
     return res.json() as Promise<ArweaveLocalInfo>;
   }
@@ -209,7 +226,9 @@ export class ArweaveLocalHelper {
    */
   async isRunning(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/info`, { signal: AbortSignal.timeout(2_000) });
+      const res = await fetch(`${this.baseUrl}/info`, {
+        signal: AbortSignal.timeout(2_000),
+      });
       return res.ok;
     } catch {
       return false;
@@ -221,9 +240,12 @@ export class ArweaveLocalHelper {
    * Only available when arlocal is started with persistence disabled (the default).
    */
   async reset(): Promise<void> {
-    const res = await this.get('/reset');
+    const res = await this.get("/reset");
     if (!res.ok) {
-      throw new ArweaveLocalError(`reset failed: HTTP ${res.status}`, res.status);
+      throw new ArweaveLocalError(
+        `reset failed: HTTP ${res.status}`,
+        res.status,
+      );
     }
   }
 
@@ -234,7 +256,10 @@ export class ArweaveLocalHelper {
 
 // ── ArweaveLocalStorageAdapter ────────────────────────────────────────────────
 
-export interface ArweaveLocalAdapterConfig extends Omit<ArweaveAdapterConfig, 'gateway'> {
+export interface ArweaveLocalAdapterConfig extends Omit<
+  ArweaveAdapterConfig,
+  "gateway"
+> {
   /**
    * Override the arlocal gateway (host/port).
    * Defaults to localhost:1984.
@@ -283,8 +308,8 @@ export interface ArweaveLocalAdapterConfig extends Omit<ArweaveAdapterConfig, 'g
  *   storageAdapter: new ArweaveStorageAdapter({ walletKey: realJwk })
  */
 export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
-  override readonly name: StorageProviderName = 'arweave';
-  override readonly providerName: string = 'Arweave-Local';
+  override readonly name: StorageProviderName = "arweave";
+  override readonly providerName: string = "Arweave-Local";
 
   /** Access arlocal control methods: mint, mine, balance, reset. */
   readonly testnet: ArweaveLocalHelper;
@@ -294,7 +319,9 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     super({ ...config, gateway });
 
     const { protocol, host, port } = gateway;
-    this.testnet = new ArweaveLocalHelper({ url: `${protocol}://${host}:${port}` });
+    this.testnet = new ArweaveLocalHelper({
+      url: `${protocol}://${host}:${port}`,
+    });
   }
 
   /**
@@ -313,34 +340,41 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
    * // Then use adapter in your DStorage instance:
    * const ds = new DStorage({ storageAdapter: adapter, chainAdapter: new MockChainAdapter() });
    */
-  static async createWithTestWallet(options: {
-    fundAr?:  number;
-    gateway?: ArweaveGatewayConfig;
-  } = {}): Promise<{
-    adapter:   ArweaveLocalStorageAdapter;
+  static async createWithTestWallet(
+    options: {
+      fundAr?: number;
+      gateway?: ArweaveGatewayConfig;
+    } = {},
+  ): Promise<{
+    adapter: ArweaveLocalStorageAdapter;
     walletKey: Record<string, string>;
-    address:   string;
+    address: string;
   }> {
     const gateway = options.gateway ?? ARWEAVE_LOCAL;
-    const fundAr  = options.fundAr  ?? 10;
+    const fundAr = options.fundAr ?? 10;
 
     // Dynamically import arweave-js to generate a wallet without a hard dep.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let arweaveModule: any;
     try {
-      const mod    = await import('arweave');
+      const mod = await import("arweave");
       arweaveModule = mod.default;
     } catch {
       throw new Error(
-        '[dStorage/arweave-local] arweave package not found.\n' +
-        'Install it with: npm install arweave'
+        "[dStorage/arweave-local] arweave package not found.\n" +
+          "Install it with: npm install arweave",
       );
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const arweave   = arweaveModule.init(gateway) as { wallets: { generate: () => Promise<Record<string, string>>; jwkToAddress: (jwk: Record<string, string>) => Promise<string> } };
+    const arweave = arweaveModule.init(gateway) as {
+      wallets: {
+        generate: () => Promise<Record<string, string>>;
+        jwkToAddress: (jwk: Record<string, string>) => Promise<string>;
+      };
+    };
     const walletKey = await arweave.wallets.generate();
-    const address   = await arweave.wallets.jwkToAddress(walletKey);
+    const address = await arweave.wallets.jwkToAddress(walletKey);
 
     const adapter = new ArweaveLocalStorageAdapter({ walletKey, gateway });
     const winstons = BigInt(fundAr) * 1_000_000_000_000n;
@@ -352,12 +386,16 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   // ── Overridden upload: log testnet context ──────────────────────────────────
 
   override async upload(
-    data:     string,
+    data: string,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const result = await super.upload(data, metadata);
-    console.log('[dStorage/arweave-local] ⚠️  Testnet upload — data is NOT on the real Arweave network.');
-    console.log(`[dStorage/arweave-local] Mine a block to confirm: adapter.testnet.mine()`);
+    console.log(
+      "[dStorage/arweave-local] ⚠️  Testnet upload — data is NOT on the real Arweave network.",
+    );
+    console.log(
+      `[dStorage/arweave-local] Mine a block to confirm: adapter.testnet.mine()`,
+    );
     return result;
   }
 }
@@ -369,7 +407,7 @@ export class ArweaveLocalError extends Error {
 
   constructor(message: string, statusCode: number) {
     super(`[dStorage/arweave-local] ${message}`);
-    this.name       = 'ArweaveLocalError';
+    this.name = "ArweaveLocalError";
     this.statusCode = statusCode;
   }
 }

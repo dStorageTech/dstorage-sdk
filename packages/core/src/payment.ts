@@ -14,10 +14,10 @@
  */
 
 // Re-export token primitives from @dstorage/payment for backward compatibility
-export type { TokenSymbol, Token, PaymentReceipt } from '@dstorage/payment';
-export { TOKENS } from '@dstorage/payment';
+export type { TokenSymbol, Token, PaymentReceipt } from "@dstorage/payment";
+export { TOKENS } from "@dstorage/payment";
 
-import type { PaymentQuote, TokenSymbol } from '@dstorage/payment';
+import type { PaymentQuote, TokenSymbol } from "@dstorage/payment";
 
 // ── CostEstimate ──────────────────────────────────────────────────────────────
 
@@ -52,12 +52,13 @@ export interface CostEstimate {
 export function buildCostEstimate(
   storageQuote: PaymentQuote,
   chainQuote: PaymentQuote,
-  fileSizeBytes: number
+  fileSizeBytes: number,
 ): CostEstimate {
-  const fileSizeMB      = fileSizeBytes / (1024 * 1024);
-  const fileSizeDisplay = fileSizeMB < 1
-    ? `${(fileSizeBytes / 1024).toFixed(1)} KB`
-    : `${fileSizeMB.toFixed(2)} MB`;
+  const fileSizeMB = fileSizeBytes / (1024 * 1024);
+  const fileSizeDisplay =
+    fileSizeMB < 1
+      ? `${(fileSizeBytes / 1024).toFixed(1)} KB`
+      : `${fileSizeMB.toFixed(2)} MB`;
 
   const totalUsd = (
     parseFloat(storageQuote.usd) + parseFloat(chainQuote.usd)
@@ -66,13 +67,13 @@ export function buildCostEstimate(
   return {
     storageCost: {
       amount: storageQuote.amount,
-      token:  storageQuote.token,
-      usd:    storageQuote.usd,
+      token: storageQuote.token,
+      usd: storageQuote.usd,
     },
     chainCost: {
       amount: chainQuote.amount,
-      token:  chainQuote.token,
-      usd:    chainQuote.usd,
+      token: chainQuote.token,
+      usd: chainQuote.usd,
     },
     totalUsd,
     fileSizeBytes,
@@ -89,9 +90,12 @@ export function buildCostEstimate(
  */
 export function defaultStorageToken(storageProvider: string): TokenSymbol {
   switch (storageProvider) {
-    case 'arweave':  return 'AR';
-    case 'autonomi': return 'ANT';
-    default:         return 'MOCK';
+    case "arweave":
+      return "AR";
+    case "autonomi":
+      return "ANT";
+    default:
+      return "MOCK";
   }
 }
 
@@ -102,9 +106,13 @@ export function defaultStorageToken(storageProvider: string): TokenSymbol {
  */
 export function defaultChainToken(chainProvider: string): TokenSymbol {
   switch (chainProvider) {
-    case 'midnight': return 'DUST';
-    case 'ethereum': return 'ETH';
-    case 'polygon':  return 'MATIC';
-    default:         return 'MOCK';
+    case "midnight":
+      return "DUST";
+    case "ethereum":
+      return "ETH";
+    case "polygon":
+      return "MATIC";
+    default:
+      return "MOCK";
   }
 }

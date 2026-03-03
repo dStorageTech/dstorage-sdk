@@ -54,8 +54,6 @@
       }
     }
   ],
-  "witnesses": [
-  ],
-  "contracts": [
-  ]
+  "witnesses": [],
+  "contracts": []
 }

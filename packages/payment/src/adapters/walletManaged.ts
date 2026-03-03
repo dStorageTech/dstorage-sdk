@@ -19,7 +19,7 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
-} from '../types.js';
+} from "../types.js";
 
 export interface WalletManagedPaymentAdapterConfig {
   /** Token symbol for display purposes. Default: 'DUST'. */
@@ -27,21 +27,21 @@ export interface WalletManagedPaymentAdapterConfig {
 }
 
 export class WalletManagedPaymentAdapter implements PaymentAdapter {
-  readonly name: PaymentProviderName  = 'midnight';
+  readonly name: PaymentProviderName = "midnight";
   readonly token: TokenSymbol;
-  readonly type: 'storage' | 'chain'  = 'chain';
+  readonly type: "storage" | "chain" = "chain";
 
   constructor(config: WalletManagedPaymentAdapterConfig = {}) {
-    this.token = config.token ?? 'DUST';
+    this.token = config.token ?? "DUST";
   }
 
   async estimateCost(dataSizeBytes: number): Promise<PaymentQuote> {
     void dataSizeBytes;
     return {
       token: this.token,
-      amount: '0',
-      usd: '0.00',
-      type: 'chain',
+      amount: "0",
+      usd: "0.00",
+      type: "chain",
       dataSizeBytes,
       expiresAt: Date.now() + 300_000,
     };
@@ -49,16 +49,18 @@ export class WalletManagedPaymentAdapter implements PaymentAdapter {
 
   async pay(
     quote: PaymentQuote,
-    onStatus?: (message: string) => void
+    onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
-    onStatus?.('Chain fees will be handled by wallet during transaction balancing');
+    onStatus?.(
+      "Chain fees will be handled by wallet during transaction balancing",
+    );
 
     return {
-      txHash: 'wallet-managed',
+      txHash: "wallet-managed",
       token: this.token,
       amount: quote.amount,
       usd: quote.usd,
-      type: 'chain',
+      type: "chain",
       simulated: false,
       paidAt: Date.now(),
     };

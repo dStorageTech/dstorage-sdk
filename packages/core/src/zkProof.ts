@@ -31,32 +31,36 @@ export interface ZkClaim {
 /** Available claims for insurance records */
 export const INSURANCE_CLAIMS: ZkClaim[] = [
   {
-    id: 'active_coverage',
-    label: 'Has Active Coverage',
-    description: 'Proves insurance policy is currently active without revealing policy number, provider, or personal details',
-    recordField: 'policy_status',
-    exampleValue: 'ACTIVE',
+    id: "active_coverage",
+    label: "Has Active Coverage",
+    description:
+      "Proves insurance policy is currently active without revealing policy number, provider, or personal details",
+    recordField: "policy_status",
+    exampleValue: "ACTIVE",
   },
   {
-    id: 'coverage_type_inpatient',
-    label: 'Inpatient Coverage Included',
-    description: 'Proves the policy includes inpatient hospital coverage without revealing coverage limits or premium',
-    recordField: 'coverage_types',
-    exampleValue: 'inpatient, outpatient, specialist',
+    id: "coverage_type_inpatient",
+    label: "Inpatient Coverage Included",
+    description:
+      "Proves the policy includes inpatient hospital coverage without revealing coverage limits or premium",
+    recordField: "coverage_types",
+    exampleValue: "inpatient, outpatient, specialist",
   },
   {
-    id: 'no_prior_auth_required',
-    label: 'No Prior Auth Required',
-    description: 'Proves prior authorisation is not required for standard procedures',
-    recordField: 'prior_auth_required',
-    exampleValue: 'false',
+    id: "no_prior_auth_required",
+    label: "No Prior Auth Required",
+    description:
+      "Proves prior authorisation is not required for standard procedures",
+    recordField: "prior_auth_required",
+    exampleValue: "false",
   },
   {
-    id: 'deductible_met',
-    label: 'Annual Deductible Met',
-    description: 'Proves the annual deductible has been met without revealing the deductible amount or YTD spending',
-    recordField: 'deductible_met',
-    exampleValue: 'true',
+    id: "deductible_met",
+    label: "Annual Deductible Met",
+    description:
+      "Proves the annual deductible has been met without revealing the deductible amount or YTD spending",
+    recordField: "deductible_met",
+    exampleValue: "true",
   },
 ];
 
@@ -86,11 +90,11 @@ export interface ZkProofResult {
   /** Whether the claim evaluates to true */
   proofValid: boolean;
   /** The proof was generated without revealing the underlying record */
-  privacyGuarantee: 'data_never_revealed';
+  privacyGuarantee: "data_never_revealed";
 }
 
 export interface ZkProofProgress {
-  phase: 'reading' | 'witness' | 'proving' | 'committing' | 'done' | 'error';
+  phase: "reading" | "witness" | "proving" | "committing" | "done" | "error";
   label: string;
   detail?: string;
 }
@@ -113,40 +117,59 @@ export async function simulateZkProof(
   claim: ZkClaim,
   sourceRefId: string,
   chain: string,
-  onProgress: (p: ZkProofProgress) => void
+  onProgress: (p: ZkProofProgress) => void,
 ): Promise<ZkProofResult> {
-
-  onProgress({ phase: 'reading', label: 'Reading encrypted record…', detail: 'Decrypting locally — data stays on device' });
+  onProgress({
+    phase: "reading",
+    label: "Reading encrypted record…",
+    detail: "Decrypting locally — data stays on device",
+  });
   await sleep(700);
 
-  onProgress({ phase: 'witness', label: 'Generating witness…', detail: `Extracting field: ${claim.recordField}` });
+  onProgress({
+    phase: "witness",
+    label: "Generating witness…",
+    detail: `Extracting field: ${claim.recordField}`,
+  });
   await sleep(900);
 
-  onProgress({ phase: 'proving', label: 'Running ZK proving circuit…', detail: 'Midnight Compact: proveInsuranceEligibility()' });
+  onProgress({
+    phase: "proving",
+    label: "Running ZK proving circuit…",
+    detail: "Midnight Compact: proveInsuranceEligibility()",
+  });
   await sleep(1200);
 
-  onProgress({ phase: 'committing', label: 'Committing proof on-chain…', detail: 'Writing commitment + nullifier to Midnight' });
+  onProgress({
+    phase: "committing",
+    label: "Committing proof on-chain…",
+    detail: "Writing commitment + nullifier to Midnight",
+  });
   await sleep(600);
 
   const now = Date.now();
   const proof: ZkProofResult = {
     claim,
     commitment: `0x${randomHex(64)}`,
-    nullifier:  `0x${randomHex(64)}`,
+    nullifier: `0x${randomHex(64)}`,
     publicInputs: {
-      claimId:      claim.id,
-      claimLabel:   claim.label,
+      claimId: claim.id,
+      claimLabel: claim.label,
       sourceRefId,
       chain,
-      generatedAt:  now,
-      expiresAt:    now + 24 * 60 * 60 * 1000,
+      generatedAt: now,
+      expiresAt: now + 24 * 60 * 60 * 1000,
     },
     verificationKey: `vk_${randomHex(32)}`,
     proofValid: true,
-    privacyGuarantee: 'data_never_revealed',
+    privacyGuarantee: "data_never_revealed",
   };
 
-  onProgress({ phase: 'done', label: 'Proof generated', detail: `Commitment: ${proof.commitment.slice(0, 18)}…` });
+  onProgress({
+    phase: "done",
+    label: "Proof generated",
+    detail: `Commitment: ${proof.commitment.slice(0, 18)}…`,
+  });
 
   return proof;
 }
@@ -155,10 +178,10 @@ export async function simulateZkProof(
 
 function randomHex(len: number): string {
   return Array.from({ length: len }, () =>
-    Math.floor(Math.random() * 16).toString(16)
-  ).join('');
+    Math.floor(Math.random() * 16).toString(16),
+  ).join("");
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms));
+  return new Promise((r) => setTimeout(r, ms));
 }

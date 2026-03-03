@@ -24,17 +24,17 @@ import type {
   ChainReference,
   ChainWriteResult,
   CircuitCallResult,
-} from '../types.js';
-import { MockProofServer } from '../mockProofServer.js';
+} from "../types.js";
+import { MockProofServer } from "../mockProofServer.js";
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
-const refs        = new Map<string, ChainReference>();
+const refs = new Map<string, ChainReference>();
 const permissions = new Map<string, Set<string>>();
 
 function generateRefId(): string {
   const id =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `ref_${id}`;
@@ -59,7 +59,7 @@ function load<T>(key: string): T | null {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Simulated block height counter (monotonically increases) */
@@ -68,44 +68,56 @@ let mockBlockHeight = 1_000_000 + Math.floor(Math.random() * 10_000);
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MockMidnightChainAdapter implements ChainAdapter {
-  readonly name: ChainProviderName = 'midnight';
-  readonly providerName: string = 'Midnight-Mock';
+  readonly name: ChainProviderName = "midnight";
+  readonly providerName: string = "Midnight-Mock";
 
   private readonly proofServer: MockProofServer;
 
-  constructor(options: {
-    proofServerMinMs?: number;
-    proofServerMaxMs?: number;
-    /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
-    compiledContract?: unknown;
-    /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
-    contractAddress?: string;
-  } = {}) {
+  constructor(
+    options: {
+      proofServerMinMs?: number;
+      proofServerMaxMs?: number;
+      /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
+      compiledContract?: unknown;
+      /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
+      contractAddress?: string;
+    } = {},
+  ) {
     this.proofServer = new MockProofServer({
-      ...(options.proofServerMinMs !== undefined ? { minMs: options.proofServerMinMs } : {}),
-      ...(options.proofServerMaxMs !== undefined ? { maxMs: options.proofServerMaxMs } : {}),
+      ...(options.proofServerMinMs !== undefined
+        ? { minMs: options.proofServerMinMs }
+        : {}),
+      ...(options.proofServerMaxMs !== undefined
+        ? { maxMs: options.proofServerMaxMs }
+        : {}),
     });
 
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
-    const savedRefs = load<Record<string, ChainReference>>('dstorage:midnight:refs');
+    const savedRefs = load<Record<string, ChainReference>>(
+      "dstorage:midnight:refs",
+    );
     if (savedRefs) {
       for (const [k, v] of Object.entries(savedRefs)) refs.set(k, v);
     }
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
-    console.log('[dStorage/mock-midnight] writeReference → calling proof server…');
+    console.log(
+      "[dStorage/mock-midnight] writeReference → calling proof server…",
+    );
 
     // Step 1: Generate ZK proof via mock proof server
-    await this.proofServer.generateProof('storeReference', {
-      storageId:       ref.storageId,
+    await this.proofServer.generateProof("storeReference", {
+      storageId: ref.storageId,
       storageProvider: ref.storageProvider,
-      owner:           ref.owner,
+      owner: ref.owner,
     });
 
     // Step 2: Simulate submitting the balanced transaction to the Midnight node
     const blockInclusionMs = 150 + Math.random() * 250;
-    console.log('[dStorage/mock-midnight] Submitting balanced tx to Midnight node…');
+    console.log(
+      "[dStorage/mock-midnight] Submitting balanced tx to Midnight node…",
+    );
     await sleep(blockInclusionMs);
 
     mockBlockHeight += 1;
@@ -114,19 +126,26 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     refs.set(refId, entry);
 
     // Persist to localStorage
-    persist('dstorage:midnight:refs', Object.fromEntries(refs));
+    persist("dstorage:midnight:refs", Object.fromEntries(refs));
 
     console.log(
-      `[dStorage/mock-midnight] Reference written at block ${mockBlockHeight} → refId: ${refId}`
+      `[dStorage/mock-midnight] Reference written at block ${mockBlockHeight} → refId: ${refId}`,
     );
 
-    return { refId, provider: 'midnight', blockHeight: mockBlockHeight, writtenAt: Date.now() };
+    return {
+      refId,
+      provider: "midnight",
+      blockHeight: mockBlockHeight,
+      writtenAt: Date.now(),
+    };
   }
 
   async readReference(refId: string): Promise<ChainReference> {
     const ref = refs.get(refId);
     if (!ref) {
-      throw new Error(`[dStorage/mock-midnight] No reference found for refId: ${refId}`);
+      throw new Error(
+        `[dStorage/mock-midnight] No reference found for refId: ${refId}`,
+      );
     }
     return ref;
   }
@@ -136,7 +155,9 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return [...refs.entries()].map(([refId, ref]) => ({ refId, ref }));
   }
 
-  async listReferences(): Promise<Array<{ refId: string; ref: ChainReference }>> {
+  async listReferences(): Promise<
+    Array<{ refId: string; ref: ChainReference }>
+  > {
     return this.getAllReferences();
   }
 
@@ -147,11 +168,11 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   }
 
   getContractAddress(): string {
-    return 'mock-midnight-contract-address';
+    return "mock-midnight-contract-address";
   }
 
   async deployDataRegistry(): Promise<string> {
-    await this.proofServer.generateProof('constructor', {});
+    await this.proofServer.generateProof("constructor", {});
     await sleep(150 + Math.random() * 100);
     const addr = `mock_contract_${Date.now()}`;
     console.log(`[dStorage/mock-midnight] DataRegistry deployed at: ${addr}`);
@@ -159,16 +180,19 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   }
 
   async getEncryptionKey(): Promise<CryptoKey> {
-    const { KeyDeriver } = await import('@dstorage/crypto');
+    const { KeyDeriver } = await import("@dstorage/crypto");
     // Fixed test mnemonic for deterministic mock encryption key
     return new KeyDeriver({
-      mnemonic: 'test test test test test test test test test test test junk',
+      mnemonic: "test test test test test test test test test test test junk",
     }).deriveEncryptionKey();
   }
 
   // ── Generic circuit API ───────────────────────────────────────────────────
 
-  async callCircuit(circuitName: string, inputs: unknown[]): Promise<CircuitCallResult> {
+  async callCircuit(
+    circuitName: string,
+    inputs: unknown[],
+  ): Promise<CircuitCallResult> {
     await this.proofServer.generateProof(circuitName, inputs);
 
     // Simulate block inclusion delay
@@ -176,13 +200,16 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     mockBlockHeight += 1;
 
     return {
-      txHash:      `mock-tx-${Date.now()}`,
+      txHash: `mock-tx-${Date.now()}`,
       blockHeight: mockBlockHeight,
-      calledAt:    Date.now(),
+      calledAt: Date.now(),
     };
   }
 
-  async queryCircuit<T = unknown>(_queryName: string, _inputs: unknown[]): Promise<T> {
+  async queryCircuit<T = unknown>(
+    _queryName: string,
+    _inputs: unknown[],
+  ): Promise<T> {
     // Default mock returns undefined — override per test as needed
     return undefined as T;
   }

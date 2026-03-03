@@ -97,7 +97,7 @@ Storage adapters define where encrypted blobs are stored.
 Stores data in `localStorage` (browser) or an in-memory `Map` (Node.js). No network calls. Perfect for development and unit tests.
 
 ```typescript
-import { MockStorageAdapter } from '@dstorage/core';
+import { MockStorageAdapter } from "@dstorage/core";
 
 const ds = new DStorage({
   storageAdapter: new MockStorageAdapter(),
@@ -110,7 +110,7 @@ const ds = new DStorage({
 Uploads encrypted blobs to [Arweave](https://arweave.org) — pay once, store forever. Requires the `arweave` package and either ArConnect (browser) or a JWK wallet key (Node.js).
 
 ```typescript
-import { ArweaveStorageAdapter } from '@dstorage/core';
+import { ArweaveStorageAdapter } from "@dstorage/core";
 
 // Browser — ArConnect wallet handles signing automatically
 const ds = new DStorage({
@@ -119,10 +119,10 @@ const ds = new DStorage({
 });
 
 // Node.js — pass a JWK wallet key
-import fs from 'fs';
+import fs from "fs";
 const ds = new DStorage({
   storageAdapter: new ArweaveStorageAdapter({
-    walletKey: JSON.parse(fs.readFileSync('wallet.json', 'utf8')),
+    walletKey: JSON.parse(fs.readFileSync("wallet.json", "utf8")),
   }),
   // ...
 });
@@ -130,7 +130,7 @@ const ds = new DStorage({
 // Testnet (default is mainnet arweave.net)
 const ds = new DStorage({
   storageAdapter: new ArweaveStorageAdapter({
-    gateway: { host: 'arweave.dev', port: 443, protocol: 'https' },
+    gateway: { host: "arweave.dev", port: 443, protocol: "https" },
   }),
   // ...
 });
@@ -139,9 +139,9 @@ const ds = new DStorage({
 const ds = new DStorage({
   storageAdapter: new ArweaveStorageAdapter({
     walletKey,
-    maxRetries:          3,       // retry failed posts up to N times (default: 3)
-    waitForConfirmation: false,   // block until tx is mined — can take 2–20 min (default: false)
-    confirmationPollMs:  30_000,  // how often to poll when waiting (default: 30 s)
+    maxRetries: 3, // retry failed posts up to N times (default: 3)
+    waitForConfirmation: false, // block until tx is mined — can take 2–20 min (default: false)
+    confirmationPollMs: 30_000, // how often to poll when waiting (default: 30 s)
   }),
   // ...
 });
@@ -180,8 +180,8 @@ You need an Arweave wallet to sign and pay for transactions. Choose the path tha
 ```typescript
 // Request permissions up front (recommended for better UX)
 await window.arweaveWallet.connect(
-  ['ACCESS_ADDRESS', 'SIGN_TRANSACTION', 'DISPATCH'],
-  { name: 'Your App Name', logo: 'https://yourapp.com/logo.png' }
+  ["ACCESS_ADDRESS", "SIGN_TRANSACTION", "DISPATCH"],
+  { name: "Your App Name", logo: "https://yourapp.com/logo.png" },
 );
 ```
 
@@ -193,32 +193,37 @@ await window.arweaveWallet.connect(
 
 For server-side scripts or backend services, use a JWK (JSON Web Key) wallet file.
 
-*Option A — Generate a fresh wallet using arweave-js:*
+_Option A — Generate a fresh wallet using arweave-js:_
 
 ```typescript
-import Arweave from 'arweave';
-import fs from 'fs';
+import Arweave from "arweave";
+import fs from "fs";
 
-const arweave = Arweave.init({ host: 'arweave.net', port: 443, protocol: 'https' });
-const jwk     = await arweave.wallets.generate();
+const arweave = Arweave.init({
+  host: "arweave.net",
+  port: 443,
+  protocol: "https",
+});
+const jwk = await arweave.wallets.generate();
 
-fs.writeFileSync('wallet.json', JSON.stringify(jwk, null, 2));
-console.log('Wallet address:', await arweave.wallets.jwkToAddress(jwk));
+fs.writeFileSync("wallet.json", JSON.stringify(jwk, null, 2));
+console.log("Wallet address:", await arweave.wallets.jwkToAddress(jwk));
 ```
 
-*Option B — Export from ArConnect:* Open ArConnect → **Settings → Wallets → ⋮ → Export** → save the JSON file.
+_Option B — Export from ArConnect:_ Open ArConnect → **Settings → Wallets → ⋮ → Export** → save the JSON file.
 
 Pass the loaded JWK to the adapter:
 
 ```typescript
-import fs from 'fs';
-import { ArweaveStorageAdapter } from '@dstorage/core';
+import fs from "fs";
+import { ArweaveStorageAdapter } from "@dstorage/core";
 
-const walletKey = JSON.parse(fs.readFileSync('wallet.json', 'utf8'));
-const adapter   = new ArweaveStorageAdapter({ walletKey });
+const walletKey = JSON.parse(fs.readFileSync("wallet.json", "utf8"));
+const adapter = new ArweaveStorageAdapter({ walletKey });
 ```
 
 > ⚠️ **Never commit `wallet.json` to version control.** Add it to `.gitignore` immediately:
+>
 > ```
 > echo "wallet.json" >> .gitignore
 > ```
@@ -229,20 +234,24 @@ const adapter   = new ArweaveStorageAdapter({ walletKey });
 
 Arweave transactions require AR tokens to pay for permanent storage. The cost is tiny — typically fractions of a cent per KB — but the wallet must have a non-zero balance.
 
-| Environment | How to get AR |
-|-------------|---------------|
+| Environment                 | How to get AR                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | **Testnet** (`arweave.dev`) | Use the free [Arweave faucet](https://faucet.arweave.net) — paste your wallet address and receive test AR instantly. |
-| **Mainnet** (`arweave.net`) | Buy AR on a centralised exchange (Binance, Coinbase, KuCoin) or a DEX, then withdraw to your wallet address. |
+| **Mainnet** (`arweave.net`) | Buy AR on a centralised exchange (Binance, Coinbase, KuCoin) or a DEX, then withdraw to your wallet address.         |
 
 Check your balance before uploading:
 
 ```typescript
-import Arweave from 'arweave';
-import fs from 'fs';
+import Arweave from "arweave";
+import fs from "fs";
 
-const arweave  = Arweave.init({ host: 'arweave.net', port: 443, protocol: 'https' });
-const jwk      = JSON.parse(fs.readFileSync('wallet.json', 'utf8'));
-const address  = await arweave.wallets.jwkToAddress(jwk);
+const arweave = Arweave.init({
+  host: "arweave.net",
+  port: 443,
+  protocol: "https",
+});
+const jwk = JSON.parse(fs.readFileSync("wallet.json", "utf8"));
+const address = await arweave.wallets.jwkToAddress(jwk);
 const winstons = await arweave.wallets.getBalance(address);
 
 console.log(`Address: ${address}`);
@@ -256,17 +265,21 @@ console.log(`Balance: ${arweave.ar.winstonToAr(winstons)} AR`);
 `ArweaveStorageAdapter` fetches the current network fee from Arweave's oracle before every upload and includes it in the `UploadResult.cost` field. You can also estimate without committing:
 
 ```typescript
-import { DStorage, ArweaveStorageAdapter, MockChainAdapter } from '@dstorage/core';
+import {
+  DStorage,
+  ArweaveStorageAdapter,
+  MockChainAdapter,
+} from "@dstorage/core";
 
 const ds = new DStorage({
   storageAdapter: new ArweaveStorageAdapter({ walletKey }),
-  chainAdapter:   new MockChainAdapter(),
+  chainAdapter: new MockChainAdapter(),
 });
 
 await ds.connect(walletInfo);
 
 // Returns a human-readable string, e.g. "~0.00000312 AR"
-const estimate = await ds.estimateCost('My private content');
+const estimate = await ds.estimateCost("My private content");
 console.log(`Estimated storage cost: ${estimate}`);
 ```
 
@@ -278,10 +291,10 @@ The adapter pattern means swapping from development to production is a single li
 
 ```typescript
 // Development — no network, no tokens needed
-storageAdapter: new MockStorageAdapter()
+storageAdapter: new MockStorageAdapter();
 
 // Production — drop-in replacement, zero application code changes
-storageAdapter: new ArweaveStorageAdapter({ walletKey })
+storageAdapter: new ArweaveStorageAdapter({ walletKey });
 ```
 
 ---
@@ -295,9 +308,9 @@ By default `ArweaveStorageAdapter` returns immediately after the gateway accepts
 ```typescript
 const adapter = new ArweaveStorageAdapter({
   walletKey,
-  waitForConfirmation:   true,
-  confirmationPollMs:    30_000,   // check every 30 s
-  confirmationTimeoutMs: 1_200_000 // give up after 20 min
+  waitForConfirmation: true,
+  confirmationPollMs: 30_000, // check every 30 s
+  confirmationTimeoutMs: 1_200_000, // give up after 20 min
 });
 ```
 
@@ -312,19 +325,19 @@ If you need to track a transaction's status independently, use its `id` (the Arw
 A dedicated adapter for local Arweave integration testing using [arlocal](https://github.com/textury/arlocal) — a zero-config local Arweave sandbox with instant token minting, no real AR required, and full offline support.
 
 ```typescript
-import { ArweaveLocalStorageAdapter, MockChainAdapter } from '@dstorage/core';
+import { ArweaveLocalStorageAdapter, MockChainAdapter } from "@dstorage/core";
 
 // Generates a wallet, mints 10 test AR, returns a ready-to-use adapter
 const { adapter, walletKey, address } =
   await ArweaveLocalStorageAdapter.createWithTestWallet();
 
 const ds = new DStorage({
-  storageAdapter: adapter,     // ← drop-in replacement for ArweaveStorageAdapter
-  chainAdapter:   new MockChainAdapter(),
+  storageAdapter: adapter, // ← drop-in replacement for ArweaveStorageAdapter
+  chainAdapter: new MockChainAdapter(),
 });
 
 // Upload to local arlocal instance (no real AR spent)
-const { id } = await ds.upload('test data');
+const { id } = await ds.upload("test data");
 
 // Fast-forward a block to "confirm" the transaction
 await adapter.testnet.mine();
@@ -343,7 +356,7 @@ const { content } = await ds.retrieve(id);
 Placeholder for [Autonomi](https://autonomi.com) integration. Currently backed by an in-memory store. Awaiting Autonomi JS SDK stability.
 
 ```typescript
-import { AutonomiStorageAdapter } from '@dstorage/core';
+import { AutonomiStorageAdapter } from "@dstorage/core";
 
 const ds = new DStorage({
   storageAdapter: new AutonomiStorageAdapter(),
@@ -362,7 +375,7 @@ Chain adapters define where on-chain references and permissions are recorded.
 Records references and permissions in `localStorage` (browser) or an in-memory `Map` (Node.js). No proofs, no network. Ideal for development.
 
 ```typescript
-import { MockChainAdapter } from '@dstorage/core';
+import { MockChainAdapter } from "@dstorage/core";
 
 const ds = new DStorage({
   // ...
@@ -377,7 +390,7 @@ Simulates the full Midnight transaction flow — including ZK proof generation �
 Use this when you want realistic Midnight UX (progress steps, proof wait times) during development.
 
 ```typescript
-import { MockMidnightChainAdapter, MockProofServer } from '@dstorage/core';
+import { MockMidnightChainAdapter, MockProofServer } from "@dstorage/core";
 
 const ds = new DStorage({
   // ...
@@ -399,19 +412,19 @@ Connects to a real Midnight node and proof server. Each write follows the standa
 Requires a deployed contract, the compiled contract output from `compactc`, and a connected wallet.
 
 ```typescript
-import { MidnightChainAdapter } from '@dstorage/core';
-import { DataRegistry } from './contracts/managed/DataRegistry/index.js';
+import { MidnightChainAdapter } from "@dstorage/core";
+import { DataRegistry } from "./contracts/managed/DataRegistry/index.js";
 
 const ds = new DStorage({
   // ...
   chainAdapter: new MidnightChainAdapter({
-    contractAddress: '0xYourDeployedContract...',
-    compiledContract: DataRegistry,          // compiled output from compactc
-    wallet: walletInfo.walletApi,            // from connectMidnightWallet()
-    proofServerEndpoint: 'http://localhost:6300',  // default
-    nodeEndpoint: 'http://localhost:9944',          // optional — overrides default
-    indexerEndpoint: 'http://localhost:8088/api/v3/graphql', // optional
-    indexerWsEndpoint: 'ws://localhost:8088/api/v3/graphql/ws', // optional
+    contractAddress: "0xYourDeployedContract...",
+    compiledContract: DataRegistry, // compiled output from compactc
+    wallet: walletInfo.walletApi, // from connectMidnightWallet()
+    proofServerEndpoint: "http://localhost:6300", // default
+    nodeEndpoint: "http://localhost:9944", // optional — overrides default
+    indexerEndpoint: "http://localhost:8088/api/v3/graphql", // optional
+    indexerWsEndpoint: "ws://localhost:8088/api/v3/graphql/ws", // optional
   }),
 });
 ```
@@ -423,6 +436,7 @@ const ds = new DStorage({
 Payment adapters handle cost estimation and fee payments for storage and chain operations. Both slots are optional — the SDK falls back to `MockPaymentAdapter` automatically based on your chosen adapters.
 
 You only need to configure payment adapters explicitly if you want to:
+
 - Use real tokens (`AR`, `DUST`, etc.) in a live environment
 - Override the default token selection
 
@@ -431,13 +445,13 @@ You only need to configure payment adapters explicitly if you want to:
 Simulates wallet payment UX with realistic delays. No real transfers.
 
 ```typescript
-import { MockPaymentAdapter, TOKENS } from '@dstorage/core';
+import { MockPaymentAdapter, TOKENS } from "@dstorage/core";
 
 const ds = new DStorage({
   storageAdapter: new MockStorageAdapter(),
-  chainAdapter:   new MockChainAdapter(),
+  chainAdapter: new MockChainAdapter(),
   storagePaymentAdapter: new MockPaymentAdapter(TOKENS.MOCK),
-  chainPaymentAdapter:   new MockPaymentAdapter(TOKENS.MOCK),
+  chainPaymentAdapter: new MockPaymentAdapter(TOKENS.MOCK),
 });
 ```
 
@@ -452,16 +466,20 @@ Real payment adapters for Arweave (AR token) and Midnight (DUST token). Structur
 These helpers connect a user's wallet and return a `WalletInfo` object that `ds.connect()` uses to derive the client-side encryption key.
 
 ```typescript
-import { connectMetaMask, connectMidnightWallet, connectDemoWallet } from '@dstorage/core';
+import {
+  connectMetaMask,
+  connectMidnightWallet,
+  connectDemoWallet,
+} from "@dstorage/core";
 
 // EVM-compatible wallet (MetaMask, etc.) — browser only
 const walletInfo = await connectMetaMask();
 
 // Midnight wallet browser extension
-const walletInfo = await connectMidnightWallet('testnet-02');  // or 'undeployed'
+const walletInfo = await connectMidnightWallet("testnet-02"); // or 'undeployed'
 
 // Demo / testing — no real wallet required
-const walletInfo = await connectDemoWallet('0xTestUser');
+const walletInfo = await connectDemoWallet("0xTestUser");
 ```
 
 After connecting:
@@ -501,13 +519,15 @@ flowchart LR
 ```
 
 ```typescript
-import { KeyDeriver } from '@dstorage/crypto';
+import { KeyDeriver } from "@dstorage/crypto";
 
-const deriver = new KeyDeriver({ mnemonic: 'word word word ... (12 or 24 words)' });
+const deriver = new KeyDeriver({
+  mnemonic: "word word word ... (12 or 24 words)",
+});
 // or: new KeyDeriver({ seedHex: 'aabbcc...' })
 
-const encryptionKey = await deriver.deriveEncryptionKey();       // CryptoKey for AES-GCM
-const signingKeys   = await deriver.deriveMidnightSigningKeys(); // { zswapSeed, dustSeed, nightExternalSeed }
+const encryptionKey = await deriver.deriveEncryptionKey(); // CryptoKey for AES-GCM
+const signingKeys = await deriver.deriveMidnightSigningKeys(); // { zswapSeed, dustSeed, nightExternalSeed }
 ```
 
 See `apps/midnight-console` for a complete Node.js example that constructs a full Midnight wallet from these keys.
@@ -547,18 +567,18 @@ import {
   MockStorageAdapter,
   MockChainAdapter,
   connectDemoWallet,
-} from '@dstorage/core';
+} from "@dstorage/core";
 
 const ds = new DStorage({
   storageAdapter: new MockStorageAdapter(),
-  chainAdapter:   new MockChainAdapter(),
+  chainAdapter: new MockChainAdapter(),
 });
 
-const walletInfo = await connectDemoWallet('0xAlice');
+const walletInfo = await connectDemoWallet("0xAlice");
 await ds.connect(walletInfo);
 
 // Encrypt client-side → store → write on-chain reference
-const { dataId } = await ds.upload('My private data');
+const { dataId } = await ds.upload("My private data");
 // dataId format: "<storageId>::<chainRefId>"
 
 // Read on-chain reference → fetch encrypted blob → decrypt locally
@@ -569,6 +589,7 @@ ds.disconnect();
 ```
 
 What happens under the hood:
+
 1. Data is encrypted with an AES-GCM key derived from the wallet signature
 2. The encrypted blob is stored via the storage adapter
 3. A reference (storage ID + owner) is written via the chain adapter
@@ -578,13 +599,13 @@ What happens under the hood:
 
 ```typescript
 // Grant read access to another address
-await ds.grant(dataId, '0xBobAddress');
+await ds.grant(dataId, "0xBobAddress");
 
 // Check whether an address has access
-const canAccess = await ds.hasAccess(dataId, '0xBobAddress'); // true
+const canAccess = await ds.hasAccess(dataId, "0xBobAddress"); // true
 
 // Revoke access
-await ds.revoke(dataId, '0xBobAddress');
+await ds.revoke(dataId, "0xBobAddress");
 ```
 
 Permissions are written to and read from the chain adapter. The owner always has implicit access.
@@ -595,7 +616,7 @@ For production flows where you want cost estimation and step-by-step user feedba
 
 ```typescript
 const receipt = await ds.executeMetaTransaction(
-  file,                     // File object (browser) or equivalent
+  file, // File object (browser) or equivalent
   (progress) => {
     // Called at each step transition
     console.log(progress.currentStepId, progress.status);
@@ -603,16 +624,16 @@ const receipt = await ds.executeMetaTransaction(
     // 'estimate' → 'encrypt' → 'payment_storage' → 'upload' → 'payment_chain' → 'chain_reference' → 'complete'
   },
   {
-    storageToken: 'AR',     // optional — override token selection
-    chainToken:   'DUST',
-    metadata: { label: 'medical-record' },
-  }
+    storageToken: "AR", // optional — override token selection
+    chainToken: "DUST",
+    metadata: { label: "medical-record" },
+  },
 );
 
-console.log(receipt.dataId);          // "<storageId>::<chainRefId>"
-console.log(receipt.totalUsd);        // total cost in USD
-console.log(receipt.storagePayment);  // payment receipt for storage
-console.log(receipt.chainPayment);    // payment receipt for chain tx
+console.log(receipt.dataId); // "<storageId>::<chainRefId>"
+console.log(receipt.totalUsd); // total cost in USD
+console.log(receipt.storagePayment); // payment receipt for storage
+console.log(receipt.chainPayment); // payment receipt for chain tx
 ```
 
 You can also estimate costs separately before committing:
@@ -627,22 +648,25 @@ const estimate = await ds.estimateCost(content);
 For CLI tools, server-side scripts, or the Midnight console demo:
 
 ```typescript
-import { KeyDeriver } from '@dstorage/crypto';
-import { DStorage, MockStorageAdapter, MockChainAdapter } from '@dstorage/core';
+import { KeyDeriver } from "@dstorage/crypto";
+import { DStorage, MockStorageAdapter, MockChainAdapter } from "@dstorage/core";
 
 // Derive keys from a BIP-39 mnemonic
-const deriver = new KeyDeriver({ mnemonic: 'word word ... word' });
+const deriver = new KeyDeriver({ mnemonic: "word word ... word" });
 const encryptionKey = await deriver.deriveEncryptionKey();
 
 // Construct DStorage manually (bypassing wallet connect flow)
 const ds = new DStorage({
   storageAdapter: new MockStorageAdapter(),
-  chainAdapter:   new MockChainAdapter(),
+  chainAdapter: new MockChainAdapter(),
 });
 
 // Use encryptionKey directly with @dstorage/crypto primitives if needed
-import { encrypt, decrypt } from '@dstorage/crypto';
-const payload = await encrypt(encryptionKey, new TextEncoder().encode('secret'));
+import { encrypt, decrypt } from "@dstorage/crypto";
+const payload = await encrypt(
+  encryptionKey,
+  new TextEncoder().encode("secret"),
+);
 ```
 
 For a complete real-world example including Midnight wallet construction, indexer sync, and balance checks, see [`apps/midnight-console`](../apps/midnight-console/README.md).

@@ -20,48 +20,50 @@ No wallet extension is required for the default mock flow.
 ### Start options + adapter switchers
 
 On the first screen, the demo provides two paths:
+
 - **A** Upload a new health insurance certificate
 - **B** Go directly to proof generation from a mock list of previously uploaded certificates
 
 You can also pick a storage backend:
 
-| Adapter | Status | What it does |
-|---|---|---|
-| **Mock** | Live | Stores encrypted blobs in memory — no network, instant |
-| **Arweave Local** | Live | Real Arweave transaction flow against a local [arlocal](https://github.com/textury/arlocal) node — no AR tokens needed |
-| **Arweave** | Preview | Uploads to the Arweave permaweb (requires ArConnect extension) |
-| **Autonomi** | Stub | Autonomi network — memory-backed until JS SDK is stable |
+| Adapter           | Status  | What it does                                                                                                           |
+| ----------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Mock**          | Live    | Stores encrypted blobs in memory — no network, instant                                                                 |
+| **Arweave Local** | Live    | Real Arweave transaction flow against a local [arlocal](https://github.com/textury/arlocal) node — no AR tokens needed |
+| **Arweave**       | Preview | Uploads to the Arweave permaweb (requires ArConnect extension)                                                         |
+| **Autonomi**      | Stub    | Autonomi network — memory-backed until JS SDK is stable                                                                |
 
 Switching between them is a single line change in application code:
 
 ```typescript
 // Mock — for development
-storageAdapter: new MockStorageAdapter()
+storageAdapter: new MockStorageAdapter();
 
 // Arweave Local — integration testing with a local arlocal node
 // Start: docker run -d --rm -p 1984:1984 textury/arlocal
 //    or: npx arlocal
-storageAdapter: new ArweaveLocalStorageAdapter()
+storageAdapter: new ArweaveLocalStorageAdapter();
 
 // Arweave — pay-once permanent storage
-storageAdapter: new ArweaveStorageAdapter()
+storageAdapter: new ArweaveStorageAdapter();
 
 // Autonomi — decentralised, self-encrypting
-storageAdapter: new AutonomiStorageAdapter()
+storageAdapter: new AutonomiStorageAdapter();
 ```
 
 The SDK takes care of everything else: encryption, cost estimation, and on-chain references. The application logic doesn't change.
 
 You can also pick the chain backend:
 
-| Adapter | Status | What it does |
-|---|---|---|
-| **Mock Midnight** | Live | Simulated on-chain reference writes for local development |
-| **Midnight Network** | Live | Browser connector flow using `MidnightChainAdapter` |
+| Adapter              | Status | What it does                                              |
+| -------------------- | ------ | --------------------------------------------------------- |
+| **Mock Midnight**    | Live   | Simulated on-chain reference writes for local development |
+| **Midnight Network** | Live   | Browser connector flow using `MidnightChainAdapter`       |
 
 ### Upload summary
 
 After upload completes, the patient sees a dedicated summary step before proof generation that shows:
+
 - selected storage adapter and chain adapter
 - full `storageId`
 - full `refId`

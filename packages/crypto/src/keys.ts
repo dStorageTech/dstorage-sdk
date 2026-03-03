@@ -20,7 +20,7 @@
 
 /** The message signed by the wallet to derive the encryption key. */
 export const KEY_DERIVATION_MESSAGE =
-  'dStorage key derivation v1\n\nThis signature derives your encryption key. Never share it.';
+  "dStorage key derivation v1\n\nThis signature derives your encryption key. Never share it.";
 
 // ── KeyDeriver ────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,9 @@ export class KeyDeriver {
 
   constructor(input: { mnemonic?: string; seedHex?: string }) {
     if (!input.mnemonic && !input.seedHex) {
-      throw new Error('[dStorage/crypto] Either mnemonic or seedHex must be provided.');
+      throw new Error(
+        "[dStorage/crypto] Either mnemonic or seedHex must be provided.",
+      );
     }
     this.input = input;
   }
@@ -61,15 +63,17 @@ export class KeyDeriver {
     if (this.input.seedHex) {
       const bytes = hexToBytes(this.input.seedHex);
       if (bytes.length !== 32 && bytes.length !== 64) {
-        throw new Error('[dStorage/crypto] seedHex must be 32 bytes (64 hex chars) or 64 bytes (128 hex chars).');
+        throw new Error(
+          "[dStorage/crypto] seedHex must be 32 bytes (64 hex chars) or 64 bytes (128 hex chars).",
+        );
       }
       return bytes;
     }
 
     // mnemonic path — validate then convert
-    const bip39 = await import('bip39');
+    const bip39 = await import("bip39");
     if (!bip39.validateMnemonic(this.input.mnemonic!)) {
-      throw new Error('[dStorage/crypto] Invalid BIP-39 mnemonic phrase.');
+      throw new Error("[dStorage/crypto] Invalid BIP-39 mnemonic phrase.");
     }
     const buf = await bip39.mnemonicToSeed(this.input.mnemonic!);
     return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -83,9 +87,9 @@ export class KeyDeriver {
     const seed = await this.getSeedBuffer();
     // Use the full seed bytes as signature material for PBKDF2
     const signatureHex = Array.from(seed)
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return deriveKeyFromSignature(signatureHex, salt ?? 'dstorage-v1');
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return deriveKeyFromSignature(signatureHex, salt ?? "dstorage-v1");
   }
 
   /**
@@ -100,8 +104,10 @@ export class KeyDeriver {
 
     // Variable indirection + @vite-ignore: prevents bundlers from resolving
     // this optional peer dep at build time; throws clearly if not installed.
-    const hdId = '@midnight-ntwrk/wallet-sdk-hd';
-    let HDWallet: { fromSeed(seed: Uint8Array): { type: string; hdWallet: HDWalletInner } };
+    const hdId = "@midnight-ntwrk/wallet-sdk-hd";
+    let HDWallet: {
+      fromSeed(seed: Uint8Array): { type: string; hdWallet: HDWalletInner };
+    };
     let Roles: MidnightRoles;
     try {
       const mod = await import(/* @vite-ignore */ hdId);
@@ -109,14 +115,16 @@ export class KeyDeriver {
       Roles = mod.Roles as MidnightRoles;
     } catch {
       throw new Error(
-        '[dStorage/crypto] @midnight-ntwrk/wallet-sdk-hd is not installed. ' +
-          'Run: npm install @midnight-ntwrk/wallet-sdk-hd'
+        "[dStorage/crypto] @midnight-ntwrk/wallet-sdk-hd is not installed. " +
+          "Run: npm install @midnight-ntwrk/wallet-sdk-hd",
       );
     }
 
     const result = HDWallet.fromSeed(seed);
-    if (result.type !== 'seedOk') {
-      throw new Error('[dStorage/crypto] HDWallet.fromSeed failed: invalid seed.');
+    if (result.type !== "seedOk") {
+      throw new Error(
+        "[dStorage/crypto] HDWallet.fromSeed failed: invalid seed.",
+      );
     }
 
     const derivation = result.hdWallet
@@ -124,8 +132,8 @@ export class KeyDeriver {
       .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
       .deriveKeysAt(0);
 
-    if (derivation.type !== 'keysDerived') {
-      throw new Error('[dStorage/crypto] Key derivation failed.');
+    if (derivation.type !== "keysDerived") {
+      throw new Error("[dStorage/crypto] Key derivation failed.");
     }
 
     // Clear sensitive HD wallet material from memory
@@ -150,13 +158,18 @@ interface MidnightRoles {
 interface HDWalletInner {
   selectAccount(n: number): this;
   selectRoles(roles: string[]): this;
-  deriveKeysAt(index: number): { type: string; keys: Record<string, Uint8Array> };
+  deriveKeysAt(index: number): {
+    type: string;
+    keys: Record<string, Uint8Array>;
+  };
   clear(): void;
 }
 
 function getCrypto(): Crypto {
-  if (typeof globalThis.crypto !== 'undefined') return globalThis.crypto;
-  throw new Error('[dStorage/crypto] WebCrypto not available in this environment.');
+  if (typeof globalThis.crypto !== "undefined") return globalThis.crypto;
+  throw new Error(
+    "[dStorage/crypto] WebCrypto not available in this environment.",
+  );
 }
 
 /**
@@ -167,7 +180,7 @@ function getCrypto(): Crypto {
  */
 export async function deriveKeyFromSignature(
   signatureHex: string,
-  salt = 'dstorage-v1'
+  salt = "dstorage-v1",
 ): Promise<CryptoKey> {
   const crypto = getCrypto();
 
@@ -176,11 +189,11 @@ export async function deriveKeyFromSignature(
 
   // Import raw bytes as PBKDF2 key material
   const keyMaterial = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     sigBytes,
-    { name: 'PBKDF2' },
+    { name: "PBKDF2" },
     false,
-    ['deriveKey']
+    ["deriveKey"],
   );
 
   // Derive a 256-bit AES-GCM key
@@ -188,15 +201,15 @@ export async function deriveKeyFromSignature(
 
   const key = await crypto.subtle.deriveKey(
     {
-      name: 'PBKDF2',
+      name: "PBKDF2",
       salt: saltBytes,
       iterations: 100_000,
-      hash: 'SHA-256',
+      hash: "SHA-256",
     },
     keyMaterial,
-    { name: 'AES-GCM', length: 256 },
+    { name: "AES-GCM", length: 256 },
     false, // not extractable — key never leaves the browser
-    ['encrypt', 'decrypt']
+    ["encrypt", "decrypt"],
   );
 
   return key;
@@ -205,7 +218,7 @@ export async function deriveKeyFromSignature(
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
-  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   const bytes = new Uint8Array(clean.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);

@@ -28,16 +28,16 @@ import {
   DStorage,
   connectDemoWallet,
   MockMidnightChainAdapter,
-} from '@dstorage/core';
-import { MockStorageAdapter } from '@dstorage/storage';
+} from "@dstorage/core";
+import { MockStorageAdapter } from "@dstorage/storage";
 
 async function main(): Promise<void> {
   // ── 1. Connect a mocked wallet ─────────────────────────────────────────────
   //
   // connectDemoWallet() returns a WalletInfo with a deterministic fake signature.
   // In production, use connectMetaMask() or connectMidnightWallet() instead.
-  const wallet = await connectDemoWallet('0xAlice_dStorage_Demo');
-  console.log('\nWallet connected →', wallet.address, '\n');
+  const wallet = await connectDemoWallet("0xAlice_dStorage_Demo");
+  console.log("\nWallet connected →", wallet.address, "\n");
 
   // ── 2. Initialise the SDK with mock adapters ───────────────────────────────
   //
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   //   - Generates deterministic content IDs
   const sdk = new DStorage({
     storageAdapter: new MockStorageAdapter(),
-    chainAdapter:   new MockMidnightChainAdapter(),
+    chainAdapter: new MockMidnightChainAdapter(),
   });
 
   await sdk.connect(wallet);
@@ -63,40 +63,44 @@ async function main(): Promise<void> {
   //   2. Uploads the encrypted blob to the mock storage network
   //   3. Calls the mock proof server via MockMidnightChainAdapter
   //   4. Writes a cryptographic reference on the mock Midnight chain
-  const record = JSON.stringify({ patient: 'Alice', plan: 'Gold', active: true });
-  const { dataId } = await sdk.upload(record, { label: 'insurance-record' });
+  const record = JSON.stringify({
+    patient: "Alice",
+    plan: "Gold",
+    active: true,
+  });
+  const { dataId } = await sdk.upload(record, { label: "insurance-record" });
 
-  console.log('\nUploaded dataId:', dataId, '\n');
+  console.log("\nUploaded dataId:", dataId, "\n");
 
   // ── 4. Retrieve and decrypt ────────────────────────────────────────────────
   //
   // Decryption is fully local — the SDK never sends plaintext anywhere.
   const { content } = await sdk.retrieve(dataId);
-  console.log('Retrieved content:', content, '\n');
+  console.log("Retrieved content:", content, "\n");
 
   // ── 5. Access control ──────────────────────────────────────────────────────
   //
   // grant() writes a permission record on the mock chain (also proof-server-backed).
   // hasAccess() queries the on-chain ACL.
-  const bob = '0xBob_Clinic_Verifier';
+  const bob = "0xBob_Clinic_Verifier";
 
   const beforeGrant = await sdk.hasAccess(dataId, bob);
-  console.log('Bob has access (before grant):', beforeGrant);
+  console.log("Bob has access (before grant):", beforeGrant);
 
   await sdk.grant(dataId, bob);
   const afterGrant = await sdk.hasAccess(dataId, bob);
-  console.log('Bob has access (after grant): ', afterGrant);
+  console.log("Bob has access (after grant): ", afterGrant);
 
   await sdk.revoke(dataId, bob);
   const afterRevoke = await sdk.hasAccess(dataId, bob);
-  console.log('Bob has access (after revoke):', afterRevoke, '\n');
+  console.log("Bob has access (after revoke):", afterRevoke, "\n");
 
   // ── 6. Disconnect ──────────────────────────────────────────────────────────
   sdk.disconnect();
-  console.log('Done.\n');
+  console.log("Done.\n");
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error(err);
   process.exit(1);
 });

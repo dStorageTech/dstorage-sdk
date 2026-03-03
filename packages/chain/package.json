@@ -41,21 +41,51 @@
     "rxjs": "^7.8.1"
   },
   "peerDependenciesMeta": {
-    "@midnight-ntwrk/compact-js": { "optional": true },
-    "@midnight-ntwrk/midnight-js-contracts": { "optional": true },
-    "@midnight-ntwrk/midnight-js-http-client-proof-provider": { "optional": true },
-    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": { "optional": true },
-    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": { "optional": true },
-    "@midnight-ntwrk/compact-runtime": { "optional": true },
-    "@midnight-ntwrk/dapp-connector-api": { "optional": true },
-    "@midnight-ntwrk/ledger-v7": { "optional": true },
-    "@midnight-ntwrk/midnight-js-network-id": { "optional": true },
-    "@midnight-ntwrk/wallet-sdk-address-format": { "optional": true },
-    "@midnight-ntwrk/wallet-sdk-dust-wallet": { "optional": true },
-    "@midnight-ntwrk/wallet-sdk-facade": { "optional": true },
-    "@midnight-ntwrk/wallet-sdk-shielded": { "optional": true },
-    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": { "optional": true },
-    "rxjs": { "optional": true }
+    "@midnight-ntwrk/compact-js": {
+      "optional": true
+    },
+    "@midnight-ntwrk/midnight-js-contracts": {
+      "optional": true
+    },
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": {
+      "optional": true
+    },
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": {
+      "optional": true
+    },
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": {
+      "optional": true
+    },
+    "@midnight-ntwrk/compact-runtime": {
+      "optional": true
+    },
+    "@midnight-ntwrk/dapp-connector-api": {
+      "optional": true
+    },
+    "@midnight-ntwrk/ledger-v7": {
+      "optional": true
+    },
+    "@midnight-ntwrk/midnight-js-network-id": {
+      "optional": true
+    },
+    "@midnight-ntwrk/wallet-sdk-address-format": {
+      "optional": true
+    },
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": {
+      "optional": true
+    },
+    "@midnight-ntwrk/wallet-sdk-facade": {
+      "optional": true
+    },
+    "@midnight-ntwrk/wallet-sdk-shielded": {
+      "optional": true
+    },
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": {
+      "optional": true
+    },
+    "rxjs": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "^5.4.5"

@@ -1,8 +1,13 @@
-import { type MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
-import { type FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import type { DataRegistryPrivateState, ReferenceEntry, Contract, Witnesses } from '../contracts/src/index';
+import { type MidnightProviders } from "@midnight-ntwrk/midnight-js-types";
+import { type FoundContract } from "@midnight-ntwrk/midnight-js-contracts";
+import type {
+  DataRegistryPrivateState,
+  ReferenceEntry,
+  Contract,
+  Witnesses,
+} from "../contracts/src/index";
 
-export const dataRegistryPrivateStateKey = 'DataRegistryPrivateState';
+export const dataRegistryPrivateStateKey = "DataRegistryPrivateState";
 export type PrivateStateId = typeof dataRegistryPrivateStateKey;
 
 /**
@@ -20,21 +25,31 @@ export type PrivateStates = {
  *
  * @public
  */
-export type DataRegistryContract = Contract<DataRegistryPrivateState, Witnesses<DataRegistryPrivateState>>;
+export type DataRegistryContract = Contract<
+  DataRegistryPrivateState,
+  Witnesses<DataRegistryPrivateState>
+>;
 
 /**
  * The keys of the circuits exported from {@link DataRegistryContract}.
  *
  * @public
  */
-export type DataRegistryCircuitKeys = Exclude<keyof DataRegistryContract['impureCircuits'], number | symbol>;
+export type DataRegistryCircuitKeys = Exclude<
+  keyof DataRegistryContract["impureCircuits"],
+  number | symbol
+>;
 
 /**
  * The providers required by {@link DataRegistryContract}.
  *
  * @public
  */
-export type DataRegistryProviders = MidnightProviders<DataRegistryCircuitKeys, PrivateStateId, DataRegistryPrivateState>;
+export type DataRegistryProviders = MidnightProviders<
+  DataRegistryCircuitKeys,
+  PrivateStateId,
+  DataRegistryPrivateState
+>;
 
 /**
  * A {@link DataRegistryContract} that has been deployed to the network.
@@ -47,7 +62,7 @@ export type DeployedDataRegistryContract = FoundContract<DataRegistryContract>;
  * A type that represents the derived combination of public (or ledger), and private state.
  */
 export type DataRegistryDerivedState = {
-  readonly references: Map<string, ReferenceEntry> ;
+  readonly references: Map<string, ReferenceEntry>;
   readonly refCounter: bigint;
   readonly owner: string;
 

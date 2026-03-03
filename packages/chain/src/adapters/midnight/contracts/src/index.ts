@@ -13,5 +13,7 @@ export const CompiledDataRegistryContractContract = CompiledContract.make<
 ).pipe(
   //CompiledContract.withWitnesses(Witnesses.witnesses),
   CompiledContract.withVacantWitnesses,
-  CompiledContract.withCompiledFileAssets("/home/bochaco/night/dstorage-sdk/packages/chain/src/adapters/midnight/contracts/dataregistry/managed"),
+  CompiledContract.withCompiledFileAssets(
+    "/home/bochaco/night/dstorage-sdk/packages/chain/src/adapters/midnight/contracts/dataregistry/managed",
+  ),
 );

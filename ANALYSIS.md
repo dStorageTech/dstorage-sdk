@@ -46,31 +46,32 @@ but not composed into one developer-facing SDK.
 
 ### Established competitors
 
-| Project | What they do | Key gap vs dStorage |
-|---|---|---|
-| **Lit Protocol** | Threshold encryption, programmable access conditions across chains | Requires their own node network for key management; more powerful but introduces a trusted third party |
-| **Verida** | Web3 personal data network with encrypted storage and identity layer | Opinionated stack with their own identity and chain; not plug-and-play into existing dApps |
-| **Ceramic / ComposeDB** | Mutable decentralised data graph | No first-class encryption; focused on queryability not privacy |
-| **Polybase** | Encrypted decentralised database | More mature but no ZK proof layer; EVM-only |
-| **Secret Network** | Privacy-preserving smart contracts (computation on encrypted data) | Requires their chain for everything; much higher integration cost |
-| **WeaveDB / Tableland** | Decentralised queryable databases | Not privacy-focused; data is public |
+| Project                 | What they do                                                         | Key gap vs dStorage                                                                                    |
+| ----------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Lit Protocol**        | Threshold encryption, programmable access conditions across chains   | Requires their own node network for key management; more powerful but introduces a trusted third party |
+| **Verida**              | Web3 personal data network with encrypted storage and identity layer | Opinionated stack with their own identity and chain; not plug-and-play into existing dApps             |
+| **Ceramic / ComposeDB** | Mutable decentralised data graph                                     | No first-class encryption; focused on queryability not privacy                                         |
+| **Polybase**            | Encrypted decentralised database                                     | More mature but no ZK proof layer; EVM-only                                                            |
+| **Secret Network**      | Privacy-preserving smart contracts (computation on encrypted data)   | Requires their chain for everything; much higher integration cost                                      |
+| **WeaveDB / Tableland** | Decentralised queryable databases                                    | Not privacy-focused; data is public                                                                    |
 
 ---
 
 ### ar.io
 
-**What it is:** ar.io is not a storage protocol — it is a *gateway and access layer* built on top
+**What it is:** ar.io is not a storage protocol — it is a _gateway and access layer_ built on top
 of Arweave. It provides the infrastructure that makes Arweave data globally accessible at CDN
 speeds: 650+ gateway nodes, the ArNS naming system (decentralised DNS for permaweb apps), the
 Turbo SDK for fast uploads, and the Wayfinder SDK for optimised content discovery. The network
 uses the $ARIO token for gateway operator incentives.
 
 **Overlap with dStorage:**
+
 - Both sit on top of Arweave as a storage layer.
 - ar.io's **ArDrive Core JS** library includes encrypted file storage on Arweave, which is the
   most direct area of overlap. ArDrive targets file management (drives, folders, versioning);
   dStorage targets dApp-level user data with ZK proofs and chain references.
-- ar.io's gateway network could actually be *complementary* to dStorage — once dStorage stores
+- ar.io's gateway network could actually be _complementary_ to dStorage — once dStorage stores
   encrypted blobs on Arweave, ar.io gateways are what makes retrieval fast and resilient.
 
 **Verdict: Infrastructure layer, not a direct privacy competitor.** ar.io is upstream
@@ -90,7 +91,7 @@ claims or privacy-preserving access control.
 
 ### Storacha (formerly web3.storage)
 
-**What it is:** Storacha is a decentralised *hot storage* network built on IPFS + Filecoin.
+**What it is:** Storacha is a decentralised _hot storage_ network built on IPFS + Filecoin.
 Evolved from Protocol Labs' web3.storage project, now community-driven. Targets developers who
 need fast, CDN-level retrieval of decentralised content at scale. Offers subscription pricing
 ($0–$100/month tiers, then $0.03–$0.15/GB). Has JavaScript, Go, and CLI clients.
@@ -102,23 +103,23 @@ centralised auth server. This is a genuinely sophisticated access control primit
 
 **Critical difference from dStorage:** Storacha stores data on IPFS, which means **data is
 public by default**. IPFS is content-addressed but not private. If you upload a file to
-Storacha, anyone with the CID can retrieve it. The UCAN layer controls *who you tell* the CID
+Storacha, anyone with the CID can retrieve it. The UCAN layer controls _who you tell_ the CID
 to, not who can decrypt the data. There is no encryption layer built in. Privacy is the user's
 responsibility.
 
 **Comparison breakdown:**
 
-| Dimension | dStorage SDK | Storacha |
-|---|---|---|
-| Storage backend | Arweave, Autonomi (permanent) | Filecoin + IPFS (subscription) |
-| Privacy model | Encrypted by default, key from wallet | Public by default, no encryption |
-| Access control | On-chain grants + ZK proofs | UCAN delegation (no encryption) |
-| Pricing model | Pay once, stored forever | Monthly subscription |
-| Key management | None — wallet-derived | None needed (data is public) |
-| Retrieval speed | Arweave gateway (improving) | CDN-level, fast |
-| ZK proof layer | Planned (Midnight) | None |
-| Data permanence | Permanent (Arweave) | Subscription-dependent |
-| Developer SDK | TypeScript, adapter pattern | JS, Go, CLI |
+| Dimension       | dStorage SDK                          | Storacha                         |
+| --------------- | ------------------------------------- | -------------------------------- |
+| Storage backend | Arweave, Autonomi (permanent)         | Filecoin + IPFS (subscription)   |
+| Privacy model   | Encrypted by default, key from wallet | Public by default, no encryption |
+| Access control  | On-chain grants + ZK proofs           | UCAN delegation (no encryption)  |
+| Pricing model   | Pay once, stored forever              | Monthly subscription             |
+| Key management  | None — wallet-derived                 | None needed (data is public)     |
+| Retrieval speed | Arweave gateway (improving)           | CDN-level, fast                  |
+| ZK proof layer  | Planned (Midnight)                    | None                             |
+| Data permanence | Permanent (Arweave)                   | Subscription-dependent           |
+| Developer SDK   | TypeScript, adapter pattern           | JS, Go, CLI                      |
 
 **Verdict: Adjacent but structurally different.** Storacha wins on retrieval speed and
 operational maturity. dStorage wins on privacy — not as a feature but as an architectural
@@ -135,19 +136,19 @@ access control primitive in the decentralised storage space. If they added clien
 
 ## Full competitive matrix
 
-| Feature | dStorage SDK | ar.io / ArDrive | Storacha | Lit Protocol | Verida |
-|---|---|---|---|---|---|
-| Encrypted by default | ✅ | via ArDrive | ❌ | ✅ | ✅ |
-| Wallet-derived keys (no 3rd party) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| ZK proof layer | 🚧 Planned | ❌ | ❌ | ❌ | ❌ |
-| Permanent storage | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Subscription-free | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Privacy chain integration | 🚧 Midnight | ❌ | ❌ | multi-chain | Verida chain |
-| Multi-chain / multi-storage | ✅ (adapters) | Arweave only | IPFS/Filecoin only | multi-chain | their stack |
-| Access control | On-chain + ZK | ArNS / ArDrive | UCAN | programmable | custom |
-| Developer ergonomics | ✅ 3-line API | moderate | good | complex | moderate |
-| Production maturity | 🚧 Early | ✅ Mature | ✅ Mature | ✅ Mature | 🟡 Growing |
-| Key custodian required | None | None | None | Lit nodes | Verida nodes |
+| Feature                            | dStorage SDK  | ar.io / ArDrive | Storacha           | Lit Protocol | Verida       |
+| ---------------------------------- | ------------- | --------------- | ------------------ | ------------ | ------------ |
+| Encrypted by default               | ✅            | via ArDrive     | ❌                 | ✅           | ✅           |
+| Wallet-derived keys (no 3rd party) | ✅            | ❌              | ❌                 | ❌           | ❌           |
+| ZK proof layer                     | 🚧 Planned    | ❌              | ❌                 | ❌           | ❌           |
+| Permanent storage                  | ✅            | ✅              | ❌                 | ❌           | ❌           |
+| Subscription-free                  | ✅            | ✅              | ❌                 | ❌           | ❌           |
+| Privacy chain integration          | 🚧 Midnight   | ❌              | ❌                 | multi-chain  | Verida chain |
+| Multi-chain / multi-storage        | ✅ (adapters) | Arweave only    | IPFS/Filecoin only | multi-chain  | their stack  |
+| Access control                     | On-chain + ZK | ArNS / ArDrive  | UCAN               | programmable | custom       |
+| Developer ergonomics               | ✅ 3-line API | moderate        | good               | complex      | moderate     |
+| Production maturity                | 🚧 Early      | ✅ Mature       | ✅ Mature          | ✅ Mature    | 🟡 Growing   |
+| Key custodian required             | None          | None            | None               | Lit nodes    | Verida nodes |
 
 ---
 
@@ -192,6 +193,7 @@ Storacha confirms that neither is building toward ZK-shielded user data with wal
 encryption; they're optimising for retrieval speed and storage scale instead.
 
 The work to make this production-credible, in order of priority:
+
 1. Real grant/revoke via proxy re-encryption (this makes the access model real)
 2. Real Arweave upload + payment integration (Turbo SDK is the path)
 3. Real Midnight adapter once Midnight.js v1 lands

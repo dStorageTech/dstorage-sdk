@@ -28,8 +28,8 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
-} from '../types.js';
-import { TOKENS } from '../types.js';
+} from "../types.js";
+import { TOKENS } from "../types.js";
 
 export interface ArweavePaymentAdapterConfig {
   /**
@@ -40,7 +40,7 @@ export interface ArweavePaymentAdapterConfig {
   gateway?: {
     host: string;
     port: number;
-    protocol: 'http' | 'https';
+    protocol: "http" | "https";
   };
   /**
    * JWK wallet key for Node.js server-side usage.
@@ -56,9 +56,9 @@ export interface ArweavePaymentAdapterConfig {
 }
 
 export class ArweavePaymentAdapter implements PaymentAdapter {
-  readonly name: PaymentProviderName = 'arweave';
-  readonly token: TokenSymbol         = 'AR';
-  readonly type: 'storage' | 'chain' = 'storage';
+  readonly name: PaymentProviderName = "arweave";
+  readonly token: TokenSymbol = "AR";
+  readonly type: "storage" | "chain" = "storage";
 
   private config: ArweavePaymentAdapterConfig;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,14 +67,20 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
   constructor(config: ArweavePaymentAdapterConfig = {}) {
     this.config = {
-      gateway: config.gateway ?? { host: 'arweave.net', port: 443, protocol: 'https' },
-      ...(config.walletKey !== undefined ? { walletKey: config.walletKey } : {}),
+      gateway: config.gateway ?? {
+        host: "arweave.net",
+        port: 443,
+        protocol: "https",
+      },
+      ...(config.walletKey !== undefined
+        ? { walletKey: config.walletKey }
+        : {}),
     };
     this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
 
     console.warn(
-      '[dStorage/arweave-payment] Arweave payment adapter preview mode — ' +
-      'real AR token transfer pending full Arweave integration.'
+      "[dStorage/arweave-payment] Arweave payment adapter preview mode — " +
+        "real AR token transfer pending full Arweave integration.",
     );
   }
 
@@ -83,12 +89,12 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
   private async getClient(): Promise<any> {
     if (this.arweaveClient) return this.arweaveClient;
     try {
-      const { default: Arweave } = await import('arweave');
+      const { default: Arweave } = await import("arweave");
       this.arweaveClient = Arweave.init(this.config.gateway!);
       return this.arweaveClient;
     } catch {
       throw new Error(
-        '[dStorage/arweave-payment] arweave package not installed. Run: npm install arweave'
+        "[dStorage/arweave-payment] arweave package not installed. Run: npm install arweave",
       );
     }
   }
@@ -113,16 +119,18 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     // Preview: static formula (~$0.004/MB) matching existing estimateCost() in core/payment.ts
     const fileSizeMB = dataSizeBytes / (1024 * 1024);
     const storageUsd = Math.max(0.0001, fileSizeMB * 0.004);
-    const amount     = (storageUsd / TOKENS['AR'].approxUsdPrice).toFixed(8);
-    const usd        = storageUsd.toFixed(6);
+    const amount = (storageUsd / TOKENS["AR"].approxUsdPrice).toFixed(8);
+    const usd = storageUsd.toFixed(6);
 
-    console.log(`[dStorage/arweave-payment] (preview) Estimated: ${amount} AR ≈ $${usd}`);
+    console.log(
+      `[dStorage/arweave-payment] (preview) Estimated: ${amount} AR ≈ $${usd}`,
+    );
 
     return {
-      token: 'AR',
+      token: "AR",
       amount,
       usd,
-      type: 'storage',
+      type: "storage",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
     };
@@ -130,7 +138,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
   async pay(
     quote: PaymentQuote,
-    onStatus?: (message: string) => void
+    onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     /**
      * TODO: Replace with real Arweave payment flow:
@@ -168,26 +176,28 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
      */
 
     // Preview: simulate with delays
-    onStatus?.('Requesting AR wallet signature… (preview)');
+    onStatus?.("Requesting AR wallet signature… (preview)");
     await delay(600);
 
-    onStatus?.('Broadcasting AR payment transaction… (preview)');
+    onStatus?.("Broadcasting AR payment transaction… (preview)");
     await delay(800);
 
-    onStatus?.('Awaiting Arweave confirmation… (preview)');
+    onStatus?.("Awaiting Arweave confirmation… (preview)");
     await delay(500);
 
     const txHash = `arweave_preview_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    console.log(`[dStorage/arweave-payment] (preview) Storage payment → txHash: ${txHash}`);
+    console.log(
+      `[dStorage/arweave-payment] (preview) Storage payment → txHash: ${txHash}`,
+    );
 
     return {
       txHash,
-      token:     'AR',
-      amount:    quote.amount,
-      usd:       quote.usd,
-      type:      'storage',
+      token: "AR",
+      amount: quote.amount,
+      usd: quote.usd,
+      type: "storage",
       simulated: true, // ← becomes false once the TODO above is wired up
-      paidAt:    Date.now(),
+      paidAt: Date.now(),
     };
   }
 }

@@ -47,10 +47,12 @@ npm run demo:midnight
 ```
 
 Open http://localhost:5173 and choose a path:
+
 - upload a new health insurance certificate
 - or jump directly to proof generation from a mock list of previously uploaded certificates
 
 For terminal-only testing, `npm run demo:midnight` starts a CLI that:
+
 - asks for network + wallet seed/mnemonic and initializes `MidnightChainAdapter`
 - uses Arweave Local storage in the current CLI implementation
 - provides actions to upload files, list on-chain references, and retrieve content by `refId`
@@ -71,12 +73,12 @@ import {
   MockStorageAdapter,
   MockChainAdapter,
   connectMetaMask,
-} from '@dstorage/core';
+} from "@dstorage/core";
 
 // 1. Init SDK with your chosen providers
 const ds = new DStorage({
-  storageAdapter: new MockStorageAdapter(),   // swap for ArweaveStorageAdapter
-  chainAdapter:   new MockChainAdapter(),     // swap for MidnightChainAdapter
+  storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter
+  chainAdapter: new MockChainAdapter(), // swap for MidnightChainAdapter
 });
 
 // 2. Connect wallet (derives encryption key from signature)
@@ -115,26 +117,26 @@ const receipt = await ds.executeMetaTransaction(file, (progress) => {
   console.log(progress.currentStepId); // 'estimate' | 'encrypt' | 'payment_storage' | 'upload' | 'payment_chain' | 'chain_reference' | 'complete'
 });
 
-console.log(receipt.totalUsd);         // Total cost in USD
-console.log(receipt.storagePayment);   // Payment receipt for storage
-console.log(receipt.chainPayment);     // Payment receipt for chain tx
+console.log(receipt.totalUsd); // Total cost in USD
+console.log(receipt.storagePayment); // Payment receipt for storage
+console.log(receipt.chainPayment); // Payment receipt for chain tx
 ```
 
 ### Supported tokens
 
-| Token | Network | Used for |
-|-------|---------|----------|
-| `AR` | Arweave | Storage payment adapter (preview/simulated mode) |
-| `DUST` | Midnight | Chain payment adapter (preview/simulated mode) |
-| `MOCK` | Mock | Development & testing (simulated) |
-| `ANT` / `ETH` / `MATIC` | Token registry | Defined token metadata for future/override use |
+| Token                   | Network        | Used for                                         |
+| ----------------------- | -------------- | ------------------------------------------------ |
+| `AR`                    | Arweave        | Storage payment adapter (preview/simulated mode) |
+| `DUST`                  | Midnight       | Chain payment adapter (preview/simulated mode)   |
+| `MOCK`                  | Mock           | Development & testing (simulated)                |
+| `ANT` / `ETH` / `MATIC` | Token registry | Defined token metadata for future/override use   |
 
 Tokens are selected automatically based on your chosen adapters, or you can override them explicitly:
 
 ```typescript
 await ds.executeMetaTransaction(file, onProgress, {
-  storageToken: 'AR',
-  chainToken: 'DUST',
+  storageToken: "AR",
+  chainToken: "DUST",
 });
 ```
 
@@ -185,31 +187,33 @@ User input
 
 ## Packages
 
-| Package | Description | Status |
-|---------|-------------|--------|
-| `@dstorage/crypto` | Key derivation + AES-GCM encrypt/decrypt | 🚧 In Progress |
-| `@dstorage/storage` | Storage adapter interface + adapters | 🚧 In Progress |
-| `@dstorage/chain` | Chain adapter interface + adapters | 🚧 In Progress |
-| `@dstorage/core` | Orchestration SDK + wallet helpers | 🚧 In Progress |
+| Package             | Description                              | Status         |
+| ------------------- | ---------------------------------------- | -------------- |
+| `@dstorage/crypto`  | Key derivation + AES-GCM encrypt/decrypt | 🚧 In Progress |
+| `@dstorage/storage` | Storage adapter interface + adapters     | 🚧 In Progress |
+| `@dstorage/chain`   | Chain adapter interface + adapters       | 🚧 In Progress |
+| `@dstorage/core`    | Orchestration SDK + wallet helpers       | 🚧 In Progress |
 
 ---
 
 ## Supported Providers
 
 ### Storage
-| Provider | Status | Notes |
-|----------|--------|-------|
-| Mock (localStorage/memory) | ✅ Live | Perfect for development & demos |
-| Arweave Local | ✅ Live | Local arlocal integration testing |
-| Arweave | 🟡 Preview | Requires `arweave` package + ArConnect wallet |
-| Autonomi | 🔵 Stub | Awaiting Autonomi JS SDK stability |
+
+| Provider                   | Status     | Notes                                         |
+| -------------------------- | ---------- | --------------------------------------------- |
+| Mock (localStorage/memory) | ✅ Live    | Perfect for development & demos               |
+| Arweave Local              | ✅ Live    | Local arlocal integration testing             |
+| Arweave                    | 🟡 Preview | Requires `arweave` package + ArConnect wallet |
+| Autonomi                   | 🔵 Stub    | Awaiting Autonomi JS SDK stability            |
 
 ### Blockchain
-| Chain | Status | Notes |
-|-------|--------|-------|
-| Mock | ✅ Live | Simulates on-chain references locally |
+
+| Chain        | Status  | Notes                                  |
+| ------------ | ------- | -------------------------------------- |
+| Mock         | ✅ Live | Simulates on-chain references locally  |
 | MockMidnight | ✅ Live | Simulated Midnight-like chain behavior |
-| Midnight | ✅ Live | Connector + facade modes supported |
+| Midnight     | ✅ Live | Connector + facade modes supported     |
 
 ---
 
@@ -218,6 +222,7 @@ User input
 **Primary Objective**
 
 Ship a polished **v1 SDK** with:
+
 - Production-grade security
 - Clear developer onboarding
 - Real developer adoption
@@ -226,14 +231,14 @@ Ship a polished **v1 SDK** with:
 
 ### Roadmap Overview
 
-| Phase | Focus | Outcome |
-|------|------|------|
-| 1 | Core Foundations | Stable architecture |
-| 2 | Midnight Integration | Private on-chain coordination |
-| 3 | Arweave Integration | Permanent encrypted storage |
-| 4 | Developer Experience | Easy SDK adoption |
-| 5 | Security & Validation | Production readiness |
-| 6 | Launch & Growth | Market traction |
+| Phase | Focus                 | Outcome                       |
+| ----- | --------------------- | ----------------------------- |
+| 1     | Core Foundations      | Stable architecture           |
+| 2     | Midnight Integration  | Private on-chain coordination |
+| 3     | Arweave Integration   | Permanent encrypted storage   |
+| 4     | Developer Experience  | Easy SDK adoption             |
+| 5     | Security & Validation | Production readiness          |
+| 6     | Launch & Growth       | Market traction               |
 
 ---
 
@@ -259,9 +264,9 @@ Ship a polished **v1 SDK** with:
 
 #### Outcome
 
-- ✅ Technical foundation locked  
-- ✅ Future adapters enabled  
-- ✅ Security model established early  
+- ✅ Technical foundation locked
+- ✅ Future adapters enabled
+- ✅ Security model established early
 
 ---
 
@@ -275,16 +280,16 @@ Ship a polished **v1 SDK** with:
 - Transaction orchestration & fee handling (DUST)
 - ZK-proof integration for private references
 - Wallet construction & signing flows
-- Wallet UX integration 
-    - App connector API 
-    - Browser wallet extensions (for example, Lace) 
+- Wallet UX integration
+  - App connector API
+  - Browser wallet extensions (for example, Lace)
 - End-to-end testing on pre-production environments
 
 #### Outcome
 
-- ✅ Privacy differentiation established  
-- ✅ On-chain coordination operational  
-- ✅ First real network dependency validated  
+- ✅ Privacy differentiation established
+- ✅ On-chain coordination operational
+- ✅ First real network dependency validated
 
 ---
 
@@ -305,9 +310,9 @@ Ship a polished **v1 SDK** with:
 
 #### Outcome
 
-- ✅ Full decentralized data pipeline operational  
-- ✅ Predictable storage economics  
-- ✅ Real-world scalability demonstrated  
+- ✅ Full decentralized data pipeline operational
+- ✅ Predictable storage economics
+- ✅ Real-world scalability demonstrated
 
 ---
 
@@ -317,24 +322,26 @@ Ship a polished **v1 SDK** with:
 
 #### Key Deliverables
 
-- Complete orchestration flow: 
-    `Encrypt → Pay Storage → Upload → Pay Chain → Write Reference`
+- Complete orchestration flow:
+  `Encrypt → Pay Storage → Upload → Pay Chain → Write Reference`
 - Public SDK API stabilization
 - Full TypeScript typings
 
 ##### Reference Applications
+
 - Web demo (browser wallet flow)
 - CLI demo (seed-derived wallet)
 
 ##### Developer Enablement
+
 - Starter templates
 - Quickstart documentation
 
 #### Outcome
 
-- ✅ Developers integrate in hours, not weeks  
-- ✅ Clear usability signal  
-- ✅ Adoption-ready SDK  
+- ✅ Developers integrate in hours, not weeks
+- ✅ Clear usability signal
+- ✅ Adoption-ready SDK
 
 ---
 
@@ -350,18 +357,20 @@ Ship a polished **v1 SDK** with:
 - CI/CD pipelines for builds and releases
 
 ##### Security Review
+
 - Threat modeling
 - Dependency audits
 - Crypto flow validation
 
 ##### Validation
+
 - Feedback cycle with early developer partners
 
 #### Outcome
 
-- ✅ Reduced execution risk  
-- ✅ External validation  
-- ✅ Enterprise credibility foundation  
+- ✅ Reduced execution risk
+- ✅ External validation
+- ✅ Enterprise credibility foundation
 
 ---
 
@@ -376,23 +385,26 @@ Ship a polished **v1 SDK** with:
 - Demo application launch
 
 ##### Developer Onboarding
+
 - Quickstart tutorial
 - One-page security brief
 
 ##### Ecosystem Growth
+
 - Webinars
 - Sample integrations
 - Pilot partnerships
 
 ##### Expansion Roadmap
+
 - Additional storage adapters
 - EVM ecosystem support
 
 #### Outcome
 
-- ✅ Market entry achieved  
-- ✅ Early network effects initiated  
-- ✅ Expansion path defined  
+- ✅ Market entry achieved
+- ✅ Early network effects initiated
+- ✅ Expansion path defined
 
 ---
 

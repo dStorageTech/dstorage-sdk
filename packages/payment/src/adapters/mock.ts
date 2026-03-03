@@ -23,8 +23,8 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
-} from '../types.js';
-import { TOKENS } from '../types.js';
+} from "../types.js";
+import { TOKENS } from "../types.js";
 
 export interface MockPaymentAdapterConfig {
   /**
@@ -36,7 +36,7 @@ export interface MockPaymentAdapterConfig {
    * Payment type this instance simulates.
    * Defaults to 'storage'.
    */
-  type?: 'storage' | 'chain';
+  type?: "storage" | "chain";
   /**
    * How long in ms before a quote expires.
    * Defaults to 600_000 (10 minutes).
@@ -45,25 +45,29 @@ export interface MockPaymentAdapterConfig {
 }
 
 export class MockPaymentAdapter implements PaymentAdapter {
-  readonly name: PaymentProviderName = 'mock';
+  readonly name: PaymentProviderName = "mock";
   readonly token: TokenSymbol;
-  readonly type: 'storage' | 'chain';
+  readonly type: "storage" | "chain";
 
   private readonly quoteValidityMs: number;
 
   constructor(config: MockPaymentAdapterConfig = {}) {
-    this.token = config.token ?? 'MOCK';
-    this.type  = config.type  ?? 'storage';
+    this.token = config.token ?? "MOCK";
+    this.type = config.type ?? "storage";
     this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
   }
 
   async estimateCost(dataSizeBytes: number): Promise<PaymentQuote> {
     // MOCK pricing: 0.001 MOCK per KB, minimum 0.0001 MOCK
-    const kb     = dataSizeBytes / 1024;
+    const kb = dataSizeBytes / 1024;
     const amount = Math.max(0.0001, kb * 0.001).toFixed(6);
-    const usd    = (parseFloat(amount) * (TOKENS[this.token]?.approxUsdPrice ?? 1)).toFixed(6);
+    const usd = (
+      parseFloat(amount) * (TOKENS[this.token]?.approxUsdPrice ?? 1)
+    ).toFixed(6);
 
-    console.log(`[dStorage/mock-payment] Estimated cost: ${amount} ${this.token} ≈ $${usd}`);
+    console.log(
+      `[dStorage/mock-payment] Estimated cost: ${amount} ${this.token} ≈ $${usd}`,
+    );
 
     return {
       token: this.token,
@@ -77,7 +81,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
 
   async pay(
     quote: PaymentQuote,
-    onStatus?: (message: string) => void
+    onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     const tokenName = TOKENS[quote.token]?.name ?? quote.token;
 
@@ -90,21 +94,23 @@ export class MockPaymentAdapter implements PaymentAdapter {
     await delay(800);
 
     // Phase 3 — confirmation
-    onStatus?.('Awaiting confirmation…');
+    onStatus?.("Awaiting confirmation…");
     await delay(500);
 
     const txHash = generateSimulatedTxHash();
 
-    console.log(`[dStorage/mock-payment] Simulated ${quote.type} payment → txHash: ${txHash}`);
+    console.log(
+      `[dStorage/mock-payment] Simulated ${quote.type} payment → txHash: ${txHash}`,
+    );
 
     return {
       txHash,
-      token:     quote.token,
-      amount:    quote.amount,
-      usd:       quote.usd,
-      type:      quote.type,
+      token: quote.token,
+      amount: quote.amount,
+      usd: quote.usd,
+      type: quote.type,
       simulated: true,
-      paidAt:    Date.now(),
+      paidAt: Date.now(),
     };
   }
 }
@@ -112,10 +118,9 @@ export class MockPaymentAdapter implements PaymentAdapter {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function generateSimulatedTxHash(): string {
-  const hex = Array.from(
-    { length: 64 },
-    () => Math.floor(Math.random() * 16).toString(16)
-  ).join('');
+  const hex = Array.from({ length: 64 }, () =>
+    Math.floor(Math.random() * 16).toString(16),
+  ).join("");
   return `0x${hex}`;
 }
 

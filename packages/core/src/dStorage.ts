@@ -22,12 +22,21 @@ import {
   serializePayload,
   deserializePayload,
   deriveKeyFromSignature,
-} from '@dstorage/crypto';
+} from "@dstorage/crypto";
 
-import type { ChainReference, CircuitCallResult } from '@dstorage/chain';
-import type { DStorageConfig, RetrieveResult, UploadResult, WalletInfo } from './types.js';
-import { MetaTransaction } from './metaTransaction.js';
-import type { MetaTxConfig, MetaTxProgress, MetaTxReceipt } from './metaTransaction.js';
+import type { ChainReference, CircuitCallResult } from "@dstorage/chain";
+import type {
+  DStorageConfig,
+  RetrieveResult,
+  UploadResult,
+  WalletInfo,
+} from "./types.js";
+import { MetaTransaction } from "./metaTransaction.js";
+import type {
+  MetaTxConfig,
+  MetaTxProgress,
+  MetaTxReceipt,
+} from "./metaTransaction.js";
 
 export class DStorage {
   private config: DStorageConfig;
@@ -81,7 +90,7 @@ export class DStorage {
     // The key never leaves the device and is not persisted.
     this.encryptionKey = await deriveKeyFromSignature(
       walletInfo._signatureHex,
-      walletInfo.address
+      walletInfo.address,
     );
 
     console.log(`[dStorage] Connected: ${walletInfo.address}`);
@@ -92,11 +101,15 @@ export class DStorage {
     this.wallet = null;
     this.encryptionKey = null;
     this._initialized = false;
-    console.log('[dStorage] Disconnected — encryption key cleared from memory.');
+    console.log(
+      "[dStorage] Disconnected — encryption key cleared from memory.",
+    );
   }
 
   get isConnected(): boolean {
-    return (this.wallet !== null && this.encryptionKey !== null) || this._initialized;
+    return (
+      (this.wallet !== null && this.encryptionKey !== null) || this._initialized
+    );
   }
 
   get connectedAddress(): string | null {
@@ -115,14 +128,12 @@ export class DStorage {
    */
   async upload(
     content: string | Uint8Array,
-    metadata: Record<string, string> = {}
+    metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     this.assertConnected();
 
     const bytes =
-      typeof content === 'string'
-        ? new TextEncoder().encode(content)
-        : content;
+      typeof content === "string" ? new TextEncoder().encode(content) : content;
 
     // 1. Encrypt client-side if key is available; otherwise store as UTF-8 text
     let serialized: string;
@@ -134,18 +145,15 @@ export class DStorage {
     }
 
     // 2. Upload to chosen storage network
-    const ownerAddress = this.wallet?.address ?? '';
-    const storageResult = await this.config.storageAdapter.upload(
-      serialized,
-      {
-        ...metadata,
-        'dstorage-version': '0.1.0',
-        ...(ownerAddress ? { 'dstorage-owner': ownerAddress } : {}),
-      }
-    );
+    const ownerAddress = this.wallet?.address ?? "";
+    const storageResult = await this.config.storageAdapter.upload(serialized, {
+      ...metadata,
+      "dstorage-version": "0.1.0",
+      ...(ownerAddress ? { "dstorage-owner": ownerAddress } : {}),
+    });
 
     // 3. Write on-chain reference — only the pointer, never the data
-    const dataLabel = this.config.defaultDataLabel ?? metadata['label'];
+    const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
       storageId: storageResult.id,
       storageProvider: storageResult.provider,
@@ -227,22 +235,27 @@ export class DStorage {
 
     // 1. Resolve the original storage network ID from the on-chain reference
     const adapter = this.config.chainAdapter as unknown as {
-      getReference?: (refId: string) => Promise<{ storageId: string; storageProvider: string } | null>;
+      getReference?: (
+        refId: string,
+      ) => Promise<{ storageId: string; storageProvider: string } | null>;
       readReference?: (refId: string) => Promise<{ storageId: string }>;
     };
 
     let storageId: string;
-    if (typeof adapter.getReference === 'function') {
+    if (typeof adapter.getReference === "function") {
       const ref = await adapter.getReference(refId);
-      if (!ref) throw new Error(`[dStorage] No on-chain reference found for refId: ${refId}`);
+      if (!ref)
+        throw new Error(
+          `[dStorage] No on-chain reference found for refId: ${refId}`,
+        );
       storageId = ref.storageId;
-    } else if (typeof adapter.readReference === 'function') {
+    } else if (typeof adapter.readReference === "function") {
       const ref = await adapter.readReference(refId);
       storageId = ref.storageId;
     } else {
       throw new Error(
-        '[dStorage] retrieveByRefId() requires the chain adapter to implement ' +
-          'getReference() or readReference().'
+        "[dStorage] retrieveByRefId() requires the chain adapter to implement " +
+          "getReference() or readReference().",
       );
     }
 
@@ -278,23 +291,30 @@ export class DStorage {
    *   - { refId, storageId, storageProvider }
    *   - { refId, ref: { storageId, storageProvider } }
    */
-  async listReferences(): Promise<Array<{ refId: string; storageId: string; storageProvider: string }>> {
+  async listReferences(): Promise<
+    Array<{ refId: string; storageId: string; storageProvider: string }>
+  > {
     const adapter = this.config.chainAdapter as unknown as {
       listReferences?: () => Promise<
         Array<
           | { refId: string; storageId: string; storageProvider: string }
-          | { refId: string; ref: { storageId: string; storageProvider: string } }
+          | {
+              refId: string;
+              ref: { storageId: string; storageProvider: string };
+            }
         >
       >;
     };
 
-    if (typeof adapter.listReferences !== 'function') {
-      throw new Error('[dStorage] listReferences() is not supported by this chain adapter.');
+    if (typeof adapter.listReferences !== "function") {
+      throw new Error(
+        "[dStorage] listReferences() is not supported by this chain adapter.",
+      );
     }
 
     const refs = await adapter.listReferences();
     return refs.map((item) => {
-      if ('ref' in item) {
+      if ("ref" in item) {
         return {
           refId: item.refId,
           storageId: item.ref.storageId,
@@ -317,7 +337,7 @@ export class DStorage {
     if (this.config.storageAdapter.estimateCost) {
       return this.config.storageAdapter.estimateCost(content);
     }
-    return 'Cost estimation not available for this storage provider.';
+    return "Cost estimation not available for this storage provider.";
   }
 
   // ── Meta-transaction ──────────────────────────────────────────────────────
@@ -335,14 +355,14 @@ export class DStorage {
   async executeMetaTransaction(
     file: File,
     onProgress: (progress: MetaTxProgress) => void,
-    config: MetaTxConfig = {}
+    config: MetaTxConfig = {},
   ): Promise<MetaTxReceipt> {
     this.assertConnected();
 
     if (!this.encryptionKey) {
       throw new Error(
-        '[dStorage] executeMetaTransaction() requires an encryption key. ' +
-          'Call connect() with wallet credentials, or use init() with a facade-mode chain adapter.'
+        "[dStorage] executeMetaTransaction() requires an encryption key. " +
+          "Call connect() with wallet credentials, or use init() with a facade-mode chain adapter.",
       );
     }
 
@@ -350,9 +370,9 @@ export class DStorage {
       this.config.storageAdapter,
       this.config.chainAdapter,
       this.encryptionKey,
-      this.wallet?.address ?? '',
+      this.wallet?.address ?? "",
       this.config.storagePaymentAdapter,
-      this.config.chainPaymentAdapter
+      this.config.chainPaymentAdapter,
     );
 
     metaTx.onProgress(onProgress);
@@ -364,7 +384,7 @@ export class DStorage {
   private assertConnected(): void {
     if (!this._initialized && this.wallet === null) {
       throw new Error(
-        '[dStorage] Not connected. Call dStorage.connect(walletInfo) first.'
+        "[dStorage] Not connected. Call dStorage.connect(walletInfo) first.",
       );
     }
   }
@@ -373,13 +393,14 @@ export class DStorage {
 // ── dataId parsing ────────────────────────────────────────────────────────────
 
 function parseStorageId(dataId: string): string {
-  const parts = dataId.split('::');
+  const parts = dataId.split("::");
   if (!parts[0]) throw new Error(`[dStorage] Invalid dataId: ${dataId}`);
   return parts[0];
 }
 
 function parseChainRefId(dataId: string): string {
-  const parts = dataId.split('::');
-  if (!parts[1]) throw new Error(`[dStorage] Invalid dataId (missing chain ref): ${dataId}`);
+  const parts = dataId.split("::");
+  if (!parts[1])
+    throw new Error(`[dStorage] Invalid dataId (missing chain ref): ${dataId}`);
   return parts[1];
 }

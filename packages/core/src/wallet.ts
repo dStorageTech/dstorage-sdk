@@ -8,8 +8,8 @@
  *   3. Returns a WalletInfo ready to pass into dStorage.connect()
  */
 
-import { KEY_DERIVATION_MESSAGE } from '@dstorage/crypto';
-import type { WalletInfo } from './types.js';
+import { KEY_DERIVATION_MESSAGE } from "@dstorage/crypto";
+import type { WalletInfo } from "./types.js";
 
 // ── MetaMask / EIP-1193 wallets ───────────────────────────────────────────────
 
@@ -65,9 +65,9 @@ interface MidnightWalletProvider {
  * - Returns WalletInfo ready for dStorage.connect()
  */
 export async function connectMetaMask(): Promise<WalletInfo> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  if (typeof window === "undefined" || !window.ethereum) {
     throw new Error(
-      '[dStorage] MetaMask not detected. Please install MetaMask: https://metamask.io'
+      "[dStorage] MetaMask not detected. Please install MetaMask: https://metamask.io",
     );
   }
 
@@ -75,18 +75,18 @@ export async function connectMetaMask(): Promise<WalletInfo> {
 
   // Request account access
   const accounts = (await provider.request({
-    method: 'eth_requestAccounts',
+    method: "eth_requestAccounts",
   })) as string[];
 
   if (!accounts || accounts.length === 0) {
-    throw new Error('[dStorage] No accounts returned from MetaMask.');
+    throw new Error("[dStorage] No accounts returned from MetaMask.");
   }
 
   const address = accounts[0]!;
 
   // Sign key-derivation message — this signature is deterministic per wallet
   const signatureHex = (await provider.request({
-    method: 'personal_sign',
+    method: "personal_sign",
     params: [KEY_DERIVATION_MESSAGE, address],
   })) as string;
 
@@ -94,7 +94,7 @@ export async function connectMetaMask(): Promise<WalletInfo> {
 
   return {
     address,
-    chainProvider: 'mock', // Will become 'ethereum' in Phase 2
+    chainProvider: "mock", // Will become 'ethereum' in Phase 2
     _signatureHex: signatureHex,
   };
 }
@@ -116,11 +116,13 @@ export async function connectMetaMask(): Promise<WalletInfo> {
  *
  * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp/connect-wallet
  */
-export async function connectMidnightWallet(networkId = 'testnet-02'): Promise<WalletInfo> {
-  if (typeof window === 'undefined' || !window.midnight) {
+export async function connectMidnightWallet(
+  networkId = "testnet-02",
+): Promise<WalletInfo> {
+  if (typeof window === "undefined" || !window.midnight) {
     throw new Error(
-      '[dStorage] Midnight wallet not detected. ' +
-        'Please install the Lace wallet with Midnight extension.'
+      "[dStorage] Midnight wallet not detected. " +
+        "Please install the Lace wallet with Midnight extension.",
     );
   }
 
@@ -128,7 +130,7 @@ export async function connectMidnightWallet(networkId = 'testnet-02'): Promise<W
   if (!connector) {
     throw new Error(
       `[dStorage] Midnight wallet does not support network "${networkId}". ` +
-        `Available networks: ${Object.keys(window.midnight).join(', ')}`
+        `Available networks: ${Object.keys(window.midnight).join(", ")}`,
     );
   }
 
@@ -152,11 +154,13 @@ export async function connectMidnightWallet(networkId = 'testnet-02'): Promise<W
   //   computational cost against brute-force.
   const signatureHex = await deriveKeySeedFromAddress(address);
 
-  console.log(`[dStorage] Midnight wallet connected: ${address} (network: ${networkId})`);
+  console.log(
+    `[dStorage] Midnight wallet connected: ${address} (network: ${networkId})`,
+  );
 
   return {
     address,
-    chainProvider: 'midnight',
+    chainProvider: "midnight",
     _signatureHex: signatureHex,
     walletApi: api,
   };
@@ -171,43 +175,45 @@ export async function connectMidnightWallet(networkId = 'testnet-02'): Promise<W
 async function deriveKeySeedFromAddress(address: string): Promise<string> {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     enc.encode(address),
-    { name: 'PBKDF2' },
+    { name: "PBKDF2" },
     false,
-    ['deriveBits']
+    ["deriveBits"],
   );
 
   // Fixed salt — namespaced to dStorage so the same wallet used in other
   // dApps produces a different derived value.
-  const salt = enc.encode('dstorage-midnight-key-derivation-v1');
+  const salt = enc.encode("dstorage-midnight-key-derivation-v1");
 
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 },
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations: 100_000 },
     keyMaterial,
-    256
+    256,
   );
 
   return Array.from(new Uint8Array(bits))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /**
  * Demo helper: create a fake wallet connection without a real wallet.
  * Useful for testing and demos in environments without extensions.
  */
-export async function connectDemoWallet(address = '0xDemoWallet1234'): Promise<WalletInfo> {
+export async function connectDemoWallet(
+  address = "0xDemoWallet1234",
+): Promise<WalletInfo> {
   // Use a deterministic fake signature for demo purposes
-  const fakeSignature = `0x${'ab'.repeat(32)}${address.replace('0x', '').slice(0, 8)}`;
+  const fakeSignature = `0x${"ab".repeat(32)}${address.replace("0x", "").slice(0, 8)}`;
 
   console.warn(
-    '[dStorage] Demo wallet connected — encryption is real but not wallet-bound. For production, use connectMetaMask() or connectMidnightWallet().'
+    "[dStorage] Demo wallet connected — encryption is real but not wallet-bound. For production, use connectMetaMask() or connectMidnightWallet().",
   );
 
   return {
     address,
-    chainProvider: 'mock',
+    chainProvider: "mock",
     _signatureHex: fakeSignature,
   };
 }

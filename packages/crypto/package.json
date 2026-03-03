@@ -22,7 +22,9 @@
     "@midnight-ntwrk/wallet-sdk-hd": "^3.0.0"
   },
   "peerDependenciesMeta": {
-    "@midnight-ntwrk/wallet-sdk-hd": { "optional": true }
+    "@midnight-ntwrk/wallet-sdk-hd": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "^5.4.5"
