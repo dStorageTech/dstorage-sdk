@@ -12,31 +12,32 @@ interface Props {
   chainAdapterKey: ChainAdapterKey;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onChainAdapterChange: (key: ChainAdapterKey) => void;
-  mockRecords: StoredRecord[];
+  existingReferences: Array<{ refId: string }>;
   onStartUploadFlow: () => Promise<void>;
-  onUseExistingRecord: (dataId: string) => void;
+  onLoadExistingReferences: () => Promise<void>;
+  onUseExistingRecord: (refId: string) => Promise<void>;
   onContinueToProof: () => void;
   onUpload: (file: File) => Promise<void>;
   onGenerateProof: (claimId: string) => Promise<void>;
 }
 
-export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAdapterKey, onStorageAdapterChange, onChainAdapterChange, mockRecords, onStartUploadFlow, onUseExistingRecord, onContinueToProof, onUpload, onGenerateProof }: Props) {
+export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAdapterKey, onStorageAdapterChange, onChainAdapterChange, existingReferences, onStartUploadFlow, onLoadExistingReferences, onUseExistingRecord, onContinueToProof, onUpload, onGenerateProof }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedClaim, setSelectedClaim] = useState(INSURANCE_CLAIMS[0]!.id);
-  const [selectedMockRecordId, setSelectedMockRecordId] = useState('');
+  const [selectedRefId, setSelectedRefId] = useState('');
 
   const activeAdapter = ADAPTER_CONFIGS[storageAdapterKey];
   const activeChainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
 
   useEffect(() => {
-    if (!selectedMockRecordId && mockRecords.length > 0) {
-      setSelectedMockRecordId(mockRecords[0]!.dataId);
+    if (!selectedRefId && existingReferences.length > 0) {
+      setSelectedRefId(existingReferences[0]!.refId);
     }
-  }, [mockRecords, selectedMockRecordId]);
+  }, [existingReferences, selectedRefId]);
 
   const handleStartUploadFlow = async () => {
     setLoading('start-upload');
@@ -44,8 +45,14 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
   };
 
   const handleUseExistingRecord = () => {
-    if (!selectedMockRecordId) return;
-    onUseExistingRecord(selectedMockRecordId);
+    if (!selectedRefId) return;
+    setLoading('use-existing');
+    onUseExistingRecord(selectedRefId).finally(() => setLoading(null));
+  };
+
+  const handleLoadExistingReferences = () => {
+    setLoading('load-refs');
+    onLoadExistingReferences().finally(() => setLoading(null));
   };
 
   const handleFile = (file: File) => {
@@ -143,19 +150,27 @@ export function PatientPanel({ step, wallet, record, storageAdapterKey, chainAda
       </div>
 
       <div className="pp-connect-btns">
+        <button className="pp-btn pp-btn-ghost pp-btn-full" onClick={handleLoadExistingReferences}
+          disabled={!!loading}>
+          {loading === 'load-refs' ? <Spinner /> : ''} Load references from SDK
+        </button>
         <select
           className="pp-contract-addr-input"
-          value={selectedMockRecordId}
-          onChange={(e) => setSelectedMockRecordId(e.target.value)}
+          value={selectedRefId}
+          onChange={(e) => setSelectedRefId(e.target.value)}
         >
-          {mockRecords.map((doc) => (
-            <option key={doc.dataId} value={doc.dataId}>
-              {doc.fileName} ({new Date(doc.uploadedAt).toLocaleDateString()})
-            </option>
-          ))}
+          {existingReferences.length === 0 ? (
+            <option value="">No on-chain references found</option>
+          ) : (
+            existingReferences.map((ref) => (
+              <option key={ref.refId} value={ref.refId}>
+                {ref.refId}
+              </option>
+            ))
+          )}
         </select>
         <button className="pp-btn pp-btn-primary pp-btn-full" onClick={handleUseExistingRecord}
-          disabled={!!loading || !selectedMockRecordId}>
+          disabled={!!loading || !selectedRefId}>
           Generate a ZK-proof from uploaded certificate
         </button>
       </div>

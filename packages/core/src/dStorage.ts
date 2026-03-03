@@ -272,6 +272,44 @@ export class DStorage {
   // ── Cost estimation ────────────────────────────────────────────────────────
 
   /**
+   * List references currently available from the configured chain adapter.
+   *
+   * Supports both shapes used by current adapters:
+   *   - { refId, storageId, storageProvider }
+   *   - { refId, ref: { storageId, storageProvider } }
+   */
+  async listReferences(): Promise<Array<{ refId: string; storageId: string; storageProvider: string }>> {
+    const adapter = this.config.chainAdapter as unknown as {
+      listReferences?: () => Promise<
+        Array<
+          | { refId: string; storageId: string; storageProvider: string }
+          | { refId: string; ref: { storageId: string; storageProvider: string } }
+        >
+      >;
+    };
+
+    if (typeof adapter.listReferences !== 'function') {
+      throw new Error('[dStorage] listReferences() is not supported by this chain adapter.');
+    }
+
+    const refs = await adapter.listReferences();
+    return refs.map((item) => {
+      if ('ref' in item) {
+        return {
+          refId: item.refId,
+          storageId: item.ref.storageId,
+          storageProvider: item.ref.storageProvider,
+        };
+      }
+      return {
+        refId: item.refId,
+        storageId: item.storageId,
+        storageProvider: item.storageProvider,
+      };
+    });
+  }
+
+  /**
    * Estimate the storage cost for a given content string before committing.
    * Returns a human-readable cost string.
    */

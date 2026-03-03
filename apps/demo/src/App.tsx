@@ -23,6 +23,7 @@ export interface StoredRecord {
   chainRefId: string;
 }
 type ThemeMode = 'light' | 'dark';
+type ExistingReference = { refId: string; storageId: string; storageProvider: string };
 
 export type StorageAdapterKey = 'mock' | 'arweave-local' | 'arweave' | 'autonomi';
 export type ChainAdapterKey = 'mock' | 'midnight-connector';
@@ -78,33 +79,6 @@ export const CHAIN_ADAPTER_CONFIGS: Record<ChainAdapterKey, {
   },
 };
 
-const MOCK_UPLOADED_CERTIFICATES: StoredRecord[] = [
-  {
-    dataId: 'mock-doc-1',
-    storageId: 'QmMockStorageIdAetna2025w9f3u2k7n1x',
-    refId: 'midnight:ref:7f3b8c21a9e44d8ab31f0c2f9e11a101',
-    fileName: 'Aetna-Insurance-Certificate-2025.pdf',
-    uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 7,
-    chainRefId: 'midnight:ref:7f3b8c21a9e44d8ab31f0c2f9e11a101',
-  },
-  {
-    dataId: 'mock-doc-2',
-    storageId: 'QmMockStorageIdBlueCrossQ42025m8v4r1z6p',
-    refId: 'midnight:ref:2bc9d550fa1041d48ec5b69241f2c5a7',
-    fileName: 'BlueCross-Coverage-Letter-Q4-2025.pdf',
-    uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 20,
-    chainRefId: 'midnight:ref:2bc9d550fa1041d48ec5b69241f2c5a7',
-  },
-  {
-    dataId: 'mock-doc-3',
-    storageId: 'QmMockStorageIdUnitedRenewalx3s6n9b2k5q',
-    refId: 'midnight:ref:d19a7e0b9e7f4cd1a0478d94ccfd1162',
-    fileName: 'UnitedHealthcare-ID-Card-Renewal.png',
-    uploadedAt: Date.now() - 1000 * 60 * 60 * 24 * 35,
-    chainRefId: 'midnight:ref:d19a7e0b9e7f4cd1a0478d94ccfd1162',
-  },
-];
-
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'light';
@@ -124,6 +98,7 @@ export default function App() {
   const [drawerMode, setDrawerMode]         = useState<'metatx' | 'zkproof'>('metatx');
   const [storageAdapterKey, setStorageAdapterKey] = useState<StorageAdapterKey>('mock');
   const [chainAdapterKey, setChainAdapterKey] = useState<ChainAdapterKey>('mock');
+  const [existingReferences, setExistingReferences] = useState<ExistingReference[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -183,20 +158,37 @@ export default function App() {
    * For Midnight connector: calls sdk.init() which connects to the Lace wallet and
    * deploys/joins the DataRegistry contract, then uses a demo wallet for encryption.
    */
+  const ensureSdkReady = useCallback(async (): Promise<DStorage> => {
+    if (dstorage) return dstorage;
+
+    const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey);
+
+    if (chainAdapterKey === 'midnight-connector') {
+      await sdk.init();
+    }
+
+    const connectedWallet = await connectDemoWallet();
+    await sdk.connect(connectedWallet);
+    setWallet(connectedWallet);
+    setDStorage(sdk);
+    return sdk;
+  }, [buildSDK, chainAdapterKey, dstorage, storageAdapterKey]);
+
+  const refreshExistingReferences = useCallback(async (sdk: DStorage): Promise<ExistingReference[]> => {
+    try {
+      const refs = await sdk.listReferences();
+      setExistingReferences(refs);
+      return refs;
+    } catch {
+      setExistingReferences([]);
+      return [];
+    }
+  }, []);
+
   const handleStartUploadFlow = async () => {
     try {
-      const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey);
-
-      if (chainAdapterKey === 'midnight-connector') {
-        // Connect to Lace wallet, then deploy or join the DataRegistry contract.
-        const deployedAddr = await sdk.init();
-      }
-
-      // Use demo wallet for encryption key derivation (works for all adapter types).
-      const wallet = await connectDemoWallet();
-      await sdk.connect(wallet);
-      setWallet(wallet);
-      setDStorage(sdk);
+      const sdk = await ensureSdkReady();
+      await refreshExistingReferences(sdk);
       setStep('upload');
     } catch (err) {
       console.error('Connection failed:', err);
@@ -205,14 +197,44 @@ export default function App() {
     }
   };
 
-  const handleUseExistingRecord = (dataId: string) => {
-    const selected = MOCK_UPLOADED_CERTIFICATES.find((doc) => doc.dataId === dataId);
-    if (!selected) return;
-    setRecord(selected);
-    setProof(null);
-    setVerified(null);
-    setVerifying(false);
-    setStep('prove');
+  const handleUseExistingRecord = async (refId: string) => {
+    try {
+      const sdk = await ensureSdkReady();
+      const refs = existingReferences.length > 0 ? existingReferences : await refreshExistingReferences(sdk);
+      const selected = refs.find((r) => r.refId === refId);
+      if (!selected) {
+        alert('Reference not found on chain.');
+        return;
+      }
+
+      setRecord({
+        dataId: `${selected.storageId}::${selected.refId}`,
+        storageId: selected.storageId,
+        refId: selected.refId,
+        fileName: 'Existing on-chain reference',
+        uploadedAt: Date.now(),
+        chainRefId: selected.refId,
+      });
+      setProof(null);
+      setVerified(null);
+      setVerifying(false);
+      setStep('prove');
+    } catch (err) {
+      console.error('Failed to load references:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`Failed to load references:\n${msg}`);
+    }
+  };
+
+  const handleLoadExistingReferences = async () => {
+    try {
+      const sdk = await ensureSdkReady();
+      await refreshExistingReferences(sdk);
+    } catch (err) {
+      console.error('Failed to load references:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`Failed to load references:\n${msg}`);
+    }
   };
 
   const handleUpload = async (file: File) => {
@@ -235,6 +257,7 @@ export default function App() {
       uploadedAt: receipt.completedAt,
       chainRefId: receipt.chainRefId,
     });
+    await refreshExistingReferences(dstorage);
     setStep('uploaded');
   };
 
@@ -299,8 +322,9 @@ export default function App() {
             chainAdapterKey={chainAdapterKey}
             onStorageAdapterChange={setStorageAdapterKey}
             onChainAdapterChange={setChainAdapterKey}
-            mockRecords={MOCK_UPLOADED_CERTIFICATES}
+            existingReferences={existingReferences}
             onStartUploadFlow={handleStartUploadFlow}
+            onLoadExistingReferences={handleLoadExistingReferences}
             onUseExistingRecord={handleUseExistingRecord}
             onContinueToProof={handleContinueToProof}
             onUpload={handleUpload} onGenerateProof={handleGenerateProof} />
@@ -323,8 +347,8 @@ export default function App() {
 
 function StepIndicator({ step }: { step: AppStep }) {
   const steps = [
-    { id: 'connect', label: 'Choose Path'   },
-    { id: 'upload',  label: 'Upload Record'  },
+    { id: 'connect', label: 'Choose Adapters'   },
+    { id: 'upload',  label: 'Upload Certificate'  },
     { id: 'uploaded', label: 'Upload Summary' },
     { id: 'prove',   label: 'Generate Proof' },
     { id: 'done',    label: 'Verified'        },

@@ -4,6 +4,8 @@ HealthVault is a browser demo showing how the dStorage SDK works end-to-end. It 
 
 The whole point is to make the SDK's core promise tangible: data stays private, only the owner controls access, and claims can be verified without revealing anything.
 
+![HealthVault demo screenshot](../../docs/Screenshot%20From%202026-03-02%2021-04-51.png)
+
 ## Running the demo
 
 ```bash
