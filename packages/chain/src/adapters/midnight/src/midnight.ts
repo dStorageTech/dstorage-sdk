@@ -374,6 +374,59 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
+   * midnight-js-contracts expects privateStateProvider.setContractAddress().
+   * Some providers do not implement it, so we add a no-op shim.
+   */
+  private _withContractAddressShim<T extends object>(
+    privateStateProvider: T,
+  ): T & { setContractAddress: (address: string) => void } {
+    return Object.assign(privateStateProvider, {
+      setContractAddress: (_address: string) => {
+        /* no-op: provider scopes by privateStateId */
+      },
+    });
+  }
+
+  /**
+   * Assemble DataRegistryProviders from mode-specific pieces.
+   */
+  private async _assembleDataRegistryProviders(params: {
+    privateStateProvider: object;
+    zkConfigProvider: unknown;
+    indexerHttp: string;
+    indexerWs: string;
+    proofServer: string;
+    walletProvider: unknown;
+    midnightProvider: unknown;
+  }): Promise<DataRegistryProviders> {
+    const { indexerPublicDataProvider } = await import(
+      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-indexer-public-data-provider"
+    );
+    const { httpClientProofProvider } = await import(
+      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-http-client-proof-provider"
+    );
+
+    return {
+      privateStateProvider:
+        this._withContractAddressShim(params.privateStateProvider) as unknown as DataRegistryProviders["privateStateProvider"],
+      publicDataProvider: indexerPublicDataProvider(
+        params.indexerHttp,
+        params.indexerWs,
+      ),
+      zkConfigProvider:
+        params.zkConfigProvider as DataRegistryProviders["zkConfigProvider"],
+      proofProvider: httpClientProofProvider(
+        params.proofServer,
+        params.zkConfigProvider as any,
+      ),
+      walletProvider:
+        params.walletProvider as unknown as DataRegistryProviders["walletProvider"],
+      midnightProvider:
+        params.midnightProvider as unknown as DataRegistryProviders["midnightProvider"],
+    };
+  }
+
+  /**
    * Build providers for connector (browser) mode.
    * Uses in-memory private state, FetchZkConfigProvider, and the Lace wallet connector API.
    */
@@ -393,10 +446,6 @@ export class MidnightChainAdapter implements ChainAdapter {
     // Use browser-safe helpers defined at module level — compact-runtime's toHex/fromHex
     // use Buffer internally and are not safe in the browser.
     const { Transaction } = await import("@midnight-ntwrk/ledger-v7");
-    const { httpClientProofProvider } =
-      await import("@midnight-ntwrk/midnight-js-http-client-proof-provider");
-    const { indexerPublicDataProvider } =
-      await import("@midnight-ntwrk/midnight-js-indexer-public-data-provider");
 
     const connectorAPI = this.connectorAPI;
     const coinPublicKey = this.connectorCoinPublicKey ?? "";
@@ -443,31 +492,15 @@ export class MidnightChainAdapter implements ChainAdapter {
       },
     };
 
-    // midnight-js-contracts calls setContractAddress() which is not yet in the
-    // levelPrivateStateProvider implementation — add a no-op shim.
-    const privateStateProviderUpdated = Object.assign(privateStateProvider, {
-      setContractAddress: (_address: string) => {
-        /* no-op: levelDb scopes by privateStateId */
-      },
+    return this._assembleDataRegistryProviders({
+      privateStateProvider,
+      zkConfigProvider,
+      indexerHttp,
+      indexerWs,
+      proofServer,
+      walletProvider,
+      midnightProvider,
     });
-
-    const providers: DataRegistryProviders = {
-      privateStateProvider:
-        privateStateProviderUpdated as unknown as DataRegistryProviders["privateStateProvider"],
-      publicDataProvider: indexerPublicDataProvider(indexerHttp, indexerWs),
-      zkConfigProvider:
-        zkConfigProvider as DataRegistryProviders["zkConfigProvider"],
-      proofProvider: httpClientProofProvider(
-        proofServer,
-        zkConfigProvider as any,
-      ),
-      walletProvider:
-        walletProvider as unknown as DataRegistryProviders["walletProvider"],
-      midnightProvider:
-        midnightProvider as unknown as DataRegistryProviders["midnightProvider"],
-    };
-
-    return providers;
   }
 
   /**
@@ -475,10 +508,6 @@ export class MidnightChainAdapter implements ChainAdapter {
    * (wallet, proof server, indexer, node) with an in-memory private state store.
    */
   private async _buildDataRegistryProviders(): Promise<DataRegistryProviders> {
-    if (this.walletMode === "connector") {
-      return this._buildConnectorProviders();
-    }
-
     // Facade mode (Node.js CLI only — uses WalletFacade and levelDb private state).
     const zkConfigProvider = await this._buildZkConfigProvider();
 
@@ -542,35 +571,15 @@ export class MidnightChainAdapter implements ChainAdapter {
         return "key-just-for-testing-here!";
       },
     });
-    // midnight-js-contracts calls setContractAddress() which is not yet in the
-    // levelPrivateStateProvider implementation — add a no-op shim.
-    const privateStateProvider = Object.assign(basePrivateStateProvider, {
-      setContractAddress: (_address: string) => {
-        /* no-op: levelDb scopes by privateStateId */
-      },
-    });
-    const { indexerPublicDataProvider } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-indexer-public-data-provider"
-    );
-    const { httpClientProofProvider } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-http-client-proof-provider"
-    );
-    const providers: DataRegistryProviders = {
-      privateStateProvider:
-        privateStateProvider as unknown as DataRegistryProviders["privateStateProvider"],
-      publicDataProvider: indexerPublicDataProvider(
-        this.config.indexer,
-        this.config.indexerWS,
-      ),
+    const providers = await this._assembleDataRegistryProviders({
+      privateStateProvider: basePrivateStateProvider,
       zkConfigProvider,
-      proofProvider: httpClientProofProvider(
-        this.config.proofServer,
-        zkConfigProvider as any,
-      ),
-      walletProvider:
-        walletProvider as unknown as DataRegistryProviders["walletProvider"],
+      indexerHttp: this.config.indexer,
+      indexerWs: this.config.indexerWS,
+      proofServer: this.config.proofServer,
+      walletProvider,
       midnightProvider: walletProvider,
-    };
+    });
 
     this.facade = walletFacade;
     return providers;
@@ -591,7 +600,12 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
 
-    const providers = await this._buildDataRegistryProviders();
+    let providers;
+    if (this.walletMode === "connector") {
+      providers = await this._buildConnectorProviders();
+    } else {
+      providers = await this._buildDataRegistryProviders();
+    }
 
     const { DataRegistryAPI } = await import("./api.js");
     if (!this._contractAddress) {
