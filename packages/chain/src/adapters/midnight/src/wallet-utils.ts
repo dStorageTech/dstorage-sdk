@@ -40,7 +40,7 @@ export const getInitialUnshieldedState = async (wallet: UnshieldedWallet) => {
 export const syncWallet = (
   wallet: WalletFacade,
   throttleTime = 2_000,
-  timeout = 90_000,
+  timeout = 360_000,
 ) => {
   console.log("Syncing wallet...");
 

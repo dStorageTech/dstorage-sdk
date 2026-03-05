@@ -111,7 +111,7 @@ export class MidnightWalletProvider
 
     const initialState = await getInitialShieldedState(wallet.shielded);
     /*console.log(
-      `Your wallet seed is: ${seeds.masterSeed} and your address is: ${initialState.address.coinPublicKeyString()}`,
+      `Your wallet address is: ${initialState.address.coinPublicKeyString()}`,
     );*/
 
     return new MidnightWalletProvider(

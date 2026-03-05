@@ -202,48 +202,64 @@ export function PatientPanel({
           </div>
         </div>
 
-        <div className="pp-connect-btns">
-          <button
-            className="pp-btn pp-btn-primary pp-btn-full"
-            onClick={handleStartUploadFlow}
-            disabled={!!loading}
-          >
-            {loading === "start-upload" ? <Spinner /> : ""} Upload a health
-            insurance certificate
-          </button>
-        </div>
+        <div className="pp-paths">
+          <section className="pp-path-card">
+            <div className="pp-path-kicker">Path A</div>
+            <h3 className="pp-path-title">Upload a New Certificate</h3>
+            <p className="pp-path-body">
+              Start with a new health insurance certificate. The file is
+              encrypted locally, stored, and then referenced on-chain.
+            </p>
+            <button
+              className="pp-btn pp-btn-primary pp-btn-full"
+              onClick={handleStartUploadFlow}
+              disabled={!!loading}
+            >
+              {loading === "start-upload" ? <Spinner /> : ""} Start Upload Flow
+            </button>
+          </section>
 
-        <div className="pp-connect-btns">
-          <button
-            className="pp-btn pp-btn-ghost pp-btn-full"
-            onClick={handleLoadExistingReferences}
-            disabled={!!loading}
-          >
-            {loading === "load-refs" ? <Spinner /> : ""} Load references from
-            SDK
-          </button>
-          <select
-            className="pp-contract-addr-input"
-            value={selectedRefId}
-            onChange={(e) => setSelectedRefId(e.target.value)}
-          >
-            {existingReferences.length === 0 ? (
-              <option value="">No on-chain references found</option>
-            ) : (
-              existingReferences.map((ref) => (
-                <option key={ref.refId} value={ref.refId}>
-                  {ref.refId}
-                </option>
-              ))
-            )}
-          </select>
-          <button
-            className="pp-btn pp-btn-primary pp-btn-full"
-            onClick={handleUseExistingRecord}
-            disabled={!!loading || !selectedRefId}
-          >
-            Generate a ZK-proof from uploaded certificate
-          </button>
+          <section className="pp-path-card">
+            <div className="pp-path-kicker">Path B</div>
+            <h3 className="pp-path-title">
+              Generate Proof from Existing Reference
+            </h3>
+            <p className="pp-path-body">
+              Load references already stored on-chain, select a `refId`, and
+              jump directly to ZK-proof generation.
+            </p>
+            <div className="pp-connect-btns">
+              <button
+                className="pp-btn pp-btn-ghost pp-btn-full"
+                onClick={handleLoadExistingReferences}
+                disabled={!!loading}
+              >
+                {loading === "load-refs" ? <Spinner /> : ""} Load References
+              </button>
+              <select
+                className="pp-contract-addr-input"
+                value={selectedRefId}
+                onChange={(e) => setSelectedRefId(e.target.value)}
+              >
+                {existingReferences.length === 0 ? (
+                  <option value="">No on-chain references found</option>
+                ) : (
+                  existingReferences.map((ref) => (
+                    <option key={ref.refId} value={ref.refId}>
+                      {ref.refId}
+                    </option>
+                  ))
+                )}
+              </select>
+              <button
+                className="pp-btn pp-btn-primary pp-btn-full"
+                onClick={handleUseExistingRecord}
+                disabled={!!loading || !selectedRefId}
+              >
+                Continue to Proof
+              </button>
+            </div>
+          </section>
         </div>
         <div className="pp-privacy-note">
           <span className="pp-privacy-icon">🛡</span>

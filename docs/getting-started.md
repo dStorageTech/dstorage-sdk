@@ -466,10 +466,7 @@ Real payment adapters for Arweave (AR token) and Midnight (DUST token). Structur
 These helpers connect a user's wallet and return a `WalletInfo` object that `ds.connect()` uses to derive the client-side encryption key.
 
 ```typescript
-import {
-  connectMidnightWallet,
-  connectDemoWallet,
-} from "@dstorage/core";
+import { connectMidnightWallet, connectDemoWallet } from "@dstorage/core";
 
 // Midnight wallet browser extension
 const walletInfo = await connectMidnightWallet("preprod"); // or 'undeployed'

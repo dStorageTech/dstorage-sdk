@@ -232,7 +232,7 @@ export class MidnightChainAdapter implements ChainAdapter {
   private connectorProofServer: string | null = null;
 
   private readonly walletMode: "facade" | "connector";
-  private readonly connectorName: string;
+  private readonly connectorName: string | null;
 
   private _contractAddress: string | undefined;
   private _zkArtifactsPath: string | undefined;
@@ -285,8 +285,8 @@ export class MidnightChainAdapter implements ChainAdapter {
               MidnightChainAdapterConfig,
               { walletMode: "connector" }
             >
-          ).connectorName ?? "mnLace")
-        : "";
+          ).connectorName ?? null)
+        : null;
 
     this._contractAddress = config.contractAddress;
     this._credentials =
@@ -407,8 +407,9 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
 
     return {
-      privateStateProvider:
-        this._withContractAddressShim(params.privateStateProvider) as unknown as DataRegistryProviders["privateStateProvider"],
+      privateStateProvider: this._withContractAddressShim(
+        params.privateStateProvider,
+      ) as unknown as DataRegistryProviders["privateStateProvider"],
       publicDataProvider: indexerPublicDataProvider(
         params.indexerHttp,
         params.indexerWs,
@@ -863,13 +864,19 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
 
     // Select the wallet: prefer the configured connectorName, otherwise use the first available
-    let selected = availableWallets.find((w) => w.id === this.connectorName);
-    if (!selected) {
-      console.warn(
-        `[dStorage/midnight] Configured wallet "${this.connectorName}" not found. ` +
-          `Using first available: "${availableWallets[0]!.id}"`,
+    let selected = availableWallets[0]!;
+    if (this.connectorName) {
+      let connectorFound = availableWallets.find(
+        (w) => w.id === this.connectorName,
       );
-      selected = availableWallets[0]!;
+      if (connectorFound) {
+        selected = connectorFound;
+      } else {
+        console.warn(
+          `[dStorage/midnight] Configured wallet "${this.connectorName}" not found. ` +
+            `Using first available: "${selected.id}"`,
+        );
+      }
     }
 
     console.log(

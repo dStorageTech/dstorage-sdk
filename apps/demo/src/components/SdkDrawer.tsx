@@ -183,7 +183,7 @@ function MetaTxView({ progress }: { progress: MetaTxProgress }) {
               navigator.clipboard.writeText(progress.receipt!.dataId)
             }
           >
-            {progress.receipt.dataId.slice(0, 44)}…{" "}
+            {progress.receipt.dataId}{" "}
             <span className="sdk-copy">copy</span>
           </span>
         </div>
