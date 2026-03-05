@@ -112,12 +112,12 @@ export async function connectMetaMask(): Promise<WalletInfo> {
  *      property we use PBKDF2(address) as the seed instead.)
  *   5. Return WalletInfo with walletApi for MidnightChainAdapter to reuse.
  *
- * @param networkId  Midnight network to connect to. Default: "testnet-02".
+ * @param networkId  Midnight network to connect to. Default: "preprod".
  *
  * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp/connect-wallet
  */
 export async function connectMidnightWallet(
-  networkId = "testnet-02",
+  networkId = "preprod",
 ): Promise<WalletInfo> {
   if (typeof window === "undefined" || !window.midnight) {
     throw new Error(

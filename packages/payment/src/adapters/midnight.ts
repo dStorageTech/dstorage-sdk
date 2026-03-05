@@ -35,7 +35,7 @@ import { TOKENS } from "../types.js";
 export interface MidnightPaymentAdapterConfig {
   /**
    * Midnight node RPC endpoint.
-   * Testnet-02: https://rpc.testnet-02.midnight.network
+   * Testnet-02: https://rpc.preprod.midnight.network
    */
   nodeEndpoint?: string;
   /**
@@ -62,7 +62,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
   constructor(config: MidnightPaymentAdapterConfig = {}) {
     this.config = {
       nodeEndpoint:
-        config.nodeEndpoint ?? "https://rpc.testnet-02.midnight.network",
+        config.nodeEndpoint ?? "https://rpc.preprod.midnight.network",
       wallet: config.wallet,
     };
     this.quoteValidityMs = config.quoteValidityMs ?? 120_000;

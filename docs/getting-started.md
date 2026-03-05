@@ -467,16 +467,12 @@ These helpers connect a user's wallet and return a `WalletInfo` object that `ds.
 
 ```typescript
 import {
-  connectMetaMask,
   connectMidnightWallet,
   connectDemoWallet,
 } from "@dstorage/core";
 
-// EVM-compatible wallet (MetaMask, etc.) — browser only
-const walletInfo = await connectMetaMask();
-
 // Midnight wallet browser extension
-const walletInfo = await connectMidnightWallet("testnet-02"); // or 'undeployed'
+const walletInfo = await connectMidnightWallet("preprod"); // or 'undeployed'
 
 // Demo / testing — no real wallet required
 const walletInfo = await connectDemoWallet("0xTestUser");
