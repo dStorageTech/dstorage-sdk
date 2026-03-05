@@ -1,3 +1,5 @@
+<img src="docs/dStorage-logo-image-monochrome.png" alt="dStorage logo" width="80" />
+
 # dStorage SDK
 
 > Privacy-first data layer for dApps — client-side encryption + decentralised storage + on-chain coordination in a single SDK.
@@ -26,7 +28,7 @@ Deliver a **privacy-first, developer-friendly data layer** combining **Midnight 
 
 Instead of dApps collecting and storing user data on centralised servers, dStorage shifts data ownership to the user:
 
-- **Encrypts** data client-side using wallet-derived keys (AES-GCM 256)
+- **Encrypts** data client-side using wallet-derived keys
 - **Pays** storage and chain networks using adapter-defined tokens (MOCK, AR, DUST)
 - **Stores** encrypted blobs on decentralised storage (Arweave, Arweave Local, Mock, Autonomi)
 - **Writes** cryptographic references on-chain (Mock, Midnight)
@@ -36,63 +38,111 @@ Privacy becomes an **architectural guarantee**, not a compliance promise.
 
 Most applications store user data on servers they control. That means users have to trust that the service provider won't read, sell, or lose their data — and history shows that trust is often misplaced. dStorage takes a different approach: data is encrypted on the user's device before it ever leaves, stored on a decentralised network where no single party has control, and a tamper-proof on-chain record ties the data back to its owner. The service provider never sees the plaintext. Neither does anyone else.
 
-The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from their wallet — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID and the owner's address — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob, decrypt it locally. At no point does any server hold an unencrypted copy.
+The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from their wallet — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob/s, decrypt them locally. At no point does any server hold an unencrypted copy.
 
-For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, connect a wallet, and call `upload` and `retrieve` (or `retrieveByRefId`). You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready. If you are building on Midnight, the SDK supports wallet lifecycle management, contract deployment/join, reference listing/lookups, and fee handling in adapter flows.
+For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, connect a wallet, and call `upload` and `retrieve` (or `retrieveByRefId`). You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready. If you are building on Midnight, the SDK supports wallet lifecycle management, contract deployment/joining, reference listing/lookups, and fee handling in adapter flows.
 
 ---
 
 ## Quick Start
 
+These setup steps are mainly for the current monorepo/development workflow and are temporary. Once the SDK is published as installable packages, most of the manual build and local wiring steps below will no longer be required for standard integration and usage.
+
 ### Prerequisites
 
 - Node.js 22+ and npm
 - Docker for Midnight Proof server
-- [Compact deveoper tools](https://docs.midnight.network/blog/compact-developer-tools)
-- Optional: Docker (for local Arweave via `arlocal`)
+- Midnight [Compact deveoper tools](https://docs.midnight.network/blog/compact-developer-tools)
+- Optional: Docker for local Arweave via `arlocal`
 - Optional: [Lace](https://www.lace.io) wallet extension for Midnight (browser connector flows)
 - Optional: [Wander](https://www.wander.app) wallet extension for Arweave (browser connector flows)
 
-```bash
-# 1. Install dependencies
+### 1. Install Dependencies
+
+Install dependencies for all packages:
+
+```sh
 npm install
-
-# 2. Run the demo app
-npm run dev -w apps/demo
-
-# or run the console demo app
-npm run demo:midnight
 ```
 
-Note: Any time you modify `packages/crypto` or `packages/chain`, run `npm run build` (or per-package build) before running the demo, since the demo app consumes compiled package outputs:
+Build the packages/adapters:
 
 ```bash
-npm run build --workspace=@dstorage/crypto
-npm run build --workspace=@dstorage/chain
+npm run build
+```
+
+Note: Any time you modify any of the packages, e.g. `packages/crypto` or `packages/chain`, run `npm run build` (or per-package build) before running any of the demo apps, since they consume compiled package outputs.
+
+### 2. Build the dStorage contract
+
+The `DataRegistry` contract is the on-chain index used by the SDK. It records references to encrypted documents (for example `refId`, `storageId`, and related metadata) so proofs and lookups can resolve a reference to the underlying storage record. It does **not** store raw user files or plaintext data; payloads stay off-chain in the selected storage backend, while `DataRegistry` keeps the minimal verification and retrieval pointers on Midnight.
+
+Install the Compact toolchain:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+```
+
+Compile the contract:
+
+```sh
+npm run compile:contract
+```
+
+### 3. Run the Midnight proof server
+
+Follow the Midnight [documentation to start the local proof server](https://docs.midnight.network/getting-started/installation#run-the-proof-server).
+
+```sh
+docker run -p 6300:6300 midnightntwrk/proof-server:7.0.0 -- midnight-proof-server -v
+```
+
+### 4. Run Arweave Local server
+
+This step is optional. Run Arweave Local only if you want to test against a local Arweave-compatible node (`ArweaveLocalStorageAdapter`) instead of using the in-memory `MockStorageAdapter`.
+
+Start Arweave Local with Docker:
+```sh
+docker run --rm -p 1984:1984 textury/arlocal
+
+# or run it with `npx`:
+npx arlocal
+```
+
+If you are using the mock storage adapter path, you can skip this step.
+
+### 5. Run any of the demo apps
+
+Run the demo web app:
+```bash
+npm run dev -w apps/demo
 ```
 
 Open http://localhost:5173 and choose a path:
-
 - upload a new health insurance certificate
-- or jump directly to proof generation from a mock list of previously uploaded certificates
+- or jump directly to proof generation from a list of previously uploaded certificates
 
-For terminal-only testing, `npm run demo:midnight` starts a CLI that:
+Alternatively, for terminal-only testing, run the console demo app:
+```bash
+npm run demo:midnight
+```
 
+It will start a CLI that:
+- uses Midnight Preprod network and Arweave Local storage
 - asks for network + wallet seed/mnemonic and initializes `MidnightChainAdapter`
-- uses Arweave Local storage in the current CLI implementation
 - provides actions to upload files, list on-chain references, and retrieve content by `refId`
 
 ---
 
 ## Reality Check (Current Support)
 
-| Area | Current state |
-|------|---------------|
-| Storage adapters | `Mock` and `ArweaveLocal` are live; `Arweave` is preview; `Autonomi` is stub |
-| Chain adapters | `Mock`, `MockMidnight`, and `Midnight` are implemented |
+| Area             | Current state                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| Storage adapters | `Mock` and `ArweaveLocal` are live; `Arweave` is preview; `Autonomi` is stub                         |
+| Chain adapters   | `Mock`, `MockMidnight`, and `Midnight` are implemented                                               |
 | Payment adapters | `Mock` is simulated by design; `Arweave` and `Midnight` payment adapters are preview/simulated flows |
-| Demo webapp | End-to-end upload UX; supports mock and browser Midnight connector paths |
-| Console demo | Uses Midnight chain + local Arweave flow for upload/list/retrieve operations |
+| Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector and Arweave Local paths                            |
+| Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                         |
 
 ---
 
@@ -109,7 +159,7 @@ import {
   DStorage,
   MockStorageAdapter,
   MockChainAdapter,
-  connectMidnightWallet
+  connectMidnightWallet,
 } from "@dstorage/core";
 
 // 1. Init SDK with your chosen providers
@@ -217,19 +267,6 @@ User input
  dataId        ← "<storageId>::<chainRefId>"
  private state ← owner's on-chain record updated (ZK-shielded, not publicly readable)
 ```
-
----
-
-## Packages
-
-| Package             | Description                              | Status         |
-| ------------------- | ---------------------------------------- | -------------- |
-| `@dstorage/crypto`  | Key derivation + AES-GCM encrypt/decrypt | 🚧 In Progress |
-| `@dstorage/storage` | Storage adapter interface + adapters     | 🚧 In Progress |
-| `@dstorage/chain`   | Chain adapter interface + adapters       | 🚧 In Progress |
-| `@dstorage/core`    | Orchestration SDK + wallet helpers       | 🚧 In Progress |
-
----
 
 ## Supported Providers
 
