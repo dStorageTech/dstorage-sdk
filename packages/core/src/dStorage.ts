@@ -24,7 +24,6 @@ import {
   deriveKeyFromSignature,
 } from "@dstorage/crypto";
 
-import type { ChainReference, CircuitCallResult } from "@dstorage/chain";
 import type {
   DStorageConfig,
   RetrieveResult,
@@ -159,7 +158,7 @@ export class DStorage {
       storageProvider: storageResult.provider,
       owner: ownerAddress,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
-      createdAt: Date.now(),
+      writtenAt: Date.now(),
     });
 
     const refId = chainResult.refId;

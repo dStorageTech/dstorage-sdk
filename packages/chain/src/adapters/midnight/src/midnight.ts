@@ -26,6 +26,8 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
+  WalletBalances,
+  DataReferencesSummary,
 } from "../../../types.js";
 
 import type { DataRegistryAPI, PrivateStateId } from "./api.js";
@@ -41,27 +43,12 @@ export interface WalletAddresses {
   dust: string;
 }
 
-export interface WalletBalances {
-  night: bigint; // unshielded NIGHT token balance
-  dust: bigint; // DUST fee token balance
-}
-
-export interface DataRegistryReferenceSummary {
-  refId: string;
-  storageId: string;
-  storageProvider: string;
-}
+// Token names used to populate WalletBalances map
+const TOKEN_NAME_NIGTH = "night"; // unshielded NIGHT token
+const TOKEN_NAME_DUST = "dust"; // DUST fee token
 
 // ── Connector API types (minimal surface from dApp connector spec) ────────────
 // See: https://docs.midnight.network/api-reference/dapp-connector
-
-/** InitialAPI: exposed at window.midnight.{walletId} before connection. */
-interface WalletInitialAPI {
-  name: string;
-  icon: string;
-  apiVersion: string;
-  connect(networkId: string): Promise<ConnectedAPI>;
-}
 
 /** ConnectedAPI: returned by wallet.connect(networkId). */
 interface ConnectedAPI {
@@ -649,7 +636,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    * For Arweave references, storageId is the original txId string.
    * For other providers, storageId is the hex of the stored Bytes<32>.
    */
-  async listReferences(): Promise<DataRegistryReferenceSummary[]> {
+  async listReferences(): Promise<DataReferencesSummary[]> {
     const api = await this._getAPI();
 
     const { firstValueFrom } = await import("rxjs");
@@ -672,9 +659,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Returns { storageId, storageProvider } with the storageId decoded to the
    * original storage network identifier (e.g. Arweave txId), or null if not found.
    */
-  async getReference(
-    refId: string,
-  ): Promise<DataRegistryReferenceSummary | null> {
+  async getReference(refId: string): Promise<DataReferencesSummary | null> {
     const api = await this._getAPI();
 
     const { firstValueFrom } = await import("rxjs");
@@ -995,6 +980,7 @@ export class MidnightChainAdapter implements ChainAdapter {
   /**
    * Read NIGHT and DUST balances.
    * - Facade mode: reads from synced wallet state
+   * TODO:
    * - Connector mode: returns 0n (known limitation)
    */
   async getBalances(): Promise<WalletBalances> {
@@ -1013,8 +999,9 @@ export class MidnightChainAdapter implements ChainAdapter {
       const nightToken = unshieldedToken();
 
       return {
-        night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
-        dust: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
+        TOKEN_NAME_NIGTH:
+          (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
+        TOKEN_NAME_DUST: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
       };
     } else {
       if (!this.connectorAPI) {
@@ -1023,8 +1010,8 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
       }
       return {
-        night: 0n,
-        dust: 0n,
+        TOKEN_NAME_NIGTH: 0n,
+        TOKEN_NAME_DUST: 0n,
       };
     }
   }

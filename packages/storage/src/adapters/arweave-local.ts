@@ -394,8 +394,9 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
       "[dStorage/arweave-local] ⚠️  Testnet upload — data is NOT on the real Arweave network.",
     );
     console.log(
-      `[dStorage/arweave-local] Mine a block to confirm: adapter.testnet.mine()`,
+      `[dStorage/arweave-local] Mining a block to confirm...`,
     );
+    await this.testnet.mine();
     return result;
   }
 }

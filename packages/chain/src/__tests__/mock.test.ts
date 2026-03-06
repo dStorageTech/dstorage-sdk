@@ -10,7 +10,7 @@ function uniqueRef(suffix: string) {
     storageId: `store_${suffix}`,
     storageProvider: "mock",
     owner: `0xOwner_${suffix}`,
-    createdAt: Date.now(),
+    writtenAt: Date.now(),
   };
 }
 
@@ -61,15 +61,15 @@ describe("MockChainAdapter", () => {
       expect(ids.size).toBe(3);
     });
 
-    it("overrides createdAt with current timestamp", async () => {
+    it("overrides writtenAt with current timestamp", async () => {
       const adapter = new MockChainAdapter();
-      const ref = { ...uniqueRef("wr6"), createdAt: 1 }; // old timestamp
+      const ref = { ...uniqueRef("wr6"), writtenAt: 1 }; // old timestamp
       const before = Date.now();
       await adapter.writeReference(ref);
       const stored = await adapter.readReference(
         (await adapter.writeReference(uniqueRef("wr6b"))).refId,
       );
-      expect(stored.createdAt).toBeGreaterThanOrEqual(before);
+      expect(stored.writtenAt).toBeGreaterThanOrEqual(before);
     });
 
     it("writes a reference with optional dataLabel", async () => {
@@ -107,7 +107,7 @@ describe("MockChainAdapter", () => {
         storageId: "sid_rr3",
         storageProvider: "arweave",
         owner: "0xOwner_rr3",
-        createdAt: Date.now(),
+        writtenAt: Date.now(),
       };
       const { refId } = await adapter.writeReference(ref);
       const stored = await adapter.readReference(refId);
@@ -117,28 +117,29 @@ describe("MockChainAdapter", () => {
     });
   });
 
-  // ── getAllReferences ───────────────────────────────────────────────────────
+  // ── listReferences ────────────────────────────────────────────────────────
 
-  describe("getAllReferences", () => {
+  describe("listReferences", () => {
     it("returns an array", async () => {
       const adapter = new MockChainAdapter();
-      expect(Array.isArray(adapter.getAllReferences())).toBe(true);
+      const all = await adapter.listReferences();
+      expect(Array.isArray(all)).toBe(true);
     });
 
     it("includes a newly written reference", async () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(uniqueRef("all1"));
-      const all = adapter.getAllReferences();
+      const all = await adapter.listReferences();
       const found = all.find((r) => r.refId === refId);
       expect(found).toBeDefined();
-      expect(found?.ref.storageId).toBe("store_all1");
+      expect(found?.storageId).toBe("store_all1");
     });
 
     it("includes all written references", async () => {
       const adapter = new MockChainAdapter();
       const r1 = await adapter.writeReference(uniqueRef("all2a"));
       const r2 = await adapter.writeReference(uniqueRef("all2b"));
-      const all = adapter.getAllReferences();
+      const all = await adapter.listReferences();
       expect(all.some((r) => r.refId === r1.refId)).toBe(true);
       expect(all.some((r) => r.refId === r2.refId)).toBe(true);
     });

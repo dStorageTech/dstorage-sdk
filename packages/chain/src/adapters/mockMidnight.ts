@@ -19,11 +19,10 @@
 
 import type {
   ChainAdapter,
-  ChainPermission,
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
-  CircuitCallResult,
+  DataReferencesSummary,
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
 
@@ -122,7 +121,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
     mockBlockHeight += 1;
     const refId = generateRefId();
-    const entry: ChainReference = { ...ref, createdAt: Date.now() };
+    const entry: ChainReference = { ...ref, writtenAt: Date.now() };
     refs.set(refId, entry);
 
     // Persist to localStorage
@@ -151,14 +150,12 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   }
 
   /** List all references (useful for demo UI) */
-  getAllReferences(): Array<{ refId: string; ref: ChainReference }> {
-    return [...refs.entries()].map(([refId, ref]) => ({ refId, ref }));
-  }
-
-  async listReferences(): Promise<
-    Array<{ refId: string; ref: ChainReference }>
-  > {
-    return this.getAllReferences();
+  async listReferences(): Promise<DataReferencesSummary[]> {
+    return [...refs.entries()].map(([refId, ref]) => ({
+      refId,
+      storageId: ref.storageId,
+      storageProvider: ref.storageProvider,
+    }));
   }
 
   // ── DataRegistry deployment stubs ─────────────────────────────────────────
@@ -185,32 +182,5 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return new KeyDeriver({
       mnemonic: "test test test test test test test test test test test junk",
     }).deriveEncryptionKey();
-  }
-
-  // ── Generic circuit API ───────────────────────────────────────────────────
-
-  async callCircuit(
-    circuitName: string,
-    inputs: unknown[],
-  ): Promise<CircuitCallResult> {
-    await this.proofServer.generateProof(circuitName, inputs);
-
-    // Simulate block inclusion delay
-    await sleep(150 + Math.random() * 250);
-    mockBlockHeight += 1;
-
-    return {
-      txHash: `mock-tx-${Date.now()}`,
-      blockHeight: mockBlockHeight,
-      calledAt: Date.now(),
-    };
-  }
-
-  async queryCircuit<T = unknown>(
-    _queryName: string,
-    _inputs: unknown[],
-  ): Promise<T> {
-    // Default mock returns undefined — override per test as needed
-    return undefined as T;
   }
 }

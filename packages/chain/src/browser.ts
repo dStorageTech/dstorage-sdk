@@ -14,5 +14,4 @@ export { MidnightChainAdapter } from "./adapters/midnight/src/midnight.js";
 export type {
   MidnightChainAdapterConfig,
   WalletAddresses,
-  WalletBalances,
 } from "./adapters/midnight/src/midnight.js";

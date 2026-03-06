@@ -179,7 +179,7 @@ describe("MidnightChainAdapter", () => {
           storageId: "sid",
           storageProvider: "mock",
           owner: "0xOwner",
-          createdAt: Date.now(),
+          writtenAt: Date.now(),
         }),
       ).rejects.toThrow("init()");
     });
@@ -196,7 +196,7 @@ describe("MidnightChainAdapter", () => {
           storageId: "sid",
           storageProvider: "mock",
           owner: "0xOwner",
-          createdAt: Date.now(),
+          writtenAt: Date.now(),
         }),
       ).rejects.toThrow("init()");
     });

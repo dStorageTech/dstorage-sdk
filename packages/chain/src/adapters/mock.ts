@@ -4,27 +4,21 @@
  * Mock chain adapter — simulates on-chain reference storage using
  * localStorage (browser) or in-memory Map (Node.js).
  *
- * Mimics exactly what the Midnight adapter will do:
- *   - writeReference()   → stores a pointer to encrypted off-chain data
- *   - grantAccess()      → records a permission entry
- *   - revokeAccess()     → removes the permission
- *   - hasAccess()        → checks the permission registry
- *
+ * Mimics exactly what a chain adapter will do:
  * ⚠️  Not for production: not decentralised, not immutable.
  */
 
 import type {
   ChainAdapter,
-  ChainPermission,
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
+  WalletBalances,
+  DataReferencesSummary,
 } from "../types.js";
 
-// ── Storage helpers ───────────────────────────────────────────────────────────
-
+// ── Storage helpers ──
 const refs = new Map<string, ChainReference>();
-const permissions = new Map<string, Set<string>>();
 
 function generateRefId(): string {
   const id =
@@ -52,9 +46,12 @@ function load<T>(key: string): T | null {
   return null;
 }
 
+// ── Mock Adapter ──
 export class MockChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = "mock";
   readonly providerName: string = "Mock-Chain-Adapter";
+
+  private contractAddress: string;
 
   constructor() {
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
@@ -64,11 +61,12 @@ export class MockChainAdapter implements ChainAdapter {
     if (savedRefs) {
       for (const [k, v] of Object.entries(savedRefs)) refs.set(k, v);
     }
+    this.contractAddress = `mock_contract_${Date.now()}`;
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
     const refId = generateRefId();
-    const entry: ChainReference = { ...ref, createdAt: Date.now() };
+    const entry: ChainReference = { ...ref, writtenAt: Date.now() };
     refs.set(refId, entry);
 
     // Persist to localStorage
@@ -88,52 +86,34 @@ export class MockChainAdapter implements ChainAdapter {
     return ref;
   }
 
-  async grantAccess(permission: ChainPermission): Promise<string> {
-    const { refId, grantee } = permission;
-
-    if (!permissions.has(refId)) permissions.set(refId, new Set());
-    permissions.get(refId)!.add(grantee);
-
-    // Persist
-    const allPerms: Record<string, string[]> = {};
-    for (const [k, v] of permissions.entries()) allPerms[k] = [...v];
-    persist("dstorage:chain:perms", allPerms);
-
-    const permId = `perm_${refId}_${grantee}`;
-    console.log(`[dStorage/mock-chain] Access granted: ${grantee} → ${refId}`);
-    return permId;
-  }
-
-  async revokeAccess(refId: string, grantee: string): Promise<void> {
-    permissions.get(refId)?.delete(grantee);
-    console.log(`[dStorage/mock-chain] Access revoked: ${grantee} → ${refId}`);
-  }
-
-  async hasAccess(refId: string, wallet: string): Promise<boolean> {
-    const ref = refs.get(refId);
-    // Owner always has access
-    if (ref?.owner === wallet) return true;
-    return permissions.get(refId)?.has(wallet) ?? false;
-  }
-
   /** List all references (useful for demo UI) */
-  getAllReferences(): Array<{ refId: string; ref: ChainReference }> {
-    return [...refs.entries()].map(([refId, ref]) => ({ refId, ref }));
+  async listReferences(): Promise<DataReferencesSummary[]> {
+    return [...refs.entries()].map(([refId, ref]) => ({
+      refId,
+      storageId: ref.storageId,
+      storageProvider: ref.storageProvider,
+    }));
   }
 
-  // ── DataRegistry deployment stubs ─────────────────────────────────────────
+  async getBalances(): Promise<WalletBalances> {
+    return {
+      NIGHT: 0n,
+      DUST: 0n,
+    };
+  }
 
-  setContractAddress(_address: string): void {
-    // No-op for mock — contract address is not used
+  setContractAddress(address: string): void {
+    this.contractAddress = address;
   }
 
   getContractAddress(): string {
-    return "mock-contract-address";
+    return this.contractAddress;
   }
 
   async deployDataRegistry(): Promise<string> {
     const addr = `mock_contract_${Date.now()}`;
     console.log(`[dStorage/mock-chain] DataRegistry deployed at: ${addr}`);
+    this.contractAddress = addr;
     return addr;
   }
 

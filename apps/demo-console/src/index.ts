@@ -35,7 +35,7 @@ import fs from "fs";
 import { DStorage } from "@dstorage/core";
 import {
   ArweaveLocalStorageAdapter,
-  MockStorageAdapter,
+  //MockStorageAdapter,
 } from "@dstorage/storage";
 import { MidnightChainAdapter } from "@dstorage/chain";
 
@@ -92,7 +92,7 @@ async function withTicker<T>(
 
 async function main(): Promise<void> {
   let rl = createInterface({ input, output });
-  let chain: MidnightChainAdapter | undefined;
+  let chainAdapter: MidnightChainAdapter | undefined;
 
   try {
     console.log("\n=== dStorage Midnight Console Demo ===\n");
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
     });
 
     // ── 6. Build the chain adapter ──────────────────────────────────────────
-    chain = new MidnightChainAdapter({
+    chainAdapter = new MidnightChainAdapter({
       network: networkName,
       walletMode: "facade",
       credentials,
@@ -181,19 +181,18 @@ async function main(): Promise<void> {
       // ZK artifacts for the DataRegistry storeReference circuit
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
     });
-    const activeChain = chain;
 
     // ── 7. Initialise the DStorage SDK ──────────────────────────────────────
-    // sdk.init() calls chain.init() (wallet sync), then sets/deploys the contract,
-    // and derives an AES-GCM encryption key from the seed.
     const sdk = new DStorage({
       storageAdapter,
-      chainAdapter: activeChain,
+      chainAdapter,
       ...(contractAddressInput
         ? { dataRegistryAddress: contractAddressInput }
         : {}),
     });
 
+    // sdk.init() calls chain.init() (wallet sync), then sets/deploys the contract,
+    // and derives an AES-GCM encryption key from the seed.
     console.log("\nInitialising wallet, syncing, and preparing contract...");
     const dataRegistryAddress = await withTicker(
       () => "Building wallet and syncing...",
@@ -202,14 +201,13 @@ async function main(): Promise<void> {
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
     // ── 8. Display addresses and balances ───────────────────────────────────
-    // TODO!!! this should be called on the SDK somehow abstracted
-    const addresses = activeChain.getAddresses();
+    const addresses = chainAdapter.getAddresses();
     console.log("\nWallet addresses:");
     console.log(`  Unshielded: ${addresses.unshielded}`);
     console.log(`  Shielded:   ${addresses.shielded}`);
     console.log(`  Dust:       ${addresses.dust}`);
 
-    const balances = await activeChain.getBalances();
+    const balances = await chainAdapter.getBalances();
     if (balances.night === 0n) {
       console.log(
         `\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`,
@@ -231,7 +229,7 @@ async function main(): Promise<void> {
       "\n─── Actions ──────────────────────────────────────────────────────────",
     );
     console.log(
-      `The SDK will encrypt files, store them (${storageAdapter.providerName}), and write references on-chain (${activeChain.providerName}).`,
+      `The SDK will encrypt files, store them (${storageAdapter.providerName}), and write references on-chain (${chainAdapter.providerName}).`,
     );
     console.log(
       "You can also list references currently stored on the DataRegistry contract.\n",
@@ -257,9 +255,9 @@ async function main(): Promise<void> {
 
       if (action === "2" || action.toLowerCase() === "list") {
         try {
-          const refs = await activeChain.listReferences();
+          const refs = await sdk.listReferences();
           console.log(
-            `\n  Stored references on contract ${activeChain.getContractAddress()}: ${refs.length}`,
+            `\n  Stored references on contract ${chainAdapter.getContractAddress()}: ${refs.length}`,
           );
           if (refs.length === 0) {
             console.log("  (none)\n");
@@ -362,7 +360,7 @@ async function main(): Promise<void> {
         `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes)`,
       );
       console.log(
-        `  Uploading to ${storageAdapter.name} storage and writing on-chain (${activeChain.name}) reference...`,
+        `  Uploading to ${storageAdapter.name} storage and writing on-chain (${chainAdapter.name}) reference...`,
       );
 
       try {
@@ -388,7 +386,7 @@ async function main(): Promise<void> {
     console.log("\nDone.\n");
   } finally {
     rl.close();
-    if (chain) {
+    if (chainAdapter) {
       console.log("Shutting down wallet...");
       //await chain.stop();
     }

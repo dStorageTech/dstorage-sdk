@@ -333,6 +333,11 @@ describe("ArweaveLocalStorageAdapter", () => {
   // ── upload ─────────────────────────────────────────────────────────────────
 
   describe("upload", () => {
+    beforeEach(() => {
+      // mine() inside upload() calls fetch("/mine") — provide a mock response
+      mockFetch.mockResolvedValue(okResponse());
+    });
+
     it("returns an UploadResult with all required fields", async () => {
       const result = await makeAdapter().upload("local test data");
       expect(result).toHaveProperty("id");

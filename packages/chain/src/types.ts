@@ -2,22 +2,23 @@
  * @dstorage/chain — types.ts
  * Interface every chain adapter must implement.
  * Chains store only cryptographic references — never raw user data.
+ * More chains can be supported in the future
  */
 
-export type ChainProviderName = "mock" | "midnight" | "ethereum" | "solana";
+export type ChainProviderName = "mock" | "midnight";
 
 /** An on-chain reference record — what gets written to the smart contract. */
 export interface ChainReference {
-  /** The storage content ID (e.g. Arweave txId, Autonomi address) */
+  /** The storage content ID (e.g. Arweave txId, Autonomi XOR address, etc.) */
   storageId: string;
   /** Storage network used */
   storageProvider: string;
   /** Owner wallet address */
   owner: string;
-  /** Optional label for the data type e.g. "profile", "document" */
+  /** Optional label for the referenced data e.g. "profile", "document" */
   dataLabel?: string;
-  /** Unix timestamp of when the reference was written on-chain */
-  createdAt: number;
+  /** Timestamp of when the reference was written on-chain */
+  writtenAt: number;
 }
 
 /** Result of writing a reference to chain */
@@ -28,28 +29,24 @@ export interface ChainWriteResult {
   provider: ChainProviderName;
   /** Block or ledger position (if available) */
   blockHeight?: number;
-  /** Unix timestamp */
+  /** Timestamp of when the reference was written on-chain */
   writtenAt: number;
 }
 
-/** Permission record stored on-chain for selective access */
-export interface ChainPermission {
-  /** The reference this permission applies to */
-  refId: string;
-  /** Wallet address being granted access */
-  grantee: string;
-  /** Optional expiry timestamp */
-  expiresAt?: number;
-}
+/**
+ * Wallet token balances keyed by token symbol/name (e.g. NIGHT, DUST).
+ * Values are expressed in base units as bigint.
+ */
+export type WalletBalances = Record<string, bigint>;
 
-/** Result of calling a custom ZK circuit */
-export interface CircuitCallResult {
-  /** Transaction hash returned by the network */
-  txHash: string;
-  /** Block height at which the transaction was included (if available) */
-  blockHeight?: number;
-  /** Unix timestamp of when the call was made */
-  calledAt: number;
+/** Minimal on-chain reference shape returned from DataRegistry listing APIs. */
+export interface DataReferencesSummary {
+  /** Unique on-chain reference identifier. */
+  refId: string;
+  /** Storage-network content identifier referenced by this record. */
+  storageId: string;
+  /** Storage backend/provider where the encrypted payload is stored. */
+  storageProvider: string;
 }
 
 /** Every chain adapter must implement this interface */
@@ -57,31 +54,30 @@ export interface ChainAdapter {
   readonly name: ChainProviderName;
   readonly providerName: string;
 
+  /** Initialize the wallet: derive keys, wait for sync.
+   *  Must be called before any read/write operations. */
+  init?(): Promise<string>;
+
   /**
    * Write an encrypted data reference to the blockchain.
-   * Only the storage pointer + metadata is stored — never the data itself.
+   * Only the storage pointer + (optional) label is stored — never the data itself.
    */
   writeReference(ref: ChainReference): Promise<ChainWriteResult>;
+
+  /**
+   * List references currently stored in the DataRegistry contract.
+   */
+  listReferences(): Promise<DataReferencesSummary[]>;
 
   /**
    * Retrieve a reference by its on-chain ID.
    */
   //readReference(refId: string): Promise<ChainReference>;
 
-  /** Initialize the wallet: derive keys, build WalletFacade, wait for sync.
-   *  Must be called before write operations or getBalances().
-   *  Optional — only for adapters that manage wallet lifecycle (e.g. Midnight). */
-  init?(): Promise<string>;
-
-  /** Return wallet addresses derived during init(). Throws if init() not yet called.
+  /**
+   * Read NIGHT and DUST balances from synced wallet state.
    *  Optional — only for adapters that manage wallet lifecycle. */
-  getAddresses?(): import("./adapters/midnight/src/midnight.js").WalletAddresses;
-
-  /** Read NIGHT and DUST balances from synced wallet state.
-   *  Optional — only for adapters that manage wallet lifecycle. */
-  getBalances?(): Promise<
-    import("./adapters/midnight/src/midnight.js").WalletBalances
-  >;
+  getBalances?(): Promise<WalletBalances>;
 
   /** Deploy the DataRegistry contract and return the deployed contract address.
    *  Optional — only for adapters that support on-chain deployment. */
@@ -95,7 +91,7 @@ export interface ChainAdapter {
   /** Get the contract address. **/
   getContractAddress(): string;
 
-  /** Derive a deterministic AES-GCM encryption key from the adapter's credentials.
+  /** Derive a deterministic encryption key from the adapter's credentials.
    *  Optional — only for adapters that hold wallet credentials (e.g. facade mode). */
   getEncryptionKey?(): Promise<CryptoKey>;
 }

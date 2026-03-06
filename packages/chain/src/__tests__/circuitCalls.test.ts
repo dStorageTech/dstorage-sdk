@@ -1,7 +1,5 @@
 /**
- * Tests for the generic circuit call API:
- *  - MockMidnightChainAdapter.callCircuit() / queryCircuit()
- *  - MidnightChainAdapter.callCircuit / queryCircuit (throws "not supported")
+ * Additional writeReference tests for MockMidnightChainAdapter.
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -9,37 +7,46 @@ import { MockMidnightChainAdapter } from "../adapters/mockMidnight.js";
 
 afterEach(() => vi.useRealTimers());
 
+function makeRef(tag: string) {
+  return {
+    storageId: `store_${tag}`,
+    storageProvider: "mock",
+    owner: `0xOwner_${tag}`,
+    writtenAt: Date.now(),
+  };
+}
+
 // ── MockMidnightChainAdapter ─────────────────────────────────────────────────
 
-describe("MockMidnightChainAdapter.callCircuit", () => {
-  it("returns a CircuitCallResult with txHash, blockHeight, and calledAt", async () => {
+describe("MockMidnightChainAdapter.writeReference", () => {
+  it("returns a ChainWriteResult with refId, blockHeight, and writtenAt", async () => {
     vi.useFakeTimers();
     const adapter = new MockMidnightChainAdapter({
       proofServerMinMs: 0,
       proofServerMaxMs: 0,
     });
 
-    const p = adapter.callCircuit("myCircuit", ["arg1", "arg2"]);
+    const p = adapter.writeReference(makeRef("cc1"));
     await vi.runAllTimersAsync();
     const result = await p;
 
-    expect(result).toHaveProperty("txHash");
+    expect(result).toHaveProperty("refId");
     expect(result).toHaveProperty("blockHeight");
-    expect(result).toHaveProperty("calledAt");
+    expect(result).toHaveProperty("writtenAt");
   });
 
-  it('txHash starts with "mock-tx-"', async () => {
+  it('refId starts with "ref_"', async () => {
     vi.useFakeTimers();
     const adapter = new MockMidnightChainAdapter({
       proofServerMinMs: 0,
       proofServerMaxMs: 0,
     });
 
-    const p = adapter.callCircuit("myCircuit", []);
+    const p = adapter.writeReference(makeRef("cc2"));
     await vi.runAllTimersAsync();
     const result = await p;
 
-    expect(result.txHash.startsWith("mock-tx-")).toBe(true);
+    expect(result.refId.startsWith("ref_")).toBe(true);
   });
 
   it("blockHeight is a number at or above 1,000,000", async () => {
@@ -49,7 +56,7 @@ describe("MockMidnightChainAdapter.callCircuit", () => {
       proofServerMaxMs: 0,
     });
 
-    const p = adapter.callCircuit("myCircuit", []);
+    const p = adapter.writeReference(makeRef("cc3"));
     await vi.runAllTimersAsync();
     const result = await p;
 
@@ -57,87 +64,71 @@ describe("MockMidnightChainAdapter.callCircuit", () => {
     expect(result.blockHeight!).toBeGreaterThanOrEqual(1_000_000);
   });
 
-  it("calledAt is a Unix timestamp (number)", async () => {
+  it("writtenAt is a Unix timestamp (number)", async () => {
     vi.useFakeTimers();
     const adapter = new MockMidnightChainAdapter({
       proofServerMinMs: 0,
       proofServerMaxMs: 0,
     });
 
-    const p = adapter.callCircuit("myCircuit", []);
+    const p = adapter.writeReference(makeRef("cc4"));
     await vi.runAllTimersAsync();
     const result = await p;
 
-    expect(typeof result.calledAt).toBe("number");
+    expect(typeof result.writtenAt).toBe("number");
   });
 
-  it("successive calls return different txHashes", async () => {
+  it("successive calls return different refIds", async () => {
     vi.useFakeTimers();
     const adapter = new MockMidnightChainAdapter({
       proofServerMinMs: 0,
       proofServerMaxMs: 0,
     });
 
-    const p1 = adapter.callCircuit("circuitA", ["x"]);
+    const p1 = adapter.writeReference(makeRef("cc5a"));
     await vi.runAllTimersAsync();
     const r1 = await p1;
 
     vi.advanceTimersByTime(1); // ensure Date.now() differs
-    const p2 = adapter.callCircuit("circuitB", ["y"]);
+    const p2 = adapter.writeReference(makeRef("cc5b"));
     await vi.runAllTimersAsync();
     const r2 = await p2;
 
-    expect(r1.txHash).not.toBe(r2.txHash);
+    expect(r1.refId).not.toBe(r2.refId);
   });
 
-  it("blockHeight increments on each callCircuit call", async () => {
+  it("blockHeight increments on each write call", async () => {
     vi.useFakeTimers();
     const adapter = new MockMidnightChainAdapter({
       proofServerMinMs: 0,
       proofServerMaxMs: 0,
     });
 
-    const p1 = adapter.callCircuit("myCircuit", []);
+    const p1 = adapter.writeReference(makeRef("cc6a"));
     await vi.runAllTimersAsync();
     const r1 = await p1;
 
-    const p2 = adapter.callCircuit("myCircuit", []);
+    const p2 = adapter.writeReference(makeRef("cc6b"));
     await vi.runAllTimersAsync();
     const r2 = await p2;
 
     expect(r2.blockHeight).toBe(r1.blockHeight! + 1);
   });
 
-  it("accepts arbitrary circuit names", async () => {
+  it("accepts references with various storage providers", async () => {
     vi.useFakeTimers();
     const adapter = new MockMidnightChainAdapter({
       proofServerMinMs: 0,
       proofServerMaxMs: 0,
     });
 
-    const p = adapter.callCircuit("verifyAge", [19860101, "ref_abc"]);
+    const p = adapter.writeReference({
+      storageId: "ref_abc",
+      storageProvider: "arweave",
+      owner: "0xAlice",
+      writtenAt: Date.now(),
+    });
     await vi.runAllTimersAsync();
     await expect(p).resolves.not.toThrow();
-  });
-});
-
-describe("MockMidnightChainAdapter.queryCircuit", () => {
-  it("returns undefined by default (override per test as needed)", async () => {
-    const adapter = new MockMidnightChainAdapter({
-      proofServerMinMs: 0,
-      proofServerMaxMs: 0,
-    });
-    const result = await adapter.queryCircuit("anyQuery", []);
-    expect(result).toBeUndefined();
-  });
-
-  it("accepts arbitrary query names and inputs", async () => {
-    const adapter = new MockMidnightChainAdapter({
-      proofServerMinMs: 0,
-      proofServerMaxMs: 0,
-    });
-    await expect(
-      adapter.queryCircuit("checkCoverage", ["patient-123"]),
-    ).resolves.not.toThrow();
   });
 });

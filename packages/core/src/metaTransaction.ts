@@ -379,7 +379,7 @@ export class MetaTransaction {
         storageProvider: uploadResult.provider,
         owner: this.ownerAddress,
         dataLabel: file.name,
-        createdAt: Date.now(),
+        writtenAt: Date.now(),
       });
 
       const circuitLabel = config.circuitName

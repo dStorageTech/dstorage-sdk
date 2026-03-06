@@ -38,7 +38,6 @@ export {
 
 export type {
   ChainReference,
-  CircuitCallResult,
   MidnightChainAdapterConfig,
 } from "@dstorage/chain";
 
