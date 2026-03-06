@@ -65,14 +65,6 @@ Install dependencies for all packages:
 npm install
 ```
 
-Build the packages/adapters:
-
-```bash
-npm run build
-```
-
-Note: Any time you modify any of the packages, e.g. `packages/crypto` or `packages/chain`, run `npm run build` (or per-package build) before running any of the demo apps, since they consume compiled package outputs.
-
 ### 2. Build the dStorage contract
 
 The `DataRegistry` contract is the on-chain index used by the SDK. It records references to encrypted documents (for example `refId`, `storageId`, and related metadata) so proofs and lookups can resolve a reference to the underlying storage record. It does **not** store raw user files or plaintext data; payloads stay off-chain in the selected storage backend, while `DataRegistry` keeps the minimal verification and retrieval pointers on Midnight.
@@ -89,7 +81,17 @@ Compile the contract:
 npm run compile:contract
 ```
 
-### 3. Run the Midnight proof server
+### 3. Build the SDK adapters
+
+Build the packages/adapters:
+
+```bash
+npm run build
+```
+
+Note: Any time you modify any of the packages, e.g. `packages/crypto` or `packages/chain`, run `npm run build` (or per-package build) before running any of the demo apps, since they consume compiled package outputs.
+
+### 4. Run the Midnight proof server
 
 Follow the Midnight [documentation to start the local proof server](https://docs.midnight.network/getting-started/installation#run-the-proof-server).
 
@@ -97,7 +99,7 @@ Follow the Midnight [documentation to start the local proof server](https://docs
 docker run -p 6300:6300 midnightntwrk/proof-server:7.0.0 -- midnight-proof-server -v
 ```
 
-### 4. Run Arweave Local server
+### 5. Run Arweave Local server
 
 This step is optional. Run Arweave Local only if you want to test against a local Arweave-compatible node (`ArweaveLocalStorageAdapter`) instead of using the in-memory `MockStorageAdapter`.
 
@@ -111,11 +113,11 @@ npx arlocal
 
 If you are using the mock storage adapter path, you can skip this step.
 
-### 5. Run any of the demo apps
+### 6. Run any of the demo apps
 
 Run the demo web app:
 ```bash
-npm run dev -w apps/demo
+npm run demo:run
 ```
 
 Open http://localhost:5173 and choose a path:
@@ -124,7 +126,7 @@ Open http://localhost:5173 and choose a path:
 
 Alternatively, for terminal-only testing, run the console demo app:
 ```bash
-npm run demo:midnight
+npm run demo-console:run
 ```
 
 It will start a CLI that:
