@@ -2,7 +2,7 @@
  * dStorage Midnight Console Demo
  *
  * A real working CLI that:
- *  1. Accepts a BIP-39 mnemonic (or 32/64-byte hex seed)
+ *  1. Accepts a BIP-39 mnemonic or 32/64-byte hex seed
  *  2. Accepts an (optional) deployed DataRegistry contract address
  *  3. Initialises the DStorage SDK — which internally:
  *       a. Build chain and storage adapters

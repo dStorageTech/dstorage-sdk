@@ -363,7 +363,7 @@ export function PatientPanel({
         <div className="pp-encrypt-note">
           <div className="pp-encrypt-steps">
             {[
-              "AES-GCM 256 encryption",
+              "Clide side encryption",
               "Decentralised storage",
               "On-chain reference",
             ].map((s, i) => (

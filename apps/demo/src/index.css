@@ -91,17 +91,71 @@ code {
   overflow: hidden;
 }
 
+.hv-contract-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 17, 28, 0.55);
+  z-index: 1000;
+  padding: 20px;
+}
+
+.hv-contract-modal {
+  width: min(560px, 100%);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  padding: 24px;
+}
+
+.hv-contract-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.hv-contract-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.hv-contract-modal-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--c-text-2);
+  margin-bottom: 18px;
+}
+
+.hv-contract-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .hv-header {
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
   box-shadow: var(--shadow-sm);
-  padding: 0 28px;
-  height: 68px;
+  padding: 8px 28px;
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.hv-header-top {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 24px;
-  flex-shrink: 0;
-  z-index: 10;
 }
 .hv-logo {
   display: flex;
@@ -200,12 +254,25 @@ code {
   background: var(--c-blue);
 }
 
-.hv-header-right {
+.hv-header-right-top {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
   margin-left: auto;
+}
+.hv-header-meta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hv-header-right-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  min-width: 0;
 }
 .hv-theme-toggle {
   display: inline-flex;
@@ -253,6 +320,16 @@ code {
   border: 1px solid var(--c-border);
   border-radius: 99px;
   padding: 4px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(58vw, 760px);
+}
+.hv-sdk-badge-contract {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
 }
 .hv-sdk-badge strong {
   color: var(--c-blue);

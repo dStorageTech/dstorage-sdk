@@ -45,8 +45,6 @@ export type StorageAdapterKey =
   | "autonomi";
 export type ChainAdapterKey = "mock" | "midnight-connector";
 
-const DATA_REGISTRY_CNTRACT_ADDR =
-  "e4ca9d7f3ee5ac206b0808cb1a2de992ece1369b1bb18753e728665724eaecd9";
 const PROOF_SERVER_ENDPOINT = "http://127.0.0.1:6300";
 
 export const ADAPTER_CONFIGS: Record<
@@ -133,6 +131,11 @@ export default function App() {
   const [existingReferences, setExistingReferences] = useState<
     ExistingReference[]
   >([]);
+  const [showContractSetupModal, setShowContractSetupModal] = useState(true);
+  const [contractAddressInput, setContractAddressInput] = useState("");
+  const [selectedContractAddress, setSelectedContractAddress] = useState("");
+  const [deployNewContractSelected, setDeployNewContractSelected] =
+    useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -163,10 +166,11 @@ export default function App() {
         // MidnightChainAdapter in connector mode is browser-safe.
         // All Node.js-only imports inside midnight.ts are /* @vite-ignore */ dynamic
         // imports that are never executed in connector mode.
-        chainAdapter = new MidnightChainAdapter({
+        const midnightConfig: ConstructorParameters<
+          typeof MidnightChainAdapter
+        >[0] = {
           walletMode: "connector",
           network: "preprod",
-          contractAddress: DATA_REGISTRY_CNTRACT_ADDR,
           nodeEndpoint: "",
           nodeWsEndpoint: "",
           indexerEndpoint: "",
@@ -174,7 +178,11 @@ export default function App() {
           proofServerEndpoint: PROOF_SERVER_ENDPOINT,
           // ZK artifacts are served from public/keys/ and public/zkir/
           zkConfigBaseUrl: window.location.origin,
-        });
+        };
+        if (selectedContractAddress.trim()) {
+          midnightConfig.contractAddress = selectedContractAddress.trim();
+        }
+        chainAdapter = new MidnightChainAdapter(midnightConfig);
         // Midnight fees are managed internally by the Lace wallet — no separate payment adapter.
       } else {
         chainAdapter = new MockMidnightChainAdapter();
@@ -189,7 +197,7 @@ export default function App() {
 
       return { sdk: new DStorage(dstorageConfig) };
     },
-    [],
+    [selectedContractAddress],
   );
 
   /**
@@ -204,7 +212,12 @@ export default function App() {
     const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey);
 
     if (chainAdapterKey === "midnight-connector") {
-      await sdk.init();
+      const contractAddress = await sdk.init();
+      if (contractAddress) {
+        setSelectedContractAddress(contractAddress);
+        setContractAddressInput(contractAddress);
+        setDeployNewContractSelected(false);
+      }
     }
 
     const connectedWallet = await connectDemoWallet();
@@ -349,43 +362,145 @@ export default function App() {
     setZkProgress(null);
   };
 
+  const handleUseExistingContract = () => {
+    const nextAddress = contractAddressInput.trim();
+    if (!nextAddress) {
+      alert("Please enter a contract address.");
+      return;
+    }
+    setDeployNewContractSelected(false);
+    setSelectedContractAddress(nextAddress);
+    setShowContractSetupModal(false);
+  };
+
+  const handleDeployNewContract = () => {
+    setDeployNewContractSelected(true);
+    setSelectedContractAddress("");
+    setContractAddressInput("");
+    setShowContractSetupModal(false);
+  };
+
+  if (showContractSetupModal) {
+    return (
+      <div className="hv-root" data-theme={theme}>
+        <div className="hv-contract-modal-backdrop">
+          <div className="hv-contract-modal">
+            <div className="hv-contract-modal-head">
+              <h2 className="hv-contract-modal-title">Contract Setup</h2>
+              <button
+                className="hv-theme-toggle"
+                type="button"
+                onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+                aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+                aria-pressed={theme === "dark"}
+                title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+              >
+                <span className="hv-theme-track">
+                  <span
+                    className={`hv-theme-thumb ${theme === "dark" ? "is-dark" : ""}`}
+                  />
+                </span>
+                <span className="hv-theme-label">
+                  {theme === "dark" ? "Dark" : "Light"}
+                </span>
+              </button>
+            </div>
+            <p className="hv-contract-modal-body">
+              Before starting, choose how the demo should work with the Midnight
+              DataRegistry contract.
+            </p>
+
+            <div className="hv-contract-actions">
+              <button
+                className="pp-btn pp-btn-ghost pp-btn-full"
+                type="button"
+                onClick={handleDeployNewContract}
+              >
+                Deploy New Contract
+              </button>
+
+              <div className="pp-contract-addr">
+                <label className="pp-contract-addr-label" htmlFor="contract-id">
+                  Use Existing Contract Address
+                </label>
+                <input
+                  id="contract-id"
+                  className="pp-contract-addr-input"
+                  value={contractAddressInput}
+                  onChange={(e) => setContractAddressInput(e.target.value)}
+                  placeholder="Enter DataRegistry contract address"
+                />
+              </div>
+
+              <button
+                className="pp-btn pp-btn-primary pp-btn-full"
+                type="button"
+                onClick={handleUseExistingContract}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="hv-root" data-theme={theme}>
       <header className="hv-header">
-        <div className="hv-logo">
-          <div className="hv-logo-mark">✦</div>
-          <div>
-            <div className="hv-logo-name">HealthVault</div>
-            <div className="hv-logo-sub">Private Medical Records on Web3</div>
+        <div className="hv-header-top">
+          <div className="hv-logo">
+            <div className="hv-logo-mark">✦</div>
+            <div>
+              <div className="hv-logo-name">HealthVault</div>
+              <div className="hv-logo-sub">Private Medical Records on Web3</div>
+            </div>
+          </div>
+          <StepIndicator step={step} />
+          <div className="hv-header-right-top">
+            <button
+              className="hv-theme-toggle"
+              type="button"
+              onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+              aria-pressed={theme === "dark"}
+              title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+            >
+              <span className="hv-theme-track">
+                <span
+                  className={`hv-theme-thumb ${theme === "dark" ? "is-dark" : ""}`}
+                />
+              </span>
+              <span className="hv-theme-label">
+                {theme === "dark" ? "Dark" : "Light"}
+              </span>
+            </button>
           </div>
         </div>
-        <StepIndicator step={step} />
-        <div className="hv-header-right">
-          <button
-            className="hv-theme-toggle"
-            type="button"
-            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
-            aria-pressed={theme === "dark"}
-            title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
-          >
-            <span className="hv-theme-track">
-              <span
-                className={`hv-theme-thumb ${theme === "dark" ? "is-dark" : ""}`}
-              />
-            </span>
-            <span className="hv-theme-label">
-              {theme === "dark" ? "Dark" : "Light"}
-            </span>
-          </button>
+
+        <div className="hv-header-meta">
           <div className="hv-sdk-badge">
             Powered by <strong>dStorage SDK</strong>
           </div>
-          {(wallet || step !== "connect") && (
-            <button className="hv-reset-btn" onClick={() => handleReset()}>
-              New Session
-            </button>
-          )}
+
+          <div className="hv-header-right-meta">
+            {(chainAdapterKey === "midnight-connector" ||
+              selectedContractAddress ||
+              deployNewContractSelected) && (
+              <div className="hv-sdk-badge hv-sdk-badge-contract">
+                Contract:{" "}
+                <strong>
+                  {selectedContractAddress || "will be deployed on first connect"}
+                </strong>
+              </div>
+            )}
+            {(wallet || step !== "connect") && (
+              <button className="hv-reset-btn" onClick={() => handleReset()}>
+                New Session
+              </button>
+            )}
+          </div>
         </div>
       </header>
 

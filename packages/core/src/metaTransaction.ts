@@ -195,7 +195,7 @@ function buildInitialSteps(): MetaTxStepState[] {
     {
       id: "encrypt",
       label: "Encrypt File",
-      description: "AES-GCM 256 encryption using your wallet key",
+      description: "Client side encryption using your wallet key",
       status: "pending",
     },
     {
