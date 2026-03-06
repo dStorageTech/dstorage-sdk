@@ -19,13 +19,13 @@ mnemonic (or hex seed), and uploads/retrieves local files through the dStorage S
 
 ## Requirements
 
-- **Proof server** running locally at `http://localhost:6300` (standard for all Midnight CLI apps)
-- For `undeployed` (local) network: a running `midnight-local-network` instance
+- **Proof server** running locally at `http://localhost:6300` (standard for all Midnight apps)
+- For `undeployed` (local) network running instance:
   - Default ports: node `9944`, indexer `8088`, proof server `6300`
 - For `preprod`: network access to `*.preprod.midnight.network` endpoints
 - Local storage backend uses **Arweave Local** in the current CLI code:
   - Run arlocal (for example: `docker run -d --rm -p 1984:1984 textury/arlocal`)
-  - Provide `test-arweave-wallet-key.json` in the repo root (used by `ArweaveLocalStorageAdapter`)
+  - Provide `test-arweave-wallet-key.json` in this app root dir (used by `ArweaveLocalStorageAdapter`)
 
 ### NIGHT and DUST
 
@@ -36,15 +36,17 @@ mnemonic (or hex seed), and uploads/retrieves local files through the dStorage S
 
 ## Run
 
+Review the main README of this repo for prerequesites and follow the instructions to run the Midnight proof server and Arweave Local server.
+
 ```bash
 # from repo root, ensure contract artifacts exist
-npm run compile:contract -w packages/chain
+npm run compile:contract
 
 # build SDK packages
 npm run build
 
-# run console demo
-npm run demo:midnight
+# then run console demo
+npm run demo-console:run
 ```
 
 ## Default endpoints (`undeployed` local network)
@@ -69,6 +71,8 @@ npm run demo:midnight
 
 ## Notes
 
-- Uses `@dstorage/crypto`'s `KeyDeriver` for key derivation (BIP-39 → Midnight signing keys)
+Current CLI implementation:
+
+- Uses `@dstorage/crypto`'s `KeyDeriver` for key derivation (BIP-39/hex → Midnight signing keys)
 - Uses `@dstorage/chain`'s `MidnightChainAdapter` for on-chain reference writes
-- Uses `ArweaveLocalStorageAdapter` for encrypted blob storage in the current CLI implementation
+- Uses `ArweaveLocalStorageAdapter` for encrypted blobs storage

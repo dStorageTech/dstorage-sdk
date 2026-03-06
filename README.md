@@ -104,6 +104,7 @@ docker run -p 6300:6300 midnightntwrk/proof-server:7.0.0 -- midnight-proof-serve
 This step is optional. Run Arweave Local only if you want to test against a local Arweave-compatible node (`ArweaveLocalStorageAdapter`) instead of using the in-memory `MockStorageAdapter`.
 
 Start Arweave Local with Docker:
+
 ```sh
 docker run --rm -p 1984:1984 textury/arlocal
 
@@ -116,20 +117,24 @@ If you are using the mock storage adapter path, you can skip this step.
 ### 6. Run any of the demo apps
 
 Run the demo web app:
+
 ```bash
 npm run demo:run
 ```
 
 Open http://localhost:5173 and choose a path:
+
 - upload a new health insurance certificate
 - or jump directly to proof generation from a list of previously uploaded certificates
 
 Alternatively, for terminal-only testing, run the console demo app:
+
 ```bash
 npm run demo-console:run
 ```
 
 It will start a CLI that:
+
 - uses Midnight Preprod network and Arweave Local storage
 - asks for network + wallet seed/mnemonic and initializes `MidnightChainAdapter`
 - provides actions to upload files, list on-chain references, and retrieve content by `refId`
@@ -143,8 +148,8 @@ It will start a CLI that:
 | Storage adapters | `Mock` and `ArweaveLocal` are live; `Arweave` is preview; `Autonomi` is stub                         |
 | Chain adapters   | `Mock`, `MockMidnight`, and `Midnight` are implemented                                               |
 | Payment adapters | `Mock` is simulated by design; `Arweave` and `Midnight` payment adapters are preview/simulated flows |
-| Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector and Arweave Local paths                            |
-| Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                         |
+| Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector and Arweave Local paths              |
+| Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                 |
 
 ---
 

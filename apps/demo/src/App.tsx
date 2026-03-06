@@ -390,7 +390,9 @@ export default function App() {
               <button
                 className="hv-theme-toggle"
                 type="button"
-                onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+                onClick={() =>
+                  setTheme((t) => (t === "light" ? "dark" : "light"))
+                }
                 aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
                 aria-pressed={theme === "dark"}
                 title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
@@ -462,7 +464,9 @@ export default function App() {
             <button
               className="hv-theme-toggle"
               type="button"
-              onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+              onClick={() =>
+                setTheme((t) => (t === "light" ? "dark" : "light"))
+              }
               aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
               aria-pressed={theme === "dark"}
               title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
@@ -491,7 +495,8 @@ export default function App() {
               <div className="hv-sdk-badge hv-sdk-badge-contract">
                 Contract:{" "}
                 <strong>
-                  {selectedContractAddress || "will be deployed on first connect"}
+                  {selectedContractAddress ||
+                    "will be deployed on first connect"}
                 </strong>
               </div>
             )}
