@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "compile:contract": "compact compile contracts/bboard.compact contracts/managed/bboard"
+    "copy-zk-artifacts": "cp -a ../../packages/chain/src/adapters/midnight/contracts/dataregistry/managed/keys ./public/ && cp -a ../../packages/chain/src/adapters/midnight/contracts/dataregistry/managed/zkir ./public/"
   },
   "dependencies": {
     "@dstorage/chain": "*",
