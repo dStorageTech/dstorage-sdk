@@ -40,7 +40,7 @@ describe("MockStorageAdapter", () => {
     it('cost is "0 (mock)"', async () => {
       const adapter = new MockStorageAdapter();
       const result = await adapter.upload(enc("data"));
-      expect(result.cost).toBe("0 (mock)");
+      expect(result.cost).toBe("4");
     });
 
     it("uploadedAt is a recent timestamp", async () => {

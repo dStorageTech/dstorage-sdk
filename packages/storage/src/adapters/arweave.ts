@@ -101,7 +101,13 @@ export interface ArweaveAdapterConfig {
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
 
-const MAINNET: ArweaveGatewayConfig = {
+/**
+ * Arweave mainnet gateway preset.
+ *
+ * @example
+ * new ArweaveStorageAdapter({ gateway: ARWEAVE_MAINNET })
+ */
+export const ARWEAVE_MAINNET: ArweaveGatewayConfig = {
   host: "arweave.net",
   port: 443,
   protocol: "https",
@@ -124,7 +130,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   private arweaveClient: any; // typed as `any` to avoid a hard import at module level
 
   constructor(config: ArweaveAdapterConfig = {}) {
-    this.gateway = config.gateway ?? MAINNET;
+    this.gateway = config.gateway ?? ARWEAVE_MAINNET;
     this.walletKey = config.walletKey;
     this.maxRetries = config.maxRetries ?? 3;
     this.shouldWaitForConfirm = config.waitForConfirmation ?? false;
@@ -242,7 +248,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     return {
       id: txId,
       provider: "arweave",
-      cost: `~${arCost} AR`,
+      cost: arCost as string,
       url,
       uploadedAt: Date.now(),
     };

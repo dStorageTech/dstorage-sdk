@@ -72,6 +72,7 @@ export class MockStorageAdapter implements StorageAdapter {
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const id = generateId();
+    const cost = await this.estimateCost(data);
 
     const entry = JSON.stringify({
       data: uint8ArrayToBase64(data),
@@ -80,12 +81,14 @@ export class MockStorageAdapter implements StorageAdapter {
     });
     storeSet(`dstorage:blob:${id}`, entry);
 
-    console.log(`[dStorage/mock] Uploaded ${data.byteLength} bytes → id: ${id}`);
+    console.log(
+      `[dStorage/mock] Uploaded ${data.byteLength} bytes → id: ${id}`,
+    );
 
     return {
       id,
-      provider: "mock",
-      cost: "0 (mock)",
+      provider: this.name,
+      cost,
       uploadedAt: Date.now(),
     };
   }
@@ -108,7 +111,7 @@ export class MockStorageAdapter implements StorageAdapter {
     return `${data.byteLength}`; // mock — 1 unit per byte
   }
 
-  /** List all stored IDs (useful for debugging in the demo app) */
+  /** List all stored IDs (useful for debugging) */
   listAll(): string[] {
     const ids: string[] = [];
 

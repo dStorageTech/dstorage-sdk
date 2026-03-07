@@ -45,23 +45,11 @@ import type { StorageProviderName, UploadResult } from "../types.js";
 // ── Gateway presets ────────────────────────────────────────────────────────────
 
 /**
- * Arweave mainnet gateway preset.
- *
- * @example
- * new ArweaveStorageAdapter({ gateway: ARWEAVE_MAINNET })
- */
-export const ARWEAVE_MAINNET: ArweaveGatewayConfig = {
-  host: "arweave.net",
-  port: 443,
-  protocol: "https",
-};
-
-/**
  * Local arlocal gateway preset (default port 1984).
  *
  * @example
  * new ArweaveStorageAdapter({ gateway: ARWEAVE_LOCAL, walletKey: testJwk })
- * // or, for the full test experience:
+ * // or:
  * new ArweaveLocalStorageAdapter({ walletKey: testJwk })
  */
 export const ARWEAVE_LOCAL: ArweaveGatewayConfig = {
@@ -276,8 +264,7 @@ export interface ArweaveLocalAdapterConfig extends Omit<
  *
  * ── Requirements ──────────────────────────────────────────────────────────────
  *
- *   1. Install arweave (peer dep):  npm install arweave
- *   2. Start arlocal (Docker recommended — no npm install needed):
+ *   Start arlocal (Docker recommended — no npm install needed):
  *        docker run -d --rm -p 1984:1984 --name arlocal textury/arlocal
  *      or, via npx (installs arlocal on demand):
  *        npx arlocal
@@ -393,9 +380,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     console.log(
       "[dStorage/arweave-local] ⚠️  Testnet upload — data is NOT on the real Arweave network.",
     );
-    console.log(
-      `[dStorage/arweave-local] Mining a block to confirm...`,
-    );
+    console.log(`[dStorage/arweave-local] Mining a block to confirm...`);
     await this.testnet.mine();
     return result;
   }

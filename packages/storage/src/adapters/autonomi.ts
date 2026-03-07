@@ -52,27 +52,18 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   ): Promise<UploadResult> {
     /**
      * TODO: Replace with real Autonomi upload when JS SDK is stable.
-     *
-     * Expected flow:
-     *   const client = await autonomi.Client.connect(this.config.peers);
-     *   const wallet  = autonomi.Wallet.fromPrivateKey(this.config.walletKey);
-     *   const addr    = await client.dataMapChunkPut(Buffer.from(data), wallet);
-     *   return { id: addr.toHex(), provider: 'autonomi', ... };
-     *
-     * Autonomi uses self-encryption internally — data is split, encrypted,
-     * and content-addressed automatically before leaving the device.
      */
-
     // Preview: in-memory stub
     const id = `autonomi_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     this.store.set(id, data);
+    const cost = await this.estimateCost(data);
 
     console.log(`[dStorage/autonomi] (preview) Stored locally → id: ${id}`);
 
     return {
       id,
-      provider: "autonomi",
-      cost: "pending ANT pricing",
+      provider: this.name,
+      cost,
       uploadedAt: Date.now(),
     };
   }
@@ -80,12 +71,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   async retrieve(id: string): Promise<Uint8Array> {
     /**
      * TODO: Replace with real Autonomi retrieval:
-     *   const client = await autonomi.Client.connect(this.config.peers);
-     *   const addr   = autonomi.XorName.fromHex(id);
-     *   const data   = await client.dataMapChunkGet(addr);
-     *   return data;
      */
-
     const data = this.store.get(id);
     if (!data) {
       throw new Error(`[dStorage/autonomi] No data found for id: ${id}`);

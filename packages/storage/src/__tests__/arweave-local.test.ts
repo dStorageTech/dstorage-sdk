@@ -10,7 +10,6 @@ import {
   ArweaveLocalStorageAdapter,
   ArweaveLocalHelper,
   ArweaveLocalError,
-  ARWEAVE_MAINNET,
   ARWEAVE_LOCAL,
   arlocalGateway,
 } from "../adapters/arweave-local.js";
@@ -33,7 +32,9 @@ const mockArweaveInstance = {
     getPrice: vi.fn().mockResolvedValue("500000"),
     sign: vi.fn().mockResolvedValue(undefined),
     post: vi.fn().mockResolvedValue({ status: 200, statusText: "OK" }),
-    getData: vi.fn().mockResolvedValue(new TextEncoder().encode("test-retrieved-data")),
+    getData: vi
+      .fn()
+      .mockResolvedValue(new TextEncoder().encode("test-retrieved-data")),
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 42 } }),
@@ -105,14 +106,6 @@ afterEach(() => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("Gateway presets", () => {
-  it("ARWEAVE_MAINNET points to arweave.net:443 over HTTPS", () => {
-    expect(ARWEAVE_MAINNET).toEqual({
-      host: "arweave.net",
-      port: 443,
-      protocol: "https",
-    });
-  });
-
   it("ARWEAVE_LOCAL points to localhost:1984 over HTTP", () => {
     expect(ARWEAVE_LOCAL).toEqual({
       host: "localhost",

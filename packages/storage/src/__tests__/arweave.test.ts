@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ArweaveStorageAdapter } from "../adapters/arweave.js";
+import { ArweaveStorageAdapter, ARWEAVE_MAINNET } from "../adapters/arweave.js";
 
 // ── arweave-js mock ───────────────────────────────────────────────────────────
 
@@ -23,7 +23,9 @@ const mockArweave = {
     getPrice: vi.fn().mockResolvedValue("1000000"), // 1 winston
     sign: vi.fn().mockResolvedValue(undefined),
     post: vi.fn().mockResolvedValue({ status: 200, statusText: "OK" }),
-    getData: vi.fn().mockResolvedValue(new TextEncoder().encode("retrieved-data")),
+    getData: vi
+      .fn()
+      .mockResolvedValue(new TextEncoder().encode("retrieved-data")),
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 1234567 } }),
@@ -65,12 +67,22 @@ describe("ArweaveStorageAdapter", () => {
       status: 200,
       statusText: "OK",
     });
-    mockArweave.transactions.getData.mockResolvedValue(new TextEncoder().encode("retrieved-data"));
+    mockArweave.transactions.getData.mockResolvedValue(
+      new TextEncoder().encode("retrieved-data"),
+    );
     mockArweave.transactions.getStatus.mockResolvedValue({
       status: 200,
       confirmed: { block_height: 1234567 },
     });
     mockArweave.ar.winstonToAr.mockReturnValue("0.000001");
+  });
+
+  it("ARWEAVE_MAINNET points to arweave.net:443 over HTTPS", () => {
+    expect(ARWEAVE_MAINNET).toEqual({
+      host: "arweave.net",
+      port: 443,
+      protocol: "https",
+    });
   });
 
   // ── identity ────────────────────────────────────────────────────────────────
@@ -129,8 +141,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("cost contains the AR amount from the fee oracle", async () => {
       const result = await nodeAdapter().upload(enc("data"));
-      expect(result.cost).toContain("AR");
-      expect(result.cost).toContain("0.000001");
+      expect(result.cost).toBe("0.000001");
     });
 
     it("url is constructed from gateway + txId", async () => {
@@ -178,7 +189,7 @@ describe("ArweaveStorageAdapter", () => {
       const signOrder =
         mockArweave.transactions.sign.mock.invocationCallOrder[0];
       const postOrder =
-        mockArweave.transactions.post.mock.invocationCallOrder[0];
+        mockArweave.transactions.post.mock.invocationCallOrder[0] ?? 0;
       expect(signOrder).toBeLessThan(postOrder);
     });
 
