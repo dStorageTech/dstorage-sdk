@@ -26,6 +26,7 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
+  Logger,
   WalletBalances,
   DataReferencesSummary,
 } from "../../../types.js";
@@ -91,6 +92,12 @@ interface BaseConfig {
    */
   nodeEndpoint: string;
   nodeWsEndpoint: string;
+  /**
+   * Optional logger for SDK operational output.
+   * Pass `logger: console` to see all output, or inject your own logger.
+   * Omit to suppress all SDK log output.
+   */
+  logger?: Logger;
   /**
    * Midnight indexer HTTP (GraphQL) endpoint for state queries.
    */
@@ -220,6 +227,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   private readonly walletMode: "facade" | "connector";
   private readonly connectorName: string | null;
+  private readonly logger: Logger | undefined;
 
   private _contractAddress: string | undefined;
   private _zkArtifactsPath: string | undefined;
@@ -264,6 +272,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       }
     }
 
+    this.logger = config.logger;
     this.walletMode = walletMode;
     this.connectorName =
       walletMode === "connector"
@@ -333,7 +342,7 @@ export class MidnightChainAdapter implements ChainAdapter {
             "    zkConfigBaseUrl: window.location.origin",
         );
       }
-      console.log(`[dStorage/midnight] ZK artifacts base URL: ${baseUrl}`);
+      this.logger?.log(`[dStorage/midnight] ZK artifacts base URL: ${baseUrl}`);
       const { FetchZkConfigProvider } =
         await import("@midnight-ntwrk/midnight-js-fetch-zk-config-provider");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,7 +361,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
     const zkConfigPath = this._zkArtifactsPath;
-    console.log(`[dStorage/midnight] ZK artifacts path: ${zkConfigPath}`);
+    this.logger?.log(`[dStorage/midnight] ZK artifacts path: ${zkConfigPath}`);
 
     const { NodeZkConfigProvider } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/midnight-js-node-zk-config-provider"
@@ -436,6 +445,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const { Transaction } = await import("@midnight-ntwrk/ledger-v7");
 
     const connectorAPI = this.connectorAPI;
+    const logger = this.logger;
     const coinPublicKey = this.connectorCoinPublicKey ?? "";
     const encPublicKey = this.connectorEncPublicKey ?? "";
     const indexerHttp = this.connectorIndexerHttp ?? this.config.indexer;
@@ -448,14 +458,14 @@ export class MidnightChainAdapter implements ChainAdapter {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       balanceTx: async (tx: any, _ttl?: Date): Promise<any> => {
         const serializedTx = uint8ArrayToHex((tx as any).serialize());
-        console.log(
+        logger?.log(
           `[dStorage/midnight] balanceTx: serialized tx length=${serializedTx.length}`,
         );
         const received =
           await connectorAPI.balanceUnsealedTransaction(serializedTx);
         const balancedHex =
           typeof received === "string" ? received : (received as any).tx;
-        console.log(
+        logger?.log(
           `[dStorage/midnight] balanceTx: received balanced tx length=${balancedHex?.length}`,
         );
         // Transaction.deserialize takes (sigType, proofType, bindingType, bytes) — see ledger-v7 API.
@@ -472,7 +482,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       submitTx: async (tx: any): Promise<any> => {
         const serializedTx = uint8ArrayToHex((tx as any).serialize());
-        console.log(
+        logger?.log(
           `[dStorage/midnight] submitTx: submitting tx length=${serializedTx.length}`,
         );
         await connectorAPI.submitTransaction(serializedTx);
@@ -505,6 +515,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const walletProvider = await MidnightWalletProvider.build(
       this.config,
       this._credentials.seedHex,
+      this.logger,
     );
     const walletFacade: WalletFacade = walletProvider.wallet;
     await walletProvider.start();
@@ -520,13 +531,14 @@ export class MidnightChainAdapter implements ChainAdapter {
       this.config,
       unshieldedToken(),
       false,
+      this.logger,
     );
     const nightBalance = unshieldedState.balances[unshieldedToken().raw];
     if (nightBalance === undefined) {
-      console.log("No funds received, exiting...");
+      this.logger?.log("No funds received, exiting...");
       throw new Error("[dStorage/midnight] No NIGHT funds received/detected.");
     }
-    console.log(`Your NIGHT wallet balance is: ${nightBalance}`);
+    this.logger?.log(`Your NIGHT wallet balance is: ${nightBalance}`);
 
     const { firstValueFrom } = await import("rxjs");
     const facadeState = await firstValueFrom(
@@ -597,15 +609,19 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     const { DataRegistryAPI } = await import("./api.js");
     if (!this._contractAddress) {
-      console.log("[dStorage/midnight] Deploying DataRegistry contract…");
-      this._api = await DataRegistryAPI.deploy(providers);
+      this.logger?.log("[dStorage/midnight] Deploying DataRegistry contract…");
+      this._api = await DataRegistryAPI.deploy(providers, this.logger);
       this._contractAddress = this._api.deployedContractAddress;
-      console.log(
+      this.logger?.log(
         `[dStorage/midnight] DataRegistry deployed at: ${this._contractAddress}`,
       );
     } else {
-      this._api = await DataRegistryAPI.join(providers, this._contractAddress);
-      console.log(
+      this._api = await DataRegistryAPI.join(
+        providers,
+        this._contractAddress,
+        this.logger,
+      );
+      this.logger?.log(
         `[dStorage/midnight] DataRegistry joined at: ${this._contractAddress}`,
       );
     }
@@ -686,15 +702,15 @@ export class MidnightChainAdapter implements ChainAdapter {
   // ── ChainAdapter implementation ────────────────────────────────────────────
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
-    console.log(
+    this.logger?.log(
       `[dStorage/midnight] writeReference() called — storageId: ${ref.storageId}, provider: ${ref.storageProvider}`,
     );
     try {
       const api = await this._getAPI();
-      console.log("[dStorage/midnight] Encoding storageId…");
+      this.logger?.log("[dStorage/midnight] Encoding storageId…");
       const encodedStorageId = await this._encodeStorageId(ref.storageId);
 
-      console.log(
+      this.logger?.log(
         `[dStorage/midnight] Storing reference for storageId: ${uint8ArrayToHex(encodedStorageId)}`,
       );
       const {
@@ -709,7 +725,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
       const refIdHex = uint8ArrayToHex(refId);
 
-      console.log(
+      this.logger?.log(
         `[dStorage/midnight] Reference written at block ${blockHeight} → refId: ${refIdHex}`,
       );
 
@@ -720,7 +736,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         writtenAt: ref.writtenAt,
       };
     } catch (err) {
-      console.error("[dStorage/midnight] writeReference() failed:", err);
+      this.logger?.error("[dStorage/midnight] writeReference() failed:", err);
       throw err;
     }
   }
@@ -855,7 +871,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
 
-    console.log(
+    this.logger?.log(
       `[dStorage/midnight] Found ${availableWallets.length} wallet(s): ` +
         availableWallets
           .map((w) => `${w.id} (${w.wallet.name ?? "unknown"})`)
@@ -871,14 +887,14 @@ export class MidnightChainAdapter implements ChainAdapter {
       if (connectorFound) {
         selected = connectorFound;
       } else {
-        console.warn(
+        this.logger?.warn(
           `[dStorage/midnight] Configured wallet "${this.connectorName}" not found. ` +
             `Using first available: "${selected.id}"`,
         );
       }
     }
 
-    console.log(
+    this.logger?.log(
       `[dStorage/midnight] Connecting to wallet "${selected.id}" ` +
         `(name: ${selected.wallet.name ?? "unknown"}, apiVersion: ${selected.wallet.apiVersion ?? "unknown"}) ` +
         `on network "${this.config.networkId}"...`,
@@ -896,12 +912,17 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
 
-    console.log(`[dStorage/midnight] ✓ Connected to wallet "${selected.id}"`);
+    this.logger?.log(
+      `[dStorage/midnight] ✓ Connected to wallet "${selected.id}"`,
+    );
 
     // Step 2: Retrieve wallet configuration (respects user preferences for proof server, indexer, etc.)
     try {
       const walletConfig = await connectedAPI.getConfiguration();
-      console.log("[dStorage/midnight] Wallet configuration:", walletConfig);
+      this.logger?.log(
+        "[dStorage/midnight] Wallet configuration:",
+        walletConfig,
+      );
       this.connectorIndexerHttp =
         walletConfig.indexerUri ?? this.config.indexer;
       this.connectorIndexerWs =
@@ -909,7 +930,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       this.connectorProofServer =
         walletConfig.proverServerUri ?? this.config.proofServer;
     } catch (err) {
-      console.warn(
+      this.logger?.warn(
         "[dStorage/midnight] Failed to retrieve wallet configuration:",
         err instanceof Error ? err.message : String(err),
       );
@@ -930,7 +951,10 @@ export class MidnightChainAdapter implements ChainAdapter {
         this.connectorEncPublicKey =
           (obj as any)?.shieldedEncryptionPublicKey ?? null;
       } catch (err) {
-        console.warn("[dStorage/midnight] getShieldedAddresses() failed:", err);
+        this.logger?.warn(
+          "[dStorage/midnight] getShieldedAddresses() failed:",
+          err,
+        );
       }
 
       let unshieldedAddr = "";
@@ -939,7 +963,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         unshieldedAddr =
           (r as any)?.unshieldedAddress ?? (typeof r === "string" ? r : "");
       } catch {
-        console.warn(
+        this.logger?.warn(
           "[dStorage/midnight] Could not retrieve unshielded address",
         );
       }
@@ -949,7 +973,9 @@ export class MidnightChainAdapter implements ChainAdapter {
         const r = await (connectedAPI as any).getDustAddress?.();
         dustAddr = (r as any)?.dustAddress ?? (typeof r === "string" ? r : "");
       } catch {
-        console.warn("[dStorage/midnight] Could not retrieve dust address");
+        this.logger?.warn(
+          "[dStorage/midnight] Could not retrieve dust address",
+        );
       }
 
       if (!shieldedAddr && !unshieldedAddr && !dustAddr) {
@@ -962,7 +988,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         dust: dustAddr,
       };
 
-      console.log("[dStorage/midnight] Wallet addresses:", {
+      this.logger?.log("[dStorage/midnight] Wallet addresses:", {
         shielded: shieldedAddr ? `${shieldedAddr.slice(0, 20)}…` : "(none)",
         unshielded: unshieldedAddr
           ? `${unshieldedAddr.slice(0, 20)}…`

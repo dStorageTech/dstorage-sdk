@@ -39,6 +39,7 @@
  */
 
 import type {
+  Logger,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
@@ -98,6 +99,12 @@ export interface ArweaveAdapterConfig {
    * Defaults to 1_200_000 (20 minutes).
    */
   confirmationTimeoutMs?: number;
+  /**
+   * Optional logger for SDK operational output.
+   * Pass `logger: console` to see all output, or inject your own logger.
+   * Omit to suppress all SDK log output.
+   */
+  logger?: Logger;
 }
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
@@ -126,6 +133,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   private readonly shouldWaitForConfirm: boolean;
   private readonly confirmationPollMs: number;
   private readonly confirmationTimeoutMs: number;
+  protected readonly logger: Logger | undefined;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private arweaveClient: any; // typed as `any` to avoid a hard import at module level
@@ -138,6 +146,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     this.confirmationPollMs = config.confirmationPollMs ?? 30_000;
     this.confirmationTimeoutMs =
       config.confirmationTimeoutMs ?? 20 * 60 * 1_000;
+    this.logger = config.logger;
   }
 
   // ── Private: lazy Arweave client ──────────────────────────────────────────────
@@ -231,13 +240,13 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     const txId = tx.id as string;
     const url = `${this.gateway.protocol}://${this.gateway.host}/${txId}`;
 
-    console.log(
+    this.logger?.log(
       `[dStorage/arweave] Uploaded → txId: ${txId}  cost: ~${arCost} AR`,
     );
 
     // Optional: block until the transaction is included in a block.
     if (this.shouldWaitForConfirm) {
-      console.log("[dStorage/arweave] Waiting for on-chain confirmation…");
+      this.logger?.log("[dStorage/arweave] Waiting for on-chain confirmation…");
       await this.pollUntilConfirmed(arweave, txId);
     }
 
@@ -268,7 +277,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       );
     }
 
-    console.log(`[dStorage/arweave] Retrieved txId: ${id}`);
+    this.logger?.log(`[dStorage/arweave] Retrieved txId: ${id}`);
     return raw as Uint8Array;
   }
 
@@ -296,7 +305,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           `(attempt ${attempt}/${this.maxRetries}): ` +
           `HTTP ${response.status} ${response.statusText ?? ""}`.trimEnd(),
       );
-      console.warn(lastError.message);
+      this.logger?.warn(lastError.message);
 
       if (attempt < this.maxRetries) {
         // Linear back-off: 1 s, 2 s, 3 s…
@@ -321,7 +330,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
       if (status.status === 200) {
         const block = status.confirmed?.block_height as number | undefined;
-        console.log(
+        this.logger?.log(
           `[dStorage/arweave] Confirmed: ${txId}` +
             (block !== undefined ? ` (block ${block})` : ""),
         );
@@ -329,7 +338,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       }
 
       const remaining = Math.round((deadline - Date.now()) / 1_000);
-      console.log(
+      this.logger?.log(
         `[dStorage/arweave] Still pending (HTTP ${status.status}) — ` +
           `retrying in ${this.confirmationPollMs / 1_000}s… ` +
           `(timeout in ${remaining}s)`,

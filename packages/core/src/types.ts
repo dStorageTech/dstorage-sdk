@@ -7,6 +7,18 @@ import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
 import type { PaymentAdapter } from "@dstorage/payment";
 
+/**
+ * Minimal logger interface accepted by every SDK class.
+ * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
+ * Omit the field entirely to suppress all SDK output.
+ */
+export interface Logger {
+  log(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+  debug?(...args: unknown[]): void;
+}
+
 /** Wallet connection info returned after connecting */
 export interface WalletInfo {
   address: string;
@@ -44,6 +56,12 @@ export interface DStorageConfig {
    * If omitted, sdk.init() will deploy a new contract and return its address.
    */
   dataRegistryAddress?: string;
+  /**
+   * Optional logger for SDK operational output.
+   * Pass `logger: console` to see all output, or inject your own logger.
+   * Omit to suppress all SDK log output.
+   */
+  logger?: Logger;
 }
 
 /** Result returned from dStorage.upload() */

@@ -50,15 +50,25 @@ function sleep(ms: number): Promise<void> {
  *   const server = new MockProofServer();
  *   const proof = await server.generateProof('storeReference', { storageId, owner });
  */
+
+interface Logger {
+  log(...args: unknown[]): void;
+  debug?(...args: unknown[]): void;
+}
+
 export class MockProofServer {
   /** Minimum simulated proving time in ms */
   private readonly minMs: number;
   /** Maximum simulated proving time in ms */
   private readonly maxMs: number;
+  private readonly logger: Logger | undefined;
 
-  constructor(options: { minMs?: number; maxMs?: number } = {}) {
+  constructor(
+    options: { minMs?: number; maxMs?: number; logger?: Logger } = {},
+  ) {
     this.minMs = options.minMs ?? 300;
     this.maxMs = options.maxMs ?? 800;
+    this.logger = options.logger;
   }
 
   /**
@@ -69,7 +79,7 @@ export class MockProofServer {
     const delay = this.minMs + Math.random() * (this.maxMs - this.minMs);
     const start = Date.now();
 
-    console.log(
+    this.logger?.log(
       `[dStorage/proof-server] Generating proof for circuit "${circuit}"…`,
       inputs,
     );
@@ -84,7 +94,7 @@ export class MockProofServer {
       provingTimeMs: Date.now() - start,
     };
 
-    console.log(
+    this.logger?.log(
       `[dStorage/proof-server] Proof generated in ${proof.provingTimeMs}ms ✓`,
     );
 

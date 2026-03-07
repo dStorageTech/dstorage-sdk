@@ -4,6 +4,18 @@
  * This is the plugin contract.
  */
 
+/**
+ * Minimal logger interface accepted by every SDK class.
+ * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
+ * Omit the field entirely to suppress all SDK output.
+ */
+export interface Logger {
+  log(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+  debug?(...args: unknown[]): void;
+}
+
 /** Identifies which storage network an adapter represents. */
 export type StorageProviderName = "mock" | "arweave" | "autonomi";
 

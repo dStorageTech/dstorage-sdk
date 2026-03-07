@@ -1,4 +1,4 @@
-export * from "./types.js";
+export * from "./types.js"; // includes Logger
 export * from "./dStorage.js";
 export * from "./wallet.js";
 export * from "./payment.js";

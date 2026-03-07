@@ -8,6 +8,7 @@
  */
 
 import type {
+  Logger,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
@@ -66,6 +67,11 @@ function storeGet(key: string): string | null {
 export class MockStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = "mock";
   readonly providerName: string = "Mock-Storage-Adapter";
+  private readonly logger: Logger | undefined;
+
+  constructor(logger?: Logger) {
+    this.logger = logger;
+  }
 
   async upload(
     data: Uint8Array,
@@ -81,7 +87,7 @@ export class MockStorageAdapter implements StorageAdapter {
     });
     storeSet(`dstorage:blob:${id}`, entry);
 
-    console.log(
+    this.logger?.log(
       `[dStorage/mock] Uploaded ${data.byteLength} bytes → id: ${id}`,
     );
 
@@ -103,7 +109,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
 
     const entry = JSON.parse(raw) as { data: string };
-    console.log(`[dStorage/mock] Retrieved id: ${id}`);
+    this.logger?.log(`[dStorage/mock] Retrieved id: ${id}`);
     return base64ToUint8Array(entry.data);
   }
 

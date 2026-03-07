@@ -377,10 +377,10 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const result = await super.upload(data, metadata);
-    console.log(
+    this.logger?.log(
       "[dStorage/arweave-local] ⚠️  Testnet upload — data is NOT on the real Arweave network.",
     );
-    console.log(`[dStorage/arweave-local] Mining a block to confirm...`);
+    this.logger?.log(`[dStorage/arweave-local] Mining a block to confirm...`);
     await this.testnet.mine();
     return result;
   }

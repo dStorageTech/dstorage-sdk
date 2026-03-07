@@ -11,6 +11,7 @@
  */
 
 import type {
+  Logger,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
@@ -26,6 +27,10 @@ export interface AutonomiAdapterConfig {
    * Wallet private key or mnemonic for paying storage costs in ANT token.
    */
   walletKey?: string;
+  /**
+   * Optional logger for SDK operational output.
+   */
+  logger?: Logger;
 }
 
 export class AutonomiStorageAdapter implements StorageAdapter {
@@ -33,10 +38,12 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   readonly providerName: string = "Autonomi";
 
   private config: AutonomiAdapterConfig;
+  private readonly logger: Logger | undefined;
 
   constructor(config: AutonomiAdapterConfig = {}) {
     this.config = config;
-    console.warn(
+    this.logger = config.logger;
+    this.logger?.warn(
       "[dStorage/autonomi] Autonomi adapter is in preview. " +
         "Real network integration pending JS SDK stability. " +
         "Data is stored in memory for now.",
@@ -58,7 +65,9 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     this.store.set(id, data);
     const cost = await this.estimateCost(data);
 
-    console.log(`[dStorage/autonomi] (preview) Stored locally → id: ${id}`);
+    this.logger?.log(
+      `[dStorage/autonomi] (preview) Stored locally → id: ${id}`,
+    );
 
     return {
       id,

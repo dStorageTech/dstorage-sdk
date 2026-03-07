@@ -31,8 +31,9 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import fs from "fs";
+import pino from "pino";
 
-import { DStorage } from "@dstorage/core";
+import { DStorage, type Logger as DStorageLogger } from "@dstorage/core";
 import {
   ArweaveLocalStorageAdapter,
   //MockStorageAdapter,
@@ -40,6 +41,14 @@ import {
 import { MidnightChainAdapter } from "@dstorage/chain";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fmt = (args: unknown[]) =>
+  args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
+const logger: DStorageLogger = {
+  log: (...args) => process.stderr.write(`[info] ${fmt(args)}\n`),
+  warn: (...args) => process.stderr.write(`[warn] ${fmt(args)}\n`),
+  error: (...args) => process.stderr.write(`[error] ${fmt(args)}\n`),
+  debug: (...args) => process.stderr.write(`[debug] ${fmt(args)}\n`),
+};
 
 // ZK artifacts for the DataRegistry contract.
 // Built by running: npm run compile:contract (from packages/chain)
@@ -186,6 +195,7 @@ async function main(): Promise<void> {
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter,
+      logger,
       ...(contractAddressInput
         ? { dataRegistryAddress: contractAddressInput }
         : {}),

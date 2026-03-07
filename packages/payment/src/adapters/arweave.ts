@@ -23,6 +23,7 @@
  */
 
 import type {
+  Logger,
   PaymentAdapter,
   PaymentProviderName,
   PaymentQuote,
@@ -53,6 +54,10 @@ export interface ArweavePaymentAdapterConfig {
    * Defaults to 600_000.
    */
   quoteValidityMs?: number;
+  /**
+   * Optional logger for SDK operational output.
+   */
+  logger?: Logger;
 }
 
 export class ArweavePaymentAdapter implements PaymentAdapter {
@@ -64,6 +69,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private arweaveClient: any; // typed as any to avoid a hard import at module level
   private readonly quoteValidityMs: number;
+  private readonly logger: Logger | undefined;
 
   constructor(config: ArweavePaymentAdapterConfig = {}) {
     this.config = {
@@ -77,8 +83,9 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
         : {}),
     };
     this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
+    this.logger = config.logger;
 
-    console.warn(
+    this.logger?.warn(
       "[dStorage/arweave-payment] Arweave payment adapter preview mode — " +
         "real AR token transfer pending full Arweave integration.",
     );
@@ -122,7 +129,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     const amount = (storageUsd / TOKENS["AR"].approxUsdPrice).toFixed(8);
     const usd = storageUsd.toFixed(6);
 
-    console.log(
+    this.logger?.log(
       `[dStorage/arweave-payment] (preview) Estimated: ${amount} AR ≈ $${usd}`,
     );
 
@@ -186,7 +193,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     await delay(500);
 
     const txHash = `arweave_preview_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    console.log(
+    this.logger?.log(
       `[dStorage/arweave-payment] (preview) Storage payment → txHash: ${txHash}`,
     );
 

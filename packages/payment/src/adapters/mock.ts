@@ -18,6 +18,7 @@
  */
 
 import type {
+  Logger,
   PaymentAdapter,
   PaymentProviderName,
   PaymentQuote,
@@ -42,6 +43,10 @@ export interface MockPaymentAdapterConfig {
    * Defaults to 600_000 (10 minutes).
    */
   quoteValidityMs?: number;
+  /**
+   * Optional logger for SDK operational output.
+   */
+  logger?: Logger;
 }
 
 export class MockPaymentAdapter implements PaymentAdapter {
@@ -50,11 +55,13 @@ export class MockPaymentAdapter implements PaymentAdapter {
   readonly type: "storage" | "chain";
 
   private readonly quoteValidityMs: number;
+  private readonly logger: Logger | undefined;
 
   constructor(config: MockPaymentAdapterConfig = {}) {
     this.token = config.token ?? "MOCK";
     this.type = config.type ?? "storage";
     this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
+    this.logger = config.logger;
   }
 
   async estimateCost(dataSizeBytes: number): Promise<PaymentQuote> {
@@ -65,7 +72,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
       parseFloat(amount) * (TOKENS[this.token]?.approxUsdPrice ?? 1)
     ).toFixed(6);
 
-    console.log(
+    this.logger?.log(
       `[dStorage/mock-payment] Estimated cost: ${amount} ${this.token} ≈ $${usd}`,
     );
 
@@ -99,7 +106,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
 
     const txHash = generateSimulatedTxHash();
 
-    console.log(
+    this.logger?.log(
       `[dStorage/mock-payment] Simulated ${quote.type} payment → txHash: ${txHash}`,
     );
 

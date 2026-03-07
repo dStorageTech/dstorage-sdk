@@ -27,6 +27,7 @@ import corePackageJson from "../package.json";
 
 import type {
   DStorageConfig,
+  Logger,
   RetrieveResult,
   UploadResult,
   WalletInfo,
@@ -43,9 +44,11 @@ export class DStorage {
   private wallet: WalletInfo | null = null;
   private encryptionKey: CryptoKey | null = null;
   private _initialized = false;
+  private readonly logger: Logger | undefined;
 
   constructor(config: DStorageConfig) {
     this.config = config;
+    this.logger = config.logger;
   }
 
   /**
@@ -89,7 +92,7 @@ export class DStorage {
       walletInfo.address,
     );
 
-    console.log(`[dStorage] Connected: ${walletInfo.address}`);
+    this.logger?.log(`[dStorage] Connected: ${walletInfo.address}`);
   }
 
   /** Disconnect and clear the in-memory encryption key. */
@@ -97,7 +100,7 @@ export class DStorage {
     this.wallet = null;
     this.encryptionKey = null;
     this._initialized = false;
-    console.log(
+    this.logger?.log(
       "[dStorage] Disconnected — encryption key cleared from memory.",
     );
   }
@@ -132,7 +135,7 @@ export class DStorage {
     // 1. Encrypt client-side if key is available; otherwise store raw bytes
     let uploadData: Uint8Array;
     if (this.encryptionKey) {
-      console.log("[dStorage] Encrypting content...");
+      this.logger?.log("[dStorage] Encrypting content...");
       const payload = await encrypt(this.encryptionKey, bytes);
       uploadData = new TextEncoder().encode(serializePayload(payload));
     } else {
@@ -158,7 +161,7 @@ export class DStorage {
     });
 
     const refId = chainResult.refId;
-    console.log(`[dStorage] Upload complete → refId: ${refId}`);
+    this.logger?.log(`[dStorage] Upload complete → refId: ${refId}`);
 
     return {
       chainRefId: refId,
@@ -191,7 +194,7 @@ export class DStorage {
       if (encryptedPayload) {
         try {
           decryptedBytes = await decrypt(this.encryptionKey, encryptedPayload);
-          console.log(
+          this.logger?.log(
             `[dStorage] Data decrypted successfully: ${decryptedBytes.byteLength} bytes`,
           );
         } catch (err) {
@@ -200,13 +203,13 @@ export class DStorage {
       } else {
         // It's not the expected payload for encrypted content,
         // thus assume it's not encrypted
-        console.log(
+        this.logger?.log(
           `[dStorage] Retrieved non ecrypted content of ${decryptedBytes.byteLength} bytes`,
         );
       }
     }
 
-    console.log(`[dStorage] Retrieved by refId → storageId: ${storageId}`);
+    this.logger?.log(`[dStorage] Retrieved by refId → storageId: ${storageId}`);
 
     return {
       content: new TextDecoder().decode(decryptedBytes),

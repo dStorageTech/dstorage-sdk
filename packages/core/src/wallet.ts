@@ -9,7 +9,7 @@
  */
 
 import { KEY_DERIVATION_MESSAGE } from "@dstorage/crypto";
-import type { WalletInfo } from "./types.js";
+import type { Logger, WalletInfo } from "./types.js";
 
 // ── MetaMask / EIP-1193 wallets ───────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ interface MidnightWalletProvider {
  * - Signs the deterministic key-derivation message
  * - Returns WalletInfo ready for dStorage.connect()
  */
-export async function connectMetaMask(): Promise<WalletInfo> {
+export async function connectMetaMask(logger?: Logger): Promise<WalletInfo> {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error(
       "[dStorage] MetaMask not detected. Please install MetaMask: https://metamask.io",
@@ -90,7 +90,7 @@ export async function connectMetaMask(): Promise<WalletInfo> {
     params: [KEY_DERIVATION_MESSAGE, address],
   })) as string;
 
-  console.log(`[dStorage] MetaMask connected: ${address}`);
+  logger?.log(`[dStorage] MetaMask connected: ${address}`);
 
   return {
     address,
@@ -118,6 +118,7 @@ export async function connectMetaMask(): Promise<WalletInfo> {
  */
 export async function connectMidnightWallet(
   networkId = "preprod",
+  logger?: Logger,
 ): Promise<WalletInfo> {
   if (typeof window === "undefined" || !window.midnight) {
     throw new Error(
@@ -154,7 +155,7 @@ export async function connectMidnightWallet(
   //   computational cost against brute-force.
   const signatureHex = await deriveKeySeedFromAddress(address);
 
-  console.log(
+  logger?.log(
     `[dStorage] Midnight wallet connected: ${address} (network: ${networkId})`,
   );
 
@@ -203,11 +204,12 @@ async function deriveKeySeedFromAddress(address: string): Promise<string> {
  */
 export async function connectDemoWallet(
   address = "0xDemoWallet1234",
+  logger?: Logger,
 ): Promise<WalletInfo> {
   // Use a deterministic fake signature for demo purposes
   const fakeSignature = `0x${"ab".repeat(32)}${address.replace("0x", "").slice(0, 8)}`;
 
-  console.warn(
+  logger?.warn(
     "[dStorage] Demo wallet connected — encryption is real but not wallet-bound. For production, use connectMetaMask() or connectMidnightWallet().",
   );
 

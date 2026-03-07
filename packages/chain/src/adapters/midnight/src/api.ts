@@ -4,7 +4,7 @@ import {
   type ContractAddress,
   convertFieldToBytes,
 } from "@midnight-ntwrk/compact-runtime";
-import { type Logger } from "pino";
+import type { Logger } from "../../../types.js";
 import {
   type DataRegistryDerivedState,
   type DataRegistryContract,
@@ -65,7 +65,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
           .pipe(
             map((contractState) => DataRegistry.ledger(contractState.data)),
             tap((ledgerState) =>
-              logger?.trace({
+              logger?.debug?.({
                 ledgerStateChanged: {
                   ledgerState: {
                     ...ledgerState,
@@ -127,7 +127,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
-    this.logger?.info(`storing reference: ${storageId}`);
+    this.logger?.log(`storing reference: ${storageId}`);
     if (storageId.length !== 32) {
       throw new Error(
         `Storage Id is not 32 bytes long but instead ${storageId.length}`,
@@ -151,7 +151,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     const refId: Uint8Array =
       circuitResult instanceof Uint8Array ? circuitResult : new Uint8Array(32);
 
-    this.logger?.trace({
+    this.logger?.debug?.({
       transactionAdded: {
         circuit: "storeReference",
         txHash,
@@ -174,7 +174,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     providers: DataRegistryProviders,
     logger?: Logger,
   ): Promise<DataRegistryAPI> {
-    logger?.info("deployContract");
+    logger?.log("deployContract");
 
     const deployedDataRegistryContract = await deployContract(providers, {
       compiledContract: CompiledDataRegistryContractContract,
@@ -182,7 +182,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
     });
 
-    logger?.trace({
+    logger?.debug?.({
       contractDeployed: {
         finalizedDeployTxData: deployedDataRegistryContract.deployTxData.public,
       },
@@ -205,7 +205,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     contractAddress: ContractAddress,
     logger?: Logger,
   ): Promise<DataRegistryAPI> {
-    logger?.info({
+    logger?.log({
       joinContract: {
         contractAddress,
       },
@@ -219,7 +219,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
       });
 
-    logger?.trace({
+    logger?.debug?.({
       contractJoined: {
         finalizedDeployTxData: deployedDataRegistryContract.deployTxData.public,
       },

@@ -13,6 +13,7 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
+  Logger,
   WalletBalances,
   DataReferencesSummary,
 } from "../types.js";
@@ -52,8 +53,10 @@ export class MockChainAdapter implements ChainAdapter {
   readonly providerName: string = "Mock-Chain-Adapter";
 
   private contractAddress: string;
+  private readonly logger: Logger | undefined;
 
-  constructor() {
+  constructor(logger?: Logger) {
+    this.logger = logger;
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
     const savedRefs = load<Record<string, ChainReference>>(
       "dstorage:chain:refs",
@@ -72,7 +75,9 @@ export class MockChainAdapter implements ChainAdapter {
     const allRefs = Object.fromEntries(refs);
     persist("dstorage:chain:refs", allRefs);
 
-    console.log(`[dStorage/mock-chain] Reference written → refId: ${refId}`);
+    this.logger?.log(
+      `[dStorage/mock-chain] Reference written → refId: ${refId}`,
+    );
     return { refId, provider: this.name, writtenAt: ref.writtenAt };
   }
 
@@ -111,7 +116,7 @@ export class MockChainAdapter implements ChainAdapter {
 
   async deployDataRegistry(): Promise<string> {
     const addr = `mock_contract_${Date.now()}`;
-    console.log(`[dStorage/mock-chain] DataRegistry deployed at: ${addr}`);
+    this.logger?.log(`[dStorage/mock-chain] DataRegistry deployed at: ${addr}`);
     this.contractAddress = addr;
     return addr;
   }

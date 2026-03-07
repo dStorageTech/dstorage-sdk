@@ -13,7 +13,7 @@ import {
 } from "@midnight-ntwrk/midnight-js-types";
 import { ttlOneHour } from "@midnight-ntwrk/midnight-js-utils";
 import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-//import type { Logger } from 'pino';
+import type { Logger } from "../../../types.js";
 
 import { getInitialShieldedState } from "./wallet-utils";
 import {
@@ -34,17 +34,20 @@ export class MidnightWalletProvider
   readonly wallet: WalletFacade;
   readonly zswapSecretKeys: ZswapSecretKeys;
   readonly dustSecretKey: DustSecretKey;
+  private readonly logger: Logger | undefined;
 
   private constructor(
     environmentConfiguration: EnvironmentConfiguration,
     wallet: WalletFacade,
     zswapSecretKeys: ZswapSecretKeys,
     dustSecretKey: DustSecretKey,
+    logger?: Logger,
   ) {
     this.env = environmentConfiguration;
     this.wallet = wallet;
     this.zswapSecretKeys = zswapSecretKeys;
     this.dustSecretKey = dustSecretKey;
+    this.logger = logger;
   }
 
   getCoinPublicKey(): CoinPublicKey {
@@ -76,7 +79,7 @@ export class MidnightWalletProvider
 
   // We do not wait for funds, it's done outside
   async start(): Promise<void> {
-    console.log("Starting wallet...");
+    this.logger?.log("Starting wallet...");
     await this.wallet.start(this.zswapSecretKeys, this.dustSecretKey);
   }
 
@@ -87,6 +90,7 @@ export class MidnightWalletProvider
   static async build(
     env: EnvironmentConfiguration,
     seed?: string,
+    logger?: Logger,
   ): Promise<MidnightWalletProvider> {
     const DEFAULT_DUST_OPTIONS: DustWalletOptions = {
       ledgerParams: LedgerParameters.initialParameters(),
@@ -109,7 +113,7 @@ export class MidnightWalletProvider
       seeds: { masterSeed: string; shielded: Uint8Array; dust: Uint8Array };
     };
 
-    const initialState = await getInitialShieldedState(wallet.shielded);
+    const initialState = await getInitialShieldedState(wallet.shielded, logger);
     /*console.log(
       `Your wallet address is: ${initialState.address.coinPublicKeyString()}`,
     );*/
@@ -119,6 +123,7 @@ export class MidnightWalletProvider
       wallet,
       ZswapSecretKeys.fromSeed(seeds.shielded),
       DustSecretKey.fromSeed(seeds.dust),
+      logger,
     );
   }
 }

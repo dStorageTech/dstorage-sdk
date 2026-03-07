@@ -24,6 +24,7 @@
  */
 
 import type {
+  Logger,
   PaymentAdapter,
   PaymentProviderName,
   PaymentQuote,
@@ -49,6 +50,10 @@ export interface MidnightPaymentAdapterConfig {
    * Defaults to 120_000.
    */
   quoteValidityMs?: number;
+  /**
+   * Optional logger for SDK operational output.
+   */
+  logger?: Logger;
 }
 
 export class MidnightPaymentAdapter implements PaymentAdapter {
@@ -58,6 +63,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
 
   private config: MidnightPaymentAdapterConfig;
   private readonly quoteValidityMs: number;
+  private readonly logger: Logger | undefined;
 
   constructor(config: MidnightPaymentAdapterConfig = {}) {
     this.config = {
@@ -66,8 +72,9 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
       wallet: config.wallet,
     };
     this.quoteValidityMs = config.quoteValidityMs ?? 120_000;
+    this.logger = config.logger;
 
-    console.warn(
+    this.logger?.warn(
       "[dStorage/midnight-payment] Midnight payment adapter preview mode — " +
         "real DUST fee deduction pending Midnight.js v1 integration.",
     );
@@ -101,7 +108,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     const amount = (chainUsd / TOKENS["DUST"].approxUsdPrice).toFixed(4);
     const usd = chainUsd.toFixed(6);
 
-    console.log(
+    this.logger?.log(
       `[dStorage/midnight-payment] (preview) Estimated: ${amount} DUST ≈ $${usd}`,
     );
 
@@ -158,7 +165,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     await delay(700);
 
     const txHash = `midnight_preview_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    console.log(
+    this.logger?.log(
       `[dStorage/midnight-payment] (preview) Chain fee payment → txHash: ${txHash}`,
     );
 

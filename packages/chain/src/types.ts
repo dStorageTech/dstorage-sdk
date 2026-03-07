@@ -5,6 +5,18 @@
  * More chains can be supported in the future
  */
 
+/**
+ * Minimal logger interface accepted by every SDK class.
+ * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
+ * Omit the field entirely to suppress all SDK output.
+ */
+export interface Logger {
+  log(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+  debug?(...args: unknown[]): void;
+}
+
 export type ChainProviderName = "mock" | "midnight";
 
 /** An on-chain reference record — what gets written to the smart contract. */

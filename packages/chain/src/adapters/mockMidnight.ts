@@ -23,6 +23,7 @@ import type {
   ChainReference,
   ChainWriteResult,
   DataReferencesSummary,
+  Logger,
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
 
@@ -71,6 +72,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   readonly providerName: string = "Midnight-Mock";
 
   private readonly proofServer: MockProofServer;
+  private readonly logger: Logger | undefined;
 
   constructor(
     options: {
@@ -80,8 +82,10 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       compiledContract?: unknown;
       /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
       contractAddress?: string;
+      logger?: Logger;
     } = {},
   ) {
+    this.logger = options.logger;
     this.proofServer = new MockProofServer({
       ...(options.proofServerMinMs !== undefined
         ? { minMs: options.proofServerMinMs }
@@ -89,6 +93,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       ...(options.proofServerMaxMs !== undefined
         ? { maxMs: options.proofServerMaxMs }
         : {}),
+      ...(options.logger !== undefined ? { logger: options.logger } : {}),
     });
 
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
@@ -101,7 +106,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
-    console.log(
+    this.logger?.log(
       "[dStorage/mock-midnight] writeReference → calling proof server…",
     );
 
@@ -110,7 +115,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
     // Step 2: Simulate submitting the balanced transaction to the Midnight node
     const blockInclusionMs = 150 + Math.random() * 250;
-    console.log(
+    this.logger?.log(
       "[dStorage/mock-midnight] Submitting balanced tx to Midnight node…",
     );
     await sleep(blockInclusionMs);
@@ -122,7 +127,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     // Persist to localStorage
     persist("dstorage:midnight:refs", Object.fromEntries(refs));
 
-    console.log(
+    this.logger?.log(
       `[dStorage/mock-midnight] Reference written at block ${mockBlockHeight} → refId: ${refId}`,
     );
 
@@ -167,7 +172,9 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     await this.proofServer.generateProof("constructor", {});
     await sleep(150 + Math.random() * 100);
     const addr = `mock_contract_${Date.now()}`;
-    console.log(`[dStorage/mock-midnight] DataRegistry deployed at: ${addr}`);
+    this.logger?.log(
+      `[dStorage/mock-midnight] DataRegistry deployed at: ${addr}`,
+    );
     return addr;
   }
 
