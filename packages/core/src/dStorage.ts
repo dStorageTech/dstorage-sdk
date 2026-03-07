@@ -134,18 +134,18 @@ export class DStorage {
     const bytes =
       typeof content === "string" ? new TextEncoder().encode(content) : content;
 
-    // 1. Encrypt client-side if key is available; otherwise store as UTF-8 text
-    let serialized: string;
+    // 1. Encrypt client-side if key is available; otherwise store raw bytes
+    let uploadData: Uint8Array;
     if (this.encryptionKey) {
       const payload = await encrypt(this.encryptionKey, bytes);
-      serialized = serializePayload(payload);
+      uploadData = new TextEncoder().encode(serializePayload(payload));
     } else {
-      serialized = new TextDecoder().decode(bytes);
+      uploadData = bytes;
     }
 
     // 2. Upload to chosen storage network
     const ownerAddress = this.wallet?.address ?? "";
-    const storageResult = await this.config.storageAdapter.upload(serialized, {
+    const storageResult = await this.config.storageAdapter.upload(uploadData, {
       ...metadata,
       "dstorage-version": "0.1.0",
       ...(ownerAddress ? { "dstorage-owner": ownerAddress } : {}),
@@ -191,16 +191,16 @@ export class DStorage {
     const storageId = parseStorageId(dataId);
 
     // 1. Fetch blob from storage
-    const serialized = await this.config.storageAdapter.retrieve(storageId);
+    const rawBytes = await this.config.storageAdapter.retrieve(storageId);
 
     // 2. Deserialize and decrypt if an encryption key is available
     let decryptedBytes: Uint8Array;
     if (this.encryptionKey) {
-      const payload = deserializePayload(serialized);
+      const payload = deserializePayload(new TextDecoder().decode(rawBytes));
       decryptedBytes = await decrypt(this.encryptionKey, payload);
     } else {
-      // No encryption key — content was stored as unencrypted UTF-8 text
-      decryptedBytes = new TextEncoder().encode(serialized);
+      // No encryption key — assume content was stored as raw bytes
+      decryptedBytes = rawBytes;
     }
 
     const content = new TextDecoder().decode(decryptedBytes);
@@ -259,15 +259,16 @@ export class DStorage {
     }
 
     // 2. Fetch blob from storage
-    const serialized = await this.config.storageAdapter.retrieve(storageId);
+    const rawBytes = await this.config.storageAdapter.retrieve(storageId);
 
     // 3. Deserialize and decrypt if an encryption key is available
     let decryptedBytes: Uint8Array;
     if (this.encryptionKey) {
-      const payload = deserializePayload(serialized);
+      const payload = deserializePayload(new TextDecoder().decode(rawBytes));
       decryptedBytes = await decrypt(this.encryptionKey, payload);
     } else {
-      decryptedBytes = new TextEncoder().encode(serialized);
+      // No encryption key — assume content was stored as raw bytes
+      decryptedBytes = rawBytes;
     }
 
     const content = new TextDecoder().decode(decryptedBytes);
@@ -332,7 +333,7 @@ export class DStorage {
    * Estimate the storage cost for a given content string before committing.
    * Returns a human-readable cost string.
    */
-  async estimateCost(content: string): Promise<string> {
+  async estimateCost(content: Uint8Array): Promise<string> {
     if (this.config.storageAdapter.estimateCost) {
       return this.config.storageAdapter.estimateCost(content);
     }

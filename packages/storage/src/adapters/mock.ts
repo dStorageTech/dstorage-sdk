@@ -27,6 +27,24 @@ function generateId(): string {
   return `mock_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
+function uint8ArrayToBase64(arr: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 8 * 1024;
+  for (let i = 0; i < arr.length; i += chunkSize) {
+    binary += String.fromCharCode(...arr.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    arr[i] = binary.charCodeAt(i);
+  }
+  return arr;
+}
+
 function storeSet(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
@@ -50,15 +68,19 @@ export class MockStorageAdapter implements StorageAdapter {
   readonly providerName: string = "Mock-Storage-Adapter";
 
   async upload(
-    data: string,
+    data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const id = generateId();
 
-    const entry = JSON.stringify({ data, metadata, uploadedAt: Date.now() });
+    const entry = JSON.stringify({
+      data: uint8ArrayToBase64(data),
+      metadata,
+      uploadedAt: Date.now(),
+    });
     storeSet(`dstorage:blob:${id}`, entry);
 
-    console.log(`[dStorage/mock] Uploaded ${data.length} chars → id: ${id}`);
+    console.log(`[dStorage/mock] Uploaded ${data.byteLength} bytes → id: ${id}`);
 
     return {
       id,
@@ -68,7 +90,7 @@ export class MockStorageAdapter implements StorageAdapter {
     };
   }
 
-  async retrieve(id: string): Promise<string> {
+  async retrieve(id: string): Promise<Uint8Array> {
     const raw = storeGet(`dstorage:blob:${id}`);
 
     if (!raw) {
@@ -79,11 +101,11 @@ export class MockStorageAdapter implements StorageAdapter {
 
     const entry = JSON.parse(raw) as { data: string };
     console.log(`[dStorage/mock] Retrieved id: ${id}`);
-    return entry.data;
+    return base64ToUint8Array(entry.data);
   }
 
-  async estimateCost(_data: string): Promise<string> {
-    return "0 (mock — no real storage cost)";
+  async estimateCost(data: Uint8Array): Promise<string> {
+    return `${data.byteLength}`; // mock — 1 unit per byte
   }
 
   /** List all stored IDs (useful for debugging in the demo app) */

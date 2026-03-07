@@ -33,7 +33,7 @@ const mockArweaveInstance = {
     getPrice: vi.fn().mockResolvedValue("500000"),
     sign: vi.fn().mockResolvedValue(undefined),
     post: vi.fn().mockResolvedValue({ status: 200, statusText: "OK" }),
-    getData: vi.fn().mockResolvedValue("test-retrieved-data"),
+    getData: vi.fn().mockResolvedValue(new TextEncoder().encode("test-retrieved-data")),
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 42 } }),
@@ -89,7 +89,7 @@ beforeEach(() => {
     statusText: "OK",
   });
   mockArweaveInstance.transactions.getData.mockResolvedValue(
-    "test-retrieved-data",
+    new TextEncoder().encode("test-retrieved-data"),
   );
   mockArweaveInstance.ar.winstonToAr.mockReturnValue("0.0000005");
   mockArweaveInstance.wallets.generate.mockResolvedValue(MOCK_JWK);
@@ -338,8 +338,10 @@ describe("ArweaveLocalStorageAdapter", () => {
       mockFetch.mockResolvedValue(okResponse());
     });
 
+    const enc = (s: string) => new TextEncoder().encode(s);
+
     it("returns an UploadResult with all required fields", async () => {
-      const result = await makeAdapter().upload("local test data");
+      const result = await makeAdapter().upload(enc("local test data"));
       expect(result).toHaveProperty("id");
       expect(result).toHaveProperty("provider", "arweave");
       expect(result).toHaveProperty("cost");
@@ -347,12 +349,12 @@ describe("ArweaveLocalStorageAdapter", () => {
     });
 
     it("url contains localhost (testnet gateway)", async () => {
-      const result = await makeAdapter().upload("data");
+      const result = await makeAdapter().upload(enc("data"));
       expect(result.url).toContain("localhost");
     });
 
     it("tx id matches the mocked transaction id", async () => {
-      const result = await makeAdapter().upload("data");
+      const result = await makeAdapter().upload(enc("data"));
       expect(result.id).toBe(MOCK_TX_ID);
     });
   });
@@ -360,9 +362,9 @@ describe("ArweaveLocalStorageAdapter", () => {
   // ── retrieve ───────────────────────────────────────────────────────────────
 
   describe("retrieve", () => {
-    it("returns the data for a known txId", async () => {
+    it("returns the data bytes for a known txId", async () => {
       const data = await makeAdapter().retrieve(MOCK_TX_ID);
-      expect(data).toBe("test-retrieved-data");
+      expect(data).toEqual(new TextEncoder().encode("test-retrieved-data"));
     });
   });
 
@@ -405,7 +407,9 @@ describe("ArweaveLocalStorageAdapter", () => {
     it("the returned adapter can upload data", async () => {
       const { adapter } =
         await ArweaveLocalStorageAdapter.createWithTestWallet();
-      const result = await adapter.upload("factory test");
+      const result = await adapter.upload(
+        new TextEncoder().encode("factory test"),
+      );
       expect(result.id).toBe(MOCK_TX_ID);
     });
   });

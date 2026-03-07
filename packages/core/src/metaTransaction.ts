@@ -308,11 +308,13 @@ export class MetaTransaction {
       this.updateStepDetail("encrypt", "Encrypting with AES-GCM 256…");
 
       const encryptedPayload = await encrypt(this.encryptionKey, fileBytes);
-      const serialized = serializePayload(encryptedPayload);
+      const uploadData = new TextEncoder().encode(
+        serializePayload(encryptedPayload),
+      );
 
       this.completeStep(
         "encrypt",
-        `${estimate.fileSizeDisplay} encrypted (${(serialized.length / 1024).toFixed(1)} KB ciphertext)`,
+        `${estimate.fileSizeDisplay} encrypted (${(uploadData.byteLength / 1024).toFixed(1)} KB ciphertext)`,
       );
 
       // ── Step 2: Storage payment ─────────────────────────────────────────
@@ -334,7 +336,7 @@ export class MetaTransaction {
       // ── Step 3: Upload ──────────────────────────────────────────────────
       this.startStep("upload", `Uploading to ${this.storageAdapter.name}…`);
 
-      const uploadResult = await this.storageAdapter.upload(serialized, {
+      const uploadResult = await this.storageAdapter.upload(uploadData, {
         "dstorage-version": "0.1.0",
         "dstorage-owner": this.ownerAddress,
         "dstorage-filename": file.name,

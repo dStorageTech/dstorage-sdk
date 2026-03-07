@@ -44,10 +44,10 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   }
 
   // In-memory fallback until real SDK wired up
-  private store = new Map<string, string>();
+  private store = new Map<string, Uint8Array>();
 
   async upload(
-    data: string,
+    data: Uint8Array,
     _metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     /**
@@ -77,13 +77,13 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     };
   }
 
-  async retrieve(id: string): Promise<string> {
+  async retrieve(id: string): Promise<Uint8Array> {
     /**
      * TODO: Replace with real Autonomi retrieval:
      *   const client = await autonomi.Client.connect(this.config.peers);
      *   const addr   = autonomi.XorName.fromHex(id);
      *   const data   = await client.dataMapChunkGet(addr);
-     *   return data.toString('utf8');
+     *   return data;
      */
 
     const data = this.store.get(id);
@@ -93,11 +93,11 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     return data;
   }
 
-  async estimateCost(_data: string): Promise<string> {
+  async estimateCost(data: Uint8Array): Promise<string> {
     /**
      * TODO: Autonomi uses one-time payment model (pay once, store forever).
      * When JS SDK is available: call client.quotePut(dataSize) → returns ANT cost.
      */
-    return "One-time ANT payment (pricing pending SDK release)";
+    return `${data.byteLength}`; // mock — 1 unit per byte
   }
 }

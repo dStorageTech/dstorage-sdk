@@ -195,14 +195,14 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   // ── upload ─────────────────────────────────────────────────────────────────────
 
   async upload(
-    data: string,
+    data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const arweave = await this.getClient();
     const wallet = this.resolveWallet();
 
     // Pre-flight: estimate cost so callers can surface it in the UI.
-    const bytes = new TextEncoder().encode(data).byteLength;
+    const bytes = data.byteLength;
     const winstons = await arweave.transactions.getPrice(bytes);
     const arCost = arweave.ar.winstonToAr(winstons) as string;
 
@@ -250,12 +250,12 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   // ── retrieve ───────────────────────────────────────────────────────────────────
 
-  async retrieve(id: string): Promise<string> {
+  async retrieve(id: string): Promise<Uint8Array> {
     const arweave = await this.getClient();
 
     const raw = await arweave.transactions.getData(id, {
       decode: true,
-      string: true,
+      string: false,
     });
 
     if (!raw) {
@@ -267,17 +267,15 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     }
 
     console.log(`[dStorage/arweave] Retrieved txId: ${id}`);
-    return raw as string;
+    return raw as Uint8Array;
   }
 
   // ── estimateCost ───────────────────────────────────────────────────────────────
 
-  async estimateCost(data: string): Promise<string> {
+  async estimateCost(data: Uint8Array): Promise<string> {
     const arweave = await this.getClient();
-    const bytes = new TextEncoder().encode(data).byteLength;
-    const winstons = await arweave.transactions.getPrice(bytes);
-    const arCost = arweave.ar.winstonToAr(winstons) as string;
-    return `~${arCost} AR`;
+    const winstons = await arweave.transactions.getPrice(data.byteLength);
+    return winstons as string;
   }
 
   // ── Private: retry post ────────────────────────────────────────────────────────

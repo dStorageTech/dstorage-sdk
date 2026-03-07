@@ -13,10 +13,12 @@ describe("MockStorageAdapter", () => {
 
   // ── upload ───────────────────────────────────────────────────────────────
 
+  const enc = (s: string) => new TextEncoder().encode(s);
+
   describe("upload", () => {
     it("returns an UploadResult with all required fields", async () => {
       const adapter = new MockStorageAdapter();
-      const result = await adapter.upload("hello world");
+      const result = await adapter.upload(enc("hello world"));
       expect(result).toHaveProperty("id");
       expect(result).toHaveProperty("provider");
       expect(result).toHaveProperty("cost");
@@ -25,26 +27,26 @@ describe("MockStorageAdapter", () => {
 
     it('id starts with "mock_"', async () => {
       const adapter = new MockStorageAdapter();
-      const result = await adapter.upload("data");
+      const result = await adapter.upload(enc("data"));
       expect(result.id.startsWith("mock_")).toBe(true);
     });
 
     it('provider is "mock"', async () => {
       const adapter = new MockStorageAdapter();
-      const result = await adapter.upload("data");
+      const result = await adapter.upload(enc("data"));
       expect(result.provider).toBe("mock");
     });
 
     it('cost is "0 (mock)"', async () => {
       const adapter = new MockStorageAdapter();
-      const result = await adapter.upload("data");
+      const result = await adapter.upload(enc("data"));
       expect(result.cost).toBe("0 (mock)");
     });
 
     it("uploadedAt is a recent timestamp", async () => {
       const before = Date.now();
       const adapter = new MockStorageAdapter();
-      const result = await adapter.upload("data");
+      const result = await adapter.upload(enc("data"));
       const after = Date.now();
       expect(result.uploadedAt).toBeGreaterThanOrEqual(before);
       expect(result.uploadedAt).toBeLessThanOrEqual(after);
@@ -52,49 +54,49 @@ describe("MockStorageAdapter", () => {
 
     it("each upload returns a unique id", async () => {
       const adapter = new MockStorageAdapter();
-      const r1 = await adapter.upload("a");
-      const r2 = await adapter.upload("b");
-      const r3 = await adapter.upload("c");
+      const r1 = await adapter.upload(enc("a"));
+      const r2 = await adapter.upload(enc("b"));
+      const r3 = await adapter.upload(enc("c"));
       const ids = new Set([r1.id, r2.id, r3.id]);
       expect(ids.size).toBe(3);
     });
 
     it("works with no metadata argument", async () => {
       const adapter = new MockStorageAdapter();
-      await expect(adapter.upload("data")).resolves.toBeDefined();
+      await expect(adapter.upload(enc("data"))).resolves.toBeDefined();
     });
 
     it("works with empty metadata object", async () => {
       const adapter = new MockStorageAdapter();
-      await expect(adapter.upload("data", {})).resolves.toBeDefined();
+      await expect(adapter.upload(enc("data"), {})).resolves.toBeDefined();
     });
 
     it("works with metadata key-value pairs", async () => {
       const adapter = new MockStorageAdapter();
-      const result = await adapter.upload("data", {
+      const result = await adapter.upload(enc("data"), {
         "dstorage-version": "0.1.0",
         "dstorage-owner": "0xAlice",
       });
       expect(result.id).toBeDefined();
     });
 
-    it("uploads empty string without error", async () => {
+    it("uploads empty Uint8Array without error", async () => {
       const adapter = new MockStorageAdapter();
-      const result = await adapter.upload("");
+      const result = await adapter.upload(new Uint8Array(0));
       expect(result.id).toBeDefined();
     });
 
-    it("uploads valid JSON string", async () => {
+    it("uploads arbitrary binary data", async () => {
       const adapter = new MockStorageAdapter();
-      const json = JSON.stringify({ key: "value", nested: [1, 2, 3] });
-      const result = await adapter.upload(json);
+      const result = await adapter.upload(new Uint8Array([0, 1, 2, 255]));
       expect(result.id).toBeDefined();
     });
 
-    it("uploads binary-safe base64 string", async () => {
+    it("uploads JSON bytes", async () => {
       const adapter = new MockStorageAdapter();
-      const b64 = btoa("\x00\x01\x02\xFF");
-      const result = await adapter.upload(b64);
+      const result = await adapter.upload(
+        enc(JSON.stringify({ key: "value", nested: [1, 2, 3] })),
+      );
       expect(result.id).toBeDefined();
     });
   });
@@ -102,27 +104,27 @@ describe("MockStorageAdapter", () => {
   // ── retrieve ─────────────────────────────────────────────────────────────
 
   describe("retrieve", () => {
-    it("returns the exact data that was uploaded", async () => {
+    it("returns the exact bytes that were uploaded", async () => {
       const adapter = new MockStorageAdapter();
-      const data = "exact content match test";
+      const data = enc("exact content match test");
       const { id } = await adapter.upload(data);
       const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toBe(data);
+      expect(retrieved).toEqual(data);
     });
 
-    it("retrieves JSON string unchanged", async () => {
+    it("retrieves arbitrary binary data unchanged", async () => {
       const adapter = new MockStorageAdapter();
-      const json = JSON.stringify({ patient: "Alice", active: true });
-      const { id } = await adapter.upload(json);
+      const data = new Uint8Array([0, 1, 2, 128, 255]);
+      const { id } = await adapter.upload(data);
       const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toBe(json);
+      expect(retrieved).toEqual(data);
     });
 
-    it("retrieves empty string correctly", async () => {
+    it("retrieves empty Uint8Array correctly", async () => {
       const adapter = new MockStorageAdapter();
-      const { id } = await adapter.upload("");
+      const { id } = await adapter.upload(new Uint8Array(0));
       const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toBe("");
+      expect(retrieved).toEqual(new Uint8Array(0));
     });
 
     it("throws for unknown id with the correct error message", async () => {
@@ -141,37 +143,44 @@ describe("MockStorageAdapter", () => {
 
     it("multiple items: each id retrieves its own data", async () => {
       const adapter = new MockStorageAdapter();
-      const r1 = await adapter.upload("content A");
-      const r2 = await adapter.upload("content B");
-      const r3 = await adapter.upload("content C");
-      expect(await adapter.retrieve(r1.id)).toBe("content A");
-      expect(await adapter.retrieve(r2.id)).toBe("content B");
-      expect(await adapter.retrieve(r3.id)).toBe("content C");
+      const r1 = await adapter.upload(enc("content A"));
+      const r2 = await adapter.upload(enc("content B"));
+      const r3 = await adapter.upload(enc("content C"));
+      expect(await adapter.retrieve(r1.id)).toEqual(enc("content A"));
+      expect(await adapter.retrieve(r2.id)).toEqual(enc("content B"));
+      expect(await adapter.retrieve(r3.id)).toEqual(enc("content C"));
     });
 
     it("retrieve after multiple writes does not corrupt earlier entries", async () => {
       const adapter = new MockStorageAdapter();
-      const { id: id1 } = await adapter.upload("first");
-      await adapter.upload("second");
-      await adapter.upload("third");
-      expect(await adapter.retrieve(id1)).toBe("first");
+      const { id: id1 } = await adapter.upload(enc("first"));
+      await adapter.upload(enc("second"));
+      await adapter.upload(enc("third"));
+      expect(await adapter.retrieve(id1)).toEqual(enc("first"));
     });
   });
 
   // ── estimateCost ──────────────────────────────────────────────────────────
 
   describe("estimateCost", () => {
-    it("returns the mock cost string", async () => {
+    it("returns the byte length of the data as cost", async () => {
       const adapter = new MockStorageAdapter();
-      const cost = await adapter.estimateCost("any data");
-      expect(cost).toBe("0 (mock — no real storage cost)");
+      const data = enc("any data");
+      const cost = await adapter.estimateCost(data);
+      expect(cost).toBe(`${data.byteLength}`);
     });
 
-    it("returns the same string regardless of data size", async () => {
+    it("returns different costs for different data sizes", async () => {
       const adapter = new MockStorageAdapter();
-      const costSmall = await adapter.estimateCost("x");
-      const costLarge = await adapter.estimateCost("x".repeat(1_000_000));
-      expect(costSmall).toBe(costLarge);
+      const costSmall = await adapter.estimateCost(enc("x"));
+      const costLarge = await adapter.estimateCost(new Uint8Array(1_000_000));
+      expect(costSmall).not.toBe(costLarge);
+    });
+
+    it("returns '0' for empty input", async () => {
+      const adapter = new MockStorageAdapter();
+      const cost = await adapter.estimateCost(new Uint8Array(0));
+      expect(cost).toBe("0");
     });
   });
 
@@ -185,14 +194,14 @@ describe("MockStorageAdapter", () => {
 
     it("includes the id of an uploaded item", async () => {
       const adapter = new MockStorageAdapter();
-      const { id } = await adapter.upload("list-test-data");
+      const { id } = await adapter.upload(enc("list-test-data"));
       expect(adapter.listAll()).toContain(id);
     });
 
     it("includes all uploaded ids", async () => {
       const adapter = new MockStorageAdapter();
-      const r1 = await adapter.upload("list-a");
-      const r2 = await adapter.upload("list-b");
+      const r1 = await adapter.upload(enc("list-a"));
+      const r2 = await adapter.upload(enc("list-b"));
       const all = adapter.listAll();
       expect(all).toContain(r1.id);
       expect(all).toContain(r2.id);

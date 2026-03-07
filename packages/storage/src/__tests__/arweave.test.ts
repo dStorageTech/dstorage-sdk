@@ -23,7 +23,7 @@ const mockArweave = {
     getPrice: vi.fn().mockResolvedValue("1000000"), // 1 winston
     sign: vi.fn().mockResolvedValue(undefined),
     post: vi.fn().mockResolvedValue({ status: 200, statusText: "OK" }),
-    getData: vi.fn().mockResolvedValue("retrieved-data"),
+    getData: vi.fn().mockResolvedValue(new TextEncoder().encode("retrieved-data")),
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 1234567 } }),
@@ -65,7 +65,7 @@ describe("ArweaveStorageAdapter", () => {
       status: 200,
       statusText: "OK",
     });
-    mockArweave.transactions.getData.mockResolvedValue("retrieved-data");
+    mockArweave.transactions.getData.mockResolvedValue(new TextEncoder().encode("retrieved-data"));
     mockArweave.transactions.getStatus.mockResolvedValue({
       status: 200,
       confirmed: { block_height: 1234567 },
@@ -104,10 +104,12 @@ describe("ArweaveStorageAdapter", () => {
 
   // ── upload ──────────────────────────────────────────────────────────────────
 
+  const enc = (s: string) => new TextEncoder().encode(s);
+
   describe("upload", () => {
     it("returns an UploadResult with all required fields", async () => {
       const adapter = nodeAdapter();
-      const result = await adapter.upload("hello arweave");
+      const result = await adapter.upload(enc("hello arweave"));
 
       expect(result).toHaveProperty("id");
       expect(result).toHaveProperty("provider");
@@ -116,23 +118,23 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it('provider is "arweave"', async () => {
-      const result = await nodeAdapter().upload("data");
+      const result = await nodeAdapter().upload(enc("data"));
       expect(result.provider).toBe("arweave");
     });
 
     it("id is the transaction id returned by arweave-js", async () => {
-      const result = await nodeAdapter().upload("data");
+      const result = await nodeAdapter().upload(enc("data"));
       expect(result.id).toBe("mock_tx_id_abc123");
     });
 
     it("cost contains the AR amount from the fee oracle", async () => {
-      const result = await nodeAdapter().upload("data");
+      const result = await nodeAdapter().upload(enc("data"));
       expect(result.cost).toContain("AR");
       expect(result.cost).toContain("0.000001");
     });
 
     it("url is constructed from gateway + txId", async () => {
-      const result = await nodeAdapter().upload("data");
+      const result = await nodeAdapter().upload(enc("data"));
       expect(result.url).toBe("https://arweave.net/mock_tx_id_abc123");
     });
 
@@ -140,20 +142,20 @@ describe("ArweaveStorageAdapter", () => {
       const adapter = nodeAdapter({
         gateway: { host: "arweave.dev", port: 443, protocol: "https" },
       });
-      const result = await adapter.upload("data");
+      const result = await adapter.upload(enc("data"));
       expect(result.url).toContain("arweave.dev");
     });
 
     it("uploadedAt is a recent timestamp", async () => {
       const before = Date.now();
-      const result = await nodeAdapter().upload("data");
+      const result = await nodeAdapter().upload(enc("data"));
       const after = Date.now();
       expect(result.uploadedAt).toBeGreaterThanOrEqual(before);
       expect(result.uploadedAt).toBeLessThanOrEqual(after);
     });
 
     it("adds standard dStorage tags to the transaction", async () => {
-      await nodeAdapter().upload("data");
+      await nodeAdapter().upload(enc("data"));
       expect(mockTx.addTag).toHaveBeenCalledWith("App-Name", "dStorage");
       expect(mockTx.addTag).toHaveBeenCalledWith("App-Version", "0.1.0");
       expect(mockTx.addTag).toHaveBeenCalledWith(
@@ -163,7 +165,7 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it("adds caller-supplied metadata as tags", async () => {
-      await nodeAdapter().upload("data", {
+      await nodeAdapter().upload(enc("data"), {
         "dstorage-owner": "0xABC",
         label: "test",
       });
@@ -172,7 +174,7 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it("signs the transaction before posting", async () => {
-      await nodeAdapter().upload("data");
+      await nodeAdapter().upload(enc("data"));
       const signOrder =
         mockArweave.transactions.sign.mock.invocationCallOrder[0];
       const postOrder =
@@ -182,7 +184,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("throws if Node.js walletKey is empty", async () => {
       const adapter = new ArweaveStorageAdapter({ walletKey: {} });
-      await expect(adapter.upload("data")).rejects.toThrow(/walletKey/);
+      await expect(adapter.upload(enc("data"))).rejects.toThrow(/walletKey/);
     });
 
     it("retries on HTTP 500 and succeeds on second attempt", async () => {
@@ -190,7 +192,7 @@ describe("ArweaveStorageAdapter", () => {
         .mockResolvedValueOnce({ status: 500, statusText: "Server Error" })
         .mockResolvedValueOnce({ status: 200, statusText: "OK" });
 
-      const result = await nodeAdapter({ maxRetries: 3 }).upload("data");
+      const result = await nodeAdapter({ maxRetries: 3 }).upload(enc("data"));
       expect(result.id).toBe("mock_tx_id_abc123");
       expect(mockArweave.transactions.post).toHaveBeenCalledTimes(2);
     });
@@ -202,7 +204,7 @@ describe("ArweaveStorageAdapter", () => {
       });
 
       const adapter = nodeAdapter({ maxRetries: 2 });
-      await expect(adapter.upload("data")).rejects.toThrow(/HTTP 500/);
+      await expect(adapter.upload(enc("data"))).rejects.toThrow(/HTTP 500/);
       expect(mockArweave.transactions.post).toHaveBeenCalledTimes(2);
     });
   });
@@ -210,9 +212,9 @@ describe("ArweaveStorageAdapter", () => {
   // ── retrieve ────────────────────────────────────────────────────────────────
 
   describe("retrieve", () => {
-    it("returns the data string from arweave-js", async () => {
+    it("returns the data bytes from arweave-js", async () => {
       const result = await nodeAdapter().retrieve("mock_tx_id_abc123");
-      expect(result).toBe("retrieved-data");
+      expect(result).toEqual(new TextEncoder().encode("retrieved-data"));
     });
 
     it("throws with viewblock.io link when no data is returned", async () => {
@@ -222,11 +224,11 @@ describe("ArweaveStorageAdapter", () => {
       );
     });
 
-    it("passes decode:true and string:true to getData", async () => {
+    it("passes decode:true and string:false to getData", async () => {
       await nodeAdapter().retrieve("tx_123");
       expect(mockArweave.transactions.getData).toHaveBeenCalledWith("tx_123", {
         decode: true,
-        string: true,
+        string: false,
       });
     });
   });
@@ -234,22 +236,17 @@ describe("ArweaveStorageAdapter", () => {
   // ── estimateCost ─────────────────────────────────────────────────────────────
 
   describe("estimateCost", () => {
-    it('returns a string containing "AR"', async () => {
-      const cost = await nodeAdapter().estimateCost("some data");
-      expect(typeof cost).toBe("string");
-      expect(cost).toContain("AR");
-    });
-
-    it("returns cost with tilde prefix (~)", async () => {
-      const cost = await nodeAdapter().estimateCost("some data");
-      expect(cost.startsWith("~")).toBe(true);
+    it("returns the raw winstons value from getPrice", async () => {
+      const cost = await nodeAdapter().estimateCost(enc("some data"));
+      expect(cost).toBe("1000000");
     });
 
     it("calls getPrice with the byte length of the data", async () => {
-      const data = "hello";
-      const bytes = new TextEncoder().encode(data).byteLength;
+      const data = enc("hello");
       await nodeAdapter().estimateCost(data);
-      expect(mockArweave.transactions.getPrice).toHaveBeenCalledWith(bytes);
+      expect(mockArweave.transactions.getPrice).toHaveBeenCalledWith(
+        data.byteLength,
+      );
     });
   });
 
@@ -270,7 +267,7 @@ describe("ArweaveStorageAdapter", () => {
         confirmationTimeoutMs: 5_000,
       });
 
-      const result = await adapter.upload("data");
+      const result = await adapter.upload(enc("data"));
       expect(result.id).toBe("mock_tx_id_abc123");
       expect(mockArweave.transactions.getStatus).toHaveBeenCalledTimes(2);
     });
@@ -284,7 +281,7 @@ describe("ArweaveStorageAdapter", () => {
         confirmationTimeoutMs: 10, // expire immediately
       });
 
-      await expect(adapter.upload("data")).rejects.toThrow(/timeout/i);
+      await expect(adapter.upload(enc("data"))).rejects.toThrow(/timeout/i);
     }, 10_000);
   });
 
@@ -301,7 +298,7 @@ describe("ArweaveStorageAdapter", () => {
       win["window"] = {}; // simulate bare browser window
 
       try {
-        await expect(adapter.upload("data")).rejects.toThrow(/ArConnect/);
+        await expect(adapter.upload(enc("data"))).rejects.toThrow(/ArConnect/);
       } finally {
         win["window"] = original;
       }

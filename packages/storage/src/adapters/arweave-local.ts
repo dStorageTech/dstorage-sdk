@@ -386,7 +386,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   // ── Overridden upload: log testnet context ──────────────────────────────────
 
   override async upload(
-    data: string,
+    data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
     const result = await super.upload(data, metadata);

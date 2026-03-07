@@ -224,22 +224,24 @@ describe("retrieve", () => {
 // ── estimateCost ──────────────────────────────────────────────────────────────
 
 describe("estimateCost", () => {
+  const enc = (s: string) => new TextEncoder().encode(s);
+
   it("returns a string (even when not connected)", async () => {
     const ds = new DStorage(makeConfig());
-    const result = await ds.estimateCost("some content");
+    const result = await ds.estimateCost(enc("some content"));
     expect(typeof result).toBe("string");
   });
 
   it("returns a non-empty string", async () => {
     const ds = new DStorage(makeConfig());
-    const result = await ds.estimateCost("some content");
+    const result = await ds.estimateCost(enc("some content"));
     expect(result.length).toBeGreaterThan(0);
   });
 
-  it('contains "mock" or "0" to indicate no real cost', async () => {
+  it("returns cost equal to the byte length of the input", async () => {
     const ds = new DStorage(makeConfig());
-    const result = await ds.estimateCost("some content");
-    const lower = result.toLowerCase();
-    expect(lower.includes("mock") || lower.includes("0")).toBe(true);
+    const data = enc("some content");
+    const result = await ds.estimateCost(data);
+    expect(result).toBe(`${data.byteLength}`);
   });
 });
