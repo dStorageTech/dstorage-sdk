@@ -49,19 +49,12 @@ export interface DStorageConfig {
 /** Result returned from dStorage.upload() */
 export interface UploadResult {
   /**
-   * The primary on-chain reference ID, as computed by the circuit.
+   * The primary on-chain reference ID.
    * Use this to retrieve or share the stored data.
    */
-  refId: string;
-  /**
-   * The dStorage dataId — pass this to retrieve() or grant().
-   * Format: "<storageId>::<chainRefId>"
-   */
-  dataId: string;
+  chainRefId: string;
   /** The storage network content ID */
   storageId: string;
-  /** The on-chain reference ID (same as refId, kept for backward compatibility) */
-  chainRefId: string;
   /** Storage provider used */
   storageProvider: StorageProviderName;
   /** Chain provider used */

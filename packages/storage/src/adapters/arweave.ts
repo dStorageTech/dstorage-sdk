@@ -43,6 +43,7 @@ import type {
   StorageProviderName,
   UploadResult,
 } from "../types.js";
+import storagePackageJson from "../../package.json";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -216,11 +217,6 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tx: any = await arweave.createTransaction({ data }, wallet);
 
-    // Standard dStorage tags — queryable via the Arweave GraphQL gateway.
-    tx.addTag("App-Name", "dStorage");
-    tx.addTag("App-Version", "0.1.0");
-    tx.addTag("Content-Type", "application/octet-stream");
-
     // Caller-supplied metadata (e.g. dstorage-owner, dstorage-version).
     for (const [key, value] of Object.entries(metadata)) {
       tx.addTag(key, value);
@@ -247,8 +243,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     return {
       id: txId,
-      provider: "arweave",
-      cost: arCost as string,
+      provider: this.name,
+      cost: arCost,
       url,
       uploadedAt: Date.now(),
     };

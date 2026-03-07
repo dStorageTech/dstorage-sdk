@@ -187,38 +187,30 @@ describe("deserializePayload", () => {
     const payload = await encrypt(key, bytes("data"));
     const raw = serializePayload(payload);
     const result = deserializePayload(raw);
-    expect(result.ciphertext).toBe(payload.ciphertext);
-    expect(result.iv).toBe(payload.iv);
+    expect(result?.ciphertext).toBe(payload.ciphertext);
+    expect(result?.iv).toBe(payload.iv);
   });
 
   it("throws for missing ciphertext field", () => {
     const raw = JSON.stringify({ iv: "AAAAAAAAAAAAAAAA" });
-    expect(() => deserializePayload(raw)).toThrow(
-      "[dStorage/crypto] Invalid payload format.",
-    );
+    expect(deserializePayload(raw)).toBe(null);
   });
 
   it("throws for missing iv field", () => {
     const raw = JSON.stringify({ ciphertext: "AAAA" });
-    expect(() => deserializePayload(raw)).toThrow(
-      "[dStorage/crypto] Invalid payload format.",
-    );
+    expect(deserializePayload(raw)).toBe(null);
   });
 
   it("throws for null JSON value", () => {
-    expect(() => deserializePayload("null")).toThrow(
-      "[dStorage/crypto] Invalid payload format.",
-    );
+    expect(deserializePayload("null")).toBe(null);
   });
 
   it("throws for a JSON array (not an object)", () => {
-    expect(() => deserializePayload("[]")).toThrow(
-      "[dStorage/crypto] Invalid payload format.",
-    );
+    expect(deserializePayload("[]")).toBe(null);
   });
 
   it("throws for invalid JSON (SyntaxError)", () => {
-    expect(() => deserializePayload("not json")).toThrow(SyntaxError);
+    expect(deserializePayload("not json")).toBe(null);
   });
 
   it("accepts payloads with extra unknown fields", () => {
@@ -228,8 +220,8 @@ describe("deserializePayload", () => {
       extra: "ignored",
     });
     const result = deserializePayload(raw);
-    expect(result.ciphertext).toBe("AAAA");
-    expect(result.iv).toBe("BBBB");
+    expect(result?.ciphertext).toBe("AAAA");
+    expect(result?.iv).toBe("BBBB");
   });
 
   it("full serialize → deserialize → decrypt round-trip", async () => {
@@ -237,7 +229,7 @@ describe("deserializePayload", () => {
     const original = bytes("full round-trip with deserialization");
     const payload = await encrypt(key, original);
     const serialized = serializePayload(payload);
-    const deserialized = deserializePayload(serialized);
+    const deserialized = deserializePayload(serialized)!;
     const recovered = await decrypt(key, deserialized);
     expect(new TextDecoder().decode(recovered)).toBe(
       "full round-trip with deserialization",

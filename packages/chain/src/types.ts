@@ -13,8 +13,6 @@ export interface ChainReference {
   storageId: string;
   /** Storage network used */
   storageProvider: string;
-  /** Owner wallet address */
-  owner: string;
   /** Optional label for the referenced data e.g. "profile", "document" */
   dataLabel?: string;
   /** Timestamp of when the reference was written on-chain */
@@ -72,7 +70,7 @@ export interface ChainAdapter {
   /**
    * Retrieve a reference by its on-chain ID.
    */
-  //readReference(refId: string): Promise<ChainReference>;
+  readReference(refId: string): Promise<ChainReference>;
 
   /**
    * Read NIGHT and DUST balances from synced wallet state.
@@ -93,5 +91,5 @@ export interface ChainAdapter {
 
   /** Derive a deterministic encryption key from the adapter's credentials.
    *  Optional — only for adapters that hold wallet credentials (e.g. facade mode). */
-  getEncryptionKey?(): Promise<CryptoKey>;
+  getEncryptionKey?(): Promise<CryptoKey | null>;
 }

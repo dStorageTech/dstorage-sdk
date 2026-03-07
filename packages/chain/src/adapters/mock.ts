@@ -66,15 +66,14 @@ export class MockChainAdapter implements ChainAdapter {
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
     const refId = generateRefId();
-    const entry: ChainReference = { ...ref, writtenAt: Date.now() };
-    refs.set(refId, entry);
+    refs.set(refId, ref);
 
     // Persist to localStorage
     const allRefs = Object.fromEntries(refs);
     persist("dstorage:chain:refs", allRefs);
 
     console.log(`[dStorage/mock-chain] Reference written → refId: ${refId}`);
-    return { refId, provider: "mock", writtenAt: Date.now() };
+    return { refId, provider: this.name, writtenAt: ref.writtenAt };
   }
 
   async readReference(refId: string): Promise<ChainReference> {
@@ -117,7 +116,7 @@ export class MockChainAdapter implements ChainAdapter {
     return addr;
   }
 
-  async getEncryptionKey(): Promise<CryptoKey> {
+  async getEncryptionKey(): Promise<CryptoKey | null> {
     // Generate a random ephemeral key — fine for mocking purposes
     return globalThis.crypto.subtle.generateKey(
       { name: "AES-GCM", length: 256 },

@@ -5,50 +5,30 @@ const _descriptor_0 = new __compactRuntime.CompactTypeBytes(32);
 
 const _descriptor_1 = __compactRuntime.CompactTypeOpaqueString;
 
+const _descriptor_2 = new __compactRuntime.CompactTypeUnsignedInteger(18446744073709551615n, 8);
+
 class _ReferenceEntry_0 {
   alignment() {
-    return _descriptor_0.alignment().concat(_descriptor_1.alignment());
+    return _descriptor_0.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_2.alignment())));
   }
   fromValue(value_0) {
     return {
       storageId: _descriptor_0.fromValue(value_0),
-      storageProvider: _descriptor_1.fromValue(value_0)
+      storageProvider: _descriptor_1.fromValue(value_0),
+      dataLabel: _descriptor_1.fromValue(value_0),
+      writtenAt: _descriptor_2.fromValue(value_0)
     }
   }
   toValue(value_0) {
-    return _descriptor_0.toValue(value_0.storageId).concat(_descriptor_1.toValue(value_0.storageProvider));
+    return _descriptor_0.toValue(value_0.storageId).concat(_descriptor_1.toValue(value_0.storageProvider).concat(_descriptor_1.toValue(value_0.dataLabel).concat(_descriptor_2.toValue(value_0.writtenAt))));
   }
 }
 
-const _descriptor_2 = new _ReferenceEntry_0();
+const _descriptor_3 = new _ReferenceEntry_0();
 
-const _descriptor_3 = __compactRuntime.CompactTypeBoolean;
+const _descriptor_4 = __compactRuntime.CompactTypeBoolean;
 
-const _descriptor_4 = new __compactRuntime.CompactTypeUnsignedInteger(65535n, 2);
-
-const _descriptor_5 = new __compactRuntime.CompactTypeUnsignedInteger(18446744073709551615n, 8);
-
-const _descriptor_6 = new __compactRuntime.CompactTypeVector(3, _descriptor_0);
-
-class _Either_0 {
-  alignment() {
-    return _descriptor_3.alignment().concat(_descriptor_0.alignment().concat(_descriptor_0.alignment()));
-  }
-  fromValue(value_0) {
-    return {
-      is_left: _descriptor_3.fromValue(value_0),
-      left: _descriptor_0.fromValue(value_0),
-      right: _descriptor_0.fromValue(value_0)
-    }
-  }
-  toValue(value_0) {
-    return _descriptor_3.toValue(value_0.is_left).concat(_descriptor_0.toValue(value_0.left).concat(_descriptor_0.toValue(value_0.right)));
-  }
-}
-
-const _descriptor_7 = new _Either_0();
-
-const _descriptor_8 = new __compactRuntime.CompactTypeUnsignedInteger(340282366920938463463374607431768211455n, 16);
+const _descriptor_5 = new __compactRuntime.CompactTypeUnsignedInteger(65535n, 2);
 
 class _ContractAddress_0 {
   alignment() {
@@ -64,7 +44,29 @@ class _ContractAddress_0 {
   }
 }
 
-const _descriptor_9 = new _ContractAddress_0();
+const _descriptor_6 = new _ContractAddress_0();
+
+const _descriptor_7 = new __compactRuntime.CompactTypeVector(4, _descriptor_0);
+
+class _Either_0 {
+  alignment() {
+    return _descriptor_4.alignment().concat(_descriptor_0.alignment().concat(_descriptor_0.alignment()));
+  }
+  fromValue(value_0) {
+    return {
+      is_left: _descriptor_4.fromValue(value_0),
+      left: _descriptor_0.fromValue(value_0),
+      right: _descriptor_0.fromValue(value_0)
+    }
+  }
+  toValue(value_0) {
+    return _descriptor_4.toValue(value_0.is_left).concat(_descriptor_0.toValue(value_0.left).concat(_descriptor_0.toValue(value_0.right)));
+  }
+}
+
+const _descriptor_8 = new _Either_0();
+
+const _descriptor_9 = new __compactRuntime.CompactTypeUnsignedInteger(340282366920938463463374607431768211455n, 16);
 
 const _descriptor_10 = new __compactRuntime.CompactTypeUnsignedInteger(255n, 1);
 
@@ -84,31 +86,40 @@ export class Contract {
         return { result: pureCircuits.deriveRefId(...args_1), context };
       },
       storeReference: (...args_1) => {
-        if (args_1.length !== 3) {
-          throw new __compactRuntime.CompactError(`storeReference: expected 3 arguments (as invoked from Typescript), received ${args_1.length}`);
+        if (args_1.length !== 5) {
+          throw new __compactRuntime.CompactError(`storeReference: expected 5 arguments (as invoked from Typescript), received ${args_1.length}`);
         }
         const contextOrig_0 = args_1[0];
         const storageId_0 = args_1[1];
         const storageProvider_0 = args_1[2];
+        const dataLabel_0 = args_1[3];
+        const writtenAt_0 = args_1[4];
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 57 char 1',
+                                     'DataRegistry.compact line 81 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(storageId_0.buffer instanceof ArrayBuffer && storageId_0.BYTES_PER_ELEMENT === 1 && storageId_0.length === 32)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 57 char 1',
+                                     'DataRegistry.compact line 81 char 1',
                                      'Bytes<32>',
                                      storageId_0)
+        }
+        if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
+          __compactRuntime.typeError('storeReference',
+                                     'argument 4 (argument 5 as invoked from Typescript)',
+                                     'DataRegistry.compact line 81 char 1',
+                                     'Uint<0..18446744073709551616>',
+                                     writtenAt_0)
         }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
           input: {
-            value: _descriptor_0.toValue(storageId_0).concat(_descriptor_1.toValue(storageProvider_0)),
-            alignment: _descriptor_0.alignment().concat(_descriptor_1.alignment())
+            value: _descriptor_0.toValue(storageId_0).concat(_descriptor_1.toValue(storageProvider_0).concat(_descriptor_1.toValue(dataLabel_0).concat(_descriptor_2.toValue(writtenAt_0)))),
+            alignment: _descriptor_0.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_2.alignment())))
           },
           output: undefined,
           publicTranscript: [],
@@ -117,7 +128,9 @@ export class Contract {
         const result_0 = this._storeReference_0(context,
                                                 partialProofData,
                                                 storageId_0,
-                                                storageProvider_0);
+                                                storageProvider_0,
+                                                dataLabel_0,
+                                                writtenAt_0);
         partialProofData.output = { value: _descriptor_0.toValue(result_0), alignment: _descriptor_0.alignment() };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       }
@@ -170,8 +183,8 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_10.toValue(1n),
                                                                                               alignment: _descriptor_10.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_5.toValue(0n),
-                                                                                              alignment: _descriptor_5.alignment() }).encode() } },
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_2.toValue(0n),
+                                                                                              alignment: _descriptor_2.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
@@ -194,8 +207,8 @@ export class Contract {
                                                          value: { value: _descriptor_10.toValue(1n),
                                                                   alignment: _descriptor_10.alignment() } }] } },
                                        { addi: { immediate: parseInt(__compactRuntime.valueToBigInt(
-                                                              { value: _descriptor_4.toValue(tmp_0),
-                                                                alignment: _descriptor_4.alignment() }
+                                                              { value: _descriptor_5.toValue(tmp_0),
+                                                                alignment: _descriptor_5.alignment() }
                                                                 .value
                                                             )) } },
                                        { ins: { cached: true, n: 1 } }]);
@@ -207,18 +220,25 @@ export class Contract {
     }
   }
   _persistentHash_0(value_0) {
-    const result_0 = __compactRuntime.persistentHash(_descriptor_6, value_0);
+    const result_0 = __compactRuntime.persistentHash(_descriptor_7, value_0);
     return result_0;
   }
-  _deriveRefId_0(storageId_0, refCounter_0) {
+  _deriveRefId_0(storageId_0, refCounter_0, instanceSalt_0) {
     return this._persistentHash_0([new Uint8Array([100, 115, 116, 111, 114, 97, 103, 101, 58, 114, 101, 102, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
                                    storageId_0,
-                                   refCounter_0]);
+                                   refCounter_0,
+                                   instanceSalt_0]);
   }
-  _storeReference_0(context, partialProofData, storageId_0, storageProvider_0) {
+  _storeReference_0(context,
+                    partialProofData,
+                    storageId_0,
+                    storageProvider_0,
+                    dataLabel_0,
+                    writtenAt_0)
+  {
     const refId_0 = this._deriveRefId_0(storageId_0,
                                         __compactRuntime.convertFieldToBytes(32,
-                                                                             _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                             _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                                                        partialProofData,
                                                                                                                                        [
                                                                                                                                         { dup: { n: 0 } },
@@ -230,8 +250,20 @@ export class Contract {
                                                                                                                                                                    alignment: _descriptor_10.alignment() } }] } },
                                                                                                                                         { popeq: { cached: true,
                                                                                                                                                    result: undefined } }]).value),
-                                                                             'DataRegistry.compact line 58 char 40'));
-    __compactRuntime.assert(!_descriptor_3.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                             'DataRegistry.compact line 87 char 40'),
+                                        _descriptor_6.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                                  partialProofData,
+                                                                                                  [
+                                                                                                   { dup: { n: 2 } },
+                                                                                                   { idx: { cached: true,
+                                                                                                            pushPath: false,
+                                                                                                            path: [
+                                                                                                                   { tag: 'value',
+                                                                                                                     value: { value: _descriptor_10.toValue(0n),
+                                                                                                                              alignment: _descriptor_10.alignment() } }] } },
+                                                                                                   { popeq: { cached: true,
+                                                                                                              result: undefined } }]).value).bytes);
+    __compactRuntime.assert(!_descriptor_4.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                        partialProofData,
                                                                                        [
                                                                                         { dup: { n: 0 } },
@@ -248,7 +280,10 @@ export class Contract {
                                                                                         { popeq: { cached: true,
                                                                                                    result: undefined } }]).value),
                             'Reference already stored');
-    const entry_0 = { storageId: storageId_0, storageProvider: storageProvider_0 };
+    const entry_0 = { storageId: storageId_0,
+                      storageProvider: storageProvider_0,
+                      dataLabel: dataLabel_0,
+                      writtenAt: writtenAt_0 };
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -262,8 +297,8 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(refId_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_2.toValue(entry_0),
-                                                                                              alignment: _descriptor_2.alignment() }).encode() } },
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_3.toValue(entry_0),
+                                                                                              alignment: _descriptor_3.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } },
                                        { ins: { cached: true, n: 1 } }]);
     const tmp_0 = 1n;
@@ -277,8 +312,8 @@ export class Contract {
                                                          value: { value: _descriptor_10.toValue(1n),
                                                                   alignment: _descriptor_10.alignment() } }] } },
                                        { addi: { immediate: parseInt(__compactRuntime.valueToBigInt(
-                                                              { value: _descriptor_4.toValue(tmp_0),
-                                                                alignment: _descriptor_4.alignment() }
+                                                              { value: _descriptor_5.toValue(tmp_0),
+                                                                alignment: _descriptor_5.alignment() }
                                                                 .value
                                                             )) } },
                                        { ins: { cached: true, n: 1 } }]);
@@ -304,7 +339,7 @@ export function ledger(stateOrChargedState) {
         if (args_0.length !== 0) {
           throw new __compactRuntime.CompactError(`isEmpty: expected 0 arguments, received ${args_0.length}`);
         }
-        return _descriptor_3.fromValue(__compactRuntime.queryLedgerState(context,
+        return _descriptor_4.fromValue(__compactRuntime.queryLedgerState(context,
                                                                          partialProofData,
                                                                          [
                                                                           { dup: { n: 0 } },
@@ -316,8 +351,8 @@ export function ledger(stateOrChargedState) {
                                                                                                      alignment: _descriptor_10.alignment() } }] } },
                                                                           'size',
                                                                           { push: { storage: false,
-                                                                                    value: __compactRuntime.StateValue.newCell({ value: _descriptor_5.toValue(0n),
-                                                                                                                                 alignment: _descriptor_5.alignment() }).encode() } },
+                                                                                    value: __compactRuntime.StateValue.newCell({ value: _descriptor_2.toValue(0n),
+                                                                                                                                 alignment: _descriptor_2.alignment() }).encode() } },
                                                                           'eq',
                                                                           { popeq: { cached: true,
                                                                                      result: undefined } }]).value);
@@ -326,7 +361,7 @@ export function ledger(stateOrChargedState) {
         if (args_0.length !== 0) {
           throw new __compactRuntime.CompactError(`size: expected 0 arguments, received ${args_0.length}`);
         }
-        return _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
+        return _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
                                                                          partialProofData,
                                                                          [
                                                                           { dup: { n: 0 } },
@@ -348,11 +383,11 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('member',
                                      'argument 1',
-                                     'DataRegistry.compact line 25 char 1',
+                                     'DataRegistry.compact line 34 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
-        return _descriptor_3.fromValue(__compactRuntime.queryLedgerState(context,
+        return _descriptor_4.fromValue(__compactRuntime.queryLedgerState(context,
                                                                          partialProofData,
                                                                          [
                                                                           { dup: { n: 0 } },
@@ -377,11 +412,11 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('lookup',
                                      'argument 1',
-                                     'DataRegistry.compact line 25 char 1',
+                                     'DataRegistry.compact line 34 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
-        return _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
+        return _descriptor_3.fromValue(__compactRuntime.queryLedgerState(context,
                                                                          partialProofData,
                                                                          [
                                                                           { dup: { n: 0 } },
@@ -405,11 +440,11 @@ export function ledger(stateOrChargedState) {
           throw new __compactRuntime.CompactError(`iter: expected 0 arguments, received ${args_0.length}`);
         }
         const self_0 = state.asArray()[0];
-        return self_0.asMap().keys().map(  (key) => {    const value = self_0.asMap().get(key).asCell();    return [      _descriptor_0.fromValue(key.value),      _descriptor_2.fromValue(value.value)    ];  })[Symbol.iterator]();
+        return self_0.asMap().keys().map(  (key) => {    const value = self_0.asMap().get(key).asCell();    return [      _descriptor_0.fromValue(key.value),      _descriptor_3.fromValue(value.value)    ];  })[Symbol.iterator]();
       }
     },
     get refCounter() {
-      return _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
+      return _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
                                                                        partialProofData,
                                                                        [
                                                                         { dup: { n: 0 } },
@@ -444,26 +479,36 @@ const _emptyContext = {
 const _dummyContract = new Contract({ });
 export const pureCircuits = {
   deriveRefId: (...args_0) => {
-    if (args_0.length !== 2) {
-      throw new __compactRuntime.CompactError(`deriveRefId: expected 2 arguments (as invoked from Typescript), received ${args_0.length}`);
+    if (args_0.length !== 3) {
+      throw new __compactRuntime.CompactError(`deriveRefId: expected 3 arguments (as invoked from Typescript), received ${args_0.length}`);
     }
     const storageId_0 = args_0[0];
     const refCounter_0 = args_0[1];
+    const instanceSalt_0 = args_0[2];
     if (!(storageId_0.buffer instanceof ArrayBuffer && storageId_0.BYTES_PER_ELEMENT === 1 && storageId_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 1',
-                                 'DataRegistry.compact line 38 char 1',
+                                 'DataRegistry.compact line 60 char 1',
                                  'Bytes<32>',
                                  storageId_0)
     }
     if (!(refCounter_0.buffer instanceof ArrayBuffer && refCounter_0.BYTES_PER_ELEMENT === 1 && refCounter_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 2',
-                                 'DataRegistry.compact line 38 char 1',
+                                 'DataRegistry.compact line 60 char 1',
                                  'Bytes<32>',
                                  refCounter_0)
     }
-    return _dummyContract._deriveRefId_0(storageId_0, refCounter_0);
+    if (!(instanceSalt_0.buffer instanceof ArrayBuffer && instanceSalt_0.BYTES_PER_ELEMENT === 1 && instanceSalt_0.length === 32)) {
+      __compactRuntime.typeError('deriveRefId',
+                                 'argument 3',
+                                 'DataRegistry.compact line 60 char 1',
+                                 'Bytes<32>',
+                                 instanceSalt_0)
+    }
+    return _dummyContract._deriveRefId_0(storageId_0,
+                                         refCounter_0,
+                                         instanceSalt_0);
   }
 };
 export const contractReferenceLocations =

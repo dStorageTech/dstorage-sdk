@@ -2,11 +2,13 @@
 //
 // On-chain program for the dStorage SDK on Midnight Network.
 //
-// This contract stores encrypted data pointers (storage references).
+// This contract stores data pointers (storage references).
 // Raw user data is NEVER written to this contract —
 // only opaque identifiers referencing encrypted blobs stored off-chain.
+// Encryption/decryption is handled by SDK clients before/after storage access.
 //
 // Circuits:
+//   deriveRefId     — deterministic helper to derive a refId from input fields
 //   storeReference  — record a new storage reference, returns a unique refId
 //
 pragma language_version >= 0.20;
@@ -15,10 +17,17 @@ import CompactStandardLibrary;
 
 // A single storage reference entry stored on-chain.
 export struct ReferenceEntry {
-  // Storage network content ID (e.g. Arweave txId, Autonomi XorName)
+  // 32-byte storage content identifier.
+  // Upstream adapters must normalize/pad/encrypt provider-specific IDs into Bytes<32>.
   storageId: Bytes<32>;
-  // Storage provider name ("arweave", "autonomi", "mock")
+  // Storage provider identifier ("arweave", "autonomi", "mock").
+  // This contract does not validate allowed values.
   storageProvider: Opaque<"string">;
+  // Optional caller-defined label (e.g. "profile", "document").
+  // This contract does not validate allowed values.
+  dataLabel: Opaque<"string">;
+  // Caller-supplied write timestamp.
+  writtenAt: Uint<64>;
 }
 
 // Primary storage: refId → ReferenceEntry
@@ -27,41 +36,62 @@ export ledger references: Map<Bytes<32>, ReferenceEntry>;
 // Monotonic counter used to derive unique refIds without randomness.
 export ledger refCounter: Counter;
 
-// The creator of this contract becomes the owner
+// Reserved for future access-control extensions.
+// Current contract logic does not read or enforce this field.
 export ledger owner: Bytes<32>;
 
 //witness localSecretKey(): Bytes<32>;
 
-// Derive a deterministic refId from the storage ID and a monotonic counter.
-// Using hash(storageId ++ counter) guarantees uniqueness and ties the refId
-// to the actual content without revealing the counter value separately.
-export circuit deriveRefId(storageId: Bytes<32>, refCounter: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dstorage:ref:"), storageId, refCounter]);
-}
-
 constructor() {
+  // Start at 1 so the first stored entry uses a non-zero counter value.
   refCounter.increment(1);
 }
 
 // ── Circuits ──────────────────────────────────────────────────────────────────
+
+// Derive a deterministic refId from:
+//   - a fixed domain separator ("dstorage:ref:")
+//   - storageId
+//   - current refCounter value
+//   - this contract instance salt
+//
+// Including the counter avoids collisions for repeated storageId values,
+// and including instance salt avoids cross-contract collisions.
+export circuit deriveRefId(
+                 storageId: Bytes<32>,
+                 refCounter: Bytes<32>,
+                 instanceSalt: Bytes<32>
+                 ): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>(
+           [pad(32, "dstorage:ref:"), storageId, refCounter, instanceSalt]
+           );
+}
 
 // storeReference
 //
 // Records an encrypted data pointer on-chain.
 // Returns the refId that can be used to retrieve or share this reference.
 //
-// Arguments (all opaque — this contract does not interpret content):
-//   storageId       : content address on the storage network
-//   storageProvider : identifier for the storage network
+// Arguments:
+//   storageId       : 32-byte storage content ID
+//   storageProvider : provider identifier (opaque string bytes)
+//   dataLabel       : optional user-defined label (opaque string bytes)
+//   writtenAt       : caller-provided timestamp
 //
-export circuit storeReference(storageId: Bytes<32>, storageProvider: Opaque<"string">,): Bytes<32> {
-  const refId = deriveRefId(storageId, refCounter as Bytes<32>);
+export circuit storeReference(
+                 storageId: Bytes<32>,
+                 storageProvider: Opaque<"string">,
+                 dataLabel: Opaque<"string">,
+                 writtenAt: Uint<64>
+                 ): Bytes<32> {
+  const refId = deriveRefId(storageId, refCounter as Bytes<32>, kernel.self().bytes);
   assert(!references.member(disclose(refId)), "Reference already stored");
 
-  // Persist the reference entry
-  const entry = ReferenceEntry { storageId, storageProvider, };
+  // Persist the reference entry.
+  const entry = ReferenceEntry { storageId, storageProvider, dataLabel, writtenAt };
   references.insert(disclose(refId), disclose(entry));
 
+  // Increment after insertion so the next write gets a fresh refId.
   refCounter.increment(1);
   return refId;
 }

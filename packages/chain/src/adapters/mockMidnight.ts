@@ -106,11 +106,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     );
 
     // Step 1: Generate ZK proof via mock proof server
-    await this.proofServer.generateProof("storeReference", {
-      storageId: ref.storageId,
-      storageProvider: ref.storageProvider,
-      owner: ref.owner,
-    });
+    await this.proofServer.generateProof("storeReference", ref);
 
     // Step 2: Simulate submitting the balanced transaction to the Midnight node
     const blockInclusionMs = 150 + Math.random() * 250;
@@ -121,8 +117,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
     mockBlockHeight += 1;
     const refId = generateRefId();
-    const entry: ChainReference = { ...ref, writtenAt: Date.now() };
-    refs.set(refId, entry);
+    refs.set(refId, ref);
 
     // Persist to localStorage
     persist("dstorage:midnight:refs", Object.fromEntries(refs));
@@ -133,9 +128,9 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
     return {
       refId,
-      provider: "midnight",
+      provider: this.name,
       blockHeight: mockBlockHeight,
-      writtenAt: Date.now(),
+      writtenAt: ref.writtenAt,
     };
   }
 
@@ -176,7 +171,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return addr;
   }
 
-  async getEncryptionKey(): Promise<CryptoKey> {
+  async getEncryptionKey(): Promise<CryptoKey | null> {
     const { KeyDeriver } = await import("@dstorage/crypto");
     // Fixed test mnemonic for deterministic mock encryption key
     return new KeyDeriver({

@@ -370,7 +370,7 @@ async function main(): Promise<void> {
         );
 
         console.log("\n  ✓ Upload complete!");
-        console.log(`  refId:           ${result.refId}`);
+        console.log(`  refId:           ${result.chainRefId}`);
         console.log(`  storageId:       ${result.storageId}`);
         console.log(`  storageProvider: ${result.storageProvider}`);
         console.log(`  chainProvider:   ${result.chainProvider}`);

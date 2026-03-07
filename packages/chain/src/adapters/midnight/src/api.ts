@@ -37,6 +37,8 @@ export interface DeployedDataRegistryAPI {
   storeReference: (
     storageId: Uint8Array,
     storageProvider: string,
+    dataLabel: string,
+    writtenAt: bigint,
   ) => Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }>;
 }
 
@@ -122,6 +124,8 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   async storeReference(
     storageId: Uint8Array,
     storageProvider: string,
+    dataLabel: string,
+    writtenAt: bigint,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
     this.logger?.info(`storing reference: ${storageId}`);
     if (storageId.length !== 32) {
@@ -132,6 +136,8 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     const txData = await this.deployedContract.callTx.storeReference(
       storageId,
       storageProvider,
+      dataLabel,
+      writtenAt,
     );
 
     const txHash: string =

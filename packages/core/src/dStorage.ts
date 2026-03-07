@@ -23,6 +23,7 @@ import {
   deserializePayload,
   deriveKeyFromSignature,
 } from "@dstorage/crypto";
+import corePackageJson from "../package.json";
 
 import type {
   DStorageConfig,
@@ -47,8 +48,6 @@ export class DStorage {
     this.config = config;
   }
 
-  // ── Initialization (new API) ────────────────────────────────────────────────
-
   /**
    * Initialize the SDK:
    *   1. Initialize the chain adapter wallet (if supported), and
@@ -65,15 +64,13 @@ export class DStorage {
     }
 
     // 2. Derive encryption key from chain adapter credentials (facade mode)
-    /*if (this.config.chainAdapter.getEncryptionKey) {
+    if (this.config.chainAdapter.getEncryptionKey) {
       this.encryptionKey = await this.config.chainAdapter.getEncryptionKey();
-    }*/
+    }
 
     this._initialized = true;
     return this.config.chainAdapter.getContractAddress();
   }
-
-  // ── Connection ──────────────────────────────────────────────────────────────
 
   /**
    * Bind the SDK to a connected wallet.
@@ -115,8 +112,6 @@ export class DStorage {
     return this.wallet?.address ?? null;
   }
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
-
   /**
    * Encrypt content client-side, upload to decentralised storage,
    * and write a cryptographic reference on-chain.
@@ -137,6 +132,7 @@ export class DStorage {
     // 1. Encrypt client-side if key is available; otherwise store raw bytes
     let uploadData: Uint8Array;
     if (this.encryptionKey) {
+      console.log("[dStorage] Encrypting content...");
       const payload = await encrypt(this.encryptionKey, bytes);
       uploadData = new TextEncoder().encode(serializePayload(payload));
     } else {
@@ -145,10 +141,11 @@ export class DStorage {
 
     // 2. Upload to chosen storage network
     const ownerAddress = this.wallet?.address ?? "";
+    const sdkVersion = corePackageJson.version ?? "unknown";
     const storageResult = await this.config.storageAdapter.upload(uploadData, {
       ...metadata,
-      "dstorage-version": "0.1.0",
-      ...(ownerAddress ? { "dstorage-owner": ownerAddress } : {}),
+      "dStorage-version": sdkVersion,
+      "Content-Type": "application/octet-stream",
     });
 
     // 3. Write on-chain reference — only the pointer, never the data
@@ -156,65 +153,67 @@ export class DStorage {
     const chainResult = await this.config.chainAdapter.writeReference({
       storageId: storageResult.id,
       storageProvider: storageResult.provider,
-      owner: ownerAddress,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
     });
 
     const refId = chainResult.refId;
-    const dataId = `${storageResult.id}::${refId}`;
-
     console.log(`[dStorage] Upload complete → refId: ${refId}`);
 
     return {
-      refId,
-      dataId,
-      storageId: storageResult.id,
       chainRefId: refId,
+      storageId: storageResult.id,
       storageProvider: storageResult.provider,
       chainProvider: chainResult.provider,
       uploadedAt: storageResult.uploadedAt,
     };
   }
 
-  // ── Retrieve ───────────────────────────────────────────────────────────────
-
   /**
-   * Retrieve and decrypt data by its dataId.
+   * Retrieve and decrypt data by its storageId.
    * Decryption happens locally — the SDK never sends plaintext anywhere.
    *
-   * @param dataId  The dataId returned from upload()
+   * @param storageId  The storageId returned from upload()
    */
-  async retrieve(dataId: string): Promise<RetrieveResult> {
+  async retrieveByStorageId(storageId: string): Promise<RetrieveResult> {
     this.assertConnected();
-
-    const storageId = parseStorageId(dataId);
 
     // 1. Fetch blob from storage
     const rawBytes = await this.config.storageAdapter.retrieve(storageId);
 
     // 2. Deserialize and decrypt if an encryption key is available
-    let decryptedBytes: Uint8Array;
+    // If no encryption key — assume content was stored as raw bytes
+    let decryptedBytes = rawBytes;
     if (this.encryptionKey) {
-      const payload = deserializePayload(new TextDecoder().decode(rawBytes));
-      decryptedBytes = await decrypt(this.encryptionKey, payload);
-    } else {
-      // No encryption key — assume content was stored as raw bytes
-      decryptedBytes = rawBytes;
+      const encryptedPayload = deserializePayload(
+        new TextDecoder().decode(rawBytes),
+      );
+      if (encryptedPayload) {
+        try {
+          decryptedBytes = await decrypt(this.encryptionKey, encryptedPayload);
+          console.log(
+            `[dStorage] Data decrypted successfully: ${decryptedBytes.byteLength} bytes`,
+          );
+        } catch (err) {
+          throw new Error(`[dStorage] Failed to decrypt payload: ${err}`);
+        }
+      } else {
+        // It's not the expected payload for encrypted content,
+        // thus assume it's not encrypted
+        console.log(
+          `[dStorage] Retrieved non ecrypted content of ${decryptedBytes.byteLength} bytes`,
+        );
+      }
     }
 
-    const content = new TextDecoder().decode(decryptedBytes);
-
-    console.log(`[dStorage] Retrieved → dataId: ${dataId}`);
+    console.log(`[dStorage] Retrieved by refId → storageId: ${storageId}`);
 
     return {
-      content,
+      content: new TextDecoder().decode(decryptedBytes),
       bytes: decryptedBytes,
       metadata: {},
     };
   }
-
-  // ── Retrieve by refId ─────────────────────────────────────────────────────
 
   /**
    * Retrieve and decrypt data using only its on-chain reference ID.
@@ -232,57 +231,14 @@ export class DStorage {
   async retrieveByRefId(refId: string): Promise<RetrieveResult> {
     this.assertConnected();
 
-    // 1. Resolve the original storage network ID from the on-chain reference
-    const adapter = this.config.chainAdapter as unknown as {
-      getReference?: (
-        refId: string,
-      ) => Promise<{ storageId: string; storageProvider: string } | null>;
-      readReference?: (refId: string) => Promise<{ storageId: string }>;
-    };
-
-    let storageId: string;
-    if (typeof adapter.getReference === "function") {
-      const ref = await adapter.getReference(refId);
-      if (!ref)
-        throw new Error(
-          `[dStorage] No on-chain reference found for refId: ${refId}`,
-        );
-      storageId = ref.storageId;
-    } else if (typeof adapter.readReference === "function") {
-      const ref = await adapter.readReference(refId);
-      storageId = ref.storageId;
-    } else {
+    const ref = await this.config.chainAdapter.readReference(refId);
+    if (!ref)
       throw new Error(
-        "[dStorage] retrieveByRefId() requires the chain adapter to implement " +
-          "getReference() or readReference().",
+        `[dStorage] No on-chain reference found for refId: ${refId}`,
       );
-    }
 
-    // 2. Fetch blob from storage
-    const rawBytes = await this.config.storageAdapter.retrieve(storageId);
-
-    // 3. Deserialize and decrypt if an encryption key is available
-    let decryptedBytes: Uint8Array;
-    if (this.encryptionKey) {
-      const payload = deserializePayload(new TextDecoder().decode(rawBytes));
-      decryptedBytes = await decrypt(this.encryptionKey, payload);
-    } else {
-      // No encryption key — assume content was stored as raw bytes
-      decryptedBytes = rawBytes;
-    }
-
-    const content = new TextDecoder().decode(decryptedBytes);
-
-    console.log(`[dStorage] Retrieved by refId → storageId: ${storageId}`);
-
-    return {
-      content,
-      bytes: decryptedBytes,
-      metadata: {},
-    };
+    return await this.retrieveByStorageId(ref.storageId);
   }
-
-  // ── Cost estimation ────────────────────────────────────────────────────────
 
   /**
    * List references currently available from the configured chain adapter.
@@ -340,8 +296,6 @@ export class DStorage {
     return "Cost estimation not available for this storage provider.";
   }
 
-  // ── Meta-transaction ──────────────────────────────────────────────────────
-
   /**
    * Execute a full meta-transaction for a file:
    * estimate → encrypt → pay storage → upload → pay chain → write reference
@@ -388,19 +342,4 @@ export class DStorage {
       );
     }
   }
-}
-
-// ── dataId parsing ────────────────────────────────────────────────────────────
-
-function parseStorageId(dataId: string): string {
-  const parts = dataId.split("::");
-  if (!parts[0]) throw new Error(`[dStorage] Invalid dataId: ${dataId}`);
-  return parts[0];
-}
-
-function parseChainRefId(dataId: string): string {
-  const parts = dataId.split("::");
-  if (!parts[1])
-    throw new Error(`[dStorage] Invalid dataId (missing chain ref): ${dataId}`);
-  return parts[1];
 }

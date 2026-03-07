@@ -659,19 +659,27 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Returns { storageId, storageProvider } with the storageId decoded to the
    * original storage network identifier (e.g. Arweave txId), or null if not found.
    */
-  async getReference(refId: string): Promise<DataReferencesSummary | null> {
+  async readReference(refId: string): Promise<ChainReference> {
     const api = await this._getAPI();
 
     const { firstValueFrom } = await import("rxjs");
     const state = await firstValueFrom(api.state$);
 
-    const entry = state.references.get(refId);
-    if (!entry) return null;
+    const refEntry = state.references.get(refId);
+    if (!refEntry) {
+      throw new Error(
+        `[dStorage/midnight] No reference found for refId: ${refId}`,
+      );
+    }
 
     return {
-      refId,
-      storageId: this._decodeStorageId(entry.storageId, entry.storageProvider),
-      storageProvider: entry.storageProvider,
+      storageId: this._decodeStorageId(
+        refEntry.storageId,
+        refEntry.storageProvider,
+      ),
+      storageProvider: refEntry.storageProvider,
+      dataLabel: "TODO: refEntry.dataLabel",
+      writtenAt: 0, //refEntry.writtenAt
     };
   }
 
@@ -693,7 +701,12 @@ export class MidnightChainAdapter implements ChainAdapter {
         refId,
         txHash: _,
         blockHeight,
-      } = await api.storeReference(encodedStorageId, ref.storageProvider);
+      } = await api.storeReference(
+        encodedStorageId,
+        ref.storageProvider,
+        ref.dataLabel ?? "",
+        BigInt(ref.writtenAt),
+      );
       const refIdHex = uint8ArrayToHex(refId);
 
       console.log(
@@ -704,7 +717,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         refId: refIdHex,
         provider: this.name,
         blockHeight,
-        writtenAt: Date.now(),
+        writtenAt: ref.writtenAt,
       };
     } catch (err) {
       console.error("[dStorage/midnight] writeReference() failed:", err);
@@ -758,15 +771,16 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Only available in facade mode (where credentials are held by the adapter).
    * Throws in connector mode (credentials are held by the wallet extension).
    */
-  async getEncryptionKey(): Promise<CryptoKey> {
+  async getEncryptionKey(): Promise<CryptoKey | null> {
     if (this.walletMode === "facade" && this._credentials) {
       const { KeyDeriver } = await import("@dstorage/crypto");
       return new KeyDeriver(this._credentials).deriveEncryptionKey();
     }
-    throw new Error(
+    /*throw new Error(
       "[dStorage/midnight] getEncryptionKey() is not available in connector mode.\n" +
         "  Encryption key derivation requires wallet credentials (facade mode only).",
-    );
+    );*/
+    return null;
   }
 
   // ── Wallet lifecycle ───────────────────────────────────────────────────────

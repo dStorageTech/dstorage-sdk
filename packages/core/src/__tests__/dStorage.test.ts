@@ -91,9 +91,9 @@ describe("operations before connect() throw", () => {
     );
   });
 
-  it("retrieve() throws when not connected", async () => {
+  it("retrieveByRefId() throws when not connected", async () => {
     const ds = new DStorage(makeConfig());
-    await expect(ds.retrieve("any::ref")).rejects.toThrow(
+    await expect(ds.retrieveByRefId("any::ref")).rejects.toThrow(
       "[dStorage] Not connected",
     );
   });
@@ -102,18 +102,11 @@ describe("operations before connect() throw", () => {
 // ── upload ────────────────────────────────────────────────────────────────────
 
 describe("upload", () => {
-  it("returns an UploadResult with dataId, storageId, chainRefId", async () => {
+  it("returns an UploadResult with chainRefId and storageId", async () => {
     const ds = await makeConnectedDStorage();
     const result = await ds.upload("hello world");
-    expect(result).toHaveProperty("dataId");
-    expect(result).toHaveProperty("storageId");
     expect(result).toHaveProperty("chainRefId");
-  });
-
-  it('dataId is "<storageId>::<chainRefId>"', async () => {
-    const ds = await makeConnectedDStorage();
-    const result = await ds.upload("hello world");
-    expect(result.dataId).toBe(`${result.storageId}::${result.chainRefId}`);
+    expect(result).toHaveProperty("storageId");
   });
 
   it('storageProvider is "mock"', async () => {
@@ -139,40 +132,40 @@ describe("upload", () => {
     const ds = await makeConnectedDStorage();
     const bytes = new Uint8Array([104, 101, 108, 108, 111]); // "hello"
     const result = await ds.upload(bytes);
-    expect(result.dataId).toBeDefined();
+    expect(result.chainRefId).toBeDefined();
   });
 
   it("two uploads of the same content produce different dataIds", async () => {
     const ds = await makeConnectedDStorage();
     const r1 = await ds.upload("same content");
     const r2 = await ds.upload("same content");
-    expect(r1.dataId).not.toBe(r2.dataId);
+    expect(r1.chainRefId).not.toBe(r2.chainRefId);
   });
 });
 
-// ── retrieve ──────────────────────────────────────────────────────────────────
+// ── retrieveByRefId ──────────────────────────────────────────────────────────────────
 
-describe("retrieve", () => {
-  it("returns the original plaintext after upload + retrieve", async () => {
+describe("retrieveByRefId", () => {
+  it("returns the original plaintext after upload + retrieveByRefId", async () => {
     const ds = await makeConnectedDStorage();
     const content = "Hello, private world!";
-    const { dataId } = await ds.upload(content);
-    const result = await ds.retrieve(dataId);
+    const { chainRefId } = await ds.upload(content);
+    const result = await ds.retrieveByRefId(chainRefId);
     expect(result.content).toBe(content);
   });
 
   it("returns bytes matching the original UTF-8 encoding", async () => {
     const ds = await makeConnectedDStorage();
     const content = "test bytes";
-    const { dataId } = await ds.upload(content);
-    const result = await ds.retrieve(dataId);
+    const { chainRefId } = await ds.upload(content);
+    const result = await ds.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(new TextEncoder().encode(content));
   });
 
   it("returns metadata as an object (possibly empty)", async () => {
     const ds = await makeConnectedDStorage();
-    const { dataId } = await ds.upload("meta test");
-    const result = await ds.retrieve(dataId);
+    const { chainRefId } = await ds.upload("meta test");
+    const result = await ds.retrieveByRefId(chainRefId);
     expect(typeof result.metadata).toBe("object");
   });
 
@@ -185,10 +178,9 @@ describe("retrieve", () => {
     await ds1.connect(w1);
     await ds2.connect(w2);
 
-    const { dataId: id1 } = await ds1.upload("same text");
-    const { dataId: id2 } = await ds2.upload("same text");
+    const { storageId: id1 } = await ds1.upload("same text");
+    const { storageId: id2 } = await ds2.upload("same text");
 
-    // storageId part differs (random UUIDs) so just verify format
     expect(id1).not.toBe(id2);
   });
 
@@ -197,27 +189,20 @@ describe("retrieve", () => {
     const pairs: Array<[string, string]> = [];
     for (let i = 0; i < 5; i++) {
       const content = `record-${i}`;
-      const { dataId } = await ds.upload(content);
-      pairs.push([dataId, content]);
+      const { chainRefId } = await ds.upload(content);
+      pairs.push([chainRefId, content]);
     }
-    for (const [dataId, expected] of pairs) {
-      const { content } = await ds.retrieve(dataId);
+    for (const [chainRefId, expected] of pairs) {
+      const { content } = await ds.retrieveByRefId(chainRefId);
       expect(content).toBe(expected);
     }
   });
 
-  it('throws for a dataId with no storageId part (just "::")', async () => {
-    // parseStorageId('::ref_abc') → parts[0] = '' → falsy → throws
+  it("throws when the chainRefId is not found in storage", async () => {
     const ds = await makeConnectedDStorage();
-    await expect(ds.retrieve("::ref_abc")).rejects.toThrow(
-      "[dStorage] Invalid dataId",
+    await expect(ds.retrieveByRefId("::ref_abc")).rejects.toThrow(
+      "[dStorage/mock-chain] No reference found for refId: ::ref_abc",
     );
-  });
-
-  it("throws when the storageId is not found in storage", async () => {
-    // 'nonexistent' has no '::' but parts[0] is truthy → gets forwarded to storage
-    const ds = await makeConnectedDStorage();
-    await expect(ds.retrieve("nonexistent::ref_abc")).rejects.toThrow();
   });
 });
 

@@ -379,7 +379,6 @@ export class MetaTransaction {
       const chainResult = await this.chainAdapter.writeReference({
         storageId: uploadResult.id,
         storageProvider: uploadResult.provider,
-        owner: this.ownerAddress,
         dataLabel: file.name,
         writtenAt: Date.now(),
       });

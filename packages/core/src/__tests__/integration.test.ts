@@ -33,11 +33,11 @@ async function makeUser(address: string): Promise<DStorage> {
 
 // ── Upload → Retrieve (single user) ──────────────────────────────────────────
 
-describe("upload → retrieve round-trip", () => {
+describe("upload → retrieveByRefId round-trip", () => {
   it("Alice uploads and retrieves her own plaintext", async () => {
     const alice = await makeUser("0xAlice_i1");
-    const { dataId } = await alice.upload("Alice private record");
-    const { content } = await alice.retrieve(dataId);
+    const { chainRefId } = await alice.upload("Alice private record");
+    const { content } = await alice.retrieveByRefId(chainRefId);
     expect(content).toBe("Alice private record");
   });
 
@@ -46,11 +46,11 @@ describe("upload → retrieve round-trip", () => {
     const records = ["Record A", "Record B", "Record C"];
     const ids: string[] = [];
     for (const r of records) {
-      const { dataId } = await alice.upload(r);
-      ids.push(dataId);
+      const { chainRefId } = await alice.upload(r);
+      ids.push(chainRefId);
     }
     for (let i = 0; i < records.length; i++) {
-      const { content } = await alice.retrieve(ids[i]!);
+      const { content } = await alice.retrieveByRefId(ids[i]!);
       expect(content).toBe(records[i]);
     }
   });
@@ -58,8 +58,8 @@ describe("upload → retrieve round-trip", () => {
   it("binary Uint8Array content is preserved through encrypt/decrypt cycle", async () => {
     const alice = await makeUser("0xAlice_i3");
     const bytes = new Uint8Array([0, 1, 2, 255, 128, 64]);
-    const { dataId } = await alice.upload(bytes);
-    const { bytes: retrieved } = await alice.retrieve(dataId);
+    const { chainRefId } = await alice.upload(bytes);
+    const { bytes: retrieved } = await alice.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
   });
 
@@ -68,16 +68,16 @@ describe("upload → retrieve round-trip", () => {
     // The low-level upload() accepts any string including empty
     const alice = await makeUser("0xAlice_i4");
     // Non-empty string to avoid edge cases with encryption
-    const { dataId } = await alice.upload(".");
-    const { content } = await alice.retrieve(dataId);
+    const { chainRefId } = await alice.upload(".");
+    const { content } = await alice.retrieveByRefId(chainRefId);
     expect(content).toBe(".");
   });
 
   it("large content (100KB text) round-trips correctly", async () => {
     const alice = await makeUser("0xAlice_i5");
     const bigContent = "x".repeat(100 * 1024);
-    const { dataId } = await alice.upload(bigContent);
-    const { content } = await alice.retrieve(dataId);
+    const { chainRefId } = await alice.upload(bigContent);
+    const { content } = await alice.retrieveByRefId(chainRefId);
     expect(content).toBe(bigContent);
   });
 });
@@ -107,12 +107,12 @@ describe("wallet isolation", () => {
 
     // Bob uploads something
     const { storageId, chainRefId } = await bob.upload("Bob private");
-    // Reconstruct Bob's dataId for Alice to try to retrieve
-    const dataId = `${storageId}::${chainRefId}`;
+    // Reconstruct Bob's refId for Alice to try to retrieveByRefId
+    const refId = `${storageId}::${chainRefId}`;
 
-    // Alice attempts to retrieve and decrypt Bob's data — should fail or produce garbage
+    // Alice attempts to retrieveByRefId and decrypt Bob's data — should fail or produce garbage
     // The decrypt will throw because the ciphertext was encrypted with Bob's key.
-    await expect(alice.retrieve(dataId)).rejects.toThrow();
+    await expect(alice.retrieveByRefId(refId)).rejects.toThrow();
   });
 
   it("same wallet address always derives the same encryption key", async () => {
@@ -135,10 +135,9 @@ describe("wallet isolation", () => {
 
     // Upload with ds1
     const { storageId, chainRefId } = await ds1.upload("Shared key test");
-    const dataId = `${storageId}::${chainRefId}`;
 
     // Retrieve with ds2 (same address → same key)
-    const { content } = await ds2.retrieve(dataId);
+    const { content } = await ds2.retrieveByRefId(chainRefId);
     expect(content).toBe("Shared key test");
   });
 });
@@ -156,12 +155,12 @@ describe("multi-record scenarios", () => {
     const ids: Record<string, string> = {};
 
     for (const [key, content] of Object.entries(records)) {
-      const { dataId } = await alice.upload(content);
-      ids[key] = dataId;
+      const { chainRefId } = await alice.upload(content);
+      ids[key] = chainRefId;
     }
 
     for (const [key, content] of Object.entries(records)) {
-      const { content: retrieved } = await alice.retrieve(ids[key]!);
+      const { content: retrieved } = await alice.retrieveByRefId(ids[key]!);
       expect(retrieved).toBe(content);
     }
   });
@@ -176,12 +175,12 @@ describe("disconnect and reconnect", () => {
     const wallet = await connectDemoWallet("0xAlice_drr1");
     await ds.connect(wallet);
 
-    const { dataId } = await ds.upload("persistent data");
+    const { chainRefId } = await ds.upload("persistent data");
     ds.disconnect();
 
     // Reconnect with the same wallet
     await ds.connect(wallet);
-    const { content } = await ds.retrieve(dataId);
+    const { content } = await ds.retrieveByRefId(chainRefId);
     expect(content).toBe("persistent data");
   });
 });

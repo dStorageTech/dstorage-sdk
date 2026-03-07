@@ -21,6 +21,13 @@
             "type-name": "Bytes",
             "length": 32
           }
+        },
+        {
+          "name": "instanceSalt",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
         }
       ],
       "result-type": {
@@ -45,6 +52,20 @@
           "type": {
             "type-name": "Opaque",
             "tsType": "string"
+          }
+        },
+        {
+          "name": "dataLabel",
+          "type": {
+            "type-name": "Opaque",
+            "tsType": "string"
+          }
+        },
+        {
+          "name": "writtenAt",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 18446744073709551615
           }
         }
       ],

@@ -96,15 +96,19 @@ export function serializePayload(payload: EncryptedPayload): string {
 /**
  * Deserialize a stored JSON string back to an EncryptedPayload.
  */
-export function deserializePayload(raw: string): EncryptedPayload {
-  const parsed: unknown = JSON.parse(raw);
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    !("ciphertext" in parsed) ||
-    !("iv" in parsed)
-  ) {
-    throw new Error("[dStorage/crypto] Invalid payload format.");
+export function deserializePayload(raw: string): EncryptedPayload | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("ciphertext" in parsed) ||
+      !("iv" in parsed)
+    ) {
+      throw new Error("[dStorage/crypto] Invalid payload format.");
+    }
+    return parsed as EncryptedPayload;
+  } catch (_) {
+    return null;
   }
-  return parsed as EncryptedPayload;
 }
