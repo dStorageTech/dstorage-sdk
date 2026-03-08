@@ -42,10 +42,11 @@ type PendingCertificate = {
   refId: string;
   storageId: string;
   chainLabel: string;
+  previewKind: "text" | "pdf" | "binary";
   preview: string;
-  isTextPreview: boolean;
   truncated: boolean;
   bytesLength: number;
+  pdfUrl?: string;
 };
 
 export type StorageAdapterKey =
@@ -156,6 +157,15 @@ export default function App() {
       window.localStorage.setItem("demo-theme", theme);
     }
   }, [theme]);
+
+  const releasePendingCertificate = useCallback(
+    (cert: PendingCertificate | null) => {
+      if (cert?.pdfUrl) {
+        URL.revokeObjectURL(cert.pdfUrl);
+      }
+    },
+    [],
+  );
 
   const buildSDK = useCallback(
     async (storageKey: StorageAdapterKey, chainKey: ChainAdapterKey) => {
@@ -281,7 +291,7 @@ export default function App() {
       }
 
       const result = await sdk.retrieveByRefId(selected.refId);
-      const { preview, isTextPreview, truncated } = buildCertificatePreview(
+      const { preview, previewKind, truncated, pdfUrl } = buildCertificatePreview(
         result.content,
         result.bytes,
       );
@@ -293,15 +303,19 @@ export default function App() {
         uploadedAt: Date.now(),
         chainRefId: selected.refId,
       };
-      setPendingCertificate({
-        record: nextRecord,
-        refId: selected.refId,
-        storageId: selected.storageId,
-        chainLabel: CHAIN_ADAPTER_CONFIGS[chainAdapterKey].label,
-        preview,
-        isTextPreview,
-        truncated,
-        bytesLength: result.bytes.byteLength,
+      setPendingCertificate((previous) => {
+        releasePendingCertificate(previous);
+        return {
+          record: nextRecord,
+          refId: selected.refId,
+          storageId: selected.storageId,
+          chainLabel: CHAIN_ADAPTER_CONFIGS[chainAdapterKey].label,
+          previewKind,
+          preview,
+          truncated,
+          bytesLength: result.bytes.byteLength,
+          ...(pdfUrl ? { pdfUrl } : {}),
+        };
       });
       setCertificatePreviewOpen(true);
       setProof(null);
@@ -318,13 +332,19 @@ export default function App() {
     if (!pendingCertificate) return;
     setRecord(pendingCertificate.record);
     setCertificatePreviewOpen(false);
-    setPendingCertificate(null);
+    setPendingCertificate((previous) => {
+      releasePendingCertificate(previous);
+      return null;
+    });
     setStep("prove");
   };
 
   const handleCancelCertificatePreview = () => {
     setCertificatePreviewOpen(false);
-    setPendingCertificate(null);
+    setPendingCertificate((previous) => {
+      releasePendingCertificate(previous);
+      return null;
+    });
   };
 
   const handleLoadExistingReferences = async () => {
@@ -419,6 +439,11 @@ export default function App() {
     setDrawerOpen(false);
     setMetaTxProgress(null);
     setZkProgress(null);
+    setPendingCertificate((previous) => {
+      releasePendingCertificate(previous);
+      return null;
+    });
+    setCertificatePreviewOpen(false);
   };
 
   const handleUseExistingContract = () => {
@@ -653,11 +678,22 @@ export default function App() {
 
             <div className="hv-cert-preview">
               <div className="hv-cert-preview-title">
-                {pendingCertificate.isTextPreview
-                  ? "Decrypted certificate preview"
-                  : "Binary certificate"}
+                {pendingCertificate.previewKind === "pdf"
+                  ? "Decrypted PDF certificate"
+                  : pendingCertificate.previewKind === "text"
+                    ? "Decrypted certificate preview"
+                    : "Binary certificate"}
               </div>
-              <pre>{pendingCertificate.preview}</pre>
+              {pendingCertificate.previewKind === "pdf" &&
+              pendingCertificate.pdfUrl ? (
+                <iframe
+                  className="hv-cert-preview-frame"
+                  src={pendingCertificate.pdfUrl}
+                  title="Certificate PDF preview"
+                />
+              ) : (
+                <pre>{pendingCertificate.preview}</pre>
+              )}
               {pendingCertificate.truncated && (
                 <div className="hv-cert-preview-note">
                   Preview truncated for display.
@@ -689,6 +725,26 @@ export default function App() {
 }
 
 function buildCertificatePreview(content: string, bytes: Uint8Array) {
+  const isPdf =
+    bytes.length > 4 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d;
+
+  if (isPdf) {
+    const pdfBlob = new Blob([Uint8Array.from(bytes)], {
+      type: "application/pdf",
+    });
+    return {
+      previewKind: "pdf" as const,
+      preview: "PDF preview available.",
+      truncated: false,
+      pdfUrl: URL.createObjectURL(pdfBlob),
+    };
+  }
+
   const printable = bytes.reduce((count, byte) => {
     const isLineBreak = byte === 10 || byte === 13 || byte === 9;
     const isAsciiPrintable = byte >= 32 && byte <= 126;
@@ -699,9 +755,9 @@ function buildCertificatePreview(content: string, bytes: Uint8Array) {
 
   if (!isTextPreview) {
     return {
+      previewKind: "binary" as const,
       preview:
         "This certificate is binary content and cannot be rendered as text preview.",
-      isTextPreview,
       truncated: false,
     };
   }
@@ -710,8 +766,8 @@ function buildCertificatePreview(content: string, bytes: Uint8Array) {
   const normalized = content.trim() || "(empty text content)";
   const truncated = normalized.length > maxChars;
   return {
+    previewKind: "text" as const,
     preview: truncated ? `${normalized.slice(0, maxChars)}\n…` : normalized,
-    isTextPreview,
     truncated,
   };
 }

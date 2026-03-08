@@ -201,6 +201,14 @@ code {
   word-break: break-word;
 }
 
+.hv-cert-preview-frame {
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+}
+
 .hv-cert-preview-note {
   margin-top: 8px;
   font-size: 11px;
