@@ -88,7 +88,8 @@ export class MockStorageAdapter implements StorageAdapter {
     storeSet(`dstorage:blob:${id}`, entry);
 
     this.logger?.log(
-      `[dStorage/mock] Uploaded ${data.byteLength} bytes → id: ${id}`,
+      "dStorage/mock",
+      `Uploaded ${data.byteLength} bytes → id: ${id}`,
     );
 
     return {
@@ -109,7 +110,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
 
     const entry = JSON.parse(raw) as { data: string };
-    this.logger?.log(`[dStorage/mock] Retrieved id: ${id}`);
+    this.logger?.log("dStorage/mock", `Retrieved id: ${id}`);
     return base64ToUint8Array(entry.data);
   }
 

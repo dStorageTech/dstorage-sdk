@@ -90,7 +90,7 @@ export async function connectMetaMask(logger?: Logger): Promise<WalletInfo> {
     params: [KEY_DERIVATION_MESSAGE, address],
   })) as string;
 
-  logger?.log(`[dStorage] MetaMask connected: ${address}`);
+  logger?.log("dStorage", `MetaMask connected: ${address}`);
 
   return {
     address,
@@ -156,7 +156,8 @@ export async function connectMidnightWallet(
   const signatureHex = await deriveKeySeedFromAddress(address);
 
   logger?.log(
-    `[dStorage] Midnight wallet connected: ${address} (network: ${networkId})`,
+    "dStorage",
+    `Midnight wallet connected: ${address} (network: ${networkId})`,
   );
 
   return {
@@ -210,7 +211,8 @@ export async function connectDemoWallet(
   const fakeSignature = `0x${"ab".repeat(32)}${address.replace("0x", "").slice(0, 8)}`;
 
   logger?.warn(
-    "[dStorage] Demo wallet connected — encryption is real but not wallet-bound. For production, use connectMetaMask() or connectMidnightWallet().",
+    "dStorage",
+    "Demo wallet connected — encryption is real but not wallet-bound. For production, use connectMetaMask() or connectMidnightWallet().",
   );
 
   return {

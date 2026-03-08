@@ -75,8 +75,8 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     this.logger = config.logger;
 
     this.logger?.warn(
-      "[dStorage/midnight-payment] Midnight payment adapter preview mode — " +
-        "real DUST fee deduction pending Midnight.js v1 integration.",
+      "dStorage/midnight-payment",
+      "Midnight payment adapter preview mode — real DUST fee deduction pending Midnight.js v1 integration.",
     );
   }
 
@@ -109,7 +109,8 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     const usd = chainUsd.toFixed(6);
 
     this.logger?.log(
-      `[dStorage/midnight-payment] (preview) Estimated: ${amount} DUST ≈ $${usd}`,
+      "dStorage/midnight-payment",
+      `(preview) Estimated: ${amount} DUST ≈ $${usd}`,
     );
 
     return {
@@ -166,7 +167,8 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
 
     const txHash = `midnight_preview_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     this.logger?.log(
-      `[dStorage/midnight-payment] (preview) Chain fee payment → txHash: ${txHash}`,
+      "dStorage/midnight-payment",
+      `(preview) Chain fee payment → txHash: ${txHash}`,
     );
 
     return {

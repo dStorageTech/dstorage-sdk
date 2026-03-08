@@ -13,10 +13,10 @@ import type { PaymentAdapter } from "@dstorage/payment";
  * Omit the field entirely to suppress all SDK output.
  */
 export interface Logger {
-  log(...args: unknown[]): void;
-  warn(...args: unknown[]): void;
-  error(...args: unknown[]): void;
-  debug?(...args: unknown[]): void;
+  log(component: string, msg: string): void;
+  warn(component: string, msg: string): void;
+  error(component: string, msg: string): void;
+  debug?(component: string, msg: string): void;
 }
 
 /** Wallet connection info returned after connecting */

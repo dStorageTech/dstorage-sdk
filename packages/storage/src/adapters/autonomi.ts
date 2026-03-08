@@ -44,9 +44,8 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     this.config = config;
     this.logger = config.logger;
     this.logger?.warn(
-      "[dStorage/autonomi] Autonomi adapter is in preview. " +
-        "Real network integration pending JS SDK stability. " +
-        "Data is stored in memory for now.",
+      "dStorage/autonomi",
+      "Autonomi adapter is in preview. Real network integration pending JS SDK stability. Data is stored in memory for now.",
     );
   }
 
@@ -66,7 +65,8 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     const cost = await this.estimateCost(data);
 
     this.logger?.log(
-      `[dStorage/autonomi] (preview) Stored locally → id: ${id}`,
+      "dStorage/autonomi",
+      `(preview) Stored locally → id: ${id}`,
     );
 
     return {

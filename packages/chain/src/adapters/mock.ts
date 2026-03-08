@@ -76,7 +76,8 @@ export class MockChainAdapter implements ChainAdapter {
     persist("dstorage:chain:refs", allRefs);
 
     this.logger?.log(
-      `[dStorage/mock-chain] Reference written → refId: ${refId}`,
+      "dStorage/mock-chain",
+      `Reference written → refId: ${refId}`,
     );
     return { refId, provider: this.name, writtenAt: ref.writtenAt };
   }
@@ -116,7 +117,10 @@ export class MockChainAdapter implements ChainAdapter {
 
   async deployDataRegistry(): Promise<string> {
     const addr = `mock_contract_${Date.now()}`;
-    this.logger?.log(`[dStorage/mock-chain] DataRegistry deployed at: ${addr}`);
+    this.logger?.log(
+      "dStorage/mock-chain",
+      `DataRegistry deployed at: ${addr}`,
+    );
     this.contractAddress = addr;
     return addr;
   }

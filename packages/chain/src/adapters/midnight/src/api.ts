@@ -127,7 +127,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
-    this.logger?.log(`storing reference: ${storageId}`);
+    this.logger?.log("dStorage/midnight", `storing reference: ${storageId}`);
     if (storageId.length !== 32) {
       throw new Error(
         `Storage Id is not 32 bytes long but instead ${storageId.length}`,
@@ -151,13 +151,10 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     const refId: Uint8Array =
       circuitResult instanceof Uint8Array ? circuitResult : new Uint8Array(32);
 
-    this.logger?.debug?.({
-      transactionAdded: {
-        circuit: "storeReference",
-        txHash,
-        blockHeight,
-      },
-    });
+    this.logger?.debug?.(
+      "dStorage/midnight",
+      `transaction: circuit=storeReference txHash=${txHash} blockHeight=${blockHeight}`,
+    );
 
     return { refId, txHash, blockHeight };
   }

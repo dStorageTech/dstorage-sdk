@@ -107,7 +107,8 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
     this.logger?.log(
-      "[dStorage/mock-midnight] writeReference → calling proof server…",
+      "dStorage/mock-midnight",
+      "writeReference → calling proof server…",
     );
 
     // Step 1: Generate ZK proof via mock proof server
@@ -116,7 +117,8 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     // Step 2: Simulate submitting the balanced transaction to the Midnight node
     const blockInclusionMs = 150 + Math.random() * 250;
     this.logger?.log(
-      "[dStorage/mock-midnight] Submitting balanced tx to Midnight node…",
+      "dStorage/mock-midnight",
+      "Submitting balanced tx to Midnight node…",
     );
     await sleep(blockInclusionMs);
 
@@ -128,7 +130,8 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     persist("dstorage:midnight:refs", Object.fromEntries(refs));
 
     this.logger?.log(
-      `[dStorage/mock-midnight] Reference written at block ${mockBlockHeight} → refId: ${refId}`,
+      "dStorage/mock-midnight",
+      `Reference written at block ${mockBlockHeight} → refId: ${refId}`,
     );
 
     return {
@@ -173,7 +176,8 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     await sleep(150 + Math.random() * 100);
     const addr = `mock_contract_${Date.now()}`;
     this.logger?.log(
-      `[dStorage/mock-midnight] DataRegistry deployed at: ${addr}`,
+      "dStorage/mock-midnight",
+      `DataRegistry deployed at: ${addr}`,
     );
     return addr;
   }

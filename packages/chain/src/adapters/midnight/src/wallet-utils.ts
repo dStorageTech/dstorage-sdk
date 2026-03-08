@@ -29,7 +29,7 @@ export const getInitialShieldedState = async (
   wallet: ShieldedWallet,
   logger?: Logger,
 ): Promise<unknown> => {
-  logger?.log("Getting initial state of wallet...");
+  logger?.log("dStorage/midnight", "Getting initial state of wallet...");
   return Rx.firstValueFrom(wallet.state);
 };
 
@@ -37,7 +37,7 @@ export const getInitialUnshieldedState = async (
   wallet: UnshieldedWallet,
   logger?: Logger,
 ) => {
-  logger?.log("Getting initial state of wallet...");
+  logger?.log("dStorage/midnight", "Getting initial state of wallet...");
   return Rx.firstValueFrom(wallet.state);
 };
 
@@ -47,7 +47,7 @@ export const syncWallet = (
   timeout = 360_000,
   logger?: Logger,
 ) => {
-  logger?.log("Syncing wallet...");
+  logger?.log("dStorage/midnight", "Syncing wallet...");
 
   return Rx.firstValueFrom(
     wallet.state().pipe(
@@ -73,7 +73,7 @@ export const syncWallet = (
           state.dust.state.progress.isStrictlyComplete() &&
           state.unshielded.progress.isStrictlyComplete() === true,
       ),
-      Rx.tap(() => logger?.log("Sync complete")),
+      Rx.tap(() => logger?.log("dStorage/midnight", "Sync complete")),
       Rx.tap((state) => {
         const shieldedBalances = state.shielded.balances || {};
         const unshieldedBalances = state.unshielded.balances || {};
@@ -81,6 +81,7 @@ export const syncWallet = (
           state.dust.walletBalance(new Date(Date.now())) || 0n;
 
         logger?.log(
+          "dStorage/midnight",
           `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances)}, Unshielded: ${JSON.stringify(unshieldedBalances)}, Dust: ${dustBalances}`,
         );
       }),
@@ -111,6 +112,7 @@ export const waitForUnshieldedFunds = async (
     initialState.address,
   );
   logger?.log(
+    "dStorage/midnight",
     `Using unshielded address: ${unshieldedAddress.toString()} waiting for funds...`,
   );
   /*if (fundFromFaucet && env.faucet) {
@@ -119,8 +121,11 @@ export const waitForUnshieldedFunds = async (
   }*/
   const initialBalance = initialState.balances[tokenType.raw];
   if (initialBalance === undefined || initialBalance === 0n) {
-    logger?.log(`Your wallet initial balance is: 0 (not yet initialized)`);
-    logger?.log(`Waiting to receive tokens...`);
+    logger?.log(
+      "dStorage/midnight",
+      "Your wallet initial balance is: 0 (not yet initialized)",
+    );
+    logger?.log("dStorage/midnight", "Waiting to receive tokens...");
     const facadeState = await syncWallet(wallet, 2_000, 360_000, logger);
     return facadeState.unshielded;
   }

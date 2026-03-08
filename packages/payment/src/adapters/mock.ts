@@ -73,7 +73,8 @@ export class MockPaymentAdapter implements PaymentAdapter {
     ).toFixed(6);
 
     this.logger?.log(
-      `[dStorage/mock-payment] Estimated cost: ${amount} ${this.token} ≈ $${usd}`,
+      "dStorage/mock-payment",
+      `Estimated cost: ${amount} ${this.token} ≈ $${usd}`,
     );
 
     return {
@@ -107,7 +108,8 @@ export class MockPaymentAdapter implements PaymentAdapter {
     const txHash = generateSimulatedTxHash();
 
     this.logger?.log(
-      `[dStorage/mock-payment] Simulated ${quote.type} payment → txHash: ${txHash}`,
+      "dStorage/mock-payment",
+      `Simulated ${quote.type} payment → txHash: ${txHash}`,
     );
 
     return {

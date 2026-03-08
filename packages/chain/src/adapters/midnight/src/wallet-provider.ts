@@ -79,7 +79,7 @@ export class MidnightWalletProvider
 
   // We do not wait for funds, it's done outside
   async start(): Promise<void> {
-    this.logger?.log("Starting wallet...");
+    this.logger?.log("dStorage/midnight", "Starting wallet...");
     await this.wallet.start(this.zswapSecretKeys, this.dustSecretKey);
   }
 

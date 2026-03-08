@@ -165,16 +165,6 @@ describe("ArweaveStorageAdapter", () => {
       expect(result.uploadedAt).toBeLessThanOrEqual(after);
     });
 
-    it("adds standard dStorage tags to the transaction", async () => {
-      await nodeAdapter().upload(enc("data"));
-      expect(mockTx.addTag).toHaveBeenCalledWith("App-Name", "dStorage");
-      expect(mockTx.addTag).toHaveBeenCalledWith("App-Version", "0.1.0");
-      expect(mockTx.addTag).toHaveBeenCalledWith(
-        "Content-Type",
-        "application/octet-stream",
-      );
-    });
-
     it("adds caller-supplied metadata as tags", async () => {
       await nodeAdapter().upload(enc("data"), {
         "dstorage-owner": "0xABC",

@@ -86,8 +86,8 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     this.logger = config.logger;
 
     this.logger?.warn(
-      "[dStorage/arweave-payment] Arweave payment adapter preview mode — " +
-        "real AR token transfer pending full Arweave integration.",
+      "dStorage/arweave-payment",
+      "Arweave payment adapter preview mode — real AR token transfer pending full Arweave integration.",
     );
   }
 
@@ -130,7 +130,8 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     const usd = storageUsd.toFixed(6);
 
     this.logger?.log(
-      `[dStorage/arweave-payment] (preview) Estimated: ${amount} AR ≈ $${usd}`,
+      "dStorage/arweave-payment",
+      `(preview) Estimated: ${amount} AR ≈ $${usd}`,
     );
 
     return {
@@ -194,7 +195,8 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
     const txHash = `arweave_preview_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     this.logger?.log(
-      `[dStorage/arweave-payment] (preview) Storage payment → txHash: ${txHash}`,
+      "dStorage/arweave-payment",
+      `(preview) Storage payment → txHash: ${txHash}`,
     );
 
     return {

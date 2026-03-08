@@ -241,12 +241,16 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     const url = `${this.gateway.protocol}://${this.gateway.host}/${txId}`;
 
     this.logger?.log(
-      `[dStorage/arweave] Uploaded → txId: ${txId}  cost: ~${arCost} AR`,
+      "dStorage/arweave",
+      `Uploaded → txId: ${txId}  cost: ~${arCost} AR`,
     );
 
     // Optional: block until the transaction is included in a block.
     if (this.shouldWaitForConfirm) {
-      this.logger?.log("[dStorage/arweave] Waiting for on-chain confirmation…");
+      this.logger?.log(
+        "dStorage/arweave",
+        "Waiting for on-chain confirmation…",
+      );
       await this.pollUntilConfirmed(arweave, txId);
     }
 
@@ -277,7 +281,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       );
     }
 
-    this.logger?.log(`[dStorage/arweave] Retrieved txId: ${id}`);
+    this.logger?.log("dStorage/arweave", `Retrieved txId: ${id}`);
     return raw as Uint8Array;
   }
 
@@ -305,7 +309,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           `(attempt ${attempt}/${this.maxRetries}): ` +
           `HTTP ${response.status} ${response.statusText ?? ""}`.trimEnd(),
       );
-      this.logger?.warn(lastError.message);
+      this.logger?.warn("dStorage/arweave", lastError.message);
 
       if (attempt < this.maxRetries) {
         // Linear back-off: 1 s, 2 s, 3 s…
@@ -331,17 +335,16 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       if (status.status === 200) {
         const block = status.confirmed?.block_height as number | undefined;
         this.logger?.log(
-          `[dStorage/arweave] Confirmed: ${txId}` +
-            (block !== undefined ? ` (block ${block})` : ""),
+          "dStorage/arweave",
+          `Confirmed: ${txId}${block !== undefined ? ` (block ${block})` : ""}`,
         );
         return;
       }
 
       const remaining = Math.round((deadline - Date.now()) / 1_000);
       this.logger?.log(
-        `[dStorage/arweave] Still pending (HTTP ${status.status}) — ` +
-          `retrying in ${this.confirmationPollMs / 1_000}s… ` +
-          `(timeout in ${remaining}s)`,
+        "dStorage/arweave",
+        `Still pending (HTTP ${status.status}) — retrying in ${this.confirmationPollMs / 1_000}s… (timeout in ${remaining}s)`,
       );
     }
 

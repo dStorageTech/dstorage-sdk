@@ -41,13 +41,15 @@ import {
 import { MidnightChainAdapter } from "@dstorage/chain";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fmt = (args: unknown[]) =>
-  args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
 const logger: DStorageLogger = {
-  log: (...args) => process.stderr.write(`[info] ${fmt(args)}\n`),
-  warn: (...args) => process.stderr.write(`[warn] ${fmt(args)}\n`),
-  error: (...args) => process.stderr.write(`[error] ${fmt(args)}\n`),
-  debug: (...args) => process.stderr.write(`[debug] ${fmt(args)}\n`),
+  log: (component, msg) =>
+    process.stderr.write(`[info] [${component}] ${msg}\n`),
+  warn: (component, msg) =>
+    process.stderr.write(`[warn] [${component}] ${msg}\n`),
+  error: (component, msg) =>
+    process.stderr.write(`[error] [${component}] ${msg}\n`),
+  debug: (component, msg) =>
+    process.stderr.write(`[debug] [${component}] ${msg}\n`),
 };
 
 // ZK artifacts for the DataRegistry contract.

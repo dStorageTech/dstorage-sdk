@@ -80,8 +80,8 @@ export class MockProofServer {
     const start = Date.now();
 
     this.logger?.log(
-      `[dStorage/proof-server] Generating proof for circuit "${circuit}"…`,
-      inputs,
+      "dStorage/proof-server",
+      `Generating proof for circuit "${circuit}"…`,
     );
 
     await sleep(delay);
@@ -95,7 +95,8 @@ export class MockProofServer {
     };
 
     this.logger?.log(
-      `[dStorage/proof-server] Proof generated in ${proof.provingTimeMs}ms ✓`,
+      "dStorage/proof-server",
+      `Proof generated in ${proof.provingTimeMs}ms ✓`,
     );
 
     return proof;
