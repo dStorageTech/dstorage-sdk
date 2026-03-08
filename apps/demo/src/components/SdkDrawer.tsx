@@ -1,6 +1,6 @@
 import type { MetaTxProgress, ZkProofProgress } from "@dstorage/core";
-import type { StorageAdapterKey } from "../App.tsx";
-import { ADAPTER_CONFIGS } from "../App.tsx";
+import type { ChainAdapterKey, StorageAdapterKey } from "../App.tsx";
+import { ADAPTER_CONFIGS, CHAIN_ADAPTER_CONFIGS } from "../App.tsx";
 
 interface Props {
   open: boolean;
@@ -8,6 +8,7 @@ interface Props {
   metaTxProgress: MetaTxProgress | null;
   zkProgress: ZkProofProgress | null;
   storageAdapterKey: StorageAdapterKey;
+  chainAdapterKey: ChainAdapterKey;
   onToggle: () => void;
 }
 
@@ -17,9 +18,11 @@ export function SdkDrawer({
   metaTxProgress,
   zkProgress,
   storageAdapterKey,
+  chainAdapterKey,
   onToggle,
 }: Props) {
   const storageAdapter = ADAPTER_CONFIGS[storageAdapterKey];
+  const chainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
   const hasActivity = !!(metaTxProgress || zkProgress);
 
   return (
@@ -34,6 +37,15 @@ export function SdkDrawer({
               {mode === "metatx" ? "Meta-Transaction" : "ZK Proof Pipeline"}
             </span>
           )}
+        </div>
+        <div className="sdk-tab-center">
+          <span className={`as-badge as-badge-${storageAdapter.status}`}>
+            {storageAdapter.label}
+          </span>
+          <span className="sdk-tab-config-sep">·</span>
+          <span className={`as-badge as-badge-${chainAdapter.status}`}>
+            {chainAdapter.label}
+          </span>
         </div>
         <div className="sdk-tab-right">
           <span className="sdk-tab-version">v0.1.0</span>
@@ -64,10 +76,10 @@ export function SdkDrawer({
               </div>
               <div className="sdk-idle-row">
                 <span className="sdk-idle-label">Chain</span>
-                <span className="as-badge as-badge-live">MockMidnight</span>
-                <span className="sdk-idle-desc">
-                  Simulated ZK proof flow, no network
+                <span className={`as-badge as-badge-${chainAdapter.status}`}>
+                  {chainAdapter.label}
                 </span>
+                <span className="sdk-idle-desc">{chainAdapter.description}</span>
               </div>
             </div>
             <div className="sdk-idle-hint">

@@ -37,6 +37,16 @@ type ExistingReference = {
   storageId: string;
   storageProvider: string;
 };
+type PendingCertificate = {
+  record: StoredRecord;
+  refId: string;
+  storageId: string;
+  chainLabel: string;
+  preview: string;
+  isTextPreview: boolean;
+  truncated: boolean;
+  bytesLength: number;
+};
 
 export type StorageAdapterKey =
   | "mock"
@@ -136,6 +146,10 @@ export default function App() {
   const [selectedContractAddress, setSelectedContractAddress] = useState("");
   const [deployNewContractSelected, setDeployNewContractSelected] =
     useState(false);
+  const [pendingCertificate, setPendingCertificate] =
+    useState<PendingCertificate | null>(null);
+
+  const [certificatePreviewOpen, setCertificatePreviewOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -266,23 +280,51 @@ export default function App() {
         return;
       }
 
-      setRecord({
+      const result = await sdk.retrieveByRefId(selected.refId);
+      const { preview, isTextPreview, truncated } = buildCertificatePreview(
+        result.content,
+        result.bytes,
+      );
+      const nextRecord = {
         dataId: `${selected.storageId}::${selected.refId}`,
         storageId: selected.storageId,
         refId: selected.refId,
-        fileName: "Existing on-chain reference",
+        fileName: "Existing certificate from on-chain reference",
         uploadedAt: Date.now(),
         chainRefId: selected.refId,
+      };
+      setPendingCertificate({
+        record: nextRecord,
+        refId: selected.refId,
+        storageId: selected.storageId,
+        chainLabel: CHAIN_ADAPTER_CONFIGS[chainAdapterKey].label,
+        preview,
+        isTextPreview,
+        truncated,
+        bytesLength: result.bytes.byteLength,
       });
+      setCertificatePreviewOpen(true);
       setProof(null);
       setVerified(null);
       setVerifying(false);
-      setStep("prove");
     } catch (err) {
       console.error("Failed to load references:", err);
       const msg = err instanceof Error ? err.message : String(err);
       alert(`Failed to load references:\n${msg}`);
     }
+  };
+
+  const handleConfirmCertificate = () => {
+    if (!pendingCertificate) return;
+    setRecord(pendingCertificate.record);
+    setCertificatePreviewOpen(false);
+    setPendingCertificate(null);
+    setStep("prove");
+  };
+
+  const handleCancelCertificatePreview = () => {
+    setCertificatePreviewOpen(false);
+    setPendingCertificate(null);
   };
 
   const handleLoadExistingReferences = async () => {
@@ -294,6 +336,23 @@ export default function App() {
       const msg = err instanceof Error ? err.message : String(err);
       alert(`Failed to load references:\n${msg}`);
     }
+  };
+
+  const handleChainAdapterChange = (next: ChainAdapterKey) => {
+    if (next === chainAdapterKey) return;
+    dstorage?.disconnect();
+    setChainAdapterKey(next);
+    setDStorage(null);
+    setWallet(null);
+    setExistingReferences([]);
+  };
+
+  const handleStorageAdapterChange = (next: StorageAdapterKey) => {
+    if (next === storageAdapterKey) return;
+    dstorage?.disconnect();
+    setStorageAdapterKey(next);
+    setDStorage(null);
+    setWallet(null);
   };
 
   const handleUpload = async (file: File) => {
@@ -484,14 +543,16 @@ export default function App() {
         </div>
 
         <div className="hv-header-meta">
-          <div className="hv-sdk-badge">
-            Powered by <strong>dStorage SDK</strong>
+          <div className="hv-header-left-meta">
+            <div className="hv-sdk-badge">
+              Powered by <strong>dStorage SDK</strong>
+            </div>
           </div>
 
-          <div className="hv-header-right-meta">
+          <div className="hv-header-center-meta">
             {(chainAdapterKey === "midnight-connector" ||
               selectedContractAddress ||
-              deployNewContractSelected) && (
+              deployNewContractSelected) ? (
               <div className="hv-sdk-badge hv-sdk-badge-contract">
                 Contract:{" "}
                 <strong>
@@ -499,7 +560,10 @@ export default function App() {
                     "will be deployed on first connect"}
                 </strong>
               </div>
-            )}
+            ) : null}
+          </div>
+
+          <div className="hv-header-right-meta">
             {(wallet || step !== "connect") && (
               <button className="hv-reset-btn" onClick={() => handleReset()}>
                 New Session
@@ -509,7 +573,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className={`hv-main ${drawerOpen ? "drawer-open" : ""}`}>
+      <main className="hv-main">
         <div className="hv-panel hv-patient">
           <div className="hv-panel-label">
             <span>👤</span> Patient
@@ -520,8 +584,8 @@ export default function App() {
             record={record}
             storageAdapterKey={storageAdapterKey}
             chainAdapterKey={chainAdapterKey}
-            onStorageAdapterChange={setStorageAdapterKey}
-            onChainAdapterChange={setChainAdapterKey}
+            onStorageAdapterChange={handleStorageAdapterChange}
+            onChainAdapterChange={handleChainAdapterChange}
             existingReferences={existingReferences}
             onStartUploadFlow={handleStartUploadFlow}
             onLoadExistingReferences={handleLoadExistingReferences}
@@ -555,10 +619,101 @@ export default function App() {
         metaTxProgress={metaTxProgress}
         zkProgress={zkProgress}
         storageAdapterKey={storageAdapterKey}
+        chainAdapterKey={chainAdapterKey}
         onToggle={() => setDrawerOpen((o) => !o)}
       />
+
+      {certificatePreviewOpen && pendingCertificate && (
+        <div className="hv-contract-modal-backdrop">
+          <div className="hv-contract-modal hv-cert-modal">
+            <div className="hv-contract-modal-head">
+              <h2 className="hv-contract-modal-title">Confirm Certificate</h2>
+            </div>
+            <p className="hv-contract-modal-body">
+              The SDK fetched this document from{" "}
+              <strong>{pendingCertificate.chainLabel}</strong> using refId{" "}
+              <code>{pendingCertificate.refId}</code> and decrypted it locally.
+              Confirm this is the certificate to use for the ZK proof step.
+            </p>
+
+            <div className="hv-cert-meta">
+              <div>
+                <span>refId</span>
+                <code>{pendingCertificate.refId}</code>
+              </div>
+              <div>
+                <span>storageId</span>
+                <code>{pendingCertificate.storageId}</code>
+              </div>
+              <div>
+                <span>size</span>
+                <code>{pendingCertificate.bytesLength} bytes</code>
+              </div>
+            </div>
+
+            <div className="hv-cert-preview">
+              <div className="hv-cert-preview-title">
+                {pendingCertificate.isTextPreview
+                  ? "Decrypted certificate preview"
+                  : "Binary certificate"}
+              </div>
+              <pre>{pendingCertificate.preview}</pre>
+              {pendingCertificate.truncated && (
+                <div className="hv-cert-preview-note">
+                  Preview truncated for display.
+                </div>
+              )}
+            </div>
+
+            <div className="hv-contract-actions">
+              <button
+                className="pp-btn pp-btn-primary pp-btn-full"
+                type="button"
+                onClick={handleConfirmCertificate}
+              >
+                Use this certificate
+              </button>
+              <button
+                className="pp-btn pp-btn-ghost pp-btn-full"
+                type="button"
+                onClick={handleCancelCertificatePreview}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function buildCertificatePreview(content: string, bytes: Uint8Array) {
+  const printable = bytes.reduce((count, byte) => {
+    const isLineBreak = byte === 10 || byte === 13 || byte === 9;
+    const isAsciiPrintable = byte >= 32 && byte <= 126;
+    return isLineBreak || isAsciiPrintable ? count + 1 : count;
+  }, 0);
+  const printableRatio = bytes.length > 0 ? printable / bytes.length : 1;
+  const isTextPreview = printableRatio > 0.85;
+
+  if (!isTextPreview) {
+    return {
+      preview:
+        "This certificate is binary content and cannot be rendered as text preview.",
+      isTextPreview,
+      truncated: false,
+    };
+  }
+
+  const maxChars = 2400;
+  const normalized = content.trim() || "(empty text content)";
+  const truncated = normalized.length > maxChars;
+  return {
+    preview: truncated ? `${normalized.slice(0, maxChars)}\n…` : normalized,
+    isTextPreview,
+    truncated,
+  };
 }
 
 function StepIndicator({ step }: { step: AppStep }) {

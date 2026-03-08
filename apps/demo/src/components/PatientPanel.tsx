@@ -49,11 +49,16 @@ export function PatientPanel({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedClaim, setSelectedClaim] = useState(INSURANCE_CLAIMS[0]!.id);
   const [selectedRefId, setSelectedRefId] = useState("");
+  const [activePath, setActivePath] = useState<"a" | "b">("a");
 
   const activeAdapter = ADAPTER_CONFIGS[storageAdapterKey];
   const activeChainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
 
   useEffect(() => {
+    if (existingReferences.length === 0 && selectedRefId) {
+      setSelectedRefId("");
+      return;
+    }
     if (!selectedRefId && existingReferences.length > 0) {
       setSelectedRefId(existingReferences[0]!.refId);
     }
@@ -202,63 +207,89 @@ export function PatientPanel({
           </div>
         </div>
 
-        <div className="pp-paths">
-          <section className="pp-path-card">
-            <div className="pp-path-kicker">Path A</div>
-            <h3 className="pp-path-title">Upload a New Certificate</h3>
-            <p className="pp-path-body">
-              Start with a new health insurance certificate. The file is
-              encrypted locally, stored, and then referenced on-chain.
-            </p>
+        <div className="pp-path-tabs">
+          <div className="pp-path-tab-list" role="tablist" aria-label="Workflow">
             <button
-              className="pp-btn pp-btn-primary pp-btn-full"
-              onClick={handleStartUploadFlow}
-              disabled={!!loading}
+              className={`pp-path-tab ${activePath === "a" ? "active" : ""}`}
+              role="tab"
+              aria-selected={activePath === "a"}
+              type="button"
+              onClick={() => setActivePath("a")}
             >
-              {loading === "start-upload" ? <Spinner /> : ""} Start Upload Flow
+              Path A · Upload New
             </button>
-          </section>
+            <button
+              className={`pp-path-tab ${activePath === "b" ? "active" : ""}`}
+              role="tab"
+              aria-selected={activePath === "b"}
+              type="button"
+              onClick={() => setActivePath("b")}
+            >
+              Path B · Use Existing
+            </button>
+          </div>
 
-          <section className="pp-path-card">
-            <div className="pp-path-kicker">Path B</div>
-            <h3 className="pp-path-title">
-              Generate Proof from Existing Reference
-            </h3>
-            <p className="pp-path-body">
-              Load references already stored on-chain, select a `refId`, and
-              jump directly to ZK-proof generation.
-            </p>
-            <div className="pp-connect-btns">
-              <button
-                className="pp-btn pp-btn-ghost pp-btn-full"
-                onClick={handleLoadExistingReferences}
-                disabled={!!loading}
-              >
-                {loading === "load-refs" ? <Spinner /> : ""} Load References
-              </button>
-              <select
-                className="pp-contract-addr-input"
-                value={selectedRefId}
-                onChange={(e) => setSelectedRefId(e.target.value)}
-              >
-                {existingReferences.length === 0 ? (
-                  <option value="">No on-chain references found</option>
-                ) : (
-                  existingReferences.map((ref) => (
-                    <option key={ref.refId} value={ref.refId}>
-                      {ref.refId}
-                    </option>
-                  ))
-                )}
-              </select>
-              <button
-                className="pp-btn pp-btn-primary pp-btn-full"
-                onClick={handleUseExistingRecord}
-                disabled={!!loading || !selectedRefId}
-              >
-                Continue to Proof
-              </button>
-            </div>
+          <section className="pp-path-card" role="tabpanel">
+            {activePath === "a" ? (
+              <>
+                <h3 className="pp-path-title">Upload a New Certificate</h3>
+                <p className="pp-path-body">
+                  Start with a new health insurance certificate. The file is
+                  encrypted locally, stored, and then referenced on-chain.
+                </p>
+                <button
+                  className="pp-btn pp-btn-primary pp-btn-full"
+                  onClick={handleStartUploadFlow}
+                  disabled={!!loading}
+                >
+                  {loading === "start-upload" ? <Spinner /> : ""} Start Upload
+                  Flow
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="pp-path-title">
+                  Generate Proof from Existing Reference
+                </h3>
+                <p className="pp-path-body">
+                  Load references already stored on-chain, select a `refId`,
+                  review and confirm the decrypted certificate, then continue to
+                  proof generation.
+                </p>
+                <div className="pp-connect-btns">
+                  <button
+                    className="pp-btn pp-btn-ghost pp-btn-full"
+                    onClick={handleLoadExistingReferences}
+                    disabled={!!loading}
+                  >
+                    {loading === "load-refs" ? <Spinner /> : ""} Load
+                    References
+                  </button>
+                  <select
+                    className="pp-contract-addr-input"
+                    value={selectedRefId}
+                    onChange={(e) => setSelectedRefId(e.target.value)}
+                  >
+                    {existingReferences.length === 0 ? (
+                      <option value="">No on-chain references found</option>
+                    ) : (
+                      existingReferences.map((ref) => (
+                        <option key={ref.refId} value={ref.refId}>
+                          {ref.refId}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    className="pp-btn pp-btn-primary pp-btn-full"
+                    onClick={handleUseExistingRecord}
+                    disabled={!!loading || !selectedRefId}
+                  >
+                    Review Certificate
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         </div>
         <div className="pp-privacy-note">
