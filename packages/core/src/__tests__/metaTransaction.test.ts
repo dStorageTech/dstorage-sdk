@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MetaTransaction, validateFile } from "../metaTransaction.js";
+import type { DStorageContext } from "../metaTransaction.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
-import { MockPaymentAdapter } from "@dstorage/payment";
 import type { PaymentAdapter, PaymentQuote } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
 import type { MetaTxProgress, MetaTxStepId } from "../metaTransaction.js";
@@ -69,21 +69,26 @@ async function makeKey(): Promise<CryptoKey> {
   return deriveKeyFromSignature("0xabcdef1234567890".repeat(4), "0xTestOwner");
 }
 
-function makeMetaTx(
-  overrides: {
-    storagePayment?: PaymentAdapter;
-    chainPayment?: PaymentAdapter;
-  } = {},
-): MetaTransaction {
-  return new MetaTransaction(
-    new MockStorageAdapter(),
-    new MockChainAdapter(),
-    null as unknown as CryptoKey, // set later via the async factory
-    null,
-    "0xTestOwner",
-    overrides.storagePayment ?? new InstantPaymentAdapter("storage"),
-    overrides.chainPayment ?? new InstantPaymentAdapter("chain"),
-  );
+/** Build a minimal DStorageContext for tests. */
+function makeSdkContext(
+  address = "0xTestOwner",
+  storagePayment?: PaymentAdapter,
+  chainPayment?: PaymentAdapter,
+): DStorageContext {
+  return {
+    storageAdapter: new MockStorageAdapter(),
+    chainAdapter: new MockChainAdapter(),
+    storagePaymentAdapter:
+      storagePayment ?? new InstantPaymentAdapter("storage"),
+    chainPaymentAdapter: chainPayment ?? new InstantPaymentAdapter("chain"),
+    connectedAddress: address,
+    async encryptPayload(bytes: Uint8Array) {
+      return bytes; // no encryption in unit tests
+    },
+    async encryptStorageIdForChain(id: string) {
+      return id; // no storageIdKey in unit tests
+    },
+  };
 }
 
 // ── validateFile ──────────────────────────────────────────────────────────────
@@ -164,13 +169,14 @@ describe("validateFile", () => {
 
 describe("MetaTransaction constructor", () => {
   it("creates an instance", () => {
-    expect(makeMetaTx()).toBeDefined();
+    const metaTx = new MetaTransaction(makeSdkContext("0xTestOwner"));
+    expect(metaTx).toBeDefined();
   });
 
   it("onProgress registers a callback and returns this (for chaining)", () => {
-    const tx = makeMetaTx();
-    const returned = tx.onProgress(() => {});
-    expect(returned).toBe(tx);
+    const metaTx = new MetaTransaction(makeSdkContext("0xTestOwner"));
+    const returned = metaTx.onProgress(() => {});
+    expect(returned).toBe(metaTx);
   });
 });
 
@@ -179,16 +185,7 @@ describe("MetaTransaction constructor", () => {
 describe("MetaTransaction.execute", () => {
   it("returns a MetaTxReceipt with all required fields", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec1",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec1"));
 
     const file = makeFile("Hello private world", "hello.txt", "text/plain");
     const p = tx.execute(file);
@@ -210,16 +207,7 @@ describe("MetaTransaction.execute", () => {
 
   it('dataId is "<storageId>::<chainRefId>"', async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec2",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec2"));
 
     const file = makeFile("test", "test.txt", "text/plain");
     const p = tx.execute(file);
@@ -231,16 +219,7 @@ describe("MetaTransaction.execute", () => {
 
   it("file metadata in receipt matches the input file", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec3",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec3"));
 
     const content = "patient record data";
     const file = makeFile(content, "record.txt", "text/plain");
@@ -255,16 +234,7 @@ describe("MetaTransaction.execute", () => {
 
   it('storageToken and chainToken are "MOCK" when using InstantPaymentAdapter', async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec4",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec4"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file);
@@ -277,16 +247,7 @@ describe("MetaTransaction.execute", () => {
 
   it("totalDurationMs is a positive number", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec5",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec5"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file);
@@ -298,16 +259,7 @@ describe("MetaTransaction.execute", () => {
 
   it("fires onProgress callbacks at least once per step (7 steps minimum)", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec6",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec6"));
 
     const updates: MetaTxProgress[] = [];
     tx.onProgress((p) => updates.push(p));
@@ -322,16 +274,7 @@ describe("MetaTransaction.execute", () => {
 
   it('overallStatus transitions to "complete" on success', async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec7",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec7"));
 
     const statuses: MetaTxProgress["overallStatus"][] = [];
     tx.onProgress((p) => statuses.push(p.overallStatus));
@@ -346,16 +289,7 @@ describe("MetaTransaction.execute", () => {
 
   it("the last progress update includes the receipt", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec8",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec8"));
 
     let lastProgress: MetaTxProgress | null = null;
     tx.onProgress((p) => {
@@ -373,16 +307,7 @@ describe("MetaTransaction.execute", () => {
 
   it("CostEstimate is included in progress after the estimate step", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec9",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec9"));
 
     const estimates: MetaTxProgress[] = [];
     tx.onProgress((p) => {
@@ -400,16 +325,7 @@ describe("MetaTransaction.execute", () => {
 
   it("all 7 step IDs appear in the progress steps array", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec10",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec10"));
 
     let lastProgress: MetaTxProgress | null = null;
     tx.onProgress((p) => {
@@ -438,16 +354,7 @@ describe("MetaTransaction.execute", () => {
 
   it('all steps have status "done" on successful completion', async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec11",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec11"));
 
     let lastProgress: MetaTxProgress | null = null;
     tx.onProgress((p) => {
@@ -466,16 +373,7 @@ describe("MetaTransaction.execute", () => {
 
   it("contract and circuit info is included in receipt when provided via config", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec12",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec12"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file, {
@@ -496,16 +394,7 @@ describe("MetaTransaction.execute", () => {
 
   it("works without an onProgress callback", async () => {
     vi.useFakeTimers();
-    const key = await makeKey();
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec13",
-      new InstantPaymentAdapter("storage"),
-      new InstantPaymentAdapter("chain"),
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec13"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file);
@@ -516,15 +405,8 @@ describe("MetaTransaction.execute", () => {
   it("uses MockPaymentAdapter defaults when no payment adapter is provided", async () => {
     // Do NOT use fake timers here — MockPaymentAdapter has ~1900ms of real delays per adapter.
     // Real timers are used; the timeout is set to 10s to accommodate both payment adapters.
-    const key = await makeKey();
     // No payment adapters — should default to MockPaymentAdapter
-    const tx = new MetaTransaction(
-      new MockStorageAdapter(),
-      new MockChainAdapter(),
-      key,
-      key,
-      "0xOwner_exec14",
-    );
+    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec14"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const receipt = await tx.execute(file);

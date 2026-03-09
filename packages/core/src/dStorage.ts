@@ -26,6 +26,9 @@ import {
   encryptStorageId,
   decryptStorageId,
 } from "@dstorage/crypto";
+import type { StorageAdapter } from "@dstorage/storage";
+import type { ChainAdapter } from "@dstorage/chain";
+import type { PaymentAdapter } from "@dstorage/payment";
 import corePackageJson from "../package.json";
 
 import type {
@@ -37,6 +40,7 @@ import type {
 } from "./types.js";
 import { MetaTransaction } from "./metaTransaction.js";
 import type {
+  DStorageContext,
   MetaTxConfig,
   MetaTxProgress,
   MetaTxReceipt,
@@ -61,12 +65,12 @@ function bytesToBase64url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
-export class DStorage {
+export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
-  private encryptionKey: CryptoKey | null = null;
-  /** AES-GCM key for encrypting storage IDs — derived from the same root as encryptionKey. */
-  private storageIdKey: CryptoKey | null = null;
+  private _encryptionKey: CryptoKey | null = null;
+  /** AES-GCM key for encrypting storage IDs — derived from the same root as _encryptionKey. */
+  private _storageIdKey: CryptoKey | null = null;
   private _initialized = false;
   private readonly logger: Logger | undefined;
 
@@ -74,6 +78,26 @@ export class DStorage {
     this.config = config;
     this.logger = config.logger;
   }
+
+  // ── DStorageContext interface — public accessors ───────────────────────────
+
+  get storageAdapter(): StorageAdapter {
+    return this.config.storageAdapter;
+  }
+
+  get chainAdapter(): ChainAdapter {
+    return this.config.chainAdapter;
+  }
+
+  get storagePaymentAdapter(): PaymentAdapter | undefined {
+    return this.config.storagePaymentAdapter;
+  }
+
+  get chainPaymentAdapter(): PaymentAdapter | undefined {
+    return this.config.chainPaymentAdapter;
+  }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   /**
    * Initialize the SDK:
@@ -92,10 +116,10 @@ export class DStorage {
 
     // 2. Derive encryption keys from chain adapter credentials (facade mode)
     if (this.config.chainAdapter.getEncryptionKey) {
-      this.encryptionKey = await this.config.chainAdapter.getEncryptionKey();
+      this._encryptionKey = await this.config.chainAdapter.getEncryptionKey();
     }
     if (this.config.chainAdapter.getStorageIdKey) {
-      this.storageIdKey = await this.config.chainAdapter.getStorageIdKey();
+      this._storageIdKey = await this.config.chainAdapter.getStorageIdKey();
     }
 
     this._initialized = true;
@@ -114,13 +138,13 @@ export class DStorage {
 
     // Derive a deterministic AES-GCM key from the wallet signature.
     // The key never leaves the device and is not persisted.
-    this.encryptionKey = await deriveKeyFromSignature(
+    this._encryptionKey = await deriveKeyFromSignature(
       walletInfo._signatureHex,
       walletInfo.address,
     );
 
     // Derive a separate AES-GCM key for storage ID encryption (same root, different salt).
-    this.storageIdKey = await deriveStorageIdKey(
+    this._storageIdKey = await deriveStorageIdKey(
       walletInfo._signatureHex,
       `dstorage-storageId-v1:${walletInfo.address}`,
     );
@@ -131,8 +155,8 @@ export class DStorage {
   /** Disconnect and clear the in-memory encryption keys. */
   disconnect(): void {
     this.wallet = null;
-    this.encryptionKey = null;
-    this.storageIdKey = null;
+    this._encryptionKey = null;
+    this._storageIdKey = null;
     this._initialized = false;
     this.logger?.log(
       "dStorage",
@@ -142,13 +166,16 @@ export class DStorage {
 
   get isConnected(): boolean {
     return (
-      (this.wallet !== null && this.encryptionKey !== null) || this._initialized
+      (this.wallet !== null && this._encryptionKey !== null) ||
+      this._initialized
     );
   }
 
   get connectedAddress(): string | null {
     return this.wallet?.address ?? null;
   }
+
+  // ── Core operations ───────────────────────────────────────────────────────
 
   /**
    * Encrypt content client-side, upload to decentralised storage,
@@ -168,17 +195,9 @@ export class DStorage {
       typeof content === "string" ? new TextEncoder().encode(content) : content;
 
     // 1. Encrypt client-side if key is available; otherwise store raw bytes
-    let uploadData: Uint8Array;
-    if (this.encryptionKey) {
-      this.logger?.log("dStorage", "Encrypting content...");
-      const payload = await encrypt(this.encryptionKey, bytes);
-      uploadData = new TextEncoder().encode(serializePayload(payload));
-    } else {
-      uploadData = bytes;
-    }
+    let uploadData = (await this.encryptPayload(bytes)) ?? bytes;
 
     // 2. Upload to chosen storage network
-    const ownerAddress = this.wallet?.address ?? "";
     const sdkVersion = corePackageJson.version ?? "unknown";
     const storageResult = await this.config.storageAdapter.upload(uploadData, {
       ...metadata,
@@ -187,8 +206,10 @@ export class DStorage {
     });
 
     // 3. Encrypt the storageId before writing on-chain — keeps the storage pointer private.
-    // The encrypted form is a 43-char base64url string (32 bytes), compatible with Bytes<32>.
-    const encryptedStorageId = await this._encryptStorageId(storageResult.id);
+    // The encrypted form is an 80-char base64url string (60 bytes), compatible with Bytes<60>.
+    const encryptedStorageId = await this.encryptStorageIdForChain(
+      storageResult.id,
+    );
 
     // 4. Write on-chain reference — only the encrypted pointer, never the data
     const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
@@ -212,6 +233,21 @@ export class DStorage {
   }
 
   /**
+   * Encrypt raw payload bytes with the active client-side key and serialize them
+   * into the SDK wire format expected by storage adapters.
+   * Returns null when no encryption key is available.
+   */
+  async encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null> {
+    if (this._encryptionKey) {
+      this.logger?.log("dStorage", "Encrypting content...");
+      const payload = await encrypt(this._encryptionKey, bytes);
+      return new TextEncoder().encode(serializePayload(payload));
+    } else {
+      return null;
+    }
+  }
+
+  /**
    * Retrieve and decrypt data by its storageId.
    * Decryption happens locally — the SDK never sends plaintext anywhere.
    *
@@ -226,13 +262,13 @@ export class DStorage {
     // 2. Deserialize and decrypt if an encryption key is available
     // If no encryption key — assume content was stored as raw bytes
     let decryptedBytes = rawBytes;
-    if (this.encryptionKey) {
+    if (this._encryptionKey) {
       const encryptedPayload = deserializePayload(
         new TextDecoder().decode(rawBytes),
       );
       if (encryptedPayload) {
         try {
-          decryptedBytes = await decrypt(this.encryptionKey, encryptedPayload);
+          decryptedBytes = await decrypt(this._encryptionKey, encryptedPayload);
           this.logger?.log(
             "dStorage",
             `Data decrypted successfully: ${decryptedBytes.byteLength} bytes`,
@@ -345,23 +381,14 @@ export class DStorage {
   ): Promise<MetaTxReceipt> {
     this.assertConnected();
 
-    if (!this.encryptionKey) {
+    if (!this._encryptionKey) {
       throw new Error(
         "[dStorage] executeMetaTransaction() requires an encryption key. " +
           "Call connect() with wallet credentials, or use init() with a facade-mode chain adapter.",
       );
     }
 
-    const metaTx = new MetaTransaction(
-      this.config.storageAdapter,
-      this.config.chainAdapter,
-      this.encryptionKey,
-      this.storageIdKey,
-      this.wallet?.address ?? "",
-      this.config.storagePaymentAdapter,
-      this.config.chainPaymentAdapter,
-    );
-
+    const metaTx = new MetaTransaction(this);
     metaTx.onProgress(onProgress);
     return metaTx.execute(file, config);
   }
@@ -386,11 +413,13 @@ export class DStorage {
    *
    * If no storageIdKey is available (e.g. unauthenticated state), the ID
    * is returned unencrypted.
+   *
+   * @internal — part of DStorageContext; used by MetaTransaction.
    */
-  private async _encryptStorageId(storageId: string): Promise<string> {
-    if (!this.storageIdKey) return storageId;
+  async encryptStorageIdForChain(storageId: string): Promise<string> {
+    if (!this._storageIdKey) return storageId;
     const bytes = base64urlToBytes(storageId); // 32 bytes (43-char base64url input)
-    const encrypted = await encryptStorageId(this.storageIdKey, bytes); // 60 bytes
+    const encrypted = await encryptStorageId(this._storageIdKey, bytes); // 60 bytes
     return bytesToBase64url(encrypted); // 80-char base64url string
   }
 
@@ -401,10 +430,10 @@ export class DStorage {
    * (handles legacy data or unauthenticated reads).
    */
   private async _decryptStorageId(encryptedId: string): Promise<string> {
-    if (!this.storageIdKey) return encryptedId;
+    if (!this._storageIdKey) return encryptedId;
     try {
       const bytes = base64urlToBytes(encryptedId); // 60 bytes (80-char base64url input)
-      const decrypted = await decryptStorageId(this.storageIdKey, bytes); // 32 bytes
+      const decrypted = await decryptStorageId(this._storageIdKey, bytes); // 32 bytes
       return bytesToBase64url(decrypted); // 43-char base64url (original storage ID)
     } catch {
       throw new Error(

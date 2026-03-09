@@ -13,12 +13,12 @@
  *   [✓] Complete   → return full receipt
  *
  * Usage:
- *   const metaTx = new MetaTransaction(dStorage, config);
+ *   const metaTx = new MetaTransaction(dStorage);
  *   metaTx.onProgress((progress) => updateUI(progress));
  *   const receipt = await metaTx.execute(file);
  */
 
-import { encrypt, serializePayload, encryptStorageId } from "@dstorage/crypto";
+import { encrypt, serializePayload } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import type { PaymentAdapter } from "@dstorage/payment";
@@ -135,6 +135,34 @@ export interface MetaTxConfig {
   circuitName?: string;
 }
 
+// ── SDK context interface ─────────────────────────────────────────────────────
+
+/**
+ * Minimal SDK surface required by MetaTransaction.
+ * Implemented by DStorage — MetaTransaction receives the SDK instance directly
+ * rather than individual adapters/keys/address to avoid redundant constructor args.
+ */
+export interface DStorageContext {
+  readonly storageAdapter: StorageAdapter;
+  readonly chainAdapter: ChainAdapter;
+  readonly storagePaymentAdapter: PaymentAdapter | undefined;
+  readonly chainPaymentAdapter: PaymentAdapter | undefined;
+  /** Wallet address of the connected user, or null if using init() / facade mode. */
+  readonly connectedAddress: string | null;
+  /**
+   * Encrypt raw payload bytes with the active client-side key and serialize them
+   * into the SDK wire format expected by storage adapters.
+   * Returns null when no encryption key is available.
+   */
+  encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null>;
+  /**
+   * Encrypts a plain storageId (43-char base64url) for on-chain storage.
+   * Returns the encrypted form (80-char base64url) when a storageIdKey is available,
+   * or the original id unchanged when not connected / no key.
+   */
+  encryptStorageIdForChain(storageId: string): Promise<string>;
+}
+
 // ── File validation ───────────────────────────────────────────────────────────
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -234,45 +262,29 @@ function buildInitialSteps(): MetaTxStepState[] {
 // ── MetaTransaction class ─────────────────────────────────────────────────────
 
 export class MetaTransaction {
-  private storageAdapter: StorageAdapter;
-  private chainAdapter: ChainAdapter;
+  private sdk: DStorageContext;
   private storagePaymentAdapter: PaymentAdapter;
   private chainPaymentAdapter: PaymentAdapter;
-  private encryptionKey: CryptoKey;
-  private storageIdKey: CryptoKey | null;
-  private ownerAddress: string;
   private progressCallback: ((p: MetaTxProgress) => void) | null = null;
   private steps: MetaTxStepState[] = buildInitialSteps();
   private startedAt = 0;
 
-  constructor(
-    storageAdapter: StorageAdapter,
-    chainAdapter: ChainAdapter,
-    encryptionKey: CryptoKey,
-    storageIdKey: CryptoKey | null,
-    ownerAddress: string,
-    storagePaymentAdapter?: PaymentAdapter,
-    chainPaymentAdapter?: PaymentAdapter,
-  ) {
-    this.storageAdapter = storageAdapter;
-    this.chainAdapter = chainAdapter;
-    this.encryptionKey = encryptionKey;
-    this.storageIdKey = storageIdKey;
-    this.ownerAddress = ownerAddress;
+  constructor(sdk: DStorageContext) {
+    this.sdk = sdk;
 
     // Default to MockPaymentAdapter with the token that matches the chosen adapter,
     // so existing code that doesn't configure payment adapters continues to work.
     this.storagePaymentAdapter =
-      storagePaymentAdapter ??
+      sdk.storagePaymentAdapter ??
       new MockPaymentAdapter({
         type: "storage",
-        token: defaultStorageToken(storageAdapter.name),
+        token: defaultStorageToken(sdk.storageAdapter.name),
       });
     this.chainPaymentAdapter =
-      chainPaymentAdapter ??
+      sdk.chainPaymentAdapter ??
       new MockPaymentAdapter({
         type: "chain",
-        token: defaultChainToken(chainAdapter.name),
+        token: defaultChainToken(sdk.chainAdapter.name),
       });
   }
 
@@ -310,10 +322,9 @@ export class MetaTransaction {
       const fileBytes = await readFileAsBytes(file);
       this.updateStepDetail("encrypt", "Encrypting with AES-GCM 256…");
 
-      const encryptedPayload = await encrypt(this.encryptionKey, fileBytes);
-      const uploadData = new TextEncoder().encode(
-        serializePayload(encryptedPayload),
-      );
+      // Encrypt the payload if key is available; otherwise store raw bytes
+      const uploadData =
+        (await this.sdk.encryptPayload(fileBytes)) ?? fileBytes;
 
       this.completeStep(
         "encrypt",
@@ -337,11 +348,11 @@ export class MetaTransaction {
       );
 
       // ── Step 3: Upload ──────────────────────────────────────────────────
-      this.startStep("upload", `Uploading to ${this.storageAdapter.name}…`);
+      this.startStep("upload", `Uploading to ${this.sdk.storageAdapter.name}…`);
 
-      const uploadResult = await this.storageAdapter.upload(uploadData, {
+      const uploadResult = await this.sdk.storageAdapter.upload(uploadData, {
         "dstorage-version": "0.1.0",
-        "dstorage-owner": this.ownerAddress,
+        "dstorage-owner": this.sdk.connectedAddress ?? "",
         "dstorage-filename": file.name,
         "dstorage-filetype": file.type,
         "dstorage-filesize": String(file.size),
@@ -376,11 +387,11 @@ export class MetaTransaction {
       // ── Step 5: On-chain reference ───────────────────────────────────────
       this.startStep(
         "chain_reference",
-        `Writing reference to ${this.chainAdapter.name}…`,
+        `Writing reference to ${this.sdk.chainAdapter.name}…`,
       );
 
-      const chainResult = await this.chainAdapter.writeReference({
-        storageId: await this.encryptStorageIdForChain(uploadResult.id),
+      const chainResult = await this.sdk.chainAdapter.writeReference({
+        storageId: await this.sdk.encryptStorageIdForChain(uploadResult.id),
         storageProvider: uploadResult.provider,
         dataLabel: file.name,
         writtenAt: Date.now(),
@@ -497,13 +508,6 @@ export class MetaTransaction {
       ...overrides,
     });
   }
-
-  private async encryptStorageIdForChain(storageId: string): Promise<string> {
-    if (!this.storageIdKey) return storageId;
-    const bytes = base64urlToBytes(storageId);
-    const encrypted = await encryptStorageId(this.storageIdKey, bytes);
-    return bytesToBase64url(encrypted);
-  }
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
@@ -523,20 +527,4 @@ async function readFileAsBytes(file: File): Promise<Uint8Array> {
     reader.onerror = () => reject(new Error("Failed to read file."));
     reader.readAsArrayBuffer(file);
   });
-}
-
-function base64urlToBytes(id: string): Uint8Array {
-  const b64 = id.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function bytesToBase64url(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++)
-    binary += String.fromCharCode(bytes[i]!);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
