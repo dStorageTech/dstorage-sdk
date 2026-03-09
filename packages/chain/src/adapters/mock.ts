@@ -101,10 +101,7 @@ export class MockChainAdapter implements ChainAdapter {
   }
 
   async getBalances(): Promise<WalletBalances> {
-    return {
-      NIGHT: 0n,
-      DUST: 0n,
-    };
+    return { night: 0n, dust: 0n };
   }
 
   setContractAddress(address: string): void {
@@ -127,6 +124,14 @@ export class MockChainAdapter implements ChainAdapter {
 
   async getEncryptionKey(): Promise<CryptoKey | null> {
     // Generate a random ephemeral key — fine for mocking purposes
+    return globalThis.crypto.subtle.generateKey(
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"],
+    );
+  }
+
+  async getStorageIdKey(): Promise<CryptoKey | null> {
     return globalThis.crypto.subtle.generateKey(
       { name: "AES-GCM", length: 256 },
       false,

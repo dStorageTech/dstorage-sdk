@@ -80,6 +80,19 @@ export class KeyDeriver {
   }
 
   /**
+   * Derives a deterministic AES-GCM key for storage ID encryption.
+   * Uses the same seed material as deriveEncryptionKey() but a different PBKDF2 salt.
+   * @param salt  Optional binding salt (defaults to 'dstorage-storageId-v1').
+   */
+  async deriveStorageIdKey(salt?: string): Promise<CryptoKey> {
+    const seed = await this.getSeedBuffer();
+    const signatureHex = Array.from(seed)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return deriveStorageIdKey(signatureHex, salt ?? "dstorage-storageId-v1");
+  }
+
+  /**
    * Derives a deterministic AES-GCM encryption key from the seed via PBKDF2.
    * @param salt  Optional binding salt (defaults to 'dstorage-v1').
    */
@@ -171,6 +184,67 @@ function getCrypto(): Crypto {
     "[dStorage/crypto] WebCrypto not available in this environment.",
   );
 }
+
+/**
+ * Derive a deterministic AES-GCM CryptoKey for storage ID encryption.
+ *
+ * Uses the same PBKDF2 derivation path as deriveKeyFromSignature() but with
+ * a different salt, so the two keys are cryptographically independent.
+ *
+ * @param signatureHex  Raw hex string returned by the wallet (or seed hex)
+ * @param salt          Optional extra salt (default: 'dstorage-storageId-v1')
+ */
+export async function deriveStorageIdKey(
+  signatureHex: string,
+  salt = "dstorage-storageId-v1",
+): Promise<CryptoKey> {
+  const crypto = getCrypto();
+  const sigBytes = hexToBytes(signatureHex);
+
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    sigBytes,
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"],
+  );
+
+  const saltBytes = new TextEncoder().encode(salt);
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: saltBytes,
+      iterations: 100_000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+// NOTE on key derivation primitive (PBKDF2 vs HKDF):
+//
+// We use PBKDF2 (with 100k iterations) rather than HKDF for all key derivation.
+// This is an intentional choice to keep the door open for password-based derivation:
+//
+//   - HKDF is designed for high-entropy inputs (e.g. wallet signatures, BIP-39 seeds)
+//     and is fast by design. Using HKDF on a low-entropy password would be insecure —
+//     an attacker could brute-force the password space quickly.
+//
+//   - PBKDF2 is designed to be deliberately slow (via iteration count), making it
+//     safe for both high-entropy inputs (the iterations are just wasted CPU, but safe)
+//     and low-entropy passwords (where the slowness is essential security).
+//
+// If the SDK ever supports deriving keys from user passwords, PBKDF2 is the correct
+// primitive. Switching to HKDF would be a security regression for that case, even
+// though it would be more technically correct for the current high-entropy inputs.
+//
+// TODO (nice-to-have): If password-based derivation is never added and inputs remain
+// exclusively high-entropy (signatures, BIP-39 seeds), consider switching to HKDF
+// with domain-separated `info` labels (e.g. "dstorage:data:v1", "dstorage:storageId:v1")
+// and dropping the unnecessary iteration overhead.
 
 /**
  * Derive a deterministic AES-GCM CryptoKey from a hex-encoded wallet signature.

@@ -25,10 +25,10 @@ describe("MockStorageAdapter", () => {
       expect(result).toHaveProperty("uploadedAt");
     });
 
-    it('id starts with "mock_"', async () => {
+    it("id is a 43-char base64url string", async () => {
       const adapter = new MockStorageAdapter();
       const result = await adapter.upload(enc("data"));
-      expect(result.id.startsWith("mock_")).toBe(true);
+      expect(result.id).toMatch(/^[A-Za-z0-9_-]{43}$/);
     });
 
     it('provider is "mock"', async () => {

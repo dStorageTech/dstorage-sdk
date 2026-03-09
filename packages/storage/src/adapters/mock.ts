@@ -17,15 +17,29 @@ import type {
 // In Node.js (no localStorage), fall back to an in-memory map.
 const memoryStore = new Map<string, string>();
 
+/** Encode a Uint8Array to a base64url string (browser-safe, no Buffer). */
+function bytesToBase64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++)
+    binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
 function generateId(): string {
-  // Use crypto.randomUUID if available, otherwise a simple fallback
+  // Generate 32 random bytes and encode as base64url (43 chars).
+  // This format is compatible with Midnight's Bytes<32> contract field and
+  // matches the Arweave txId format, so it works with all chain adapters.
+  const bytes = new Uint8Array(32);
   if (
     typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
+    typeof crypto.getRandomValues === "function"
   ) {
-    return `mock_${crypto.randomUUID()}`;
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++)
+      bytes[i] = Math.floor(Math.random() * 256);
   }
-  return `mock_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return bytesToBase64url(bytes);
 }
 
 function uint8ArrayToBase64(arr: Uint8Array): string {

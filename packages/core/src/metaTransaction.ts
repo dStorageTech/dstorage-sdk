@@ -18,7 +18,7 @@
  *   const receipt = await metaTx.execute(file);
  */
 
-import { encrypt, serializePayload } from "@dstorage/crypto";
+import { encrypt, serializePayload, encryptStorageId } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import type { PaymentAdapter } from "@dstorage/payment";
@@ -239,6 +239,7 @@ export class MetaTransaction {
   private storagePaymentAdapter: PaymentAdapter;
   private chainPaymentAdapter: PaymentAdapter;
   private encryptionKey: CryptoKey;
+  private storageIdKey: CryptoKey | null;
   private ownerAddress: string;
   private progressCallback: ((p: MetaTxProgress) => void) | null = null;
   private steps: MetaTxStepState[] = buildInitialSteps();
@@ -248,6 +249,7 @@ export class MetaTransaction {
     storageAdapter: StorageAdapter,
     chainAdapter: ChainAdapter,
     encryptionKey: CryptoKey,
+    storageIdKey: CryptoKey | null,
     ownerAddress: string,
     storagePaymentAdapter?: PaymentAdapter,
     chainPaymentAdapter?: PaymentAdapter,
@@ -255,6 +257,7 @@ export class MetaTransaction {
     this.storageAdapter = storageAdapter;
     this.chainAdapter = chainAdapter;
     this.encryptionKey = encryptionKey;
+    this.storageIdKey = storageIdKey;
     this.ownerAddress = ownerAddress;
 
     // Default to MockPaymentAdapter with the token that matches the chosen adapter,
@@ -377,7 +380,7 @@ export class MetaTransaction {
       );
 
       const chainResult = await this.chainAdapter.writeReference({
-        storageId: uploadResult.id,
+        storageId: await this.encryptStorageIdForChain(uploadResult.id),
         storageProvider: uploadResult.provider,
         dataLabel: file.name,
         writtenAt: Date.now(),
@@ -494,6 +497,13 @@ export class MetaTransaction {
       ...overrides,
     });
   }
+
+  private async encryptStorageIdForChain(storageId: string): Promise<string> {
+    if (!this.storageIdKey) return storageId;
+    const bytes = base64urlToBytes(storageId);
+    const encrypted = await encryptStorageId(this.storageIdKey, bytes);
+    return bytesToBase64url(encrypted);
+  }
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
@@ -513,4 +523,20 @@ async function readFileAsBytes(file: File): Promise<Uint8Array> {
     reader.onerror = () => reject(new Error("Failed to read file."));
     reader.readAsArrayBuffer(file);
   });
+}
+
+function base64urlToBytes(id: string): Uint8Array {
+  const b64 = id.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++)
+    binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }

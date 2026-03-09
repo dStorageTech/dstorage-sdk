@@ -275,6 +275,45 @@ User input
  private state ← owner's on-chain record updated (ZK-shielded, not publicly readable)
 ```
 
+## Encryption Design
+
+### Two-layer encryption
+
+The SDK encrypts two distinct things independently:
+
+| Layer               | What is encrypted                            | Key derivation salt               | Where it lives                       |
+| ------------------- | -------------------------------------------- | --------------------------------- | ------------------------------------ |
+| **Data**            | The user's file / content bytes              | `dstorage-v1:<address>`           | Off-chain storage (Arweave, Mock, …) |
+| **Storage pointer** | The storage network content ID (`storageId`) | `dstorage-storageId-v1:<address>` | On-chain (`DataRegistry` contract)   |
+
+Both keys are derived from the same root material — a wallet signature hex or BIP-39 seed — via **PBKDF2-SHA-256** (100 000 iterations) with different salts, making them cryptographically independent. Neither key ever leaves the user's device.
+
+Encrypting the storage pointer means a blockchain observer cannot learn which decentralised-storage resource belongs to which wallet, even though the on-chain record is public.
+
+### StorageId encryption layout (60 bytes)
+
+AES-GCM on a 32-byte storage ID produces a 48-byte output (`ciphertext + 16-byte auth tag`). Storing the 12-byte IV alongside gives exactly **60 bytes**:
+
+```
+[ ciphertext: 32 bytes | IV: 12 bytes | auth tag: 16 bytes ]
+```
+
+This maps to the `Bytes<60>` field in the `DataRegistry` contract. It is base64url-encoded (80 chars) for wire transport and decoded back to 60 bytes before being handed to the contract.
+
+### Tamper detection
+
+AES-GCM is an **Authenticated Encryption with Associated Data (AEAD)** cipher. The 16-byte authentication tag covers the ciphertext. Any bit-flip in the on-chain encrypted pointer causes decryption to throw before the SDK ever attempts to fetch from storage, making storage-pointer tampering detectable client-side.
+
+### Storage ID format
+
+All storage IDs are 43-character base64url strings — 32 random bytes encoded without padding. This matches the Arweave transaction ID format and guarantees a fixed-width 32-byte plaintext input for the storageId encryption function.
+
+### Key derivation primitive (PBKDF2 vs HKDF)
+
+PBKDF2 is retained over HKDF deliberately. HKDF is faster and more correct for high-entropy inputs (signatures, BIP-39 seeds), but is **unsafe for low-entropy passwords** (no work factor). Keeping PBKDF2 ensures that if the SDK ever adds password-based key derivation, no security regression occurs. If password-based derivation is never added and inputs remain exclusively high-entropy, migrating to HKDF with domain-separated `info` labels would be a clean improvement.
+
+---
+
 ## Supported Providers
 
 ### Storage

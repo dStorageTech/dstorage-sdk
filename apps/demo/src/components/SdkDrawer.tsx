@@ -79,7 +79,9 @@ export function SdkDrawer({
                 <span className={`as-badge as-badge-${chainAdapter.status}`}>
                   {chainAdapter.label}
                 </span>
-                <span className="sdk-idle-desc">{chainAdapter.description}</span>
+                <span className="sdk-idle-desc">
+                  {chainAdapter.description}
+                </span>
               </div>
             </div>
             <div className="sdk-idle-hint">

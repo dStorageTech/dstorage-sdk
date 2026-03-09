@@ -22,6 +22,9 @@ import {
   serializePayload,
   deserializePayload,
   deriveKeyFromSignature,
+  deriveStorageIdKey,
+  encryptStorageId,
+  decryptStorageId,
 } from "@dstorage/crypto";
 import corePackageJson from "../package.json";
 
@@ -39,10 +42,30 @@ import type {
   MetaTxReceipt,
 } from "./metaTransaction.js";
 
+// ── Base64url helpers (browser-safe, no Buffer) ────────────────────────────
+
+function base64urlToBytes(id: string): Uint8Array {
+  const b64 = id.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++)
+    binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
 export class DStorage {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
   private encryptionKey: CryptoKey | null = null;
+  /** AES-GCM key for encrypting storage IDs — derived from the same root as encryptionKey. */
+  private storageIdKey: CryptoKey | null = null;
   private _initialized = false;
   private readonly logger: Logger | undefined;
 
@@ -66,9 +89,12 @@ export class DStorage {
       await this.config.chainAdapter.init();
     }
 
-    // 2. Derive encryption key from chain adapter credentials (facade mode)
+    // 2. Derive encryption keys from chain adapter credentials (facade mode)
     if (this.config.chainAdapter.getEncryptionKey) {
       this.encryptionKey = await this.config.chainAdapter.getEncryptionKey();
+    }
+    if (this.config.chainAdapter.getStorageIdKey) {
+      this.storageIdKey = await this.config.chainAdapter.getStorageIdKey();
     }
 
     this._initialized = true;
@@ -92,13 +118,20 @@ export class DStorage {
       walletInfo.address,
     );
 
+    // Derive a separate AES-GCM key for storage ID encryption (same root, different salt).
+    this.storageIdKey = await deriveStorageIdKey(
+      walletInfo._signatureHex,
+      `dstorage-storageId-v1:${walletInfo.address}`,
+    );
+
     this.logger?.log("dStorage", `Connected: ${walletInfo.address}`);
   }
 
-  /** Disconnect and clear the in-memory encryption key. */
+  /** Disconnect and clear the in-memory encryption keys. */
   disconnect(): void {
     this.wallet = null;
     this.encryptionKey = null;
+    this.storageIdKey = null;
     this._initialized = false;
     this.logger?.log(
       "dStorage",
@@ -152,10 +185,14 @@ export class DStorage {
       "Content-Type": "application/octet-stream",
     });
 
-    // 3. Write on-chain reference — only the pointer, never the data
+    // 3. Encrypt the storageId before writing on-chain — keeps the storage pointer private.
+    // The encrypted form is a 43-char base64url string (32 bytes), compatible with Bytes<32>.
+    const encryptedStorageId = await this._encryptStorageId(storageResult.id);
+
+    // 4. Write on-chain reference — only the encrypted pointer, never the data
     const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
-      storageId: storageResult.id,
+      storageId: encryptedStorageId,
       storageProvider: storageResult.provider,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
@@ -246,7 +283,9 @@ export class DStorage {
         `[dStorage] No on-chain reference found for refId: ${refId}`,
       );
 
-    return await this.retrieveByStorageId(ref.storageId);
+    // Decrypt the on-chain storageId to recover the original storage network ID.
+    const storageId = await this._decryptStorageId(ref.storageId);
+    return await this.retrieveByStorageId(storageId);
   }
 
   /**
@@ -278,20 +317,20 @@ export class DStorage {
     }
 
     const refs = await adapter.listReferences();
-    return refs.map((item) => {
-      if ("ref" in item) {
-        return {
-          refId: item.refId,
-          storageId: item.ref.storageId,
-          storageProvider: item.ref.storageProvider,
-        };
-      }
-      return {
-        refId: item.refId,
-        storageId: item.storageId,
-        storageProvider: item.storageProvider,
-      };
-    });
+    return Promise.all(
+      refs.map(async (item) => {
+        const encryptedId = "ref" in item ? item.ref.storageId : item.storageId;
+        const storageProvider =
+          "ref" in item ? item.ref.storageProvider : item.storageProvider;
+        let storageId: string;
+        try {
+          storageId = await this._decryptStorageId(encryptedId);
+        } catch {
+          storageId = "<cannot-decrypt>";
+        }
+        return { refId: item.refId, storageId, storageProvider };
+      }),
+    );
   }
 
   /**
@@ -333,6 +372,7 @@ export class DStorage {
       this.config.storageAdapter,
       this.config.chainAdapter,
       this.encryptionKey,
+      this.storageIdKey,
       this.wallet?.address ?? "",
       this.config.storagePaymentAdapter,
       this.config.chainPaymentAdapter,
@@ -348,6 +388,43 @@ export class DStorage {
     if (!this._initialized && this.wallet === null) {
       throw new Error(
         "[dStorage] Not connected. Call dStorage.connect(walletInfo) first.",
+      );
+    }
+  }
+
+  /**
+   * Encrypt a storageId string before writing it to the chain.
+   *
+   * The storageId must be a 43-char base64url string (32 bytes decoded) —
+   * this is the format used by Arweave txIds and MockStorageAdapter IDs.
+   * AES-GCM encryption produces a 60-byte output (ciphertext + IV + tag),
+   * which is base64url-encoded to an 80-char string for the Bytes<60> contract field.
+   *
+   * If no storageIdKey is available (e.g. unauthenticated state), the ID
+   * is returned unencrypted.
+   */
+  private async _encryptStorageId(storageId: string): Promise<string> {
+    if (!this.storageIdKey) return storageId;
+    const bytes = base64urlToBytes(storageId); // 32 bytes (43-char base64url input)
+    const encrypted = await encryptStorageId(this.storageIdKey, bytes); // 60 bytes
+    return bytesToBase64url(encrypted); // 80-char base64url string
+  }
+
+  /**
+   * Decrypt a storageId retrieved from the chain back to the original storage network ID.
+   *
+   * If no storageIdKey is available, returns the input unchanged
+   * (handles legacy data or unauthenticated reads).
+   */
+  private async _decryptStorageId(encryptedId: string): Promise<string> {
+    if (!this.storageIdKey) return encryptedId;
+    try {
+      const bytes = base64urlToBytes(encryptedId); // 60 bytes (80-char base64url input)
+      const decrypted = await decryptStorageId(this.storageIdKey, bytes); // 32 bytes
+      return bytesToBase64url(decrypted); // 43-char base64url (original storage ID)
+    } catch {
+      throw new Error(
+        "[dStorage] Failed to decrypt storageId — the record may have been encrypted with a different key.",
       );
     }
   }

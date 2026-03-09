@@ -44,10 +44,6 @@ export interface WalletAddresses {
   dust: string;
 }
 
-// Token names used to populate WalletBalances map
-const TOKEN_NAME_NIGTH = "night"; // unshielded NIGHT token
-const TOKEN_NAME_DUST = "dust"; // DUST fee token
-
 // ── Connector API types (minimal surface from dApp connector spec) ────────────
 // See: https://docs.midnight.network/api-reference/dapp-connector
 
@@ -672,10 +668,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     return Array.from(state.references.entries())
       .map(([refId, entry]) => ({
         refId,
-        storageId: this._decodeStorageId(
-          entry.storageId,
-          entry.storageProvider,
-        ),
+        storageId: this._decodeStorageId(entry.storageId),
         storageProvider: entry.storageProvider,
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
@@ -700,10 +693,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
 
     return {
-      storageId: this._decodeStorageId(
-        refEntry.storageId,
-        refEntry.storageProvider,
-      ),
+      storageId: this._decodeStorageId(refEntry.storageId),
       storageProvider: refEntry.storageProvider,
       dataLabel: "TODO: refEntry.dataLabel",
       writtenAt: 0, //refEntry.writtenAt
@@ -720,7 +710,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     try {
       const api = await this._getAPI();
       this.logger?.log("dStorage/midnight", "Encoding storageId…");
-      const encodedStorageId = await this._encodeStorageId(ref.storageId);
+      const encodedStorageId = this._encodeStorageId(ref.storageId);
 
       this.logger?.log(
         "dStorage/midnight",
@@ -759,42 +749,29 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
-   * Encode a storage ID string into a 32-byte Uint8Array for the contract's Bytes<32> field.
+   * Encode a storage ID string into a 60-byte Uint8Array for the contract's Bytes<60> field.
    *
-   * Arweave txIds are 43-character base64url strings that decode to exactly 32 bytes,
-   * so we store the raw bytes directly — this allows lossless recovery of the original txId.
-   *
-   * For all other IDs (e.g. mock UUIDs, Autonomi addresses), we fall back to SHA-256 hashing.
+   * All storage IDs passed here must be 80-character base64url strings (60 bytes decoded).
+   * This format is produced by DStorage.ts after AES-GCM encryption:
+   *   [ciphertext(32) | IV(12) | tag(16)] = 60 bytes → 80 base64url chars
    */
-  private async _encodeStorageId(id: string): Promise<Uint8Array> {
-    // FIXME!!!
-    // We have to encrypt the storage id not only for privacy reasons but also
-    // to be able to then retrieve the stored content using its id,
-    // using a hash as we do in the fallback case is not reversible
-
-    // Arweave txIds: exactly 43 base64url characters → 32 bytes when decoded
-    if (/^[A-Za-z0-9_-]{43}$/.test(id)) {
-      return base64urlToBytes(id);
+  private _encodeStorageId(id: string): Uint8Array {
+    if (/^[A-Za-z0-9_-]{80}$/.test(id)) {
+      return base64urlToBytes(id); // 60 bytes
     }
-    // Generic fallback: SHA-256 hash to fit any string into 32 bytes
-    const bytes = new TextEncoder().encode(id);
-    const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-    return new Uint8Array(hashBuffer);
+    throw new Error(
+      `[dStorage/midnight] storageId "${id.slice(0, 20)}..." is not a valid 80-char base64url string. ` +
+        "All storage IDs must be 80 base64url chars (60 bytes) to fit in the Bytes<60> contract field. " +
+        "Ensure storageId encryption is enabled in the SDK (requires an encryption key).",
+    );
   }
 
   /**
-   * Decode a 32-byte storageId (as stored on-chain) back to the original storage ID string.
-   *
-   * For Arweave: the raw 32 bytes were the base64url-decoded txId, so we base64url-encode
-   * them back to recover the original 43-character Arweave txId.
-   * For other providers: return the hex representation (the original ID is not recoverable
-   * if it was SHA-256 hashed).
+   * Decode a 32-byte storageId (as stored on-chain) back to a 43-char base64url string.
+   * The DStorage SDK layer decrypts this further to recover the original storage network ID.
    */
-  private _decodeStorageId(bytes: Uint8Array, storageProvider: string): string {
-    if (storageProvider === "arweave") {
-      return bytesToBase64url(bytes);
-    }
-    return uint8ArrayToHex(bytes);
+  private _decodeStorageId(bytes: Uint8Array): string {
+    return bytesToBase64url(bytes);
   }
 
   // ── DataRegistry deployment ────────────────────────────────────────────────
@@ -802,17 +779,28 @@ export class MidnightChainAdapter implements ChainAdapter {
   /**
    * Derive a deterministic AES-GCM encryption key from the adapter's credentials.
    * Only available in facade mode (where credentials are held by the adapter).
-   * Throws in connector mode (credentials are held by the wallet extension).
+   * In connector mode, returns null — the key is derived from the wallet signature
+   * in DStorage.connect().
    */
   async getEncryptionKey(): Promise<CryptoKey | null> {
     if (this.walletMode === "facade" && this._credentials) {
       const { KeyDeriver } = await import("@dstorage/crypto");
       return new KeyDeriver(this._credentials).deriveEncryptionKey();
     }
-    /*throw new Error(
-      "[dStorage/midnight] getEncryptionKey() is not available in connector mode.\n" +
-        "  Encryption key derivation requires wallet credentials (facade mode only).",
-    );*/
+    return null;
+  }
+
+  /**
+   * Derive a deterministic AES-GCM key for storage ID encryption.
+   * Only available in facade mode (where credentials are held by the adapter).
+   * In connector mode, returns null — the key is derived from the wallet signature
+   * in DStorage.connect().
+   */
+  async getStorageIdKey(): Promise<CryptoKey | null> {
+    if (this.walletMode === "facade" && this._credentials) {
+      const { KeyDeriver } = await import("@dstorage/crypto");
+      return new KeyDeriver(this._credentials).deriveStorageIdKey();
+    }
     return null;
   }
 
@@ -1053,9 +1041,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       const nightToken = unshieldedToken();
 
       return {
-        TOKEN_NAME_NIGTH:
-          (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
-        TOKEN_NAME_DUST: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
+        night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
+        dust: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
       };
     } else {
       if (!this.connectorAPI) {
@@ -1063,10 +1050,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           "[dStorage/midnight] getBalances() called before init().",
         );
       }
-      return {
-        TOKEN_NAME_NIGTH: 0n,
-        TOKEN_NAME_DUST: 0n,
-      };
+      return { night: 0n, dust: 0n };
     }
   }
 }

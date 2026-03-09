@@ -65,16 +65,10 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
           .pipe(
             map((contractState) => DataRegistry.ledger(contractState.data)),
             tap((ledgerState) =>
-              logger?.debug?.({
-                ledgerStateChanged: {
-                  ledgerState: {
-                    ...ledgerState,
-                    references: ledgerState.references,
-                    refCounter: ledgerState.refCounter,
-                    owner: ledgerState.owner,
-                  },
-                },
-              }),
+              logger?.debug?.(
+                "dStorage/midnight",
+                `ledger state changed: refCounter=${ledgerState.refCounter}`,
+              ),
             ),
           ),
         // ...private state...
@@ -127,10 +121,13 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
-    this.logger?.log("dStorage/midnight", `storing reference: ${storageId}`);
-    if (storageId.length !== 32) {
+    this.logger?.log(
+      "dStorage/midnight",
+      `storing reference: ${toHex(storageId)}`,
+    );
+    if (storageId.length !== 60) {
       throw new Error(
-        `Storage Id is not 32 bytes long but instead ${storageId.length}`,
+        `Storage Id is not 60 bytes long but instead ${storageId.length}`,
       );
     }
     const txData = await this.deployedContract.callTx.storeReference(
@@ -171,7 +168,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     providers: DataRegistryProviders,
     logger?: Logger,
   ): Promise<DataRegistryAPI> {
-    logger?.log("deployContract");
+    logger?.log("dStorage/midnight", "deploying DataRegistry contract...");
 
     const deployedDataRegistryContract = await deployContract(providers, {
       compiledContract: CompiledDataRegistryContractContract,
@@ -179,11 +176,10 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
     });
 
-    logger?.debug?.({
-      contractDeployed: {
-        finalizedDeployTxData: deployedDataRegistryContract.deployTxData.public,
-      },
-    });
+    logger?.debug?.(
+      "dStorage/midnight",
+      `DataRegistry deployed at: ${deployedDataRegistryContract.deployTxData.public.contractAddress}`,
+    );
 
     return new DataRegistryAPI(deployedDataRegistryContract, providers, logger);
   }
@@ -202,11 +198,10 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     contractAddress: ContractAddress,
     logger?: Logger,
   ): Promise<DataRegistryAPI> {
-    logger?.log({
-      joinContract: {
-        contractAddress,
-      },
-    });
+    logger?.log(
+      "dStorage/midnight",
+      `joining DataRegistry contract at: ${contractAddress}`,
+    );
 
     const deployedDataRegistryContract =
       await findDeployedContract<DataRegistryContract>(providers, {
@@ -216,11 +211,10 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
       });
 
-    logger?.debug?.({
-      contractJoined: {
-        finalizedDeployTxData: deployedDataRegistryContract.deployTxData.public,
-      },
-    });
+    logger?.debug?.(
+      "dStorage/midnight",
+      `DataRegistry joined at: ${deployedDataRegistryContract.deployTxData.public.contractAddress}`,
+    );
 
     return new DataRegistryAPI(deployedDataRegistryContract, providers, logger);
   }

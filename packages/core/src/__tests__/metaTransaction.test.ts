@@ -14,7 +14,7 @@ afterEach(() => vi.useRealTimers());
 // ── Instant payment adapter (no delays) ───────────────────────────────────────
 
 class InstantPaymentAdapter implements PaymentAdapter {
-  readonly name = "instant-mock";
+  readonly name = "mock";
   readonly token = "MOCK" as const;
   readonly type: "storage" | "chain";
 
@@ -79,6 +79,7 @@ function makeMetaTx(
     new MockStorageAdapter(),
     new MockChainAdapter(),
     null as unknown as CryptoKey, // set later via the async factory
+    null,
     "0xTestOwner",
     overrides.storagePayment ?? new InstantPaymentAdapter("storage"),
     overrides.chainPayment ?? new InstantPaymentAdapter("chain"),
@@ -183,6 +184,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec1",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -213,6 +215,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec2",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -232,6 +235,7 @@ describe("MetaTransaction.execute", () => {
     const tx = new MetaTransaction(
       new MockStorageAdapter(),
       new MockChainAdapter(),
+      key,
       key,
       "0xOwner_exec3",
       new InstantPaymentAdapter("storage"),
@@ -256,6 +260,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec4",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -277,6 +282,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec5",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -296,6 +302,7 @@ describe("MetaTransaction.execute", () => {
     const tx = new MetaTransaction(
       new MockStorageAdapter(),
       new MockChainAdapter(),
+      key,
       key,
       "0xOwner_exec6",
       new InstantPaymentAdapter("storage"),
@@ -320,6 +327,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec7",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -342,6 +350,7 @@ describe("MetaTransaction.execute", () => {
     const tx = new MetaTransaction(
       new MockStorageAdapter(),
       new MockChainAdapter(),
+      key,
       key,
       "0xOwner_exec8",
       new InstantPaymentAdapter("storage"),
@@ -369,6 +378,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec9",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -394,6 +404,7 @@ describe("MetaTransaction.execute", () => {
     const tx = new MetaTransaction(
       new MockStorageAdapter(),
       new MockChainAdapter(),
+      key,
       key,
       "0xOwner_exec10",
       new InstantPaymentAdapter("storage"),
@@ -432,6 +443,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec11",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -458,6 +470,7 @@ describe("MetaTransaction.execute", () => {
     const tx = new MetaTransaction(
       new MockStorageAdapter(),
       new MockChainAdapter(),
+      key,
       key,
       "0xOwner_exec12",
       new InstantPaymentAdapter("storage"),
@@ -488,6 +501,7 @@ describe("MetaTransaction.execute", () => {
       new MockStorageAdapter(),
       new MockChainAdapter(),
       key,
+      key,
       "0xOwner_exec13",
       new InstantPaymentAdapter("storage"),
       new InstantPaymentAdapter("chain"),
@@ -507,6 +521,7 @@ describe("MetaTransaction.execute", () => {
     const tx = new MetaTransaction(
       new MockStorageAdapter(),
       new MockChainAdapter(),
+      key,
       key,
       "0xOwner_exec14",
     );

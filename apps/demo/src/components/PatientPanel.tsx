@@ -208,7 +208,11 @@ export function PatientPanel({
         </div>
 
         <div className="pp-path-tabs">
-          <div className="pp-path-tab-list" role="tablist" aria-label="Workflow">
+          <div
+            className="pp-path-tab-list"
+            role="tablist"
+            aria-label="Workflow"
+          >
             <button
               className={`pp-path-tab ${activePath === "a" ? "active" : ""}`}
               role="tab"
@@ -262,8 +266,7 @@ export function PatientPanel({
                     onClick={handleLoadExistingReferences}
                     disabled={!!loading}
                   >
-                    {loading === "load-refs" ? <Spinner /> : ""} Load
-                    References
+                    {loading === "load-refs" ? <Spinner /> : ""} Load References
                   </button>
                   <select
                     className="pp-contract-addr-input"

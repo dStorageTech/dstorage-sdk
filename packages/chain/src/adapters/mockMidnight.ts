@@ -189,4 +189,12 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       mnemonic: "test test test test test test test test test test test junk",
     }).deriveEncryptionKey();
   }
+
+  async getStorageIdKey(): Promise<CryptoKey | null> {
+    const { KeyDeriver } = await import("@dstorage/crypto");
+    // Fixed test mnemonic for deterministic mock storageId key
+    return new KeyDeriver({
+      mnemonic: "test test test test test test test test test test test junk",
+    }).deriveStorageIdKey();
+  }
 }

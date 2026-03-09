@@ -291,10 +291,8 @@ export default function App() {
       }
 
       const result = await sdk.retrieveByRefId(selected.refId);
-      const { preview, previewKind, truncated, pdfUrl } = buildCertificatePreview(
-        result.content,
-        result.bytes,
-      );
+      const { preview, previewKind, truncated, pdfUrl } =
+        buildCertificatePreview(result.content, result.bytes);
       const nextRecord = {
         dataId: `${selected.storageId}::${selected.refId}`,
         storageId: selected.storageId,
@@ -575,9 +573,9 @@ export default function App() {
           </div>
 
           <div className="hv-header-center-meta">
-            {(chainAdapterKey === "midnight-connector" ||
-              selectedContractAddress ||
-              deployNewContractSelected) ? (
+            {chainAdapterKey === "midnight-connector" ||
+            selectedContractAddress ||
+            deployNewContractSelected ? (
               <div className="hv-sdk-badge hv-sdk-badge-contract">
                 Contract:{" "}
                 <strong>

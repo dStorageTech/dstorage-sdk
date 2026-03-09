@@ -7,8 +7,12 @@
 // only opaque identifiers referencing encrypted blobs stored off-chain.
 // Encryption/decryption is handled by SDK clients before/after storage access.
 //
+// The storageId field holds a 60-byte AES-GCM encrypted payload:
+//   [ ciphertext: 32 bytes | IV: 12 bytes | auth tag: 16 bytes ]
+// This ensures the storage pointer is private and tamper-evident on-chain.
+//
 // Circuits:
-//   deriveRefId     — deterministic helper to derive a refId from input fields
+//   deriveRefId     — deterministic helper to derive a refId from counter + storageId + instance salt
 //   storeReference  — record a new storage reference, returns a unique refId
 //
 pragma language_version >= 0.20;
@@ -17,9 +21,11 @@ import CompactStandardLibrary;
 
 // A single storage reference entry stored on-chain.
 export struct ReferenceEntry {
-  // 32-byte storage content identifier.
-  // Upstream adapters must normalize/pad/encrypt provider-specific IDs into Bytes<32>.
-  storageId: Bytes<32>;
+  // 60-byte AES-GCM encrypted storage content identifier:
+  //   [ ciphertext: 32 bytes | IV: 12 bytes | auth tag: 16 bytes ]
+  // The SDK encrypts the storage network ID client-side
+  // before writing, and decrypts it locally after retrieval.
+  storageId: Bytes<60>;
   // Storage provider identifier ("arweave", "autonomi", "mock").
   // This contract does not validate allowed values.
   storageProvider: Opaque<"string">;
@@ -40,8 +46,6 @@ export ledger refCounter: Counter;
 // Current contract logic does not read or enforce this field.
 export ledger owner: Bytes<32>;
 
-//witness localSecretKey(): Bytes<32>;
-
 constructor() {
   // Start at 1 so the first stored entry uses a non-zero counter value.
   refCounter.increment(1);
@@ -58,12 +62,13 @@ constructor() {
 // Including the counter avoids collisions for repeated storageId values,
 // and including instance salt avoids cross-contract collisions.
 export circuit deriveRefId(
-                 storageId: Bytes<32>,
+                 storageId: Bytes<60>,
                  refCounter: Bytes<32>,
                  instanceSalt: Bytes<32>
                  ): Bytes<32> {
+  const storageIdHash = persistentHash<Vector<1, Bytes<60>>>([storageId]);
   return persistentHash<Vector<4, Bytes<32>>>(
-           [pad(32, "dstorage:ref:"), storageId, refCounter, instanceSalt]
+           [pad(32, "dstorage:ref:"), refCounter, storageIdHash, instanceSalt]
            );
 }
 
@@ -73,13 +78,14 @@ export circuit deriveRefId(
 // Returns the refId that can be used to retrieve or share this reference.
 //
 // Arguments:
-//   storageId       : 32-byte storage content ID
-//   storageProvider : provider identifier (opaque string bytes)
-//   dataLabel       : optional user-defined label (opaque string bytes)
+//   storageId       : 60-byte AES-GCM encrypted storage content ID
+//                     [ ciphertext(32) | IV(12) | auth tag(16) ]
+//   storageProvider : provider identifier (opaque string)
+//   dataLabel       : optional user-defined label (opaque string)
 //   writtenAt       : caller-provided timestamp
 //
 export circuit storeReference(
-                 storageId: Bytes<32>,
+                 storageId: Bytes<60>,
                  storageProvider: Opaque<"string">,
                  dataLabel: Opaque<"string">,
                  writtenAt: Uint<64>
