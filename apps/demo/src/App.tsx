@@ -251,14 +251,21 @@ export default function App() {
     async (sdk: DStorage): Promise<DataReferenceSummary[]> => {
       try {
         const refs = await sdk.listReferences();
-        setExistingReferences(refs);
-        return refs;
+        const allowedProviders =
+          storageAdapterKey === "arweave-local"
+            ? new Set(["arweave"])
+            : new Set([storageAdapterKey]);
+        const filtered = refs.filter((ref) =>
+          allowedProviders.has(ref.storageProvider),
+        );
+        setExistingReferences(filtered);
+        return filtered;
       } catch {
         setExistingReferences([]);
         return [];
       }
     },
-    [],
+    [storageAdapterKey],
   );
 
   const handleStartUploadFlow = async () => {
@@ -367,6 +374,7 @@ export default function App() {
     setStorageAdapterKey(next);
     setDStorage(null);
     setWallet(null);
+    setExistingReferences([]);
   };
 
   const handleUpload = async (file: File) => {

@@ -290,7 +290,7 @@ export function PatientPanel({
                     onChange={(e) => setSelectedRefId(e.target.value)}
                   >
                     {existingReferences.length === 0 ? (
-                      <option value="">No on-chain references found</option>
+                      <option value=""></option>
                     ) : (
                       existingReferences.map((ref) => (
                         <option key={ref.refId} value={ref.refId}>
