@@ -160,7 +160,7 @@ export interface DStorageContext {
    * Returns the encrypted form (80-char base64url) when a storageIdKey is available,
    * or the original id unchanged when not connected / no key.
    */
-  encryptStorageIdForChain(storageId: string): Promise<string>;
+  encryptStorageIdForChain(storageId: string): Promise<string | null>;
 }
 
 // ── File validation ───────────────────────────────────────────────────────────
@@ -391,7 +391,7 @@ export class MetaTransaction {
       );
 
       const chainResult = await this.sdk.chainAdapter.writeReference({
-        storageId: await this.sdk.encryptStorageIdForChain(uploadResult.id),
+        storageId: await this.sdk.encryptStorageIdForChain(uploadResult.id) ?? uploadResult.id,
         storageProvider: uploadResult.provider,
         dataLabel: file.name,
         writtenAt: Date.now(),

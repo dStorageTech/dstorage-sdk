@@ -338,7 +338,6 @@ PBKDF2 is retained over HKDF deliberately. HKDF is faster and more correct for h
 ## Known Limitations
 
 - `ArweavePaymentAdapter` and `MidnightPaymentAdapter` currently run preview/simulated payment flows.
-- Some storage IDs are transformed to fit on-chain fixed-size fields (provider-dependent reversible behavior).
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
 - Autonomi adapter is currently a stub path.
 

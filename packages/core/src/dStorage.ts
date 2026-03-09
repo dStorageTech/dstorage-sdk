@@ -207,9 +207,10 @@ export class DStorage implements DStorageContext {
 
     // 3. Encrypt the storageId before writing on-chain — keeps the storage pointer private.
     // The encrypted form is an 80-char base64url string (60 bytes), compatible with Bytes<60>.
-    const encryptedStorageId = await this.encryptStorageIdForChain(
-      storageResult.id,
-    );
+    // If no key is available we store it unencrytpted assuming is public data.
+    const encryptedStorageId =
+      (await this.encryptStorageIdForChain(storageResult.id)) ??
+      storageResult.id;
 
     // 4. Write on-chain reference — only the encrypted pointer, never the data
     const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
@@ -230,21 +231,6 @@ export class DStorage implements DStorageContext {
       chainProvider: chainResult.provider,
       uploadedAt: storageResult.uploadedAt,
     };
-  }
-
-  /**
-   * Encrypt raw payload bytes with the active client-side key and serialize them
-   * into the SDK wire format expected by storage adapters.
-   * Returns null when no encryption key is available.
-   */
-  async encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null> {
-    if (this._encryptionKey) {
-      this.logger?.log("dStorage", "Encrypting content...");
-      const payload = await encrypt(this._encryptionKey, bytes);
-      return new TextEncoder().encode(serializePayload(payload));
-    } else {
-      return null;
-    }
   }
 
   /**
@@ -321,7 +307,8 @@ export class DStorage implements DStorageContext {
       );
 
     // Decrypt the on-chain storageId to recover the original storage network ID.
-    const storageId = await this._decryptStorageId(ref.storageId);
+    const storageId =
+      (await this._decryptStorageId(ref.storageId)) ?? ref.storageId;
     return await this.retrieveByStorageId(storageId);
   }
 
@@ -393,13 +380,18 @@ export class DStorage implements DStorageContext {
     return metaTx.execute(file, config);
   }
 
-  // ── Private helpers ────────────────────────────────────────────────────────
-
-  private assertConnected(): void {
-    if (!this._initialized && this.wallet === null) {
-      throw new Error(
-        "[dStorage] Not connected. Call dStorage.connect(walletInfo) first.",
-      );
+  /**
+   * Encrypt raw payload bytes with the active client-side key and serialize them
+   * into the SDK wire format expected by storage adapters.
+   * Returns null when no encryption key is available.
+   */
+  async encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null> {
+    if (this._encryptionKey) {
+      this.logger?.log("dStorage", "Encrypting content...");
+      const payload = await encrypt(this._encryptionKey, bytes);
+      return new TextEncoder().encode(serializePayload(payload));
+    } else {
+      return null;
     }
   }
 
@@ -411,26 +403,26 @@ export class DStorage implements DStorageContext {
    * AES-GCM encryption produces a 60-byte output (ciphertext + IV + tag),
    * which is base64url-encoded to an 80-char string for the Bytes<60> contract field.
    *
-   * If no storageIdKey is available (e.g. unauthenticated state), the ID
-   * is returned unencrypted.
+   * If no storageIdKey is available (e.g. unauthenticated state), it returns null
    *
    * @internal — part of DStorageContext; used by MetaTransaction.
    */
-  async encryptStorageIdForChain(storageId: string): Promise<string> {
-    if (!this._storageIdKey) return storageId;
+  async encryptStorageIdForChain(storageId: string): Promise<string | null> {
+    if (!this._storageIdKey) return null;
     const bytes = base64urlToBytes(storageId); // 32 bytes (43-char base64url input)
     const encrypted = await encryptStorageId(this._storageIdKey, bytes); // 60 bytes
     return bytesToBase64url(encrypted); // 80-char base64url string
   }
 
+  // ── Private helpers ────────────────────────────────────────────────────────
+
   /**
    * Decrypt a storageId retrieved from the chain back to the original storage network ID.
    *
-   * If no storageIdKey is available, returns the input unchanged
-   * (handles legacy data or unauthenticated reads).
+   * If no storageIdKey is available, returns null
    */
-  private async _decryptStorageId(encryptedId: string): Promise<string> {
-    if (!this._storageIdKey) return encryptedId;
+  private async _decryptStorageId(encryptedId: string): Promise<string | null> {
+    if (!this._storageIdKey) return null;
     try {
       const bytes = base64urlToBytes(encryptedId); // 60 bytes (80-char base64url input)
       const decrypted = await decryptStorageId(this._storageIdKey, bytes); // 32 bytes
@@ -438,6 +430,14 @@ export class DStorage implements DStorageContext {
     } catch {
       throw new Error(
         "[dStorage] Failed to decrypt storageId — the record may have been encrypted with a different key.",
+      );
+    }
+  }
+
+  private assertConnected(): void {
+    if (!this._initialized && this.wallet === null) {
+      throw new Error(
+        "[dStorage] Not connected. Call dStorage.connect(walletInfo) first.",
       );
     }
   }
