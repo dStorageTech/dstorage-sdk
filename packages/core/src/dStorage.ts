@@ -178,6 +178,18 @@ export class DStorage implements DStorageContext {
     const bytes =
       typeof content === "string" ? new TextEncoder().encode(content) : content;
 
+    // NOTE: Large file support is a known limitation. The entire payload is held
+    // in memory (plaintext + ciphertext + base64-encoded form) which can peak at
+    // ~4× the file size. Streaming encryption and chunked uploads will be
+    // supported in a future release.
+    const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+    if (bytes.byteLength > MAX_UPLOAD_BYTES) {
+      throw new Error(
+        `[dStorage] Content exceeds the 10 MB upload limit (${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB). ` +
+          "Large file support is planned for a future release.",
+      );
+    }
+
     // 1. Encrypt client-side if key is available; otherwise store raw bytes
     let uploadData = (await this.encryptPayload(bytes)) ?? bytes;
 

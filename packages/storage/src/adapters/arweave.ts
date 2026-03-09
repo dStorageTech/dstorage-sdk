@@ -214,6 +214,19 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
+    // NOTE: Large file support is a known limitation. The full payload is loaded
+    // into a single Arweave transaction in memory. Arweave supports files up to
+    // ~2 GB via bundled/chunked transactions (e.g. Irys/Turbo), but the current
+    // implementation does not stream data to the network. Chunked upload support
+    // is planned for a future release.
+    const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+    if (data.byteLength > MAX_UPLOAD_BYTES) {
+      throw new Error(
+        `[dStorage/arweave] Data exceeds the 10 MB upload limit (${(data.byteLength / 1024 / 1024).toFixed(1)} MB). ` +
+          "Large file support is planned for a future release.",
+      );
+    }
+
     const arweave = await this.getClient();
     const wallet = this.resolveWallet();
 
