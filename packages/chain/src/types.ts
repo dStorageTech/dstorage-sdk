@@ -53,8 +53,9 @@ export type WalletBalances = Record<string, bigint>;
 export interface DataReferencesSummary {
   /** Unique on-chain reference identifier. */
   refId: string;
-  /** Storage-network content identifier referenced by this record. */
-  storageId: string;
+  /** Storage-network content identifier referenced by this record.
+   * If the storageId couldn''t be decrypted then it's null */
+  storageId: string | null;
   /** Storage backend/provider where the encrypted payload is stored. */
   storageProvider: string;
 }

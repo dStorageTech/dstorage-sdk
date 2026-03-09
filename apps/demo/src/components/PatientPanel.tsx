@@ -123,16 +123,14 @@ export function PatientPanel({
   const formatRefLabel = (refId: string, storageId?: string): string => {
     const shortRefId =
       refId.length > 16 ? `${refId.slice(0, 8)}...${refId.slice(-8)}` : refId;
-    const cannotDecrypt = storageId?.length == 0;
-    return cannotDecrypt
-      ? `${shortRefId} (cannot decrypt content id)`
-      : shortRefId;
+    return storageId ? shortRefId : `${shortRefId} (cannot decrypt content id)`;
   };
 
   const selectedReference = existingReferences.find(
     (r) => r.refId === selectedRefId,
   );
-  const selectedRefCannotDecrypt = selectedReference?.storageId?.length == 0;
+  const selectedRefCannotDecrypt =
+    selectedReference && selectedReference.storageId == null;
 
   // ── Step: Connect ──────────────────────────────────────────────────────────
   if (step === "connect")
@@ -299,10 +297,7 @@ export function PatientPanel({
                   </select>
                   {selectedRefCannotDecrypt && (
                     <div className="pp-ref-warning">
-                      {formatRefLabel(
-                        selectedReference!.refId,
-                        selectedReference!.storageId,
-                      )}
+                      Cannot decrypt content id
                     </div>
                   )}
                   <button

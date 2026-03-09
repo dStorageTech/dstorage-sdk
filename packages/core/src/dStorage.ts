@@ -41,6 +41,7 @@ import type {
   MetaTxProgress,
   MetaTxReceipt,
 } from "./metaTransaction.js";
+import { DataReferencesSummary } from "@dstorage/chain";
 
 // ── Base64url helpers (browser-safe, no Buffer) ────────────────────────────
 
@@ -290,45 +291,28 @@ export class DStorage {
 
   /**
    * List references currently available from the configured chain adapter.
-   *
-   * Supports both shapes used by current adapters:
-   *   - { refId, storageId, storageProvider }
-   *   - { refId, ref: { storageId, storageProvider } }
    */
-  async listReferences(): Promise<
-    Array<{ refId: string; storageId: string; storageProvider: string }>
-  > {
-    const adapter = this.config.chainAdapter as unknown as {
-      listReferences?: () => Promise<
-        Array<
-          | { refId: string; storageId: string; storageProvider: string }
-          | {
-              refId: string;
-              ref: { storageId: string; storageProvider: string };
-            }
-        >
-      >;
-    };
-
-    if (typeof adapter.listReferences !== "function") {
+  async listReferences(): Promise<DataReferencesSummary[]> {
+    if (typeof this.config.chainAdapter.listReferences !== "function") {
       throw new Error(
         "[dStorage] listReferences() is not supported by this chain adapter.",
       );
     }
 
-    const refs = await adapter.listReferences();
+    const refs = await this.config.chainAdapter.listReferences();
     return Promise.all(
       refs.map(async (item) => {
-        const encryptedId = "ref" in item ? item.ref.storageId : item.storageId;
-        const storageProvider =
-          "ref" in item ? item.ref.storageProvider : item.storageProvider;
-        let storageId: string;
-        try {
-          storageId = await this._decryptStorageId(encryptedId);
-        } catch {
-          storageId = "";
+        let storageId: string | null = null;
+        if (item.storageId) {
+          try {
+            storageId = await this._decryptStorageId(item.storageId);
+          } catch {}
         }
-        return { refId: item.refId, storageId, storageProvider };
+        return {
+          refId: item.refId,
+          storageId,
+          storageProvider: item.storageProvider,
+        };
       }),
     );
   }

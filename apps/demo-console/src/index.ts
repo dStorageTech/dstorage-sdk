@@ -279,7 +279,9 @@ async function main(): Promise<void> {
             const ref = refs[i]!;
             console.log(`  [${i + 1}] refId = ${ref.refId}`);
             console.log(`      storageProvider = ${ref.storageProvider}`);
-            console.log(`      storageId = ${ref.storageId}`);
+            console.log(
+              `      storageId = ${ref.storageId ?? "(cannot decrypt it)"}`,
+            );
           }
           console.log("");
         } catch (err) {
