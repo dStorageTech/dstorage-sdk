@@ -12,10 +12,12 @@
 
 import type {
   Logger,
+  PaymentAdapter,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
 } from "../types.js";
+import { MockPaymentAdapter } from "@dstorage/payment";
 
 export interface AutonomiAdapterConfig {
   /**
@@ -36,6 +38,7 @@ export interface AutonomiAdapterConfig {
 export class AutonomiStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = "autonomi";
   readonly providerName: string = "Autonomi";
+  readonly paymentAdapter: PaymentAdapter;
 
   private config: AutonomiAdapterConfig;
   private readonly logger: Logger | undefined;
@@ -43,6 +46,8 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   constructor(config: AutonomiAdapterConfig = {}) {
     this.config = config;
     this.logger = config.logger;
+    // TODO: replace with real AutonomiPaymentAdapter once ANT JS SDK is stable
+    this.paymentAdapter = new MockPaymentAdapter({ token: "ANT", type: "storage" });
     this.logger?.warn(
       "dStorage/autonomi",
       "Autonomi adapter is in preview. Real network integration pending JS SDK stability. Data is stored in memory for now.",

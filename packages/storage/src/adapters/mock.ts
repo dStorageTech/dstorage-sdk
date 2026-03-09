@@ -9,10 +9,12 @@
 
 import type {
   Logger,
+  PaymentAdapter,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
 } from "../types.js";
+import { MockPaymentAdapter } from "@dstorage/payment";
 
 // In Node.js (no localStorage), fall back to an in-memory map.
 const memoryStore = new Map<string, string>();
@@ -81,10 +83,12 @@ function storeGet(key: string): string | null {
 export class MockStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = "mock";
   readonly providerName: string = "Mock-Storage-Adapter";
+  readonly paymentAdapter: PaymentAdapter;
   private readonly logger: Logger | undefined;
 
   constructor(logger?: Logger) {
     this.logger = logger;
+    this.paymentAdapter = new MockPaymentAdapter({ token: "MOCK", type: "storage" });
   }
 
   async upload(

@@ -72,14 +72,11 @@ async function makeKey(): Promise<CryptoKey> {
 /** Build a minimal DStorageContext for tests. */
 function makeSdkContext(
   address = "0xTestOwner",
-  storagePayment?: PaymentAdapter,
   chainPayment?: PaymentAdapter,
 ): DStorageContext {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
-    storagePaymentAdapter:
-      storagePayment ?? new InstantPaymentAdapter("storage"),
     chainPaymentAdapter: chainPayment ?? new InstantPaymentAdapter("chain"),
     connectedAddress: address,
     async encryptPayload(bytes: Uint8Array) {
@@ -402,15 +399,15 @@ describe("MetaTransaction.execute", () => {
     await expect(p).resolves.toBeDefined();
   });
 
-  it("uses MockPaymentAdapter defaults when no payment adapter is provided", async () => {
-    // Do NOT use fake timers here — MockPaymentAdapter has ~1900ms of real delays per adapter.
-    // Real timers are used; the timeout is set to 10s to accommodate both payment adapters.
-    // No payment adapters — should default to MockPaymentAdapter
+  it("storage token is MOCK from MockStorageAdapter's built-in payment adapter", async () => {
+    // Do NOT use fake timers here — MockPaymentAdapter has ~1900ms of real delays.
+    // Real timers are used; the timeout is set to 10s to accommodate the storage payment delay.
+    // MockStorageAdapter owns its own MockPaymentAdapter({ token: 'MOCK' })
     const tx = new MetaTransaction(makeSdkContext("0xOwner_exec14"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const receipt = await tx.execute(file);
-    // MockPaymentAdapter for 'mock' storage and chain → MOCK token
+    // MockStorageAdapter.paymentAdapter uses MOCK token; chain uses InstantPaymentAdapter → MOCK
     expect(receipt.storageToken).toBe("MOCK");
     expect(receipt.chainToken).toBe("MOCK");
   }, 10_000);

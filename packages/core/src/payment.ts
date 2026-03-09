@@ -9,8 +9,7 @@
  * This file owns:
  *   - CostEstimate — the UI-facing aggregation of two PaymentQuotes shown in MetaTxProgress
  *   - buildCostEstimate() — assembles a CostEstimate from a storage quote + a chain quote
- *   - defaultStorageToken() / defaultChainToken() — token selectors used when no payment
- *     adapter is configured, to instantiate the correct MockPaymentAdapter defaults
+ *   - defaultChainToken() — token selector used when no chainPaymentAdapter is configured
  */
 
 // Re-export token primitives from @dstorage/payment
@@ -87,22 +86,6 @@ export function buildCostEstimate(
 }
 
 // ── Token selector helpers ────────────────────────────────────────────────────
-
-/**
- * Return the default storage payment token for a given storage provider name.
- * Used by MetaTransaction to instantiate MockPaymentAdapter with the right token
- * when no storagePaymentAdapter is configured.
- */
-export function defaultStorageToken(storageProvider: string): TokenSymbol {
-  switch (storageProvider) {
-    case "arweave":
-      return "AR";
-    case "autonomi":
-      return "ANT";
-    default:
-      return "MOCK";
-  }
-}
 
 /**
  * Return the default chain payment token for a given chain provider name.

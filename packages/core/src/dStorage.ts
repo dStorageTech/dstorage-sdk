@@ -73,10 +73,6 @@ export class DStorage implements DStorageContext {
     return this.config.chainAdapter;
   }
 
-  get storagePaymentAdapter(): PaymentAdapter | undefined {
-    return this.config.storagePaymentAdapter;
-  }
-
   get chainPaymentAdapter(): PaymentAdapter | undefined {
     return this.config.chainPaymentAdapter;
   }

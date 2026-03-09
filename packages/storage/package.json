@@ -15,6 +15,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts"
   },
+  "dependencies": {
+    "@dstorage/payment": "*"
+  },
   "devDependencies": {
     "typescript": "^5.4.5",
     "arweave": "^1.15.0"

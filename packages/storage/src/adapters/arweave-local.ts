@@ -41,6 +41,7 @@
 import { ArweaveStorageAdapter } from "./arweave.js";
 import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from "./arweave.js";
 import type { StorageProviderName, UploadResult } from "../types.js";
+import { AccountPaymentAdapter } from "@dstorage/payment";
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 
@@ -253,6 +254,24 @@ export interface ArweaveLocalAdapterConfig extends Omit<
    * Defaults to localhost:1984.
    */
   gateway?: ArweaveGatewayConfig;
+  /**
+   * Base URL of a local AccountPaymentAdapter signing server.
+   * When provided, the adapter uses AccountPaymentAdapter (remote signing)
+   * instead of the default ArweavePaymentAdapter (local signing).
+   * Example: "http://localhost:3000"
+   */
+  signingServerUrl?: string;
+  /**
+   * Caller identity forwarded to the signing server.
+   * Required when signingServerUrl is set.
+   */
+  userId?: string;
+  /**
+   * Arweave network identifier sent with every sign request.
+   * Required when signingServerUrl is set.
+   * Example: "arlocal" (local test node), "arweave" (mainnet).
+   */
+  network?: string;
 }
 
 /**
@@ -309,6 +328,16 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     this.testnet = new ArweaveLocalHelper({
       url: `${protocol}://${host}:${port}`,
     });
+
+    if (config.signingServerUrl) {
+      this.paymentAdapter = new AccountPaymentAdapter({
+        signingServerUrl: config.signingServerUrl,
+        userId: config.userId ?? "user_1",
+        network: config.network ?? "arlocal",
+        gateway,
+        ...(config.logger !== undefined ? { logger: config.logger } : {}),
+      });
+    }
   }
 
   /**

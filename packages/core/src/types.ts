@@ -40,11 +40,6 @@ export interface DStorageConfig {
   /** Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...) */
   chainAdapter: ChainAdapter;
   /**
-   * Payment adapter for storage network fees (AR, ANT, or MOCK).
-   * Defaults to MockPaymentAdapter with the token matching the storageAdapter.
-   */
-  storagePaymentAdapter?: PaymentAdapter;
-  /**
    * Payment adapter for blockchain transaction fees (DUST, ETH, or MOCK).
    * Defaults to MockPaymentAdapter with the token matching the chainAdapter.
    */

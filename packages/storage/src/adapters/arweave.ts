@@ -40,10 +40,13 @@
 
 import type {
   Logger,
+  PaymentAdapter,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
 } from "../types.js";
+import { ArweavePaymentAdapter } from "@dstorage/payment";
+import type { SignedArweaveUpload } from "@dstorage/payment";
 import storagePackageJson from "../../package.json";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -126,6 +129,7 @@ export const ARWEAVE_MAINNET: ArweaveGatewayConfig = {
 export class ArweaveStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = "arweave";
   readonly providerName: string = "Arweave";
+  paymentAdapter: PaymentAdapter;
 
   private readonly gateway: ArweaveGatewayConfig;
   private readonly walletKey: Record<string, string> | undefined;
@@ -147,6 +151,11 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     this.confirmationTimeoutMs =
       config.confirmationTimeoutMs ?? 20 * 60 * 1_000;
     this.logger = config.logger;
+    this.paymentAdapter = new ArweavePaymentAdapter({
+      gateway: this.gateway,
+      ...(this.walletKey !== undefined ? { walletKey: this.walletKey } : {}),
+      ...(this.logger !== undefined ? { logger: this.logger } : {}),
+    });
   }
 
   // ── Private: lazy Arweave client ──────────────────────────────────────────────
@@ -228,24 +237,43 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     }
 
     const arweave = await this.getClient();
-    const wallet = this.resolveWallet();
 
-    // Pre-flight: estimate cost so callers can surface it in the UI.
-    const bytes = data.byteLength;
-    const winstons = await arweave.transactions.getPrice(bytes);
-    const arCost = arweave.ar.winstonToAr(winstons) as string;
+    // ── Sign-then-post flow ────────────────────────────────────────────────────
+    // Signing is always delegated to the payment adapter:
+    //   • MetaTransaction path: provideUploadData → pay → [here] consumeSignedUpload → post
+    //   • Direct upload path:   [here] provideUploadData → pay → consumeSignedUpload → post
+    //
+    // This keeps the storage adapter agnostic about how signing happens (local
+    // wallet, ArConnect, or remote signing server via AccountPaymentAdapter).
+    const arwPayment = this.paymentAdapter as ArweavePaymentAdapter;
 
-    // Build the transaction — data is already encrypted by @dstorage/crypto.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx: any = await arweave.createTransaction({ data }, wallet);
+    // Consume any pre-signed tx from the MetaTransaction pay() step.
+    let signed: SignedArweaveUpload | null = arwPayment.consumeSignedUpload();
 
-    // Caller-supplied metadata (e.g. dstorage-owner, dstorage-version).
-    for (const [key, value] of Object.entries(metadata)) {
-      tx.addTag(key, value);
+    if (!signed) {
+      // Direct upload path — stage data and trigger signing via payment adapter.
+      arwPayment.provideUploadData(data, metadata);
+      const winstons = (await arweave.transactions.getPrice(
+        data.byteLength,
+      )) as string;
+      const amount = arweave.ar.winstonToAr(winstons) as string;
+      await arwPayment.pay({
+        token: "AR",
+        amount,
+        fiat_amount: "0",
+        type: "storage",
+        dataSizeBytes: data.byteLength,
+        expiresAt: Date.now() + 600_000,
+      });
+      signed = arwPayment.consumeSignedUpload();
+      if (!signed) {
+        throw new Error(
+          "[dStorage/arweave] Payment adapter did not produce a signed transaction.",
+        );
+      }
     }
 
-    // Sign — prompts ArConnect in the browser; uses JWK silently in Node.js.
-    await arweave.transactions.sign(tx, wallet);
+    const { tx, arCost } = signed;
 
     // Broadcast with retry.
     await this.postWithRetry(arweave, tx);
@@ -312,21 +340,34 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   private async postWithRetry(arweave: any, tx: any): Promise<void> {
     let lastError: Error | undefined;
 
+    this.logger?.log(
+      "dStorage/arweave",
+      `Posting tx id=${tx.id as string} owner=${(tx.owner as string)?.slice(0, 16)}… data_size=${tx.data_size as string} reward=${tx.reward as string}`,
+    );
+
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       const response = await arweave.transactions.post(tx);
 
       if (response.status === 200 || response.status === 202) return;
 
+      // Try to surface the response body — arweave-js wraps it in response.data
+      const detail: string =
+        typeof response.data === "string"
+          ? response.data
+          : response.data
+            ? JSON.stringify(response.data)
+            : "";
+
       lastError = new Error(
         `[dStorage/arweave] Transaction post failed ` +
           `(attempt ${attempt}/${this.maxRetries}): ` +
-          `HTTP ${response.status} ${response.statusText ?? ""}`.trimEnd(),
+          `HTTP ${response.status} ${response.statusText ?? ""}${detail ? ` — ${detail}` : ""}`.trimEnd(),
       );
       this.logger?.warn("dStorage/arweave", lastError.message);
 
       if (attempt < this.maxRetries) {
         // Linear back-off: 1 s, 2 s, 3 s…
-        await sleep(1_000 * attempt);
+        await sleep(1_000* attempt);
       }
     }
 

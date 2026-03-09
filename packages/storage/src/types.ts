@@ -4,6 +4,9 @@
  * This is the plugin contract.
  */
 
+import type { PaymentAdapter } from "@dstorage/payment";
+export type { PaymentAdapter };
+
 /**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
@@ -37,6 +40,8 @@ export interface UploadResult {
 export interface StorageAdapter {
   readonly name: StorageProviderName;
   readonly providerName: string;
+  /** Payment adapter responsible for paying storage network fees for this adapter. */
+  readonly paymentAdapter: PaymentAdapter;
 
   /**
    * Upload bytes to the storage network.

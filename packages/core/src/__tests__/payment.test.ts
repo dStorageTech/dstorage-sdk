@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   buildCostEstimate,
-  defaultStorageToken,
   defaultChainToken,
   TOKENS,
 } from "../payment.js";
@@ -169,30 +168,6 @@ describe("buildCostEstimate", () => {
       9 * 1024 * 1024,
     );
     expect(parseFloat(estimate.totalUsd)).toBeCloseTo(150.0, 5);
-  });
-});
-
-// ── defaultStorageToken ───────────────────────────────────────────────────────
-
-describe("defaultStorageToken", () => {
-  it("arweave → AR", () => {
-    expect(defaultStorageToken("arweave")).toBe("AR");
-  });
-
-  it("autonomi → ANT", () => {
-    expect(defaultStorageToken("autonomi")).toBe("ANT");
-  });
-
-  it("mock → MOCK", () => {
-    expect(defaultStorageToken("mock")).toBe("MOCK");
-  });
-
-  it("unknown provider → MOCK", () => {
-    expect(defaultStorageToken("some-future-provider")).toBe("MOCK");
-  });
-
-  it("empty string → MOCK", () => {
-    expect(defaultStorageToken("")).toBe("MOCK");
   });
 });
 

@@ -25,7 +25,6 @@ import type { PaymentAdapter } from "@dstorage/payment";
 import { MockPaymentAdapter } from "@dstorage/payment";
 import {
   buildCostEstimate,
-  defaultStorageToken,
   defaultChainToken,
 } from "./payment.js";
 import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
@@ -115,11 +114,6 @@ export interface MetaTxReceipt {
 export interface MetaTxConfig {
   /**
    * @deprecated Token is now determined by the payment adapter's `token` property.
-   * Pass a configured payment adapter via DStorageConfig.storagePaymentAdapter instead.
-   */
-  storageToken?: TokenSymbol;
-  /**
-   * @deprecated Token is now determined by the payment adapter's `token` property.
    * Pass a configured payment adapter via DStorageConfig.chainPaymentAdapter instead.
    */
   chainToken?: TokenSymbol;
@@ -145,7 +139,6 @@ export interface MetaTxConfig {
 export interface DStorageContext {
   readonly storageAdapter: StorageAdapter;
   readonly chainAdapter: ChainAdapter;
-  readonly storagePaymentAdapter: PaymentAdapter | undefined;
   readonly chainPaymentAdapter: PaymentAdapter | undefined;
   /** Wallet address of the connected user, or null if using init() / facade mode. */
   readonly connectedAddress: string | null;
@@ -272,14 +265,9 @@ export class MetaTransaction {
   constructor(sdk: DStorageContext) {
     this.sdk = sdk;
 
-    // Default to MockPaymentAdapter with the token that matches the chosen adapter,
-    // so existing code that doesn't configure payment adapters continues to work.
-    this.storagePaymentAdapter =
-      sdk.storagePaymentAdapter ??
-      new MockPaymentAdapter({
-        type: "storage",
-        token: defaultStorageToken(sdk.storageAdapter.name),
-      });
+    // Storage payment adapter is owned by the storage adapter itself.
+    this.storagePaymentAdapter = sdk.storageAdapter.paymentAdapter;
+    // Chain payment adapter can be overridden via DStorageConfig; falls back to Mock.
     this.chainPaymentAdapter =
       sdk.chainPaymentAdapter ??
       new MockPaymentAdapter({
@@ -331,6 +319,26 @@ export class MetaTransaction {
         `${estimate.fileSizeDisplay} encrypted (${(uploadData.byteLength / 1024).toFixed(1)} KB ciphertext)`,
       );
 
+      // Build upload metadata once — used by both provideUploadData and upload().
+      const uploadMetadata: Record<string, string> = {
+        "dstorage-version": "0.1.0",
+        "dstorage-owner": this.sdk.connectedAddress ?? "",
+        "dstorage-filename": file.name,
+        "dstorage-filetype": file.type,
+        "dstorage-filesize": String(file.size),
+        ...(config.contractAddress
+          ? { "dstorage-contract": config.contractAddress }
+          : {}),
+        ...(config.circuitId ? { "dstorage-circuit": config.circuitId } : {}),
+        ...(config.metadata ?? {}),
+      };
+
+      // If the storage payment adapter needs the data to build and sign the
+      // payment transaction before broadcasting (e.g. Arweave), provide it now.
+      if (this.storagePaymentAdapter.provideUploadData) {
+        this.storagePaymentAdapter.provideUploadData(uploadData, uploadMetadata);
+      }
+
       // ── Step 2: Storage payment ─────────────────────────────────────────
       this.startStep(
         "payment_storage",
@@ -350,18 +358,13 @@ export class MetaTransaction {
       // ── Step 3: Upload ──────────────────────────────────────────────────
       this.startStep("upload", `Uploading to ${this.sdk.storageAdapter.name}…`);
 
-      const uploadResult = await this.sdk.storageAdapter.upload(uploadData, {
-        "dstorage-version": "0.1.0",
-        "dstorage-owner": this.sdk.connectedAddress ?? "",
-        "dstorage-filename": file.name,
-        "dstorage-filetype": file.type,
-        "dstorage-filesize": String(file.size),
-        ...(config.contractAddress
-          ? { "dstorage-contract": config.contractAddress }
-          : {}),
-        ...(config.circuitId ? { "dstorage-circuit": config.circuitId } : {}),
-        ...(config.metadata ?? {}),
-      });
+      // Pass the same metadata to upload(). Storage adapters that consumed a
+      // pre-signed transaction (Arweave sign-then-post flow) will ignore it;
+      // others (Mock, Autonomi) use it to attach metadata to the upload.
+      const uploadResult = await this.sdk.storageAdapter.upload(
+        uploadData,
+        uploadMetadata,
+      );
 
       this.completeStep(
         "upload",

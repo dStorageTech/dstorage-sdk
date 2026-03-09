@@ -157,4 +157,23 @@ export interface PaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt>;
+
+  /**
+   * Optional hook called by MetaTransaction after encryption and before pay().
+   *
+   * Provides the actual upload payload (and optional metadata tags) to adapters
+   * that need the data to construct the payment transaction before signing.
+   *
+   * Example: Arweave bundles data + fee in one transaction object — it must have
+   * the data at sign time. MetaTransaction calls this immediately after encrypt
+   * so that pay() can create → tag → sign the transaction, and the storage
+   * adapter's upload() can then simply post the pre-signed transaction.
+   *
+   * Adapters that do not need the data (Mock, WalletManaged, Midnight) leave
+   * this unimplemented and MetaTransaction skips the call.
+   */
+  provideUploadData?(
+    data: Uint8Array,
+    metadata?: Record<string, string>,
+  ): void;
 }

@@ -32,6 +32,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import fs from "fs";
 import pino from "pino";
+import { config as loadEnv } from "dotenv";
 
 import { DStorage, type Logger as DStorageLogger } from "@dstorage/core";
 import {
@@ -41,6 +42,10 @@ import {
 import { MidnightChainAdapter } from "@dstorage/chain";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Load .env from the app directory (apps/demo-console/.env)
+loadEnv({ path: path.resolve(__dirname, "../.env") });
+
 const logger: DStorageLogger = {
   log: (component, msg) =>
     process.stderr.write(`[info] [${component}] ${msg}\n`),
@@ -146,37 +151,70 @@ async function main(): Promise<void> {
       ).trim() || defaults.proofServer;
 
     // ── 3. Mnemonic or hex seed ─────────────────────────────────────────────
-    console.log(
-      "\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).",
-    );
-    rl.close();
-    const seedInput = await promptSecret("Mnemonic / hex seed: ");
+    let seedRaw = process.env["DSTORAGE_SEED"]?.trim() ?? "";
+    if (seedRaw) {
+      console.log("\nSeed loaded from DSTORAGE_SEED env var.");
+    } else {
+      console.log(
+        "\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).",
+      );
+      rl.close();
+      seedRaw = (await promptSecret("Mnemonic / hex seed: ")).trim();
+      rl = createInterface({ input, output });
+      process.stdout.write("\n");
+    }
+    if (!seedRaw) throw new Error("Mnemonic or seed is required.");
 
-    rl = createInterface({ input, output });
-    process.stdout.write("\n");
-    if (!seedInput) throw new Error("Mnemonic or seed is required.");
-
-    const trimmed = seedInput.trim();
     const isHex =
-      /^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed);
-    const credentials = isHex ? { seedHex: trimmed } : { mnemonic: trimmed };
+      /^[0-9a-fA-F]{64}$/.test(seedRaw) ||
+      /^[0-9a-fA-F]{128}$/.test(seedRaw);
+    const credentials = isHex ? { seedHex: seedRaw } : { mnemonic: seedRaw };
 
     // ── 4. Contract address (optional) ──────────────────────────────────────
-    const contractAddressInput = (
-      await rl.question(
-        "\nDeployed DataRegistry contract address (leave blank to auto-deploy): ",
-      )
-    ).trim();
+    let contractAddressInput = process.env["DSTORAGE_CONTRACT_ADDRESS"]?.trim() ?? "";
+    if (contractAddressInput) {
+      console.log(
+        `\nContract address loaded from DSTORAGE_CONTRACT_ADDRESS env var: ${contractAddressInput}`,
+      );
+    } else {
+      contractAddressInput = (
+        await rl.question(
+          "\nDeployed DataRegistry contract address (leave blank to auto-deploy): ",
+        )
+      ).trim();
+    }
 
-    // ── 5. Build the storage adapter ──────────────────────────────────────────
+    // ── 5. dStorage cloud services prompt ─────────────────────────────────────
+    const SIGNING_SERVER_URL = "http://localhost:3000";
+    const useCloudInput = (
+      await rl.question(
+        `\nUse dStorage cloud services at ${SIGNING_SERVER_URL} for storage payments? [y/N, default: N]: `,
+      )
+    )
+      .trim()
+      .toLowerCase();
+    const useCloud = useCloudInput === "y" || useCloudInput === "yes";
+
+    if (useCloud) {
+      console.log(
+        `  Storage payments via dStorage cloud ${SIGNING_SERVER_URL}`,
+      );
+    }
+
+    // ── 6. Build the storage adapter ──────────────────────────────────────────
+    const userId = process.env["DSTORAGE_USER_ID"]?.trim() || "user_1";
+
     //const storageAdapter = new MockStorageAdapter();
     const storageAdapter = new ArweaveLocalStorageAdapter({
       walletKey: JSON.parse(
         fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
       ),
+      ...(useCloud
+        ? { signingServerUrl: SIGNING_SERVER_URL, userId }
+        : {}),
     });
 
-    // ── 6. Build the chain adapter ──────────────────────────────────────────
+    // ── 7. Build the chain adapter ──────────────────────────────────────────
     chainAdapter = new MidnightChainAdapter({
       network: networkName,
       walletMode: "facade",
@@ -193,7 +231,7 @@ async function main(): Promise<void> {
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
     });
 
-    // ── 7. Initialise the DStorage SDK ──────────────────────────────────────
+    // ── 8. Initialise the DStorage SDK ──────────────────────────────────────
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter,
@@ -212,7 +250,7 @@ async function main(): Promise<void> {
     );
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
-    // ── 8. Display addresses and balances ───────────────────────────────────
+    // ── 9. Display addresses and balances ───────────────────────────────────
     const addresses = chainAdapter.getAddresses();
     console.log("\nWallet addresses:");
     console.log(`  Unshielded: ${addresses.unshielded}`);
@@ -235,7 +273,7 @@ async function main(): Promise<void> {
       console.log(`DUST balance:  ${balances.dust}`);
     }
 
-    // ── 9. Action loop: upload files or list DataRegistry references ───────
+    // ── 10. Action loop: upload files or list DataRegistry references ───────
 
     console.log(
       "\n─── Actions ──────────────────────────────────────────────────────────",
