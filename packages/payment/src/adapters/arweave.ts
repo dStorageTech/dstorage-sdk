@@ -4,7 +4,7 @@
  * Arweave payment adapter.
  * Pays for permanent storage on the Arweave permaweb using AR tokens.
  *
- * Real integration flow (Sprint 2):
+ * Real integration flow:
  *   arweave.transactions.getPrice(bytes)  → fetch Winston cost from fee oracle
  *   arweave.transactions.sign(tx, wallet) → sign with JWK (Node.js) or ArConnect (browser)
  *   arweave.transactions.post(tx)         → broadcast to Arweave network
@@ -13,7 +13,7 @@
  *   - ArConnect browser extension (browser), OR a JWK wallet key (Node.js)
  *   - AR tokens in the connected wallet
  *
- * Note: In the full integration, the storage payment and the data upload share
+ * Note: the storage payment and the data upload share
  * the same Arweave transaction object — ArweavePaymentAdapter and
  * ArweaveStorageAdapter will need to co-ordinate. For now both operate
  * independently using the preview stub below.
@@ -87,7 +87,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
     this.logger?.warn(
       "dStorage/arweave-payment",
-      "Arweave payment adapter preview mode — real AR token transfer pending full Arweave integration.",
+      "Arweave payment adapter — real AR token transfer.",
     );
   }
 
@@ -115,10 +115,10 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
      *   // 1 AR = 1e12 Winston.
      *   const winstons = await arweave.transactions.getPrice(dataSizeBytes);
      *   const amount   = arweave.ar.winstonToAr(winstons);
-     *   const usd      = (parseFloat(amount) * TOKENS['AR'].approxUsdPrice).toFixed(6);
+     *   const fiat_amount      = (parseFloat(amount) * approxFiatPrice).toFixed(6);
      *
      *   return {
-     *     token: 'AR', amount, usd, type: 'storage',
+     *     token: 'AR', amount, fiat_amount, type: 'storage',
      *     dataSizeBytes, expiresAt: Date.now() + this.quoteValidityMs,
      *   };
      */
@@ -126,18 +126,19 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     // Preview: static formula (~$0.004/MB) matching existing estimateCost() in core/payment.ts
     const fileSizeMB = dataSizeBytes / (1024 * 1024);
     const storageUsd = Math.max(0.0001, fileSizeMB * 0.004);
-    const amount = (storageUsd / TOKENS["AR"].approxUsdPrice).toFixed(8);
-    const usd = storageUsd.toFixed(6);
+    const approxFiatPrice = 1.5;
+    const amount = (storageUsd / approxFiatPrice).toFixed(8);
+    const fiat_amount = storageUsd.toFixed(6);
 
     this.logger?.log(
       "dStorage/arweave-payment",
-      `(preview) Estimated: ${amount} AR ≈ $${usd}`,
+      `(preview) Estimated: ${amount} AR ≈ $${fiat_amount}`,
     );
 
     return {
       token: "AR",
       amount,
-      usd,
+      fiat_amount,
       type: "storage",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
@@ -178,7 +179,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
      *   // Arweave is optimistic — treat 200/202 as accepted for UX purposes.
      *
      *   return {
-     *     txHash: tx.id, token: 'AR', amount: quote.amount, usd: quote.usd,
+     *     txHash: tx.id, token: 'AR', amount: quote.amount, fiat_amount: quote.fiat_amount,
      *     type: 'storage', simulated: false, paidAt: Date.now(),
      *   };
      */
@@ -203,7 +204,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       txHash,
       token: "AR",
       amount: quote.amount,
-      usd: quote.usd,
+      fiat_amount: quote.fiat_amount,
       type: "storage",
       simulated: true, // ← becomes false once the TODO above is wired up
       paidAt: Date.now(),

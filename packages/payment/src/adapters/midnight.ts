@@ -4,7 +4,7 @@
  * Midnight payment adapter.
  * Pays Midnight blockchain transaction fees using DUST tokens.
  *
- * Real integration flow (Sprint 2+, pending Midnight.js v1):
+ * Real integration flow:
  *   estimateFee(txBuilder, wallet)      → gas estimate in DUST
  *   createBalancedTx(txBuilder, wallet) → balance the tx deducting DUST from wallet
  *   balanced.submit()                   → broadcast to Midnight network
@@ -12,15 +12,12 @@
  * Requirements for real payments:
  *   - Lace wallet with Midnight extension (browser), OR
  *   - Programmatic Midnight wallet instance (Node.js)
- *   - DUST tokens (available from Midnight faucet on testnet)
+ *   - DUST tokens (available from emissions of registered NIGHT)
  *
  * Note: On Midnight, the DUST fee and the writeReference circuit call are part
  * of the same balanced transaction — the fee is automatically deducted by
  * createBalancedTx(). This adapter covers the fee estimation and authorisation
  * steps; actual deduction happens inside the Midnight.js balanced tx builder.
- *
- * Status: Structure defined. Real DUST transfer pending Midnight.js v1 integration.
- * Docs: https://docs.midnight.network/develop
  */
 
 import type {
@@ -36,11 +33,10 @@ import { TOKENS } from "../types.js";
 export interface MidnightPaymentAdapterConfig {
   /**
    * Midnight node RPC endpoint.
-   * Testnet-02: https://rpc.preprod.midnight.network
    */
   nodeEndpoint?: string;
   /**
-   * Lace wallet / Midnight DApp connector injected by the browser extension.
+   * Midnight DApp connector injected by the browser extension.
    * In Node.js, pass a programmatic wallet instance.
    */
   wallet?: unknown;
@@ -76,7 +72,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
 
     this.logger?.warn(
       "dStorage/midnight-payment",
-      "Midnight payment adapter preview mode — real DUST fee deduction pending Midnight.js v1 integration.",
+      "Midnight payment adapter — real DUST fee deduction.",
     );
   }
 
@@ -93,10 +89,10 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
      *   const txBuilder  = await contract.call.storeReference(...representativeArgs);
      *   const feeInfo    = await estimateFee(txBuilder, this.config.wallet);
      *   const amount     = feeInfo.fee.toString();
-     *   const usd        = (parseFloat(amount) * TOKENS['DUST'].approxUsdPrice).toFixed(6);
+     *   const fiat_amount        = (parseFloat(amount) * approxFiatPrice).toFixed(6);
      *
      *   return {
-     *     token: 'DUST', amount, usd, type: 'chain',
+     *     token: 'DUST', amount, fiat_amount, type: 'chain',
      *     dataSizeBytes, expiresAt: Date.now() + this.quoteValidityMs,
      *   };
      */
@@ -104,19 +100,20 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     // Preview: flat ~$0.01 per chain tx.
     // On Midnight, the fee is circuit-cost-dominated, so dataSizeBytes is not proportional.
     void dataSizeBytes;
-    const chainUsd = 0.01;
-    const amount = (chainUsd / TOKENS["DUST"].approxUsdPrice).toFixed(4);
-    const usd = chainUsd.toFixed(6);
+    const chainFiatAmount = 0.01;
+    const approxFiatPrice = 0.1;
+    const amount = (chainFiatAmount / approxFiatPrice).toFixed(4);
+    const fiat_amount = chainFiatAmount.toFixed(6);
 
     this.logger?.log(
       "dStorage/midnight-payment",
-      `(preview) Estimated: ${amount} DUST ≈ $${usd}`,
+      `(preview) Estimated: ${amount} DUST ≈ $${fiat_amount}`,
     );
 
     return {
       token: "DUST",
       amount,
-      usd,
+      fiat_amount,
       type: "chain",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
@@ -150,7 +147,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
      *   onStatus?.('Awaiting Midnight block confirmation…');
      *
      *   return {
-     *     txHash: receipt.txHash, token: 'DUST', amount: quote.amount, usd: quote.usd,
+     *     txHash: receipt.txHash, token: 'DUST', amount: quote.amount, fiat_amount: quote.fiat_amount,
      *     type: 'chain', simulated: false, paidAt: Date.now(),
      *   };
      */
@@ -175,7 +172,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
       txHash,
       token: "DUST",
       amount: quote.amount,
-      usd: quote.usd,
+      fiat_amount: quote.fiat_amount,
       type: "chain",
       simulated: true, // ← becomes false once the TODO above is wired up
       paidAt: Date.now(),

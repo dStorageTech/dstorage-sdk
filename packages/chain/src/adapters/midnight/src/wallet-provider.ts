@@ -114,7 +114,7 @@ export class MidnightWalletProvider
     };
 
     const initialState = await getInitialShieldedState(wallet.shielded, logger);
-    /*console.log(
+    /*logger?.log(
       `Your wallet address is: ${initialState.address.coinPublicKeyString()}`,
     );*/
 

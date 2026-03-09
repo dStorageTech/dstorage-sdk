@@ -4,8 +4,7 @@
  * Token definitions and the PaymentAdapter interface.
  *
  * Every payment adapter (Mock, Arweave, Midnight, …) must implement PaymentAdapter.
- * Token definitions live here and are re-exported from @dstorage/core for
- * backward compatibility.
+ * Token definitions live here and are re-exported from @dstorage/core.
  */
 
 /**
@@ -30,34 +29,30 @@ export interface Token {
   symbol: TokenSymbol;
   name: string;
   decimals: number;
-  /** Approximate USD price — informational only, used for display */
-  approxUsdPrice: number;
 }
 
 /** Registry of all tokens the SDK knows about. */
 export const TOKENS: Record<TokenSymbol, Token> = {
-  AR: { symbol: "AR", name: "Arweave", decimals: 12, approxUsdPrice: 22.5 },
-  ANT: { symbol: "ANT", name: "Autonomi", decimals: 9, approxUsdPrice: 0.08 },
-  DUST: { symbol: "DUST", name: "Midnight", decimals: 6, approxUsdPrice: 0.15 },
-  ETH: { symbol: "ETH", name: "Ethereum", decimals: 18, approxUsdPrice: 3200 },
+  AR: { symbol: "AR", name: "Arweave", decimals: 12 },
+  ANT: { symbol: "ANT", name: "Autonomi", decimals: 9 },
+  DUST: { symbol: "DUST", name: "Midnight", decimals: 6 },
+  ETH: { symbol: "ETH", name: "Ethereum", decimals: 18 },
   MATIC: {
     symbol: "MATIC",
     name: "Polygon",
     decimals: 18,
-    approxUsdPrice: 0.95,
   },
   MOCK: {
     symbol: "MOCK",
     name: "Mock Token",
     decimals: 6,
-    approxUsdPrice: 1.0,
   },
 };
 
 // ── Provider name ─────────────────────────────────────────────────────────────
 
 /** Identifies which payment provider an adapter connects to. */
-export type PaymentProviderName = "mock" | "arweave" | "midnight";
+export type PaymentProviderName = "mock" | "arweave" | "midnight" | "dstorage";
 
 // ── PaymentQuote ──────────────────────────────────────────────────────────────
 
@@ -74,12 +69,12 @@ export interface PaymentQuote {
   /** Amount in the native token (string to preserve precision) */
   amount: string;
   /** Approximate USD equivalent — for display only */
-  usd: string;
+  fiat_amount: string;
   /** Whether this covers a storage network fee or a chain transaction fee */
   type: "storage" | "chain";
   /** File size used to derive this quote */
   dataSizeBytes: number;
-  /** Unix timestamp after which this quote should be refreshed */
+  /** Timestamp after which this quote should be refreshed */
   expiresAt: number;
 }
 
@@ -87,17 +82,16 @@ export interface PaymentQuote {
 
 /**
  * Proof of a completed payment returned by PaymentAdapter.pay().
- * Stored in MetaTxReceipt as storagePayment and chainPayment.
  */
 export interface PaymentReceipt {
-  /** On-chain transaction hash, or a simulated equivalent */
+  /** On-chain transaction hash, or equivalent */
   txHash: string;
   /** Token used for payment */
   token: TokenSymbol;
   /** Amount paid in the native token */
   amount: string;
-  /** USD equivalent at time of payment */
-  usd: string;
+  /** Fiat equivalent at time of payment */
+  fiat_amount: string;
   /** What this payment covered */
   type: "storage" | "chain";
   /**
@@ -105,7 +99,7 @@ export interface PaymentReceipt {
    * false — a real on-chain transaction was submitted.
    */
   simulated: boolean;
-  /** Unix timestamp of payment confirmation */
+  /** Timestamp of payment confirmation */
   paidAt: number;
 }
 
@@ -120,11 +114,6 @@ export interface PaymentReceipt {
  *
  * The adapter pattern lets you swap real payment networks without touching
  * any orchestration code.
- *
- * Available adapters:
- *   MockPaymentAdapter     — simulated payments for development and demos
- *   ArweavePaymentAdapter  — real AR token payments for Arweave storage
- *   MidnightPaymentAdapter — real DUST token payments for Midnight chain fees
  */
 export interface PaymentAdapter {
   /** Which payment provider this adapter connects to */

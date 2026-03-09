@@ -4,7 +4,7 @@
  * Payment utilities for the core orchestration layer.
  *
  * Token definitions (TokenSymbol, Token, TOKENS) and the PaymentReceipt type
- * are defined in @dstorage/payment and re-exported here for backward compatibility.
+ * are defined in @dstorage/payment and re-exported here.
  *
  * This file owns:
  *   - CostEstimate — the UI-facing aggregation of two PaymentQuotes shown in MetaTxProgress
@@ -13,8 +13,13 @@
  *     adapter is configured, to instantiate the correct MockPaymentAdapter defaults
  */
 
-// Re-export token primitives from @dstorage/payment for backward compatibility
-export type { TokenSymbol, Token, PaymentReceipt } from "@dstorage/payment";
+// Re-export token primitives from @dstorage/payment
+export type {
+  TokenSymbol,
+  Token,
+  PaymentReceipt,
+  PaymentQuote,
+} from "@dstorage/payment";
 export { TOKENS } from "@dstorage/payment";
 
 import type { PaymentQuote, TokenSymbol } from "@dstorage/payment";
@@ -30,12 +35,12 @@ export interface CostEstimate {
   storageCost: {
     amount: string;
     token: TokenSymbol;
-    usd: string;
+    fiat_amount: string;
   };
   chainCost: {
     amount: string;
     token: TokenSymbol;
-    usd: string;
+    fiat_amount: string;
   };
   /** Combined total in USD (approximate) */
   totalUsd: string;
@@ -61,19 +66,19 @@ export function buildCostEstimate(
       : `${fileSizeMB.toFixed(2)} MB`;
 
   const totalUsd = (
-    parseFloat(storageQuote.usd) + parseFloat(chainQuote.usd)
+    parseFloat(storageQuote.fiat_amount) + parseFloat(chainQuote.fiat_amount)
   ).toFixed(6);
 
   return {
     storageCost: {
       amount: storageQuote.amount,
       token: storageQuote.token,
-      usd: storageQuote.usd,
+      fiat_amount: storageQuote.fiat_amount,
     },
     chainCost: {
       amount: chainQuote.amount,
       token: chainQuote.token,
-      usd: chainQuote.usd,
+      fiat_amount: chainQuote.fiat_amount,
     },
     totalUsd,
     fileSizeBytes,

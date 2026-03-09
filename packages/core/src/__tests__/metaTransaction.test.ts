@@ -26,7 +26,7 @@ class InstantPaymentAdapter implements PaymentAdapter {
     return {
       token: "MOCK",
       amount: "0.001",
-      usd: "0.001",
+      fiat_amount: "0.001",
       type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + 600_000,
@@ -43,7 +43,7 @@ class InstantPaymentAdapter implements PaymentAdapter {
       txHash: `0x${"a".repeat(64)}`,
       token: "MOCK",
       amount: quote.amount,
-      usd: quote.usd,
+      fiat_amount: quote.fiat_amount,
       type: quote.type,
       paidAt: Date.now(),
       simulated: true,

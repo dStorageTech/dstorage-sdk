@@ -52,7 +52,7 @@ export const syncWallet = (
   return Rx.firstValueFrom(
     wallet.state().pipe(
       /*Rx.tap((state) => {
-        console.log(
+        logger?.log(
           `Wallet synced state emission: { shielded=${state.shielded.state.progress.isStrictlyComplete()}, unshielded=${state.unshielded.progress.isStrictlyComplete()}, dust=${state.dust.state.progress.isStrictlyComplete()} }`,
         );
       }),*/
@@ -63,7 +63,7 @@ export const syncWallet = (
           state.dust.state.progress.isStrictlyComplete() &&
           state.unshielded.progress?.isStrictlyComplete() === true;
 
-        /*console.log(
+        /*logger?.log(
           `Wallet synced state emission (synced=${isSynced}): { shielded=${state.shielded.state.progress.isStrictlyComplete()}, unshielded=${state.unshielded.progress.isStrictlyComplete()}, dust=${state.dust.state.progress.isStrictlyComplete()} }`,
         );*/
       }),

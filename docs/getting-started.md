@@ -633,7 +633,7 @@ You can also estimate costs separately before committing:
 
 ```typescript
 const estimate = await ds.estimateCost(content);
-// { storageCost: { amount, token, usd }, chainCost: { amount, token, usd }, totalUsd }
+// { storageCost: { amount, token, fiat_amount }, chainCost: { amount, token, fiat_amount }, totalUsd }
 ```
 
 ### Flow 4: Node.js / Programmatic (No Browser Wallet)

@@ -68,7 +68,7 @@ describe("MockPaymentAdapter", () => {
       const quote = await adapter.estimateCost(1024);
       expect(quote).toHaveProperty("token");
       expect(quote).toHaveProperty("amount");
-      expect(quote).toHaveProperty("usd");
+      expect(quote).toHaveProperty("fiat_amount");
       expect(quote).toHaveProperty("type");
       expect(quote).toHaveProperty("dataSizeBytes");
       expect(quote).toHaveProperty("expiresAt");
@@ -113,13 +113,13 @@ describe("MockPaymentAdapter", () => {
       );
     });
 
-    it("usd is the token amount multiplied by approxUsdPrice", async () => {
-      // MOCK token: approxUsdPrice = 1.0, so usd ≈ amount
+    it("fiat_amount is the token amount multiplied by approx fiat price", async () => {
       const adapter = makeStorageAdapter("MOCK");
       const quote = await adapter.estimateCost(1024 * 1024); // 1 MB
       const amount = parseFloat(quote.amount);
-      const usd = parseFloat(quote.usd);
-      expect(usd).toBeCloseTo(amount * 1.0, 5);
+      const fiat_amount = parseFloat(quote.fiat_amount);
+      // MOCK token: approxUsdPrice = 1.5
+      expect(fiat_amount).toBeCloseTo(amount * 1.5, 5);
     });
 
     it("expiresAt is in the future", async () => {
@@ -148,11 +148,11 @@ describe("MockPaymentAdapter", () => {
       expect(delta).toBeLessThan(65_000);
     });
 
-    it("amount and usd are numeric strings (parseable as float)", async () => {
+    it("amount and fiat_amount are numeric strings (parseable as float)", async () => {
       const adapter = makeStorageAdapter();
       const quote = await adapter.estimateCost(1024);
       expect(isNaN(parseFloat(quote.amount))).toBe(false);
-      expect(isNaN(parseFloat(quote.usd))).toBe(false);
+      expect(isNaN(parseFloat(quote.fiat_amount))).toBe(false);
     });
   });
 
@@ -217,7 +217,7 @@ describe("MockPaymentAdapter", () => {
       expect(receipt.token).toBe("AR");
     });
 
-    it("amount and usd match the quote", async () => {
+    it("amount and fiat_amount match the quote", async () => {
       vi.useFakeTimers();
       const adapter = makeStorageAdapter();
       const quote = await adapter.estimateCost(1024);
@@ -225,7 +225,7 @@ describe("MockPaymentAdapter", () => {
       await vi.runAllTimersAsync();
       const receipt = await p;
       expect(receipt.amount).toBe(quote.amount);
-      expect(receipt.usd).toBe(quote.usd);
+      expect(receipt.fiat_amount).toBe(quote.fiat_amount);
     });
 
     it("type matches the quote type", async () => {

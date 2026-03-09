@@ -344,7 +344,7 @@ export class MetaTransaction {
 
       this.completeStep(
         "payment_storage",
-        `${storageReceipt.amount} ${storageReceipt.token} ≈ $${storageReceipt.usd}`,
+        `${storageReceipt.amount} ${storageReceipt.token} ≈ $${storageReceipt.fiat_amount}`,
       );
 
       // ── Step 3: Upload ──────────────────────────────────────────────────
@@ -381,7 +381,7 @@ export class MetaTransaction {
 
       this.completeStep(
         "payment_chain",
-        `${chainReceipt.amount} ${chainReceipt.token} ≈ $${chainReceipt.usd}`,
+        `${chainReceipt.amount} ${chainReceipt.token} ≈ $${chainReceipt.fiat_amount}`,
       );
 
       // ── Step 5: On-chain reference ───────────────────────────────────────

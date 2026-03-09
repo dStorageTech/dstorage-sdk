@@ -13,7 +13,7 @@ function makeStorageQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
   return {
     token: "AR",
     amount: "0.001234",
-    usd: "0.012340",
+    fiat_amount: "0.012340",
     type: "storage",
     dataSizeBytes: 1024,
     expiresAt: Date.now() + 600_000,
@@ -25,7 +25,7 @@ function makeChainQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
   return {
     token: "DUST",
     amount: "0.000500",
-    usd: "0.000250",
+    fiat_amount: "0.000250",
     type: "chain",
     dataSizeBytes: 1024,
     expiresAt: Date.now() + 600_000,
@@ -58,33 +58,33 @@ describe("buildCostEstimate", () => {
     expect(estimate).toHaveProperty("fileSizeDisplay");
   });
 
-  it("storageCost carries amount, token, and usd from storageQuote", () => {
+  it("storageCost carries amount, token, and fiat_amount from storageQuote", () => {
     const storageQuote = makeStorageQuote({
       amount: "1.23",
       token: "AR",
-      usd: "12.30",
+      fiat_amount: "12.30",
     });
     const estimate = buildCostEstimate(storageQuote, makeChainQuote(), 1024);
     expect(estimate.storageCost.amount).toBe("1.23");
     expect(estimate.storageCost.token).toBe("AR");
-    expect(estimate.storageCost.usd).toBe("12.30");
+    expect(estimate.storageCost.fiat_amount).toBe("12.30");
   });
 
-  it("chainCost carries amount, token, and usd from chainQuote", () => {
+  it("chainCost carries amount, token, and fiat_amount from chainQuote", () => {
     const chainQuote = makeChainQuote({
       amount: "0.05",
       token: "DUST",
-      usd: "0.025",
+      fiat_amount: "0.025",
     });
     const estimate = buildCostEstimate(makeStorageQuote(), chainQuote, 512);
     expect(estimate.chainCost.amount).toBe("0.05");
     expect(estimate.chainCost.token).toBe("DUST");
-    expect(estimate.chainCost.usd).toBe("0.025");
+    expect(estimate.chainCost.fiat_amount).toBe("0.025");
   });
 
-  it("totalUsd is the sum of storageQuote.usd and chainQuote.usd", () => {
-    const storageQuote = makeStorageQuote({ usd: "0.100000" });
-    const chainQuote = makeChainQuote({ usd: "0.050000" });
+  it("totalUsd is the sum of storageQuote.fiat_amount and chainQuote.fiat_amount", () => {
+    const storageQuote = makeStorageQuote({ fiat_amount: "0.100000" });
+    const chainQuote = makeChainQuote({ fiat_amount: "0.050000" });
     const estimate = buildCostEstimate(storageQuote, chainQuote, 1024);
     expect(parseFloat(estimate.totalUsd)).toBeCloseTo(0.15, 5);
   });
@@ -154,15 +154,15 @@ describe("buildCostEstimate", () => {
   });
 
   it("totalUsd is zero when both quotes are zero", () => {
-    const zeroStorage = makeStorageQuote({ usd: "0.000000" });
-    const zeroChain = makeChainQuote({ usd: "0.000000" });
+    const zeroStorage = makeStorageQuote({ fiat_amount: "0.000000" });
+    const zeroChain = makeChainQuote({ fiat_amount: "0.000000" });
     const estimate = buildCostEstimate(zeroStorage, zeroChain, 100);
     expect(parseFloat(estimate.totalUsd)).toBe(0);
   });
 
   it("handles large USD amounts without precision loss", () => {
-    const storageQuote = makeStorageQuote({ usd: "100.000000" });
-    const chainQuote = makeChainQuote({ usd: "50.000000" });
+    const storageQuote = makeStorageQuote({ fiat_amount: "100.000000" });
+    const chainQuote = makeChainQuote({ fiat_amount: "50.000000" });
     const estimate = buildCostEstimate(
       storageQuote,
       chainQuote,
