@@ -166,12 +166,12 @@ async function main(): Promise<void> {
     if (!seedRaw) throw new Error("Mnemonic or seed is required.");
 
     const isHex =
-      /^[0-9a-fA-F]{64}$/.test(seedRaw) ||
-      /^[0-9a-fA-F]{128}$/.test(seedRaw);
+      /^[0-9a-fA-F]{64}$/.test(seedRaw) || /^[0-9a-fA-F]{128}$/.test(seedRaw);
     const credentials = isHex ? { seedHex: seedRaw } : { mnemonic: seedRaw };
 
     // ── 4. Contract address (optional) ──────────────────────────────────────
-    let contractAddressInput = process.env["DSTORAGE_CONTRACT_ADDRESS"]?.trim() ?? "";
+    let contractAddressInput =
+      process.env["DSTORAGE_CONTRACT_ADDRESS"]?.trim() ?? "";
     if (contractAddressInput) {
       console.log(
         `\nContract address loaded from DSTORAGE_CONTRACT_ADDRESS env var: ${contractAddressInput}`,
@@ -209,9 +209,7 @@ async function main(): Promise<void> {
       walletKey: JSON.parse(
         fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
       ),
-      ...(useCloud
-        ? { signingServerUrl: SIGNING_SERVER_URL, userId }
-        : {}),
+      ...(useCloud ? { signingServerUrl: SIGNING_SERVER_URL, userId } : {}),
     });
 
     // ── 7. Build the chain adapter ──────────────────────────────────────────
@@ -273,7 +271,7 @@ async function main(): Promise<void> {
       console.log(`DUST balance:  ${balances.dust}`);
     }
 
-    // ── 10. Action loop: upload files or list DataRegistry references ───────
+    // ── 10. Action loop: upload files or list DataRegistry references ──────
 
     console.log(
       "\n─── Actions ──────────────────────────────────────────────────────────",

@@ -88,7 +88,10 @@ export class MockStorageAdapter implements StorageAdapter {
 
   constructor(logger?: Logger) {
     this.logger = logger;
-    this.paymentAdapter = new MockPaymentAdapter({ token: "MOCK", type: "storage" });
+    this.paymentAdapter = new MockPaymentAdapter({
+      token: "MOCK",
+      type: "storage",
+    });
   }
 
   async upload(

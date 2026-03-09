@@ -332,7 +332,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     if (config.signingServerUrl) {
       this.paymentAdapter = new AccountPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
-        userId: config.userId ?? "user_1",
+        userId: config.userId ?? "",
         network: config.network ?? "arlocal",
         gateway,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),

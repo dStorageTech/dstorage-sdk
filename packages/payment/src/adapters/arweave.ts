@@ -97,10 +97,10 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
   readonly type: "storage" | "chain" = "storage";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private arweaveClient: any;
-  private readonly gateway: ArweavePaymentAdapterConfig["gateway"];
+  protected arweaveClient: any;
+  protected readonly gateway: ArweavePaymentAdapterConfig["gateway"];
   private readonly walletKey: Record<string, string> | undefined;
-  private readonly quoteValidityMs: number;
+  protected readonly quoteValidityMs: number;
   protected readonly logger: Logger | undefined;
 
   protected pendingUpload: PendingUpload | null = null;
@@ -117,7 +117,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     this.logger = config.logger;
   }
 
-  // ── Private: lazy Arweave client ─────────────────────────────────────────────
+  // ── Protected: lazy Arweave client ───────────────────────────────────────────
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected async getClient(): Promise<any> {
@@ -133,10 +133,10 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     }
   }
 
-  // ── Private: wallet resolution ────────────────────────────────────────────────
+  // ── Protected: wallet resolution ─────────────────────────────────────────────
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private resolveWallet(): any {
+  protected resolveWallet(): any {
     if (this.walletKey && Object.keys(this.walletKey).length > 0) {
       return this.walletKey;
     }
@@ -218,9 +218,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
   ): Promise<PaymentReceipt> {
     if (!this.pendingUpload) {
       // Fallback: payment handled inside upload()
-      onStatus?.(
-        "AR fee will be deducted as part of the upload transaction.",
-      );
+      onStatus?.("AR fee will be deducted as part of the upload transaction.");
       return {
         txHash: "arweave-bundled-with-upload",
         token: "AR",

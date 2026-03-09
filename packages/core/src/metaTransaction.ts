@@ -23,10 +23,7 @@ import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import type { PaymentAdapter } from "@dstorage/payment";
 import { MockPaymentAdapter } from "@dstorage/payment";
-import {
-  buildCostEstimate,
-  defaultChainToken,
-} from "./payment.js";
+import { buildCostEstimate, defaultChainToken } from "./payment.js";
 import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
 
 // ── Step definitions ──────────────────────────────────────────────────────────
@@ -336,7 +333,10 @@ export class MetaTransaction {
       // If the storage payment adapter needs the data to build and sign the
       // payment transaction before broadcasting (e.g. Arweave), provide it now.
       if (this.storagePaymentAdapter.provideUploadData) {
-        this.storagePaymentAdapter.provideUploadData(uploadData, uploadMetadata);
+        this.storagePaymentAdapter.provideUploadData(
+          uploadData,
+          uploadMetadata,
+        );
       }
 
       // ── Step 2: Storage payment ─────────────────────────────────────────

@@ -47,7 +47,10 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     this.config = config;
     this.logger = config.logger;
     // TODO: replace with real AutonomiPaymentAdapter once ANT JS SDK is stable
-    this.paymentAdapter = new MockPaymentAdapter({ token: "ANT", type: "storage" });
+    this.paymentAdapter = new MockPaymentAdapter({
+      token: "ANT",
+      type: "storage",
+    });
     this.logger?.warn(
       "dStorage/autonomi",
       "Autonomi adapter is in preview. Real network integration pending JS SDK stability. Data is stored in memory for now.",

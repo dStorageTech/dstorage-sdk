@@ -172,8 +172,5 @@ export interface PaymentAdapter {
    * Adapters that do not need the data (Mock, WalletManaged, Midnight) leave
    * this unimplemented and MetaTransaction skips the call.
    */
-  provideUploadData?(
-    data: Uint8Array,
-    metadata?: Record<string, string>,
-  ): void;
+  provideUploadData?(data: Uint8Array, metadata?: Record<string, string>): void;
 }

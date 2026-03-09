@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildCostEstimate,
-  defaultChainToken,
-  TOKENS,
-} from "../payment.js";
+import { buildCostEstimate, defaultChainToken, TOKENS } from "../payment.js";
 import type { PaymentQuote } from "../payment.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

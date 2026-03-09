@@ -132,7 +132,6 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   paymentAdapter: PaymentAdapter;
 
   private readonly gateway: ArweaveGatewayConfig;
-  private readonly walletKey: Record<string, string> | undefined;
   private readonly maxRetries: number;
   private readonly shouldWaitForConfirm: boolean;
   private readonly confirmationPollMs: number;
@@ -144,7 +143,6 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   constructor(config: ArweaveAdapterConfig = {}) {
     this.gateway = config.gateway ?? ARWEAVE_MAINNET;
-    this.walletKey = config.walletKey;
     this.maxRetries = config.maxRetries ?? 3;
     this.shouldWaitForConfirm = config.waitForConfirmation ?? false;
     this.confirmationPollMs = config.confirmationPollMs ?? 30_000;
@@ -153,8 +151,10 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     this.logger = config.logger;
     this.paymentAdapter = new ArweavePaymentAdapter({
       gateway: this.gateway,
-      ...(this.walletKey !== undefined ? { walletKey: this.walletKey } : {}),
-      ...(this.logger !== undefined ? { logger: this.logger } : {}),
+      ...(config.walletKey !== undefined
+        ? { walletKey: config.walletKey }
+        : {}),
+      ...(config.logger !== undefined ? { logger: config.logger } : {}),
     });
   }
 
@@ -175,46 +175,6 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           "Install it with: npm install arweave",
       );
     }
-  }
-
-  // ── Private: wallet resolution ────────────────────────────────────────────────
-
-  /**
-   * Returns the wallet to pass to arweave-js:
-   *   - Node.js  → the JWK key object from config
-   *   - Browser  → the 'use_wallet' sentinel (arweave-js delegates to ArConnect)
-   *
-   * Throws a clear, actionable error if the required wallet isn't available.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private resolveWallet(): any {
-    // If a walletKey was provided, use it directly — works in both Node.js and browser.
-    if (this.walletKey && Object.keys(this.walletKey).length > 0) {
-      return this.walletKey as Record<string, string>;
-    }
-
-    if (typeof window === "undefined") {
-      // Node.js without walletKey.
-      throw new Error(
-        "[dStorage/arweave] Node.js usage requires a JWK walletKey.\n" +
-          "Pass it in the constructor:\n" +
-          "  new ArweaveStorageAdapter({\n" +
-          '    walletKey: JSON.parse(fs.readFileSync("wallet.json", "utf8")),\n' +
-          "  })",
-      );
-    }
-
-    // Browser without walletKey — delegate signing to ArConnect.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof (window as any).arweaveWallet === "undefined") {
-      throw new Error(
-        "[dStorage/arweave] ArConnect extension not found in the browser.\n" +
-          "Install it from https://arconnect.io and reload the page.",
-      );
-    }
-
-    // 'use_wallet' is the arweave-js sentinel for "delegate signing to ArConnect".
-    return "use_wallet";
   }
 
   // ── upload ─────────────────────────────────────────────────────────────────────
@@ -251,6 +211,10 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     let signed: SignedArweaveUpload | null = arwPayment.consumeSignedUpload();
 
     if (!signed) {
+      this.logger?.log(
+        "dStorage/arweave",
+        `Funding data storage transaction with ${arwPayment.name}...`,
+      );
       // Direct upload path — stage data and trigger signing via payment adapter.
       arwPayment.provideUploadData(data, metadata);
       const winstons = (await arweave.transactions.getPrice(
@@ -367,7 +331,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
       if (attempt < this.maxRetries) {
         // Linear back-off: 1 s, 2 s, 3 s…
-        await sleep(1_000* attempt);
+        await sleep(1_000 * attempt);
       }
     }
 

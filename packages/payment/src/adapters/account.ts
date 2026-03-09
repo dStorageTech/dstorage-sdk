@@ -44,7 +44,11 @@
  *     postWithRetry(arweave, tx)         ← broadcasts to Arweave network
  */
 
-import type { PaymentProviderName, PaymentQuote, PaymentReceipt } from "../types.js";
+import type {
+  PaymentProviderName,
+  PaymentQuote,
+  PaymentReceipt,
+} from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
 
@@ -59,8 +63,10 @@ function uint8ArrayToBase64url(bytes: Uint8Array): string {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-export interface AccountPaymentAdapterConfig
-  extends Omit<ArweavePaymentAdapterConfig, "walletKey"> {
+export interface AccountPaymentAdapterConfig extends Omit<
+  ArweavePaymentAdapterConfig,
+  "walletKey"
+> {
   /**
    * Base URL of the remote signing server (no trailing slash).
    * Example: "https://api.my-server.com"
@@ -219,12 +225,15 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
     if (!signResp.ok) {
       const body = await signResp.text().catch(() => "");
       throw new Error(
-        `[dStorage/account-payment] POST /api/service/sign-tx failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
+        `[dStorage/account-payment] POST /api/service/sign-tx failed: HTTP ${signResp.status}`,
       );
     }
 
-    const { txId, signature, publicKey: signedPublicKey } =
-      (await signResp.json()) as SignTxResponse;
+    const {
+      txId,
+      signature,
+      publicKey: signedPublicKey,
+    } = (await signResp.json()) as SignTxResponse;
 
     onStatus?.("Applying remote signature…");
     tx.setSignature({ id: txId, signature, owner: signedPublicKey });
