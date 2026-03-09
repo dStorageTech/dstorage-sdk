@@ -337,6 +337,7 @@ PBKDF2 is retained over HKDF deliberately. HKDF is faster and more correct for h
 
 ## Known Limitations
 
+- **Large file uploads are capped at 10 MB.** The current implementation holds the entire payload in memory — plaintext, ciphertext, and base64-encoded form — which can peak at roughly 4× the file size. Streaming encryption and chunked/multipart uploads are planned for a future release.
 - `ArweavePaymentAdapter` and `MidnightPaymentAdapter` currently run preview/simulated payment flows.
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
 - Autonomi adapter is currently a stub path.
