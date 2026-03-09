@@ -41,7 +41,7 @@ import type {
   MetaTxProgress,
   MetaTxReceipt,
 } from "./metaTransaction.js";
-import { DataReferencesSummary } from "@dstorage/chain";
+import { DataReferenceSummary } from "@dstorage/chain";
 
 // ── Base64url helpers (browser-safe, no Buffer) ────────────────────────────
 
@@ -292,7 +292,7 @@ export class DStorage {
   /**
    * List references currently available from the configured chain adapter.
    */
-  async listReferences(): Promise<DataReferencesSummary[]> {
+  async listReferences(): Promise<DataReferenceSummary[]> {
     if (typeof this.config.chainAdapter.listReferences !== "function") {
       throw new Error(
         "[dStorage] listReferences() is not supported by this chain adapter.",

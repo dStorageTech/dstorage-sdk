@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { validateFile, INSURANCE_CLAIMS } from "@dstorage/core";
-import type { WalletInfo } from "@dstorage/core";
+import type { DataReferenceSummary, WalletInfo } from "@dstorage/core";
 import type {
   AppStep,
   StoredRecord,
@@ -17,7 +17,7 @@ interface Props {
   chainAdapterKey: ChainAdapterKey;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onChainAdapterChange: (key: ChainAdapterKey) => void;
-  existingReferences: Array<{ refId: string; storageId?: string }>;
+  existingReferences: Array<DataReferenceSummary>;
   onStartUploadFlow: () => Promise<void>;
   onLoadExistingReferences: () => Promise<void>;
   onUseExistingRecord: (refId: string) => Promise<void>;
@@ -120,17 +120,21 @@ export function PatientPanel({
     }
   };
 
-  const formatRefLabel = (refId: string, storageId?: string): string => {
+  const formatRefLabel = (ref: DataReferenceSummary): string => {
     const shortRefId =
-      refId.length > 16 ? `${refId.slice(0, 8)}...${refId.slice(-8)}` : refId;
-    return storageId ? shortRefId : `${shortRefId} (cannot decrypt content id)`;
+      ref.refId.length > 16
+        ? `${ref.refId.slice(0, 8)}...${ref.refId.slice(-8)}`
+        : ref.refId;
+    return ref.storageId
+      ? shortRefId
+      : `${shortRefId} (cannot decrypt content id)`;
   };
 
   const selectedReference = existingReferences.find(
     (r) => r.refId === selectedRefId,
   );
   const selectedRefCannotDecrypt =
-    selectedReference && selectedReference.storageId == null;
+    selectedReference && selectedReference.storageId === null;
 
   // ── Step: Connect ──────────────────────────────────────────────────────────
   if (step === "connect")
@@ -290,7 +294,7 @@ export function PatientPanel({
                     ) : (
                       existingReferences.map((ref) => (
                         <option key={ref.refId} value={ref.refId}>
-                          {formatRefLabel(ref.refId, ref.storageId)}
+                          {formatRefLabel(ref)}
                         </option>
                       ))
                     )}
@@ -303,7 +307,9 @@ export function PatientPanel({
                   <button
                     className="pp-btn pp-btn-primary pp-btn-full"
                     onClick={handleUseExistingRecord}
-                    disabled={!!loading || !selectedRefId}
+                    disabled={
+                      !!loading || !selectedRefId || selectedRefCannotDecrypt
+                    }
                   >
                     Review Certificate
                   </button>

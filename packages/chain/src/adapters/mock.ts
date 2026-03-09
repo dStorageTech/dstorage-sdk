@@ -15,7 +15,7 @@ import type {
   ChainWriteResult,
   Logger,
   WalletBalances,
-  DataReferencesSummary,
+  DataReferenceSummary,
 } from "../types.js";
 
 // ── Storage helpers ──
@@ -92,7 +92,7 @@ export class MockChainAdapter implements ChainAdapter {
   }
 
   /** List all references (useful for demo UI) */
-  async listReferences(): Promise<DataReferencesSummary[]> {
+  async listReferences(): Promise<DataReferenceSummary[]> {
     return [...refs.entries()].map(([refId, ref]) => ({
       refId,
       storageId: ref.storageId,

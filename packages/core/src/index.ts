@@ -37,6 +37,7 @@ export {
 } from "@dstorage/chain";
 
 export type {
+  DataReferenceSummary,
   ChainReference,
   MidnightChainAdapterConfig,
 } from "@dstorage/chain";

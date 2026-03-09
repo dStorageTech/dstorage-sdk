@@ -14,6 +14,7 @@ import {
 } from "@dstorage/core";
 import type {
   WalletInfo,
+  DataReferenceSummary,
   MetaTxProgress,
   ZkProofResult,
   ZkProofProgress,
@@ -25,22 +26,17 @@ import { SdkDrawer } from "./components/SdkDrawer.tsx";
 export type AppStep = "connect" | "upload" | "uploaded" | "prove" | "done";
 export interface StoredRecord {
   dataId: string;
-  storageId: string;
+  storageId: string | null;
   refId: string;
   fileName: string;
   uploadedAt: number;
   chainRefId: string;
 }
 type ThemeMode = "light" | "dark";
-type ExistingReference = {
-  refId: string;
-  storageId: string;
-  storageProvider: string;
-};
 type PendingCertificate = {
   record: StoredRecord;
   refId: string;
-  storageId: string;
+  storageId: string | null;
   chainLabel: string;
   previewKind: "text" | "pdf" | "binary";
   preview: string;
@@ -140,7 +136,7 @@ export default function App() {
   const [chainAdapterKey, setChainAdapterKey] =
     useState<ChainAdapterKey>("mock");
   const [existingReferences, setExistingReferences] = useState<
-    ExistingReference[]
+    DataReferenceSummary[]
   >([]);
   const [showContractSetupModal, setShowContractSetupModal] = useState(true);
   const [contractAddressInput, setContractAddressInput] = useState("");
@@ -252,7 +248,7 @@ export default function App() {
   }, [buildSDK, chainAdapterKey, dstorage, storageAdapterKey]);
 
   const refreshExistingReferences = useCallback(
-    async (sdk: DStorage): Promise<ExistingReference[]> => {
+    async (sdk: DStorage): Promise<DataReferenceSummary[]> => {
       try {
         const refs = await sdk.listReferences();
         setExistingReferences(refs);

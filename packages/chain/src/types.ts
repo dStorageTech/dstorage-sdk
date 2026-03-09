@@ -50,11 +50,11 @@ export interface ChainWriteResult {
 export type WalletBalances = Record<string, bigint>;
 
 /** Minimal on-chain reference shape returned from DataRegistry listing APIs. */
-export interface DataReferencesSummary {
+export interface DataReferenceSummary {
   /** Unique on-chain reference identifier. */
   refId: string;
   /** Storage-network content identifier referenced by this record.
-   * If the storageId couldn''t be decrypted then it's null */
+   * If the storageId couldn't be decrypted then it's null */
   storageId: string | null;
   /** Storage backend/provider where the encrypted payload is stored. */
   storageProvider: string;
@@ -78,7 +78,7 @@ export interface ChainAdapter {
   /**
    * List references currently stored in the DataRegistry contract.
    */
-  listReferences(): Promise<DataReferencesSummary[]>;
+  listReferences(): Promise<DataReferenceSummary[]>;
 
   /**
    * Retrieve a reference by its on-chain ID.

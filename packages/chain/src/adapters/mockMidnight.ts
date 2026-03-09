@@ -22,7 +22,7 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
-  DataReferencesSummary,
+  DataReferenceSummary,
   Logger,
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
@@ -153,7 +153,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   }
 
   /** List all references (useful for demo UI) */
-  async listReferences(): Promise<DataReferencesSummary[]> {
+  async listReferences(): Promise<DataReferenceSummary[]> {
     return [...refs.entries()].map(([refId, ref]) => ({
       refId,
       storageId: ref.storageId,

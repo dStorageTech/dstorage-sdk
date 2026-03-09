@@ -28,7 +28,7 @@ import type {
   ChainWriteResult,
   Logger,
   WalletBalances,
-  DataReferencesSummary,
+  DataReferenceSummary,
 } from "../../../types.js";
 
 import type { DataRegistryAPI, PrivateStateId } from "./api.js";
@@ -659,7 +659,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    * For Arweave references, storageId is the original txId string.
    * For other providers, storageId is the hex of the stored Bytes<32>.
    */
-  async listReferences(): Promise<DataReferencesSummary[]> {
+  async listReferences(): Promise<DataReferenceSummary[]> {
     const api = await this._getAPI();
 
     const { firstValueFrom } = await import("rxjs");
