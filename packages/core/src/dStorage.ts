@@ -326,7 +326,7 @@ export class DStorage {
         try {
           storageId = await this._decryptStorageId(encryptedId);
         } catch {
-          storageId = "<cannot-decrypt>";
+          storageId = "";
         }
         return { refId: item.refId, storageId, storageProvider };
       }),

@@ -17,7 +17,7 @@ interface Props {
   chainAdapterKey: ChainAdapterKey;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onChainAdapterChange: (key: ChainAdapterKey) => void;
-  existingReferences: Array<{ refId: string }>;
+  existingReferences: Array<{ refId: string; storageId?: string }>;
   onStartUploadFlow: () => Promise<void>;
   onLoadExistingReferences: () => Promise<void>;
   onUseExistingRecord: (refId: string) => Promise<void>;
@@ -119,6 +119,20 @@ export function PatientPanel({
       setLoading(null);
     }
   };
+
+  const formatRefLabel = (refId: string, storageId?: string): string => {
+    const shortRefId =
+      refId.length > 16 ? `${refId.slice(0, 8)}...${refId.slice(-8)}` : refId;
+    const cannotDecrypt = storageId?.length == 0;
+    return cannotDecrypt
+      ? `${shortRefId} (cannot decrypt content id)`
+      : shortRefId;
+  };
+
+  const selectedReference = existingReferences.find(
+    (r) => r.refId === selectedRefId,
+  );
+  const selectedRefCannotDecrypt = selectedReference?.storageId?.length == 0;
 
   // ── Step: Connect ──────────────────────────────────────────────────────────
   if (step === "connect")
@@ -278,11 +292,19 @@ export function PatientPanel({
                     ) : (
                       existingReferences.map((ref) => (
                         <option key={ref.refId} value={ref.refId}>
-                          {ref.refId}
+                          {formatRefLabel(ref.refId, ref.storageId)}
                         </option>
                       ))
                     )}
                   </select>
+                  {selectedRefCannotDecrypt && (
+                    <div className="pp-ref-warning">
+                      {formatRefLabel(
+                        selectedReference!.refId,
+                        selectedReference!.storageId,
+                      )}
+                    </div>
+                  )}
                   <button
                     className="pp-btn pp-btn-primary pp-btn-full"
                     onClick={handleUseExistingRecord}

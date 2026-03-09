@@ -68,7 +68,7 @@ export const ADAPTER_CONFIGS: Record<
   }
 > = {
   mock: {
-    label: "Mock",
+    label: "Mock Storage",
     description:
       "In-memory store, no network. Instant — ideal for development.",
     status: "live",
