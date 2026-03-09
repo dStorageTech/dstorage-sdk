@@ -391,7 +391,9 @@ export class MetaTransaction {
       );
 
       const chainResult = await this.sdk.chainAdapter.writeReference({
-        storageId: await this.sdk.encryptStorageIdForChain(uploadResult.id) ?? uploadResult.id,
+        storageId:
+          (await this.sdk.encryptStorageIdForChain(uploadResult.id)) ??
+          uploadResult.id,
         storageProvider: uploadResult.provider,
         dataLabel: file.name,
         writtenAt: Date.now(),

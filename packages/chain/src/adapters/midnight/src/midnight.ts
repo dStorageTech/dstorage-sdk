@@ -21,6 +21,8 @@
  * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp
  */
 
+import { base64urlToBytes, bytesToBase64url } from "@dstorage/crypto";
+
 import type {
   ChainAdapter,
   ChainProviderName,
@@ -174,24 +176,6 @@ export type MidnightChainAdapterConfig = BaseConfig &
 /** Convert a Uint8Array to a lowercase hex string (browser-safe, no Buffer). */
 function uint8ArrayToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/** Decode a base64url string to a Uint8Array (browser-safe, no Buffer). */
-function base64urlToBytes(b64url: string): Uint8Array {
-  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-  const binary = atob(padded);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-}
-
-/** Encode a Uint8Array to a base64url string (browser-safe, no Buffer). */
-function bytesToBase64url(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++)
-    binary += String.fromCharCode(bytes[i]!);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
 /** Convert a lowercase hex string to a Uint8Array (browser-safe, no Buffer). */

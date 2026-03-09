@@ -25,6 +25,8 @@ import {
   deriveStorageIdKey,
   encryptStorageId,
   decryptStorageId,
+  base64urlToBytes,
+  bytesToBase64url,
 } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
@@ -46,24 +48,6 @@ import type {
   MetaTxReceipt,
 } from "./metaTransaction.js";
 import { DataReferenceSummary } from "@dstorage/chain";
-
-// ── Base64url helpers (browser-safe, no Buffer) ────────────────────────────
-
-function base64urlToBytes(id: string): Uint8Array {
-  const b64 = id.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function bytesToBase64url(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++)
-    binary += String.fromCharCode(bytes[i]!);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
 
 export class DStorage implements DStorageContext {
   private config: DStorageConfig;
