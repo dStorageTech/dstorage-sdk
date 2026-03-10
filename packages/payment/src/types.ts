@@ -75,7 +75,7 @@ export interface PaymentQuote {
    * Used by multi-network adapters (e.g. ManagedPaymentAdapter) to select the
    * correct payment path. Examples: "arweave", "arlocal", "midnight".
    */
-  network?: string;
+  network: string;
   /** File size used to derive this quote */
   dataSizeBytes: number;
   /** Timestamp after which this quote should be refreshed */

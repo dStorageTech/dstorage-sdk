@@ -26,6 +26,8 @@ import type {
   Logger,
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
+import { ManagedPaymentAdapter } from "@dstorage/payment";
+import type { ManagedPaymentAdapterConfig } from "@dstorage/payment";
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
@@ -72,6 +74,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   readonly providerName: string = "Midnight-Mock";
 
   private readonly proofServer: MockProofServer;
+  private readonly managedPayment: ManagedPaymentAdapter | undefined;
   private readonly logger: Logger | undefined;
 
   constructor(
@@ -83,7 +86,9 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
       contractAddress?: string;
       logger?: Logger;
-    } = {},
+    } & Partial<
+      Pick<ManagedPaymentAdapterConfig, "signingServerUrl" | "userId">
+    > = {},
   ) {
     this.logger = options.logger;
     this.proofServer = new MockProofServer({
@@ -95,6 +100,18 @@ export class MockMidnightChainAdapter implements ChainAdapter {
         : {}),
       ...(options.logger !== undefined ? { logger: options.logger } : {}),
     });
+    if (options.signingServerUrl) {
+      if (!options.userId) {
+        throw new Error(
+          "[dStorage/mock-midnight] userId is required when signingServerUrl is set.",
+        );
+      }
+      this.managedPayment = new ManagedPaymentAdapter({
+        signingServerUrl: options.signingServerUrl,
+        userId: options.userId,
+        ...(options.logger !== undefined ? { logger: options.logger } : {}),
+      });
+    }
 
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
     const savedRefs = load<Record<string, ChainReference>>(
@@ -114,7 +131,23 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     // Step 1: Generate ZK proof via mock proof server
     await this.proofServer.generateProof("storeReference", ref);
 
-    // Step 2: Simulate submitting the balanced transaction to the Midnight node
+    // Step 2: Sign the transaction via the managed payment service (if configured)
+    if (this.managedPayment) {
+      this.logger?.log(
+        "dStorage/mock-midnight",
+        "Sending request to balance Tx to remote service…",
+      );
+      await this.managedPayment.pay({
+        token: "DUST",
+        amount: "0.1000",
+        type: "chain",
+        network: "midnight",
+        dataSizeBytes: 0,
+        expiresAt: Date.now() + 60_000,
+      });
+    }
+
+    // Step 3: Simulate submitting the balanced transaction to the Midnight node
     const blockInclusionMs = 150 + Math.random() * 250;
     this.logger?.log(
       "dStorage/mock-midnight",

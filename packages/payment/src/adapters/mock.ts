@@ -77,6 +77,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
     return {
       token: this.token,
       amount,
+      network: this.name,
       type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,

@@ -189,6 +189,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     return {
       token: "AR",
       amount,
+      network: this.name,
       type: "storage",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,

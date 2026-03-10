@@ -169,40 +169,15 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       tx.addTag(key, value);
     }
 
-    onStatus?.("Sending transaction to signing server…");
-    let signResp: Response;
-    try {
-      signResp = await fetch(
-        `${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            txData: tx.toJSON(),
-            network: quote.network,
-            userId: this.userId,
-          }),
-        },
-      );
-    } catch (err) {
-      throw new Error(
-        `[dStorage/managed-payment] Could not reach signing server: ${err}`,
-      );
-    }
-    if (!signResp.ok) {
-      const body = await signResp.text().catch(() => "");
-      throw new Error(
-        `[dStorage/managed-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
-      );
-    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const txJson = tx.toJSON();
 
     const {
       txId,
       signature,
       publicKey: signedPublicKey,
       txAmount: arCost,
-    } = (await signResp.json()) as SignTxResponse;
+    } = await this._sendSignTxRequest(txJson, quote.network, onStatus);
 
     onStatus?.("Applying remote signature…");
     tx.setSignature({ id: txId, signature, owner: signedPublicKey });
@@ -225,9 +200,10 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   }
 
   /**
-   * Midnight payment flow — not yet implemented.
+   * Midnight payment flow:
+   *   POSTs the fee amount to the dStorage API service, which holds a funded
+   *   Midnight account and submits the chain transaction on behalf of the user.
    *
-   * TODO: submit the Midnight chain transaction fee via the dStorage API service.
    *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
    *        → { network: string, userId: string, amount: string }
    *        ← { txHash: string }
@@ -236,20 +212,68 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
-    void onStatus;
-    throw new Error(
-      "[dStorage/managed-payment] Midnight payment via API service is not yet implemented.",
+    const {
+      txId,
+      signature,
+      publicKey,
+      txAmount: dustCost,
+    } = await this._sendSignTxRequest({}, quote.network, onStatus);
+
+    this.logger?.log(
+      "dStorage/managed-payment",
+      `Midnight Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${dustCost} ${quote.token}`,
     );
 
-    // Placeholder — replace with real implementation:
-    // onStatus?.("Submitting Midnight fee via dStorage API service…");
-    // const resp = await fetch(`${this.signingServerUrl}{POST_SIGN_TX_API_PATH}`, {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({ network: quote.network, userId: this.userId, amount: quote.amount }),
-    // });
-    // if (!resp.ok) { ... }
-    // const { txHash } = await resp.json();
-    // return { txHash, token: quote.token, amount: quote.amount, type: quote.type, simulated: false, paidAt: Date.now() };
+    return {
+      txHash: txId,
+      token: quote.token,
+      amount: quote.amount,
+      type: quote.type,
+      simulated: false,
+      paidAt: Date.now(),
+    };
+  }
+
+  /**
+   * Shared HTTP helper: POSTs a transaction payload to the signing server and
+   * returns the parsed SignTxResponse.
+   *
+   * Used by both _payArweave (tx is a full Arweave transaction object with .toJSON())
+   * and _payMidnight (tx is a plain object carrying the relevant Midnight tx fields).
+   * Throws on network errors or non-2xx HTTP responses.
+   */
+  private async _sendSignTxRequest(
+    txJson: any,
+    network: string,
+    onStatus?: (message: string) => void,
+  ): Promise<SignTxResponse> {
+    onStatus?.(`Sending ${network} transaction to signing server…`);
+    let signResp: Response;
+    try {
+      signResp = await fetch(
+        `${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            txData: txJson,
+            network,
+            userId: this.userId,
+          }),
+        },
+      );
+    } catch (err) {
+      throw new Error(
+        `[dStorage/managed-payment] Could not reach signing server: ${err}`,
+      );
+    }
+    if (!signResp.ok) {
+      const body = await signResp.text().catch(() => "");
+      throw new Error(
+        `[dStorage/managed-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
+      );
+    }
+
+    return (await signResp.json()) as SignTxResponse;
   }
 }

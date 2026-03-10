@@ -17,7 +17,8 @@
     "compile:contract": "compact compile src/adapters/midnight/contracts/DataRegistry.compact src/adapters/midnight/contracts/dataregistry/managed"
   },
   "dependencies": {
-    "@dstorage/crypto": "*"
+    "@dstorage/crypto": "*",
+    "@dstorage/payment": "*"
   },
   "peerDependencies": {
     "@midnight-ntwrk/compact-js": "^2.0.0",

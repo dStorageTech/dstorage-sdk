@@ -109,6 +109,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     return {
       token: "DUST",
       amount,
+      network: this.name,
       type: "chain",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
