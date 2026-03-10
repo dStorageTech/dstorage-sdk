@@ -1,7 +1,7 @@
 /**
- * @dstorage/payment — adapters/account.ts
+ * @dstorage/payment — adapters/managed.ts
  *
- * Account payment adapter — remote payment via dStorage API services.
+ * Managed payment adapter — remote payment via dStorage API services.
  *
  * Routes payment to the correct network-specific flow based on
  * PaymentQuote.network. All networks share the same endpoint:
@@ -30,7 +30,7 @@
  *
  * ── Integration (Arweave) ─────────────────────────────────────────────────────
  *
- * AccountPaymentAdapter extends ArweavePaymentAdapter and slots into the
+ * ManagedPaymentAdapter extends ArweavePaymentAdapter and slots into the
  * same sign-then-post flow used by ArweaveStorageAdapter:
  *
  *   MetaTransaction:
@@ -56,7 +56,7 @@ const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-export interface AccountPaymentAdapterConfig extends Omit<
+export interface ManagedPaymentAdapterConfig extends Omit<
   ArweavePaymentAdapterConfig,
   "walletKey"
 > {
@@ -99,13 +99,13 @@ interface SignTxResponse {
 
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
-export class AccountPaymentAdapter extends ArweavePaymentAdapter {
+export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   override readonly name: PaymentProviderName = "dstorage";
 
   private readonly signingServerUrl: string;
   private readonly userId: string;
 
-  constructor(config: AccountPaymentAdapterConfig) {
+  constructor(config: ManagedPaymentAdapterConfig) {
     // walletKey intentionally omitted — signing is remote
     super({
       ...(config.gateway !== undefined ? { gateway: config.gateway } : {}),
@@ -187,13 +187,13 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
       );
     } catch (err) {
       throw new Error(
-        `[dStorage/account-payment] Could not reach signing server: ${err}`,
+        `[dStorage/managed-payment] Could not reach signing server: ${err}`,
       );
     }
     if (!signResp.ok) {
       const body = await signResp.text().catch(() => "");
       throw new Error(
-        `[dStorage/account-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
+        `[dStorage/managed-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
       );
     }
 
@@ -210,7 +210,7 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
     this.signedUpload = { tx, arCost };
 
     this.logger?.log(
-      "dStorage/account-payment",
+      "dStorage/managed-payment",
       `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token}`,
     );
 
@@ -238,7 +238,7 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
   ): Promise<PaymentReceipt> {
     void onStatus;
     throw new Error(
-      "[dStorage/account-payment] Midnight payment via API service is not yet implemented.",
+      "[dStorage/managed-payment] Midnight payment via API service is not yet implemented.",
     );
 
     // Placeholder — replace with real implementation:

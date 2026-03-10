@@ -72,7 +72,7 @@ export interface PaymentQuote {
   type: "storage" | "chain";
   /**
    * The network this quote is for.
-   * Used by multi-network adapters (e.g. AccountPaymentAdapter) to select the
+   * Used by multi-network adapters (e.g. ManagedPaymentAdapter) to select the
    * correct payment path. Examples: "arweave", "arlocal", "midnight".
    */
   network?: string;

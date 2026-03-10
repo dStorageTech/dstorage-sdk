@@ -41,7 +41,7 @@
 import { ArweaveStorageAdapter } from "./arweave.js";
 import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from "./arweave.js";
 import type { StorageProviderName, UploadResult } from "../types.js";
-import { AccountPaymentAdapter } from "@dstorage/payment";
+import { ManagedPaymentAdapter } from "@dstorage/payment";
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 
@@ -258,8 +258,8 @@ export interface ArweaveLocalAdapterConfig extends Omit<
    */
   gateway?: ArweaveGatewayConfig;
   /**
-   * Base URL of a local AccountPaymentAdapter signing server.
-   * When provided, the adapter uses AccountPaymentAdapter (remote signing)
+   * Base URL of a local ManagedPaymentAdapter signing server.
+   * When provided, the adapter uses ManagedPaymentAdapter (remote signing)
    * instead of the default ArweavePaymentAdapter (local signing).
    * Example: "http://localhost:3000"
    */
@@ -327,7 +327,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     });
 
     // When a signing server URL is provided, replace the default local-signing
-    // adapter with AccountPaymentAdapter: transactions are sent unsigned to the
+    // adapter with ManagedPaymentAdapter: transactions are sent unsigned to the
     // remote server, which holds a funded Arweave wallet and returns the signature.
     // The userId must correspond to an account registered on the server with
     // sufficient AR balance to cover upload fees.
@@ -337,7 +337,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
           "[dStorage/arweave-local] userId is required when signingServerUrl is set.",
         );
       }
-      this.paymentAdapter = new AccountPaymentAdapter({
+      this.paymentAdapter = new ManagedPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
         userId: config.userId,
         gateway,

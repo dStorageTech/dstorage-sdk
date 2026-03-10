@@ -204,7 +204,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     //   • Direct upload path:   [here] provideUploadData → pay → consumeSignedUpload → post
     //
     // This keeps the storage adapter agnostic about how signing happens (local
-    // wallet, ArConnect, or remote signing server via AccountPaymentAdapter).
+    // wallet, ArConnect, or remote signing server via ManagedPaymentAdapter).
     const arwPayment = this.paymentAdapter as ArweavePaymentAdapter;
 
     // Consume any pre-signed tx from the MetaTransaction pay() step.
