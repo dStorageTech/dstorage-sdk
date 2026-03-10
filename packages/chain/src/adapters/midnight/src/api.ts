@@ -176,11 +176,6 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
     });
 
-    logger?.debug?.(
-      "dStorage/midnight",
-      `DataRegistry deployed at: ${deployedDataRegistryContract.deployTxData.public.contractAddress}`,
-    );
-
     return new DataRegistryAPI(deployedDataRegistryContract, providers, logger);
   }
 
@@ -210,11 +205,6 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         privateStateId: dataRegistryPrivateStateKey,
         initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
       });
-
-    logger?.debug?.(
-      "dStorage/midnight",
-      `DataRegistry joined at: ${deployedDataRegistryContract.deployTxData.public.contractAddress}`,
-    );
 
     return new DataRegistryAPI(deployedDataRegistryContract, providers, logger);
   }

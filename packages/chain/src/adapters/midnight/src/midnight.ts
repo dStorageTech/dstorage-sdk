@@ -597,28 +597,41 @@ export class MidnightChainAdapter implements ChainAdapter {
     const walletFacade: WalletFacade = walletProvider.wallet;
     await walletProvider.start();
 
-    const { waitForUnshieldedFunds } = await import(
-      /* @vite-ignore */ "./wallet-utils.js"
-    );
-    const { unshieldedToken } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/ledger-v7"
-    );
-    const unshieldedState = await waitForUnshieldedFunds(
-      walletFacade,
-      this.config,
-      unshieldedToken(),
-      false,
-      this.logger,
-    );
-    const nightBalance = unshieldedState.balances[unshieldedToken().raw];
-    if (nightBalance === undefined) {
-      this.logger?.log("dStorage/midnight", "No funds received, exiting...");
-      throw new Error("[dStorage/midnight] No NIGHT funds received/detected.");
+    if (!this.managedPayment) {
+      // When using the local wallet for fee payment, verify the wallet holds NIGHT
+      // tokens (needed for DUST conversion). Waits for full sync if balance is zero.
+      // Skipped in managed payment mode — the signing server covers fees, so the
+      // local wallet does not need any NIGHT balance.
+      const { waitForUnshieldedFunds } = await import(
+        /* @vite-ignore */ "./wallet-utils.js"
+      );
+      const { unshieldedToken } = await import(
+        /* @vite-ignore */ "@midnight-ntwrk/ledger-v7"
+      );
+      const unshieldedState = await waitForUnshieldedFunds(
+        walletFacade,
+        this.config,
+        unshieldedToken(),
+        false,
+        this.logger,
+      );
+      const nightBalance = unshieldedState.balances[unshieldedToken().raw];
+      if (nightBalance === undefined) {
+        this.logger?.log("dStorage/midnight", "No funds received, exiting...");
+        throw new Error(
+          "[dStorage/midnight] No NIGHT funds received/detected.",
+        );
+      }
+      this.logger?.log(
+        "dStorage/midnight",
+        `Your NIGHT wallet balance is: ${nightBalance}`,
+      );
+    } else {
+      this.logger?.log(
+        "dStorage/midnight",
+        "Managed payment mode — skipping NIGHT balance check.",
+      );
     }
-    this.logger?.log(
-      "dStorage/midnight",
-      `Your NIGHT wallet balance is: ${nightBalance}`,
-    );
 
     const { firstValueFrom } = await import("rxjs");
     const facadeState = await firstValueFrom(
