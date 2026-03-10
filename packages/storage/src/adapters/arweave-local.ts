@@ -248,28 +248,7 @@ export class ArweaveLocalHelper {
 
 // ── ArweaveLocalStorageAdapter ────────────────────────────────────────────────
 
-export interface ArweaveLocalAdapterConfig extends Omit<
-  ArweaveAdapterConfig,
-  "gateway"
-> {
-  /**
-   * Override the arlocal gateway (host/port).
-   * Defaults to localhost:1984.
-   */
-  gateway?: ArweaveGatewayConfig;
-  /**
-   * Base URL of a local ManagedPaymentAdapter signing server.
-   * When provided, the adapter uses ManagedPaymentAdapter (remote signing)
-   * instead of the default ArweavePaymentAdapter (local signing).
-   * Example: "http://localhost:3000"
-   */
-  signingServerUrl?: string;
-  /**
-   * Caller identity forwarded to the signing server.
-   * Required when signingServerUrl is set.
-   */
-  userId?: string;
-}
+export type ArweaveLocalAdapterConfig = ArweaveAdapterConfig;
 
 /**
  * A storage adapter for local Arweave integration testing using arlocal.
@@ -325,25 +304,6 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     this.testnet = new ArweaveLocalHelper({
       url: `${protocol}://${host}:${port}`,
     });
-
-    // When a signing server URL is provided, replace the default local-signing
-    // adapter with ManagedPaymentAdapter: transactions are sent unsigned to the
-    // remote server, which holds a funded Arweave wallet and returns the signature.
-    // The userId must correspond to an account registered on the server with
-    // sufficient AR balance to cover upload fees.
-    if (config.signingServerUrl) {
-      if (!config.userId) {
-        throw new Error(
-          "[dStorage/arweave-local] userId is required when signingServerUrl is set.",
-        );
-      }
-      this.paymentAdapter = new ManagedPaymentAdapter({
-        signingServerUrl: config.signingServerUrl,
-        userId: config.userId,
-        gateway,
-        ...(config.logger !== undefined ? { logger: config.logger } : {}),
-      });
-    }
   }
 
   /**
