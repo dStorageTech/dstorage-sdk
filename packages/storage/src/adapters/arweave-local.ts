@@ -338,10 +338,20 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     // The userId must correspond to an account registered on the server with
     // sufficient AR balance to cover upload fees.
     if (config.signingServerUrl) {
+      if (!config.userId) {
+        throw new Error(
+          "[dStorage/arweave-local] userId is required when signingServerUrl is set.",
+        );
+      }
+      if (!config.network) {
+        throw new Error(
+          "[dStorage/arweave-local] network is required when signingServerUrl is set.",
+        );
+      }
       this.paymentAdapter = new AccountPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
-        userId: config.userId ?? "",
-        network: config.network ?? "arlocal",
+        userId: config.userId,
+        network: config.network,
         gateway,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
