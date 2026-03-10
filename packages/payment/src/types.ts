@@ -70,6 +70,12 @@ export interface PaymentQuote {
   amount: string;
   /** Whether this covers a storage network fee or a chain transaction fee */
   type: "storage" | "chain";
+  /**
+   * The network this quote is for.
+   * Used by multi-network adapters (e.g. AccountPaymentAdapter) to select the
+   * correct payment path. Examples: "arweave", "arlocal", "midnight".
+   */
+  network?: string;
   /** File size used to derive this quote */
   dataSizeBytes: number;
   /** Timestamp after which this quote should be refreshed */

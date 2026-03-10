@@ -269,12 +269,6 @@ export interface ArweaveLocalAdapterConfig extends Omit<
    * Required when signingServerUrl is set.
    */
   userId?: string;
-  /**
-   * Arweave network identifier sent with every sign request.
-   * Required when signingServerUrl is set.
-   * Example: "arlocal" (local test node), "arweave" (mainnet).
-   */
-  network?: string;
 }
 
 /**
@@ -343,15 +337,9 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
           "[dStorage/arweave-local] userId is required when signingServerUrl is set.",
         );
       }
-      if (!config.network) {
-        throw new Error(
-          "[dStorage/arweave-local] network is required when signingServerUrl is set.",
-        );
-      }
       this.paymentAdapter = new AccountPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
         userId: config.userId,
-        network: config.network,
         gateway,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });

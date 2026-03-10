@@ -1,16 +1,23 @@
 /**
  * @dstorage/payment — adapters/account.ts
  *
- * Account payment adapter for Arweave — remote signing via REST API.
+ * Account payment adapter — remote payment via dStorage API services.
+ *
+ * Routes payment to the correct network-specific flow based on
+ * PaymentQuote.network. All networks share the same endpoint:
+ *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
+ * Currently implemented:
+ *   - "arweave" / "arlocal": remote Arweave signing via REST API
+ *   - "midnight": placeholder — not yet implemented
+ *
+ * ── Arweave flow ──────────────────────────────────────────────────────────────
  *
  * Instead of signing the Arweave transaction locally (ArConnect or JWK),
  * this adapter constructs the Arweave transaction and sends its JSON
  * representation to a remote REST API. The server holds a funded Arweave
  * account, signs the transaction, and returns the signature and id.
  *
- * ── REST API contract ─────────────────────────────────────────────────────────
- *
- *   POST {baseUrl}/api/service/sign-tx
+ *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
  *        → { txData: object, network: string, userId: string }
  *             txData   — full Arweave transaction JSON (tx.toJSON()).
  *             network  — Arweave network identifier (e.g. "arweave", "arlocal").
@@ -21,15 +28,15 @@
  *             publicKey — server wallet's RSA modulus n (base64url).
  *             The adapter calls tx.setSignature({ id, signature, owner }).
  *
- * ── Integration ───────────────────────────────────────────────────────────────
+ * ── Integration (Arweave) ─────────────────────────────────────────────────────
  *
  * AccountPaymentAdapter extends ArweavePaymentAdapter and slots into the
  * same sign-then-post flow used by ArweaveStorageAdapter:
  *
  *   MetaTransaction:
  *     provideUploadData(data, metadata)  ← stores data + tags
- *     pay(quote, onStatus)               ← creates tx, sends JSON to server,
- *                                           applies returned signature
+ *     pay(quote, onStatus)               ← routes by quote.network, creates tx,
+ *                                           sends JSON to server, applies signature
  *
  *   ArweaveStorageAdapter.upload():
  *     consumeSignedUpload()              ← picks up the pre-signed tx
@@ -43,6 +50,9 @@ import type {
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
+
+// Shared API endpoint for all network payment flows on the dStorage signing server.
+const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -60,12 +70,6 @@ export interface AccountPaymentAdapterConfig extends Omit<
    * Used by the server to look up the account and record transactions.
    */
   userId: string;
-  /**
-   * Arweave network identifier sent with every sign request.
-   * The server uses this to select the correct network context.
-   * Example: "arweave" (mainnet), "arlocal" (local test node).
-   */
-  network: string;
 }
 
 // ── Server response shapes ────────────────────────────────────────────────────
@@ -100,7 +104,6 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
 
   private readonly signingServerUrl: string;
   private readonly userId: string;
-  private readonly network: string;
 
   constructor(config: AccountPaymentAdapterConfig) {
     // walletKey intentionally omitted — signing is remote
@@ -113,13 +116,32 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
     });
     this.signingServerUrl = config.signingServerUrl.replace(/\/$/, "");
     this.userId = config.userId;
-    this.network = config.network;
   }
 
   // ── PaymentAdapter: pay ───────────────────────────────────────────────────────
 
   /**
-   * Remote-signing flow:
+   * Routes payment to the correct network-specific handler based on quote.network.
+   *
+   * Falls back to the base-class pass-through if provideUploadData() was not called
+   * (Arweave path only) or if the network is unrecognised.
+   */
+  override async pay(
+    quote: PaymentQuote,
+    onStatus?: (message: string) => void,
+  ): Promise<PaymentReceipt> {
+    if (quote.network === "midnight") {
+      return this._payMidnight(quote, onStatus);
+    }
+
+    // Default: Arweave (covers "arweave", "arlocal", and unset network).
+    return this._payArweave(quote, onStatus);
+  }
+
+  // ── Network-specific payment handlers ────────────────────────────────────────
+
+  /**
+   * Arweave remote-signing flow:
    *   1. Creates the Arweave transaction locally (data + tags, no local signing).
    *   2. POSTs the full transaction JSON to the signing server.
    *   3. Applies the returned id, signature, and owner to the transaction.
@@ -127,7 +149,7 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
    *
    * Falls back to the base-class pass-through if provideUploadData() was not called.
    */
-  override async pay(
+  private async _payArweave(
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
@@ -150,16 +172,19 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
     onStatus?.("Sending transaction to signing server…");
     let signResp: Response;
     try {
-      signResp = await fetch(`${this.signingServerUrl}/api/service/sign-tx`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-          txData: tx.toJSON(),
-          network: this.network,
-          userId: this.userId,
-        }),
-      });
+      signResp = await fetch(
+        `${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+            txData: tx.toJSON(),
+            network: quote.network,
+            userId: this.userId,
+          }),
+        },
+      );
     } catch (err) {
       throw new Error(
         `[dStorage/account-payment] Could not reach signing server: ${err}`,
@@ -168,7 +193,7 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
     if (!signResp.ok) {
       const body = await signResp.text().catch(() => "");
       throw new Error(
-        `[dStorage/account-payment] POST /api/service/sign-tx failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
+        `[dStorage/account-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
       );
     }
 
@@ -186,16 +211,45 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/account-payment",
-      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} AR`,
+      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token}`,
     );
 
     return {
       txHash: txId,
-      token: "AR",
+      token: quote.token,
       amount: quote.amount,
-      type: "storage",
+      type: quote.type,
       simulated: false,
       paidAt: Date.now(),
     };
+  }
+
+  /**
+   * Midnight payment flow — not yet implemented.
+   *
+   * TODO: submit the Midnight chain transaction fee via the dStorage API service.
+   *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
+   *        → { network: string, userId: string, amount: string }
+   *        ← { txHash: string }
+   */
+  private async _payMidnight(
+    quote: PaymentQuote,
+    onStatus?: (message: string) => void,
+  ): Promise<PaymentReceipt> {
+    void onStatus;
+    throw new Error(
+      "[dStorage/account-payment] Midnight payment via API service is not yet implemented.",
+    );
+
+    // Placeholder — replace with real implementation:
+    // onStatus?.("Submitting Midnight fee via dStorage API service…");
+    // const resp = await fetch(`${this.signingServerUrl}{POST_SIGN_TX_API_PATH}`, {
+    //   method: "POST",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify({ network: quote.network, userId: this.userId, amount: quote.amount }),
+    // });
+    // if (!resp.ok) { ... }
+    // const { txHash } = await resp.json();
+    // return { txHash, token: quote.token, amount: quote.amount, type: quote.type, simulated: false, paidAt: Date.now() };
   }
 }

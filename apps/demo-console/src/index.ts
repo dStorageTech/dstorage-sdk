@@ -31,7 +31,6 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import fs from "fs";
-import pino from "pino";
 import { config as loadEnv } from "dotenv";
 
 import { DStorage, type Logger as DStorageLogger } from "@dstorage/core";
@@ -212,7 +211,6 @@ async function main(): Promise<void> {
         ? {
             signingServerUrl: SIGNING_SERVER_URL,
             userId: process.env["DSTORAGE_USER_ID"]?.trim() || "user_1",
-            network: "arweave",
           }
         : {}),
     });
