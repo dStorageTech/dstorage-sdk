@@ -80,6 +80,17 @@ export interface PaymentQuote {
   dataSizeBytes: number;
   /** Timestamp after which this quote should be refreshed */
   expiresAt: number;
+  /**
+   * Opaque serialized transaction bytes (hex) to be sent to the signing server.
+   * Used by ManagedPaymentAdapter to pass a network-specific unbalanced/unsigned
+   * transaction for the server to sign or balance.
+   * Example: serialized UnboundTransaction hex for Midnight.
+   *
+   * Privacy note: this field carries only the minimum information required for the
+   * server to fund, sign, or balance the transaction (e.g. fee inputs, public keys,
+   * circuit call data). No personal data or plaintext user content is ever included.
+   */
+  txData?: string;
 }
 
 // ── PaymentReceipt ────────────────────────────────────────────────────────────
@@ -103,6 +114,14 @@ export interface PaymentReceipt {
   simulated: boolean;
   /** Timestamp of payment confirmation */
   paidAt: number;
+  /**
+   * Opaque serialized balanced/signed transaction bytes (hex) returned by the
+   * signing server. Populated by ManagedPaymentAdapter after the server has
+   * funded and balanced the transaction.
+   * Example: serialized FinalizedTransaction hex for Midnight — the chain adapter
+   * deserializes this and passes it directly to submitTx().
+   */
+  signedTx?: string;
 }
 
 // ── PaymentAdapter interface ──────────────────────────────────────────────────

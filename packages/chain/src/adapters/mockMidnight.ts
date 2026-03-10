@@ -166,6 +166,10 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       "dStorage/mock-midnight",
       `Reference written at block ${mockBlockHeight} → refId: ${refId}`,
     );
+    this.logger?.log(
+      "dStorage/mock-midnight",
+      "⚠️  Reference is NOT written on the real Midnight network.",
+    );
 
     return {
       refId,

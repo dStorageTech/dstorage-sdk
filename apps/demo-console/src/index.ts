@@ -38,7 +38,10 @@ import {
   ArweaveLocalStorageAdapter,
   //MockStorageAdapter,
 } from "@dstorage/storage";
-import { MidnightChainAdapter } from "@dstorage/chain";
+import {
+  MidnightChainAdapter,
+  //MockMidnightChainAdapter,
+} from "@dstorage/chain";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -187,7 +190,7 @@ async function main(): Promise<void> {
     const SIGNING_SERVER_URL = "http://localhost:3000";
     const useCloudApiInput = (
       await rl.question(
-        `\nUse dStorage API services at ${SIGNING_SERVER_URL} for storage payments? [y/N, default: N]: `,
+        `\nUse dStorage API services at ${SIGNING_SERVER_URL} for all payments? [y/N, default: N]: `,
       )
     )
       .trim()
@@ -196,7 +199,7 @@ async function main(): Promise<void> {
       useCloudApiInput === "y" || useCloudApiInput === "yes";
 
     if (useCloudApiService) {
-      console.log(`  Storage payments via dStorage API ${SIGNING_SERVER_URL}`);
+      console.log(`  All payments via dStorage API ${SIGNING_SERVER_URL}`);
     }
 
     // ── 6. Build the storage adapter ──────────────────────────────────────────
@@ -217,6 +220,7 @@ async function main(): Promise<void> {
 
     // ── 7. Build the chain adapter ──────────────────────────────────────────
     chainAdapter = new MidnightChainAdapter({
+      logger,
       network: networkName,
       walletMode: "facade",
       credentials,
@@ -230,6 +234,12 @@ async function main(): Promise<void> {
       proofServerEndpoint,
       // ZK artifacts for the DataRegistry storeReference circuit
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
+      ...(useCloudApiService
+        ? {
+            signingServerUrl: SIGNING_SERVER_URL,
+            userId: process.env["DSTORAGE_USER_ID"]?.trim() || "user_1",
+          }
+        : {}),
     });
 
     // ── 8. Initialise the DStorage SDK ──────────────────────────────────────

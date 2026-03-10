@@ -205,8 +205,11 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    *   Midnight account and submits the chain transaction on behalf of the user.
    *
    *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
-   *        → { network: string, userId: string, amount: string }
-   *        ← { txHash: string }
+   *        → { txData: string (hex-serialized UnboundTransaction), network: string, userId: string }
+   *        ← { txId: string, signature: string (hex-serialized FinalizedTransaction), ... }
+   *
+   * The hex-serialized FinalizedTransaction is returned in PaymentReceipt.signedTx
+   * for the chain adapter to deserialize and pass to submitTx().
    */
   private async _payMidnight(
     quote: PaymentQuote,
@@ -215,9 +218,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const {
       txId,
       signature,
-      publicKey,
       txAmount: dustCost,
-    } = await this._sendSignTxRequest({}, quote.network, onStatus);
+    } = await this._sendSignTxRequest(
+      quote.txData ?? null,
+      quote.network,
+      onStatus,
+    );
 
     this.logger?.log(
       "dStorage/managed-payment",
@@ -229,6 +235,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       token: quote.token,
       amount: quote.amount,
       type: quote.type,
+      signedTx: signature,
       simulated: false,
       paidAt: Date.now(),
     };
@@ -238,8 +245,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * Shared HTTP helper: POSTs a transaction payload to the signing server and
    * returns the parsed SignTxResponse.
    *
-   * Used by both _payArweave (tx is a full Arweave transaction object with .toJSON())
-   * and _payMidnight (tx is a plain object carrying the relevant Midnight tx fields).
+   * - Arweave: txJson is the Arweave tx JSON object (from tx.toJSON()); the server
+   *   signs it and returns the signature + owner in the response fields.
+   * - Midnight: txJson is the hex-serialized UnboundTransaction; the server balances
+   *   and signs it, returning the hex-serialized FinalizedTransaction in the
+   *   `signature` response field.
+   *
    * Throws on network errors or non-2xx HTTP responses.
    */
   private async _sendSignTxRequest(

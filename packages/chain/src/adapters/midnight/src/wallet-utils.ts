@@ -7,10 +7,7 @@ import {
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import * as Rx from "rxjs";
 
-import {
-  FaucetClient,
-  type EnvironmentConfiguration,
-} from "@midnight-ntwrk/testkit-js";
+import { type EnvironmentConfiguration } from "@midnight-ntwrk/testkit-js";
 import type { Logger } from "../../../types.js";
 import { UnshieldedAddress } from "@midnight-ntwrk/wallet-sdk-address-format";
 import { getNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
