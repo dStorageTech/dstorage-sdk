@@ -111,7 +111,10 @@ export class ArweaveLocalHelper {
   private readonly baseUrl: string;
 
   constructor(config: ArweaveLocalHelperConfig = {}) {
-    this.baseUrl = (config.url ?? "http://localhost:1984").replace(/\/$/, "");
+    this.baseUrl = (
+      config.url ??
+      `${ARWEAVE_LOCAL.protocol}://${ARWEAVE_LOCAL.host}:${ARWEAVE_LOCAL.port}`
+    ).replace(/\/$/, "");
   }
 
   /**
@@ -329,6 +332,11 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
       url: `${protocol}://${host}:${port}`,
     });
 
+    // When a signing server URL is provided, replace the default local-signing
+    // adapter with AccountPaymentAdapter: transactions are sent unsigned to the
+    // remote server, which holds a funded Arweave wallet and returns the signature.
+    // The userId must correspond to an account registered on the server with
+    // sufficient AR balance to cover upload fees.
     if (config.signingServerUrl) {
       this.paymentAdapter = new AccountPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
