@@ -186,7 +186,7 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/account-payment",
-      `Transaction signed remotely → txId: ${txId}  cost: ~${arCost} AR`,
+      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} AR`,
     );
 
     return {

@@ -184,33 +184,37 @@ async function main(): Promise<void> {
       ).trim();
     }
 
-    // ── 5. dStorage cloud services prompt ─────────────────────────────────────
+    // ── 5. dStorage API services prompt ─────────────────────────────────────
     const SIGNING_SERVER_URL = "http://localhost:3000";
-    const useCloudInput = (
+    const useCloudApiInput = (
       await rl.question(
-        `\nUse dStorage cloud services at ${SIGNING_SERVER_URL} for storage payments? [y/N, default: N]: `,
+        `\nUse dStorage API services at ${SIGNING_SERVER_URL} for storage payments? [y/N, default: N]: `,
       )
     )
       .trim()
       .toLowerCase();
-    const useCloud = useCloudInput === "y" || useCloudInput === "yes";
+    const useCloudApiService =
+      useCloudApiInput === "y" || useCloudApiInput === "yes";
 
-    if (useCloud) {
-      console.log(
-        `  Storage payments via dStorage cloud ${SIGNING_SERVER_URL}`,
-      );
+    if (useCloudApiService) {
+      console.log(`  Storage payments via dStorage API ${SIGNING_SERVER_URL}`);
     }
 
     // ── 6. Build the storage adapter ──────────────────────────────────────────
-    const userId = process.env["DSTORAGE_USER_ID"]?.trim() || "user_1";
 
     //const storageAdapter = new MockStorageAdapter();
     const storageAdapter = new ArweaveLocalStorageAdapter({
       walletKey: JSON.parse(
         fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
       ),
-      ...(useCloud ? { signingServerUrl: SIGNING_SERVER_URL, userId } : {}),
       logger,
+      ...(useCloudApiService
+        ? {
+            signingServerUrl: SIGNING_SERVER_URL,
+            userId: process.env["DSTORAGE_USER_ID"]?.trim() || "user_1",
+            network: "arweave",
+          }
+        : {}),
     });
 
     // ── 7. Build the chain adapter ──────────────────────────────────────────
