@@ -23,7 +23,7 @@ import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import type { PaymentAdapter } from "@dstorage/payment";
 import { MockPaymentAdapter } from "@dstorage/payment";
-import { buildCostEstimate, defaultChainToken } from "./payment.js";
+import { buildCostEstimate } from "./payment.js";
 import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
 
 // ── Step definitions ──────────────────────────────────────────────────────────
@@ -81,7 +81,6 @@ export interface MetaTxReceipt {
     name: string;
     type: string;
     sizeBytes: number;
-    sizeDisplay: string;
   };
   /** Payment receipts */
   storagePayment: PaymentReceipt;
@@ -94,11 +93,6 @@ export interface MetaTxReceipt {
     address: string;
     name: string;
   };
-  /** Circuit invoked on the contract (if selected) */
-  circuit?: {
-    id: string;
-    name: string;
-  };
   completedAt: number;
   /** Duration of the full meta-transaction in ms */
   totalDurationMs: number;
@@ -107,11 +101,6 @@ export interface MetaTxReceipt {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export interface MetaTxConfig {
-  /**
-   * @deprecated Token is now determined by the payment adapter's `token` property.
-   * Pass a configured payment adapter via DStorageConfig.chainPaymentAdapter instead.
-   */
-  chainToken?: TokenSymbol;
   /** Optional metadata to attach to the on-chain reference */
   metadata?: Record<string, string>;
   /** Selected contract address (from the contract registry) */
@@ -196,6 +185,22 @@ export function validateFile(file: File): FileValidationResult {
     };
   }
   return { valid: true };
+}
+
+// ── Token selector helpers ────────────────────────────────────────────────────
+
+/**
+ * Return the default chain payment token for a given chain provider name.
+ * Used by MetaTransaction to instantiate MockPaymentAdapter with the right token
+ * when no chainPaymentAdapter is configured.
+ */
+export function defaultChainToken(chainProvider: string): TokenSymbol {
+  switch (chainProvider) {
+    case "midnight":
+      return "DUST";
+    default:
+      return "MOCK";
+  }
 }
 
 // ── Initial step states ───────────────────────────────────────────────────────
@@ -312,22 +317,23 @@ export class MetaTransaction {
       const uploadData =
         (await this.sdk.encryptPayload(fileBytes)) ?? fileBytes;
 
+      // Let's create a human-readable file size, e.g. "1.2 MB" or "340.0 KB"
+      const fileSizeMB = estimate.fileSizeBytes / (1024 * 1024);
+      const fileSizeDisplay =
+        fileSizeMB < 1.1
+          ? `${(estimate.fileSizeBytes / 1024).toFixed(2)} KB`
+          : `${fileSizeMB.toFixed(2)} MB`;
       this.completeStep(
         "encrypt",
-        `${estimate.fileSizeDisplay} encrypted (${(uploadData.byteLength / 1024).toFixed(1)} KB ciphertext)`,
+        `${fileSizeDisplay} encrypted (${(uploadData.byteLength / 1024).toFixed(2)} KB ciphertext)`,
       );
 
       // Build upload metadata once — used by both provideUploadData and upload().
       const uploadMetadata: Record<string, string> = {
         "dstorage-version": "0.1.0",
-        "dstorage-owner": this.sdk.connectedAddress ?? "",
         "dstorage-filename": file.name,
         "dstorage-filetype": file.type,
         "dstorage-filesize": String(file.size),
-        ...(config.contractAddress
-          ? { "dstorage-contract": config.contractAddress }
-          : {}),
-        ...(config.circuitId ? { "dstorage-circuit": config.circuitId } : {}),
         ...(config.metadata ?? {}),
       };
 
@@ -432,7 +438,6 @@ export class MetaTransaction {
           name: file.name,
           type: file.type,
           sizeBytes: file.size,
-          sizeDisplay: estimate.fileSizeDisplay,
         },
         storagePayment: storageReceipt,
         chainPayment: chainReceipt,
@@ -443,14 +448,6 @@ export class MetaTransaction {
               contract: {
                 address: config.contractAddress,
                 name: config.contractName ?? config.contractAddress,
-              },
-            }
-          : {}),
-        ...(config.circuitId
-          ? {
-              circuit: {
-                id: config.circuitId,
-                name: config.circuitName ?? config.circuitId,
               },
             }
           : {}),

@@ -9,7 +9,6 @@
  * This file owns:
  *   - CostEstimate — the UI-facing aggregation of two PaymentQuotes shown in MetaTxProgress
  *   - buildCostEstimate() — assembles a CostEstimate from a storage quote + a chain quote
- *   - defaultChainToken() — token selector used when no chainPaymentAdapter is configured
  */
 
 // Re-export token primitives from @dstorage/payment
@@ -41,8 +40,6 @@ export interface CostEstimate {
   };
   /** File size in bytes */
   fileSizeBytes: number;
-  /** Human-readable file size, e.g. "1.2 MB" or "340.0 KB" */
-  fileSizeDisplay: string;
 }
 
 /**
@@ -54,12 +51,6 @@ export function buildCostEstimate(
   chainQuote: PaymentQuote,
   fileSizeBytes: number,
 ): CostEstimate {
-  const fileSizeMB = fileSizeBytes / (1024 * 1024);
-  const fileSizeDisplay =
-    fileSizeMB < 1
-      ? `${(fileSizeBytes / 1024).toFixed(1)} KB`
-      : `${fileSizeMB.toFixed(2)} MB`;
-
   return {
     storageCost: {
       amount: storageQuote.amount,
@@ -70,26 +61,5 @@ export function buildCostEstimate(
       token: chainQuote.token,
     },
     fileSizeBytes,
-    fileSizeDisplay,
   };
-}
-
-// ── Token selector helpers ────────────────────────────────────────────────────
-
-/**
- * Return the default chain payment token for a given chain provider name.
- * Used by MetaTransaction to instantiate MockPaymentAdapter with the right token
- * when no chainPaymentAdapter is configured.
- */
-export function defaultChainToken(chainProvider: string): TokenSymbol {
-  switch (chainProvider) {
-    case "midnight":
-      return "DUST";
-    case "ethereum":
-      return "ETH";
-    case "polygon":
-      return "MATIC";
-    default:
-      return "MOCK";
-  }
 }

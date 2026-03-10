@@ -373,8 +373,6 @@ describe("MetaTransaction.execute", () => {
     const p = tx.execute(file, {
       contractAddress: "0xContractABC",
       contractName: "Social Profile dApp",
-      circuitId: "storeReference",
-      circuitName: "Store Reference",
     });
     await vi.runAllTimersAsync();
     const receipt = await p;
@@ -382,8 +380,6 @@ describe("MetaTransaction.execute", () => {
     expect(receipt.contract).toBeDefined();
     expect(receipt.contract!.address).toBe("0xContractABC");
     expect(receipt.contract!.name).toBe("Social Profile dApp");
-    expect(receipt.circuit).toBeDefined();
-    expect(receipt.circuit!.id).toBe("storeReference");
   });
 
   it("works without an onProgress callback", async () => {

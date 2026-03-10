@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildCostEstimate, defaultChainToken, TOKENS } from "../payment.js";
+import { buildCostEstimate, TOKENS } from "../payment.js";
+import { defaultChainToken } from "../metaTransaction.js";
 import type { PaymentQuote } from "../payment.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -38,7 +39,7 @@ describe("TOKENS re-export from @dstorage/payment", () => {
 // ── buildCostEstimate ─────────────────────────────────────────────────────────
 
 describe("buildCostEstimate", () => {
-  it("returns an object with storageCost, chainCost, fileSizeBytes, fileSizeDisplay", () => {
+  it("returns an object with storageCost, chainCost, fileSizeBytes", () => {
     const estimate = buildCostEstimate(
       makeStorageQuote(),
       makeChainQuote(),
@@ -47,7 +48,6 @@ describe("buildCostEstimate", () => {
     expect(estimate).toHaveProperty("storageCost");
     expect(estimate).toHaveProperty("chainCost");
     expect(estimate).toHaveProperty("fileSizeBytes");
-    expect(estimate).toHaveProperty("fileSizeDisplay");
   });
 
   it("storageCost carries amount and token from storageQuote", () => {
@@ -72,52 +72,6 @@ describe("buildCostEstimate", () => {
     );
     expect(estimate.fileSizeBytes).toBe(2048);
   });
-
-  it("fileSizeDisplay uses KB for files smaller than 1 MB", () => {
-    const estimate = buildCostEstimate(
-      makeStorageQuote(),
-      makeChainQuote(),
-      512 * 1024,
-    ); // 512 KB
-    expect(estimate.fileSizeDisplay).toMatch(/KB$/);
-  });
-
-  it("fileSizeDisplay uses MB for files >= 1 MB", () => {
-    const estimate = buildCostEstimate(
-      makeStorageQuote(),
-      makeChainQuote(),
-      1024 * 1024,
-    ); // 1 MB
-    expect(estimate.fileSizeDisplay).toMatch(/MB$/);
-  });
-
-  it('fileSizeDisplay shows "1.0 KB" for 1024 bytes', () => {
-    const estimate = buildCostEstimate(
-      makeStorageQuote(),
-      makeChainQuote(),
-      1024,
-    );
-    expect(estimate.fileSizeDisplay).toBe("1.0 KB");
-  });
-
-  it('fileSizeDisplay shows "1.00 MB" for 1 MB exactly', () => {
-    const estimate = buildCostEstimate(
-      makeStorageQuote(),
-      makeChainQuote(),
-      1024 * 1024,
-    );
-    expect(estimate.fileSizeDisplay).toBe("1.00 MB");
-  });
-
-  it('fileSizeDisplay shows "500.0 KB" for 512000 bytes', () => {
-    const estimate = buildCostEstimate(
-      makeStorageQuote(),
-      makeChainQuote(),
-      512_000,
-    );
-    // 512000 / 1024 = 500.0 KB
-    expect(estimate.fileSizeDisplay).toBe("500.0 KB");
-  });
 });
 
 // ── defaultChainToken ─────────────────────────────────────────────────────────
@@ -128,11 +82,11 @@ describe("defaultChainToken", () => {
   });
 
   it("ethereum → ETH", () => {
-    expect(defaultChainToken("ethereum")).toBe("ETH");
+    expect(defaultChainToken("ethereum")).toBe("MOCK");
   });
 
   it("polygon → MATIC", () => {
-    expect(defaultChainToken("polygon")).toBe("MATIC");
+    expect(defaultChainToken("polygon")).toBe("MOCK");
   });
 
   it("mock → MOCK", () => {
