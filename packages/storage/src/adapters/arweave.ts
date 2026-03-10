@@ -306,7 +306,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     this.logger?.log(
       "dStorage/arweave",
-      `Posting tx id=${tx.id as string} owner=${(tx.owner as string)?.slice(0, 16)}… data_size=${tx.data_size as string} reward=${tx.reward as string}`,
+      `Posting tx id=${tx.id as string} owner=${(tx.owner as string)?.slice(0, 16)}… data_size=${tx.data_size as string} reward=${tx.reward as string} data_root=${(tx.data_root as string)?.slice(0, 16) ?? "(none)"}… sig_len=${(tx.signature as string)?.length ?? 0}`,
     );
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {

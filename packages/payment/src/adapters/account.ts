@@ -4,30 +4,22 @@
  * Account payment adapter for Arweave — remote signing via REST API.
  *
  * Instead of signing the Arweave transaction locally (ArConnect or JWK),
- * this adapter sends the transaction's signature-data bytes to a remote
- * REST API. The server holds a funded Arweave account and produces the
- * signature on behalf of the caller.
- *
- * Only the transaction header hash is sent to the server — the full data
- * payload stays local and is never transmitted to the signing service.
+ * this adapter constructs the Arweave transaction and sends its JSON
+ * representation to a remote REST API. The server holds a funded Arweave
+ * account, signs the transaction, and returns the signature and id.
  *
  * ── REST API contract ─────────────────────────────────────────────────────────
  *
- *   GET  {baseUrl}/api/wallet/public-key?userId={userId}
- *        ← { publicKey: string }
- *             Server wallet's public key. Used to set the transaction owner
- *             field so the signature data includes the correct public key.
- *             Response is cached after the first successful call.
- *
  *   POST {baseUrl}/api/service/sign-tx
- *        → { txData: string, network: string, userId: string }
- *             txData   — base64url-encoded bytes from tx.getSignatureData(),
- *                        the deep-hash of the Arweave transaction header.
+ *        → { txData: object, network: string, userId: string }
+ *             txData   — full Arweave transaction JSON (tx.toJSON()).
  *             network  — Arweave network identifier (e.g. "arweave", "arlocal").
  *             userId   — caller identity forwarded to the server.
- *        ← { txId: string, signature: string, publicKey: string }
- *             All values base64url-encoded. The adapter calls
- *             tx.setSignature({ id: txId, signature, owner: publicKey }).
+ *        ← { txId: string, signature: string, publicKey: string, txAmount: string, ... }
+ *             txId      — valid 43-char base64url Arweave transaction id.
+ *             signature — base64url RSA-PSS signature.
+ *             publicKey — server wallet's RSA modulus n (base64url).
+ *             The adapter calls tx.setSignature({ id, signature, owner }).
  *
  * ── Integration ───────────────────────────────────────────────────────────────
  *
@@ -36,8 +28,8 @@
  *
  *   MetaTransaction:
  *     provideUploadData(data, metadata)  ← stores data + tags
- *     pay(quote, onStatus)               ← creates tx, sends header hash to
- *                                           server, sets remote signature
+ *     pay(quote, onStatus)               ← creates tx, sends JSON to server,
+ *                                           applies returned signature
  *
  *   ArweaveStorageAdapter.upload():
  *     consumeSignedUpload()              ← picks up the pre-signed tx
@@ -51,15 +43,6 @@ import type {
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function uint8ArrayToBase64url(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++)
-    binary += String.fromCharCode(bytes[i]!);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -87,18 +70,27 @@ export interface AccountPaymentAdapterConfig extends Omit<
 
 // ── Server response shapes ────────────────────────────────────────────────────
 
-interface PublicKeyResponse {
-  /** Server wallet's public key (base64url-encoded RSA `n` component) */
-  publicKey: string;
-}
-
 interface SignTxResponse {
-  /** base64url-encoded transaction id */
+  /** Arweave transaction id (base64url-encoded). */
   txId: string;
-  /** base64url-encoded RSA-PSS signature */
+  /** RSA-PSS signature over the Arweave signature data (base64url-encoded). */
   signature: string;
-  /** base64url-encoded RSA public key echoed back for verification */
+  /** Wallet public key used as the transaction owner (base64url-encoded RSA `n`). */
   publicKey: string;
+  /**
+   * Total transaction amount/cost as a string (server-defined units, typically AR).
+   * Used by this adapter as the returned `arCost` display value.
+   */
+  txAmount: string;
+  /** Indicates whether the signing service successfully produced a signature. */
+  success: boolean;
+  /** Address of the server-side wallet that signed/broadcasts the transaction. */
+  walletAddress: string;
+  /**
+   * Optional Arweave fee estimate returned by the server (string, units server-defined).
+   * Informational only; the adapter does not currently use this value.
+   */
+  arFeeEstimate: string;
 }
 
 // ── Adapter ───────────────────────────────────────────────────────────────────
@@ -109,7 +101,6 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
   private readonly signingServerUrl: string;
   private readonly userId: string;
   private readonly network: string;
-  private cachedPublicKey: string | null = null;
 
   constructor(config: AccountPaymentAdapterConfig) {
     // walletKey intentionally omitted — signing is remote
@@ -125,57 +116,14 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
     this.network = config.network;
   }
 
-  // ── Private: server public key ────────────────────────────────────────────────
-
-  /**
-   * Fetch and cache the server wallet's public key.
-   * Required to set the transaction owner before computing the signature data.
-   *
-   * GET {signingServerUrl}/api/wallet/public-key?userId={userId}
-   */
-  private async fetchServerPublicKey(): Promise<string> {
-    if (this.cachedPublicKey) return this.cachedPublicKey;
-
-    const url = `${this.signingServerUrl}/api/wallet/public-key?userId=${encodeURIComponent(this.userId)}`;
-    let resp: Response;
-    try {
-      resp = await fetch(url);
-    } catch (err) {
-      throw new Error(
-        `[dStorage/account-payment] Could not reach signing server at ${url}: ${err}`,
-      );
-    }
-    if (!resp.ok) {
-      throw new Error(
-        `[dStorage/account-payment] GET /api/wallet/public-key failed: HTTP ${resp.status}`,
-      );
-    }
-
-    const body = (await resp.json()) as PublicKeyResponse;
-    if (!body.publicKey) {
-      throw new Error(
-        `[dStorage/account-payment] GET /api/wallet/public-key response missing "publicKey" field`,
-      );
-    }
-
-    this.cachedPublicKey = body.publicKey;
-    this.logger?.log(
-      "dStorage/account-payment",
-      `Server public key fetched (publicKey: ${body.publicKey.slice(0, 12)}…)`,
-    );
-    return body.publicKey;
-  }
-
   // ── PaymentAdapter: pay ───────────────────────────────────────────────────────
 
   /**
    * Remote-signing flow:
-   *   1. Fetches server wallet's public key to set the transaction owner.
-   *   2. Creates the Arweave transaction locally (data + tags, no local signing).
-   *   3. Computes the signature data bytes (deep-hash of the tx header).
-   *   4. POSTs only those bytes to the signing server — data never leaves locally.
-   *   5. Applies the returned signature to the transaction.
-   *   6. Stores the signed transaction for ArweaveStorageAdapter.upload() to post.
+   *   1. Creates the Arweave transaction locally (data + tags, no local signing).
+   *   2. POSTs the full transaction JSON to the signing server.
+   *   3. Applies the returned id, signature, and owner to the transaction.
+   *   4. Stores the signed transaction for ArweaveStorageAdapter.upload() to post.
    *
    * Falls back to the base-class pass-through if provideUploadData() was not called.
    */
@@ -192,27 +140,22 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
 
     const arweave = await this.getClient();
 
-    onStatus?.("Fetching server account public key…");
-    const publicKey = await this.fetchServerPublicKey();
-
     onStatus?.("Creating Arweave transaction…");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx: any = await arweave.createTransaction({ data }, { n: publicKey });
+    const tx: any = await arweave.createTransaction({ data });
     for (const [key, value] of Object.entries(metadata)) {
       tx.addTag(key, value);
     }
 
-    onStatus?.("Sending transaction header to signing server…");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const signableBytes = (await (tx as any).getSignatureData()) as Uint8Array;
-
+    onStatus?.("Sending transaction to signing server…");
     let signResp: Response;
     try {
       signResp = await fetch(`${this.signingServerUrl}/api/service/sign-tx`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          txData: uint8ArrayToBase64url(signableBytes),
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+          txData: tx.toJSON(),
           network: this.network,
           userId: this.userId,
         }),
@@ -225,7 +168,7 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
     if (!signResp.ok) {
       const body = await signResp.text().catch(() => "");
       throw new Error(
-        `[dStorage/account-payment] POST /api/service/sign-tx failed: HTTP ${signResp.status}`,
+        `[dStorage/account-payment] POST /api/service/sign-tx failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
       );
     }
 
@@ -233,15 +176,11 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
       txId,
       signature,
       publicKey: signedPublicKey,
+      txAmount: arCost,
     } = (await signResp.json()) as SignTxResponse;
 
     onStatus?.("Applying remote signature…");
     tx.setSignature({ id: txId, signature, owner: signedPublicKey });
-
-    const winstons = (await arweave.transactions.getPrice(
-      data.byteLength,
-    )) as string;
-    const arCost = arweave.ar.winstonToAr(winstons) as string;
 
     this.signedUpload = { tx, arCost };
 

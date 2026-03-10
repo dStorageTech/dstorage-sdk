@@ -210,6 +210,7 @@ async function main(): Promise<void> {
         fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
       ),
       ...(useCloud ? { signingServerUrl: SIGNING_SERVER_URL, userId } : {}),
+      logger,
     });
 
     // ── 7. Build the chain adapter ──────────────────────────────────────────
