@@ -34,15 +34,11 @@ export interface CostEstimate {
   storageCost: {
     amount: string;
     token: TokenSymbol;
-    fiat_amount: string;
   };
   chainCost: {
     amount: string;
     token: TokenSymbol;
-    fiat_amount: string;
   };
-  /** Combined total in USD (approximate) */
-  totalUsd: string;
   /** File size in bytes */
   fileSizeBytes: number;
   /** Human-readable file size, e.g. "1.2 MB" or "340.0 KB" */
@@ -64,22 +60,15 @@ export function buildCostEstimate(
       ? `${(fileSizeBytes / 1024).toFixed(1)} KB`
       : `${fileSizeMB.toFixed(2)} MB`;
 
-  const totalUsd = (
-    parseFloat(storageQuote.fiat_amount) + parseFloat(chainQuote.fiat_amount)
-  ).toFixed(6);
-
   return {
     storageCost: {
       amount: storageQuote.amount,
       token: storageQuote.token,
-      fiat_amount: storageQuote.fiat_amount,
     },
     chainCost: {
       amount: chainQuote.amount,
       token: chainQuote.token,
-      fiat_amount: chainQuote.fiat_amount,
     },
-    totalUsd,
     fileSizeBytes,
     fileSizeDisplay,
   };

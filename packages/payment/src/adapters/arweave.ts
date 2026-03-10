@@ -45,9 +45,6 @@ import type {
   TokenSymbol,
 } from "../types.js";
 
-/** Approximate AR/USD price used for fiat display. Replace with a live feed for production. */
-const APPROX_AR_USD_PRICE = 5.0;
-
 export interface ArweavePaymentAdapterConfig {
   /**
    * Arweave gateway.
@@ -183,17 +180,15 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       dataSizeBytes,
     )) as string;
     const amount = arweave.ar.winstonToAr(winstons) as string;
-    const fiat_amount = (parseFloat(amount) * APPROX_AR_USD_PRICE).toFixed(6);
 
     this.logger?.log(
       "dStorage/arweave-payment",
-      `Estimated: ${amount} AR (${winstons} Winston) ≈ $${fiat_amount}`,
+      `Estimated: ${amount} AR (${winstons} Winston)`,
     );
 
     return {
       token: "AR",
       amount,
-      fiat_amount,
       type: "storage",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
@@ -223,7 +218,6 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
         txHash: "arweave-bundled-with-upload",
         token: "AR",
         amount: quote.amount,
-        fiat_amount: quote.fiat_amount,
         type: "storage",
         simulated: false,
         paidAt: Date.now(),
@@ -264,7 +258,6 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       txHash: tx.id as string,
       token: "AR",
       amount: quote.amount,
-      fiat_amount: quote.fiat_amount,
       type: "storage",
       simulated: false,
       paidAt: Date.now(),

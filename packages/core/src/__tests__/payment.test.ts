@@ -8,7 +8,6 @@ function makeStorageQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
   return {
     token: "AR",
     amount: "0.001234",
-    fiat_amount: "0.012340",
     type: "storage",
     dataSizeBytes: 1024,
     expiresAt: Date.now() + 600_000,
@@ -20,7 +19,6 @@ function makeChainQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
   return {
     token: "DUST",
     amount: "0.000500",
-    fiat_amount: "0.000250",
     type: "chain",
     dataSizeBytes: 1024,
     expiresAt: Date.now() + 600_000,
@@ -40,7 +38,7 @@ describe("TOKENS re-export from @dstorage/payment", () => {
 // ── buildCostEstimate ─────────────────────────────────────────────────────────
 
 describe("buildCostEstimate", () => {
-  it("returns an object with storageCost, chainCost, totalUsd, fileSizeBytes, fileSizeDisplay", () => {
+  it("returns an object with storageCost, chainCost, fileSizeBytes, fileSizeDisplay", () => {
     const estimate = buildCostEstimate(
       makeStorageQuote(),
       makeChainQuote(),
@@ -48,49 +46,22 @@ describe("buildCostEstimate", () => {
     );
     expect(estimate).toHaveProperty("storageCost");
     expect(estimate).toHaveProperty("chainCost");
-    expect(estimate).toHaveProperty("totalUsd");
     expect(estimate).toHaveProperty("fileSizeBytes");
     expect(estimate).toHaveProperty("fileSizeDisplay");
   });
 
-  it("storageCost carries amount, token, and fiat_amount from storageQuote", () => {
-    const storageQuote = makeStorageQuote({
-      amount: "1.23",
-      token: "AR",
-      fiat_amount: "12.30",
-    });
+  it("storageCost carries amount and token from storageQuote", () => {
+    const storageQuote = makeStorageQuote({ amount: "1.23", token: "AR" });
     const estimate = buildCostEstimate(storageQuote, makeChainQuote(), 1024);
     expect(estimate.storageCost.amount).toBe("1.23");
     expect(estimate.storageCost.token).toBe("AR");
-    expect(estimate.storageCost.fiat_amount).toBe("12.30");
   });
 
-  it("chainCost carries amount, token, and fiat_amount from chainQuote", () => {
-    const chainQuote = makeChainQuote({
-      amount: "0.05",
-      token: "DUST",
-      fiat_amount: "0.025",
-    });
+  it("chainCost carries amount and token from chainQuote", () => {
+    const chainQuote = makeChainQuote({ amount: "0.05", token: "DUST" });
     const estimate = buildCostEstimate(makeStorageQuote(), chainQuote, 512);
     expect(estimate.chainCost.amount).toBe("0.05");
     expect(estimate.chainCost.token).toBe("DUST");
-    expect(estimate.chainCost.fiat_amount).toBe("0.025");
-  });
-
-  it("totalUsd is the sum of storageQuote.fiat_amount and chainQuote.fiat_amount", () => {
-    const storageQuote = makeStorageQuote({ fiat_amount: "0.100000" });
-    const chainQuote = makeChainQuote({ fiat_amount: "0.050000" });
-    const estimate = buildCostEstimate(storageQuote, chainQuote, 1024);
-    expect(parseFloat(estimate.totalUsd)).toBeCloseTo(0.15, 5);
-  });
-
-  it("totalUsd is formatted to 6 decimal places", () => {
-    const estimate = buildCostEstimate(
-      makeStorageQuote(),
-      makeChainQuote(),
-      1024,
-    );
-    expect(estimate.totalUsd).toMatch(/^\d+\.\d{6}$/);
   });
 
   it("fileSizeBytes matches the input", () => {
@@ -146,24 +117,6 @@ describe("buildCostEstimate", () => {
     );
     // 512000 / 1024 = 500.0 KB
     expect(estimate.fileSizeDisplay).toBe("500.0 KB");
-  });
-
-  it("totalUsd is zero when both quotes are zero", () => {
-    const zeroStorage = makeStorageQuote({ fiat_amount: "0.000000" });
-    const zeroChain = makeChainQuote({ fiat_amount: "0.000000" });
-    const estimate = buildCostEstimate(zeroStorage, zeroChain, 100);
-    expect(parseFloat(estimate.totalUsd)).toBe(0);
-  });
-
-  it("handles large USD amounts without precision loss", () => {
-    const storageQuote = makeStorageQuote({ fiat_amount: "100.000000" });
-    const chainQuote = makeChainQuote({ fiat_amount: "50.000000" });
-    const estimate = buildCostEstimate(
-      storageQuote,
-      chainQuote,
-      9 * 1024 * 1024,
-    );
-    expect(parseFloat(estimate.totalUsd)).toBeCloseTo(150.0, 5);
   });
 });
 

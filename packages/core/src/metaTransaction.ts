@@ -89,8 +89,6 @@ export interface MetaTxReceipt {
   /** Tokens used */
   storageToken: TokenSymbol;
   chainToken: TokenSymbol;
-  /** Total cost in USD */
-  totalUsd: string;
   /** Contract invoked (if selected) */
   contract?: {
     address: string;
@@ -299,7 +297,10 @@ export class MetaTransaction {
 
       const estimate = buildCostEstimate(storageQuote, chainQuote, file.size);
       await sleep(400); // Realistic pause
-      this.completeStep("estimate", `~$${estimate.totalUsd} USD total`);
+      this.completeStep(
+        "estimate",
+        `${estimate.storageCost.amount} ${estimate.storageCost.token} + ${estimate.chainCost.amount} ${estimate.chainCost.token}`,
+      );
       this.emit({ overallStatus: "running", estimate });
 
       // ── Step 1: Encrypt ─────────────────────────────────────────────────
@@ -352,7 +353,7 @@ export class MetaTransaction {
 
       this.completeStep(
         "payment_storage",
-        `${storageReceipt.amount} ${storageReceipt.token} ≈ $${storageReceipt.fiat_amount}`,
+        `${storageReceipt.amount} ${storageReceipt.token}`,
       );
 
       // ── Step 3: Upload ──────────────────────────────────────────────────
@@ -384,7 +385,7 @@ export class MetaTransaction {
 
       this.completeStep(
         "payment_chain",
-        `${chainReceipt.amount} ${chainReceipt.token} ≈ $${chainReceipt.fiat_amount}`,
+        `${chainReceipt.amount} ${chainReceipt.token}`,
       );
 
       // ── Step 5: On-chain reference ───────────────────────────────────────
@@ -437,7 +438,6 @@ export class MetaTransaction {
         chainPayment: chainReceipt,
         storageToken: storageReceipt.token,
         chainToken: chainReceipt.token,
-        totalUsd: estimate.totalUsd,
         ...(config.contractAddress
           ? {
               contract: {

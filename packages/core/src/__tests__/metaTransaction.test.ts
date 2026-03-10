@@ -26,7 +26,6 @@ class InstantPaymentAdapter implements PaymentAdapter {
     return {
       token: "MOCK",
       amount: "0.001",
-      fiat_amount: "0.001",
       type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + 600_000,
@@ -43,7 +42,6 @@ class InstantPaymentAdapter implements PaymentAdapter {
       txHash: `0x${"a".repeat(64)}`,
       token: "MOCK",
       amount: quote.amount,
-      fiat_amount: quote.fiat_amount,
       type: quote.type,
       paidAt: Date.now(),
       simulated: true,
@@ -197,7 +195,6 @@ describe("MetaTransaction.execute", () => {
     expect(receipt).toHaveProperty("chainPayment");
     expect(receipt).toHaveProperty("storageToken");
     expect(receipt).toHaveProperty("chainToken");
-    expect(receipt).toHaveProperty("totalUsd");
     expect(receipt).toHaveProperty("completedAt");
     expect(receipt).toHaveProperty("totalDurationMs");
   });
@@ -317,7 +314,7 @@ describe("MetaTransaction.execute", () => {
     await p;
 
     expect(estimates.length).toBeGreaterThan(0);
-    expect(estimates[0]!.estimate).toHaveProperty("totalUsd");
+    expect(estimates[0]!.estimate).toHaveProperty("storageCost");
   });
 
   it("all 7 step IDs appear in the progress steps array", async () => {

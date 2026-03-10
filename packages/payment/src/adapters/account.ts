@@ -193,7 +193,6 @@ export class AccountPaymentAdapter extends ArweavePaymentAdapter {
       txHash: txId,
       token: "AR",
       amount: quote.amount,
-      fiat_amount: quote.fiat_amount,
       type: "storage",
       simulated: false,
       paidAt: Date.now(),

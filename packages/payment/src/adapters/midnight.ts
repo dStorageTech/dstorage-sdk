@@ -89,10 +89,9 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
      *   const txBuilder  = await contract.call.storeReference(...representativeArgs);
      *   const feeInfo    = await estimateFee(txBuilder, this.config.wallet);
      *   const amount     = feeInfo.fee.toString();
-     *   const fiat_amount        = (parseFloat(amount) * approxFiatPrice).toFixed(6);
      *
      *   return {
-     *     token: 'DUST', amount, fiat_amount, type: 'chain',
+     *     token: 'DUST', amount, type: 'chain',
      *     dataSizeBytes, expiresAt: Date.now() + this.quoteValidityMs,
      *   };
      */
@@ -100,20 +99,16 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     // Preview: flat ~$0.01 per chain tx.
     // On Midnight, the fee is circuit-cost-dominated, so dataSizeBytes is not proportional.
     void dataSizeBytes;
-    const chainFiatAmount = 0.01;
-    const approxFiatPrice = 0.1;
-    const amount = (chainFiatAmount / approxFiatPrice).toFixed(4);
-    const fiat_amount = chainFiatAmount.toFixed(6);
+    const amount = "0.1000";
 
     this.logger?.log(
       "dStorage/midnight-payment",
-      `(preview) Estimated: ${amount} DUST ≈ $${fiat_amount}`,
+      `(preview) Estimated: ${amount} DUST`,
     );
 
     return {
       token: "DUST",
       amount,
-      fiat_amount,
       type: "chain",
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
@@ -147,7 +142,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
      *   onStatus?.('Awaiting Midnight block confirmation…');
      *
      *   return {
-     *     txHash: receipt.txHash, token: 'DUST', amount: quote.amount, fiat_amount: quote.fiat_amount,
+     *     txHash: receipt.txHash, token: 'DUST', amount: quote.amount,
      *     type: 'chain', simulated: false, paidAt: Date.now(),
      *   };
      */
@@ -172,7 +167,6 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
       txHash,
       token: "DUST",
       amount: quote.amount,
-      fiat_amount: quote.fiat_amount,
       type: "chain",
       simulated: true, // ← becomes false once the TODO above is wired up
       paidAt: Date.now(),

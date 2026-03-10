@@ -224,7 +224,6 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       await arwPayment.pay({
         token: "AR",
         amount,
-        fiat_amount: "0",
         type: "storage",
         dataSizeBytes: data.byteLength,
         expiresAt: Date.now() + 600_000,

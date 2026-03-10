@@ -68,8 +68,6 @@ export interface PaymentQuote {
   token: TokenSymbol;
   /** Amount in the native token (string to preserve precision) */
   amount: string;
-  /** Approximate USD equivalent — for display only */
-  fiat_amount: string;
   /** Whether this covers a storage network fee or a chain transaction fee */
   type: "storage" | "chain";
   /** File size used to derive this quote */
@@ -90,8 +88,6 @@ export interface PaymentReceipt {
   token: TokenSymbol;
   /** Amount paid in the native token */
   amount: string;
-  /** Fiat equivalent at time of payment */
-  fiat_amount: string;
   /** What this payment covered */
   type: "storage" | "chain";
   /**

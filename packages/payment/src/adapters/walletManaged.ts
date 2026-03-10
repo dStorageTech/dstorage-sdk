@@ -40,7 +40,6 @@ export class WalletManagedPaymentAdapter implements PaymentAdapter {
     return {
       token: this.token,
       amount: "0",
-      fiat_amount: "0.00",
       type: "chain",
       dataSizeBytes,
       expiresAt: Date.now() + 300_000,
@@ -59,7 +58,6 @@ export class WalletManagedPaymentAdapter implements PaymentAdapter {
       txHash: "wallet-managed",
       token: this.token,
       amount: quote.amount,
-      fiat_amount: quote.fiat_amount,
       type: "chain",
       simulated: false,
       paidAt: Date.now(),

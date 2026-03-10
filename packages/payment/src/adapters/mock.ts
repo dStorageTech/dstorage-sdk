@@ -27,8 +27,6 @@ import type {
 } from "../types.js";
 import { TOKENS } from "../types.js";
 
-const APROX_FIAT_PRICE = 1.5;
-
 export interface MockPaymentAdapterConfig {
   /**
    * Token to simulate payments with.
@@ -70,17 +68,15 @@ export class MockPaymentAdapter implements PaymentAdapter {
     // MOCK pricing: 0.001 MOCK per KB, minimum 0.0001 MOCK
     const kb = dataSizeBytes / 1024;
     const amount = Math.max(0.0001, kb * 0.001).toFixed(6);
-    const fiat_amount = (parseFloat(amount) * APROX_FIAT_PRICE).toFixed(6);
 
     this.logger?.log(
       "dStorage/mock-payment",
-      `Estimated cost: ${amount} ${this.token} ≈ $${fiat_amount}`,
+      `Estimated cost: ${amount} ${this.token}`,
     );
 
     return {
       token: this.token,
       amount,
-      fiat_amount,
       type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
@@ -116,7 +112,6 @@ export class MockPaymentAdapter implements PaymentAdapter {
       txHash,
       token: quote.token,
       amount: quote.amount,
-      fiat_amount: quote.fiat_amount,
       type: quote.type,
       simulated: true,
       paidAt: Date.now(),
