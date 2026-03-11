@@ -36,6 +36,7 @@ import { config as loadEnv } from "dotenv";
 import { DStorage, type Logger as DStorageLogger } from "@dstorage/core";
 import {
   ArweaveLocalStorageAdapter,
+  //ArweaveStorageAdapter,
   //MockStorageAdapter,
 } from "@dstorage/storage";
 import {
