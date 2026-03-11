@@ -32,7 +32,6 @@ import type { ManagedPaymentAdapterConfig } from "@dstorage/payment";
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
 const refs = new Map<string, ChainReference>();
-const permissions = new Map<string, Set<string>>();
 
 function generateRefId(): string {
   const id =
@@ -129,7 +128,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     );
 
     // Step 1: Generate ZK proof via mock proof server
-    await this.proofServer.generateProof("storeReference", ref);
+    await this.proofServer.generateProof("storeReference");
 
     // Step 2: Sign the transaction via the managed payment service (if configured)
     if (this.managedPayment) {
@@ -209,7 +208,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   }
 
   async deployDataRegistry(): Promise<string> {
-    await this.proofServer.generateProof("constructor", {});
+    await this.proofServer.generateProof("constructor");
     await sleep(150 + Math.random() * 100);
     const addr = `mock_contract_${Date.now()}`;
     this.logger?.log(

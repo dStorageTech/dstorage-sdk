@@ -28,7 +28,6 @@ import type {
   PaymentReceipt,
   TokenSymbol,
 } from "../types.js";
-import { TOKENS } from "../types.js";
 
 export interface MidnightPaymentAdapterConfig {
   /**

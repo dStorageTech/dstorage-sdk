@@ -187,7 +187,7 @@ export class DStorage implements DStorageContext {
     }
 
     // 1. Encrypt client-side if key is available; otherwise store raw bytes
-    let uploadData = (await this.encryptPayload(bytes)) ?? bytes;
+    const uploadData = (await this.encryptPayload(bytes)) ?? bytes;
 
     // 2. Upload to chosen storage network
     const sdkVersion = corePackageJson.version ?? "unknown";
@@ -321,7 +321,9 @@ export class DStorage implements DStorageContext {
         if (item.storageId) {
           try {
             storageId = await this._decryptStorageId(item.storageId);
-          } catch {}
+          } catch {
+            /* we cannot decrypt */
+          }
         }
         return {
           refId: item.refId,

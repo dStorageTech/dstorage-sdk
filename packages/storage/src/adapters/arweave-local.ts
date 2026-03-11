@@ -41,7 +41,6 @@
 import { ArweaveStorageAdapter } from "./arweave.js";
 import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from "./arweave.js";
 import type { StorageProviderName, UploadResult } from "../types.js";
-import { ManagedPaymentAdapter } from "@dstorage/payment";
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 

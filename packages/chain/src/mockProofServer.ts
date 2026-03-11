@@ -48,7 +48,7 @@ function sleep(ms: number): Promise<void> {
  * Usage (internal to MockMidnightChainAdapter — also exported for tests):
  *
  *   const server = new MockProofServer();
- *   const proof = await server.generateProof('storeReference', { storageId, owner });
+ *   const proof = await server.generateProof('storeReference');
  */
 
 interface Logger {
@@ -75,7 +75,7 @@ export class MockProofServer {
    * Simulate a call to the Midnight proof server.
    * Generates a ZK proof for the given circuit and inputs.
    */
-  async generateProof(circuit: string, inputs: unknown): Promise<MockProof> {
+  async generateProof(circuit: string): Promise<MockProof> {
     const delay = this.minMs + Math.random() * (this.maxMs - this.minMs);
     const start = Date.now();
 

@@ -50,7 +50,6 @@ import {
   ManagedPaymentAdapter,
 } from "@dstorage/payment";
 import type { SignedArweaveUpload } from "@dstorage/payment";
-import storagePackageJson from "../../package.json";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 

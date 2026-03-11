@@ -54,16 +54,16 @@ export const syncWallet = (
         );
       }),*/
       Rx.throttleTime(throttleTime),
-      Rx.tap((state) => {
+      /*Rx.tap((state) => {
         const isSynced =
           state.shielded.state.progress.isStrictlyComplete() &&
           state.dust.state.progress.isStrictlyComplete() &&
           state.unshielded.progress?.isStrictlyComplete() === true;
 
-        /*logger?.log(
+        logger?.log(
           `Wallet synced state emission (synced=${isSynced}): { shielded=${state.shielded.state.progress.isStrictlyComplete()}, unshielded=${state.unshielded.progress.isStrictlyComplete()}, dust=${state.dust.state.progress.isStrictlyComplete()} }`,
-        );*/
-      }),
+        );
+      }),*/
       Rx.filter(
         (state) =>
           state.shielded.state.progress.isStrictlyComplete() &&
@@ -97,7 +97,6 @@ export const waitForUnshieldedFunds = async (
   wallet: WalletFacade,
   env: EnvironmentConfiguration,
   tokenType: UnshieldedTokenType,
-  fundFromFaucet = false,
   logger?: Logger,
 ): Promise<UnshieldedWalletState> => {
   const initialState = await getInitialUnshieldedState(
@@ -112,10 +111,6 @@ export const waitForUnshieldedFunds = async (
     "dStorage/midnight",
     `Using unshielded address: ${unshieldedAddress.toString()} waiting for funds...`,
   );
-  /*if (fundFromFaucet && env.faucet) {
-    logger?.log('Requesting tokens from faucet...');
-    await new FaucetClient(env.faucet, logger).requestTokens(unshieldedAddress.toString());
-  }*/
   const initialBalance = initialState.balances[tokenType.raw];
   if (initialBalance === undefined || initialBalance === 0n) {
     logger?.log(

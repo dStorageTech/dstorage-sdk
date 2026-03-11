@@ -3,6 +3,9 @@
   "parser": "@typescript-eslint/parser",
   "plugins": ["@typescript-eslint"],
   "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+  "ignorePatterns": [
+    "packages/chain/src/adapters/midnight/contracts/dataregistry/managed/**"
+  ],
   "env": {
     "es2020": true,
     "node": true

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MockPaymentAdapter } from "../adapters/mock.js";
-import type { PaymentQuote } from "../types.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -148,12 +147,6 @@ describe("MockPaymentAdapter", () => {
   // ── pay ───────────────────────────────────────────────────────────────────
 
   describe("pay", () => {
-    async function makeQuote(
-      adapter: MockPaymentAdapter,
-    ): Promise<PaymentQuote> {
-      return adapter.estimateCost(1024);
-    }
-
     it("returns a PaymentReceipt with simulated: true", async () => {
       vi.useFakeTimers();
       const adapter = makeStorageAdapter();

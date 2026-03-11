@@ -134,7 +134,7 @@ describe("wallet isolation", () => {
     await ds2.connect(wallet2);
 
     // Upload with ds1
-    const { storageId, chainRefId } = await ds1.upload("Shared key test");
+    const { chainRefId } = await ds1.upload("Shared key test");
 
     // Retrieve with ds2 (same address → same key)
     const { content } = await ds2.retrieveByRefId(chainRefId);

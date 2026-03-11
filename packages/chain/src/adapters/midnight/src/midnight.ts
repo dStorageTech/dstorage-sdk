@@ -85,8 +85,6 @@ interface ConnectedAPI {
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-const FACADE_WALLET_SYNC_TIMEOUT = 600_000;
-
 interface BaseConfig {
   /**
    * Midnight node RPC endpoint.
@@ -612,7 +610,6 @@ export class MidnightChainAdapter implements ChainAdapter {
         walletFacade,
         this.config,
         unshieldedToken(),
-        false,
         this.logger,
       );
       const nightBalance = unshieldedState.balances[unshieldedToken().raw];
@@ -804,11 +801,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         "dStorage/midnight",
         `Storing reference for storageId: ${uint8ArrayToHex(encodedStorageId)}`,
       );
-      const {
-        refId,
-        txHash: _,
-        blockHeight,
-      } = await api.storeReference(
+      const { refId, blockHeight } = await api.storeReference(
         encodedStorageId,
         ref.storageProvider,
         ref.dataLabel ?? "",
@@ -972,7 +965,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     // Select the wallet: prefer the configured connectorName, otherwise use the first available
     let selected = availableWallets[0]!;
     if (this.connectorName) {
-      let connectorFound = availableWallets.find(
+      const connectorFound = availableWallets.find(
         (w) => w.id === this.connectorName,
       );
       if (connectorFound) {

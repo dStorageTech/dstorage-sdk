@@ -1,5 +1,5 @@
 //import { Ledger } from "../managed/contract/index.js";
-import { WitnessContext } from "@midnight-ntwrk/compact-runtime";
+//import { WitnessContext } from "@midnight-ntwrk/compact-runtime";
 
 export type DataRegistryPrivateState = {
   readonly secretKey: Uint8Array;

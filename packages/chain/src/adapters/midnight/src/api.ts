@@ -2,7 +2,7 @@ import * as DataRegistry from "../contracts/dataregistry/managed/contract/index.
 
 import {
   type ContractAddress,
-  convertFieldToBytes,
+  //convertFieldToBytes,
 } from "@midnight-ntwrk/compact-runtime";
 import type { Logger } from "../../../types.js";
 import {
@@ -82,7 +82,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         ),
       ],
       // ...and combine them to produce the required derived state.
-      (ledgerState, privateState) => {
+      (ledgerState, _privateState) => {
         /*const hashedSecretKey = DataRegistry.pureCircuits.publicKey(
           privateState.secretKey,
           convertFieldToBytes(32, ledgerState.refCounter, 'api/src/index.ts'),

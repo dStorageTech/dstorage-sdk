@@ -7,7 +7,6 @@ import { MockChainAdapter } from "@dstorage/chain";
 import type { PaymentAdapter, PaymentQuote } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
 import type { MetaTxProgress, MetaTxStepId } from "../metaTransaction.js";
-import { deriveKeyFromSignature } from "@dstorage/crypto";
 
 afterEach(() => vi.useRealTimers());
 
@@ -26,6 +25,7 @@ class InstantPaymentAdapter implements PaymentAdapter {
     return {
       token: "MOCK",
       amount: "0.001",
+      network: "mock",
       type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + 600_000,
@@ -61,10 +61,6 @@ function makeFile(
 
 function makeEmptyFile(name = "empty.txt", type = "text/plain"): File {
   return new File([], name, { type });
-}
-
-async function makeKey(): Promise<CryptoKey> {
-  return deriveKeyFromSignature("0xabcdef1234567890".repeat(4), "0xTestOwner");
 }
 
 /** Build a minimal DStorageContext for tests. */

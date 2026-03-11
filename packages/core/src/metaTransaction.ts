@@ -18,7 +18,6 @@
  *   const receipt = await metaTx.execute(file);
  */
 
-import { encrypt, serializePayload } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import type { PaymentAdapter } from "@dstorage/payment";

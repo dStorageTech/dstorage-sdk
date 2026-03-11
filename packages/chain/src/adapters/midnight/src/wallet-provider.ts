@@ -15,7 +15,7 @@ import { ttlOneHour } from "@midnight-ntwrk/midnight-js-utils";
 import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import type { Logger } from "../../../types.js";
 
-import { getInitialShieldedState } from "./wallet-utils";
+//import { getInitialShieldedState } from "./wallet-utils";
 import {
   DustWalletOptions,
   EnvironmentConfiguration,
@@ -113,7 +113,7 @@ export class MidnightWalletProvider
       seeds: { masterSeed: string; shielded: Uint8Array; dust: Uint8Array };
     };
 
-    const initialState = await getInitialShieldedState(wallet.shielded, logger);
+    /*const initialState = await getInitialShieldedState(wallet.shielded, logger);
     /*logger?.log(
       `Your wallet address is: ${initialState.address.coinPublicKeyString()}`,
     );*/

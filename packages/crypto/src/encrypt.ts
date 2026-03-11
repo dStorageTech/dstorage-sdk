@@ -128,7 +128,7 @@ export function deserializePayload(raw: string): EncryptedPayload | null {
       throw new Error("[dStorage/crypto] Invalid payload format.");
     }
     return parsed as EncryptedPayload;
-  } catch (_) {
+  } catch {
     return null;
   }
 }
