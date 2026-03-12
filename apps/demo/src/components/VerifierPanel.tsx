@@ -1,5 +1,5 @@
 import type { ZkProofResult } from "@dstorage/core";
-import type { AppStep } from "../App.tsx";
+import type { AppStep } from "../types";
 
 interface Props {
   step: AppStep;

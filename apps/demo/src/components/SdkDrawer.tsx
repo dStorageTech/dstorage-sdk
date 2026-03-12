@@ -1,6 +1,6 @@
 import type { MetaTxProgress, ZkProofProgress } from "@dstorage/core";
-import type { ChainAdapterKey, StorageAdapterKey } from "../App.tsx";
-import { ADAPTER_CONFIGS, CHAIN_ADAPTER_CONFIGS } from "../App.tsx";
+import type { ChainAdapterKey, StorageAdapterKey } from "../types";
+import { ADAPTER_CONFIGS, CHAIN_ADAPTER_CONFIGS } from "../adapterConfigs";
 
 interface Props {
   open: boolean;

@@ -7,12 +7,12 @@ import type {
   StorageAdapterKey,
   ChainAdapterKey,
   PaymentAdapterKey,
-} from "../App.tsx";
+} from "../types";
 import {
   ADAPTER_CONFIGS,
   CHAIN_ADAPTER_CONFIGS,
   PAYMENT_ADAPTER_CONFIGS,
-} from "../App.tsx";
+} from "../adapterConfigs";
 
 interface Props {
   step: AppStep;
