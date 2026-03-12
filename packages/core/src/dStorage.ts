@@ -30,7 +30,6 @@ import {
 } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
-import type { PaymentAdapter } from "@dstorage/payment";
 import corePackageJson from "../package.json";
 
 import type {
@@ -71,10 +70,6 @@ export class DStorage implements DStorageContext {
 
   get chainAdapter(): ChainAdapter {
     return this.config.chainAdapter;
-  }
-
-  get chainPaymentAdapter(): PaymentAdapter | undefined {
-    return this.config.chainPaymentAdapter;
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -222,6 +217,17 @@ export class DStorage implements DStorageContext {
       storageProvider: storageResult.provider,
       chainProvider: chainResult.provider,
       uploadedAt: storageResult.uploadedAt,
+      costEstimate: {
+        storageCost: {
+          amount: storageResult.cost ?? "unknown",
+          token: "AR", // FIXME: this.config.storageAdapter.tokenSymbol
+        },
+        chainCost: {
+          amount: chainResult.paymentReceipt?.amount ?? "unknown",
+          token: "DUST", // FIXME: this.config.chainAdapter.tokenSymbol
+        },
+        fileSizeBytes: uploadData.length,
+      },
     };
   }
 

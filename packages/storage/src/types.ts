@@ -5,7 +5,6 @@
  */
 
 import type { PaymentAdapter } from "@dstorage/payment";
-export type { PaymentAdapter };
 
 /**
  * Minimal logger interface accepted by every SDK class.

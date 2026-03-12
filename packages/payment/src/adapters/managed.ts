@@ -44,9 +44,10 @@
  */
 
 import type {
-  PaymentProviderName,
+  PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
+  TokenSymbol,
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
@@ -60,6 +61,12 @@ export interface ManagedPaymentAdapterConfig extends Omit<
   ArweavePaymentAdapterConfig,
   "walletKey"
 > {
+  /** Which network this adapter is used for */
+  network: PaymentNetworkName;
+  /** Token this quote is denominated in */
+  token: TokenSymbol;
+  /** Whether this covers a storage network fee or a chain transaction fee */
+  type: "storage" | "chain";
   /**
    * Base URL of the remote signing server (no trailing slash).
    * Example: "https://api.my-server.com"
@@ -100,7 +107,9 @@ interface SignTxResponse {
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
-  override readonly name: PaymentProviderName = "dstorage";
+  override readonly network: PaymentNetworkName;
+  override readonly token: TokenSymbol;
+  override readonly type: "storage" | "chain";
 
   private readonly signingServerUrl: string;
   private readonly userId: string;
@@ -116,6 +125,37 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     });
     this.signingServerUrl = config.signingServerUrl.replace(/\/$/, "");
     this.userId = config.userId;
+    this.network = config.network;
+    this.token = config.token;
+    this.type = config.type;
+  }
+
+  // ── PaymentAdapter: estimateCost ─────────────────────────────────────────────
+
+  /**
+   * Query the Arweave fee oracle for the real upload cost.
+   */
+  async estimateCost(dataSizeBytes: number): Promise<PaymentQuote> {
+    if (this.network === "arweave") {
+      return await super.estimateCost(dataSizeBytes);
+    }
+
+    // TODO: query a service to obtain estimation
+    const amount = "0.0012345";
+    this.logger?.log(
+      "dStorage/managed-payment",
+      `Estimated: ${amount} ${this.token}`,
+    );
+
+    return {
+      token: this.token,
+      amount,
+      network: this.network,
+      type: this.type,
+      dataSizeBytes,
+      txData: "---",
+      expiresAt: Date.now() + this.quoteValidityMs,
+    };
   }
 
   // ── PaymentAdapter: pay ───────────────────────────────────────────────────────
@@ -130,12 +170,15 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
+    console.log(`>>>>>> MOOOOOOOOOOO ${quote.network}`);
+
     if (quote.network === "midnight") {
       return this._payMidnight(quote, onStatus);
+    } else if (quote.network === "arweave") {
+      return this._payArweave(quote, onStatus);
     }
 
-    // Default: Arweave (covers "arweave", "arlocal", and unset network).
-    return this._payArweave(quote, onStatus);
+    throw Error(`Unsupported network: ${quote.network}`);
   }
 
   // ── Network-specific payment handlers ────────────────────────────────────────
@@ -192,7 +235,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     return {
       txHash: txId,
       token: quote.token,
-      amount: quote.amount,
+      amount: arCost,
       type: quote.type,
       simulated: false,
       paidAt: Date.now(),
@@ -232,8 +275,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     return {
       txHash: txId,
-      token: quote.token,
-      amount: quote.amount,
+      token: "DUST",
+      amount: dustCost,
       type: quote.type,
       signedTx: signature,
       simulated: false,

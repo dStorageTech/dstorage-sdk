@@ -11,8 +11,7 @@
  * so a single adapter class covers both storage and chain payment slots.
  *
  * Usage:
- *   new MockPaymentAdapter()                            // MOCK token, storage type
- *   new MockPaymentAdapter({ type: 'chain' })           // MOCK token, chain type
+ *   new MockPaymentAdapter({ token: 'MOCK', type: 'chain' })
  *   new MockPaymentAdapter({ token: 'AR', type: 'storage' })
  *   new MockPaymentAdapter({ token: 'DUST', type: 'chain' })
  */
@@ -20,7 +19,7 @@
 import type {
   Logger,
   PaymentAdapter,
-  PaymentProviderName,
+  PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
@@ -32,12 +31,12 @@ export interface MockPaymentAdapterConfig {
    * Token to simulate payments with.
    * Defaults to 'MOCK'.
    */
-  token?: TokenSymbol;
+  token: TokenSymbol;
   /**
    * Payment type this instance simulates.
    * Defaults to 'storage'.
    */
-  type?: "storage" | "chain";
+  type: "storage" | "chain";
   /**
    * How long in ms before a quote expires.
    * Defaults to 600_000 (10 minutes).
@@ -50,16 +49,16 @@ export interface MockPaymentAdapterConfig {
 }
 
 export class MockPaymentAdapter implements PaymentAdapter {
-  readonly name: PaymentProviderName = "mock";
+  readonly network: PaymentNetworkName = "mock";
   readonly token: TokenSymbol;
   readonly type: "storage" | "chain";
 
   private readonly quoteValidityMs: number;
   private readonly logger: Logger | undefined;
 
-  constructor(config: MockPaymentAdapterConfig = {}) {
-    this.token = config.token ?? "MOCK";
-    this.type = config.type ?? "storage";
+  constructor(config: MockPaymentAdapterConfig) {
+    this.token = config.token;
+    this.type = config.type;
     this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
     this.logger = config.logger;
   }
@@ -77,7 +76,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
     return {
       token: this.token,
       amount,
-      network: this.name,
+      network: this.network,
       type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,

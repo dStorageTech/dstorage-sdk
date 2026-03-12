@@ -17,6 +17,7 @@ import type {
   WalletBalances,
   DataReferenceSummary,
 } from "../types.js";
+import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
 
 // ── Storage helpers ──
 const refs = new Map<string, ChainReference>();
@@ -51,6 +52,10 @@ function load<T>(key: string): T | null {
 export class MockChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = "mock";
   readonly providerName: string = "Mock-Chain-Adapter";
+  readonly paymentAdapter: PaymentAdapter = new MockPaymentAdapter({
+    token: "MOCK",
+    type: "chain",
+  });
 
   private contractAddress: string;
   private readonly logger: Logger | undefined;

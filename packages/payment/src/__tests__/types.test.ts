@@ -3,14 +3,7 @@ import { TOKENS } from "../types.js";
 import type { TokenSymbol } from "../types.js";
 
 describe("TOKENS registry", () => {
-  const expectedSymbols: TokenSymbol[] = [
-    "AR",
-    "ANT",
-    "DUST",
-    "ETH",
-    "MATIC",
-    "MOCK",
-  ];
+  const expectedSymbols: TokenSymbol[] = ["AR", "ANT", "DUST", "MOCK"];
 
   it("contains all expected token symbols", () => {
     for (const symbol of expectedSymbols) {
@@ -18,8 +11,8 @@ describe("TOKENS registry", () => {
     }
   });
 
-  it("has exactly 6 tokens", () => {
-    expect(Object.keys(TOKENS)).toHaveLength(6);
+  it("has exactly 4 tokens", () => {
+    expect(Object.keys(TOKENS)).toHaveLength(4);
   });
 
   // ── Per-token checks ───────────────────────────────────────────────────────
@@ -40,18 +33,6 @@ describe("TOKENS registry", () => {
     expect(TOKENS.DUST.symbol).toBe("DUST");
     expect(TOKENS.DUST.name).toBe("Midnight");
     expect(TOKENS.DUST.decimals).toBe(6);
-  });
-
-  it("ETH: symbol, name, 18 decimals, positive price", () => {
-    expect(TOKENS.ETH.symbol).toBe("ETH");
-    expect(TOKENS.ETH.name).toBe("Ethereum");
-    expect(TOKENS.ETH.decimals).toBe(18);
-  });
-
-  it("MATIC: symbol, name, 18 decimals, positive price", () => {
-    expect(TOKENS.MATIC.symbol).toBe("MATIC");
-    expect(TOKENS.MATIC.name).toBe("Polygon");
-    expect(TOKENS.MATIC.decimals).toBe(18);
   });
 
   it("MOCK: symbol, name, 6 decimals, price of 1.0 USD", () => {

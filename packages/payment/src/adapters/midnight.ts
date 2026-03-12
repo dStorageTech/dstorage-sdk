@@ -23,7 +23,7 @@
 import type {
   Logger,
   PaymentAdapter,
-  PaymentProviderName,
+  PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
@@ -52,7 +52,7 @@ export interface MidnightPaymentAdapterConfig {
 }
 
 export class MidnightPaymentAdapter implements PaymentAdapter {
-  readonly name: PaymentProviderName = "midnight";
+  readonly network: PaymentNetworkName = "midnight";
   readonly token: TokenSymbol = "DUST";
   readonly type: "storage" | "chain" = "chain";
 
@@ -95,6 +95,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
      *   };
      */
 
+    // TODO: query a service to obtain estimation
     // Preview: flat ~$0.01 per chain tx.
     // On Midnight, the fee is circuit-cost-dominated, so dataSizeBytes is not proportional.
     void dataSizeBytes;
@@ -106,10 +107,10 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
     );
 
     return {
-      token: "DUST",
+      token: this.token,
       amount,
-      network: this.name,
-      type: "chain",
+      network: this.network,
+      type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
     };

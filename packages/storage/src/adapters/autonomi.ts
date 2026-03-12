@@ -12,12 +12,11 @@
 
 import type {
   Logger,
-  PaymentAdapter,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
 } from "../types.js";
-import { MockPaymentAdapter } from "@dstorage/payment";
+import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
 
 export interface AutonomiAdapterConfig {
   /**

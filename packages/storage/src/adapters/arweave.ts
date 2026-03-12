@@ -40,16 +40,19 @@
 
 import type {
   Logger,
-  PaymentAdapter,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
 } from "../types.js";
 import {
+  PaymentAdapter,
   ArweavePaymentAdapter,
   ManagedPaymentAdapter,
 } from "@dstorage/payment";
-import type { SignedArweaveUpload } from "@dstorage/payment";
+import type {
+  PaymentNetworkName,
+  SignedArweaveUpload,
+} from "@dstorage/payment";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -180,6 +183,9 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       this.paymentAdapter = new ManagedPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
         userId: config.userId,
+        network: this.name as PaymentNetworkName,
+        token: "AR",
+        type: "storage",
         gateway: this.gateway,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
@@ -250,7 +256,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     if (!signed) {
       this.logger?.log(
         "dStorage/arweave",
-        `Funding data storage transaction with ${arwPayment.name}...`,
+        `Funding data storage transaction...`,
       );
       // Direct upload path — stage data and trigger signing via payment adapter.
       arwPayment.provideUploadData(data, metadata);

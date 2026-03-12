@@ -5,6 +5,9 @@
  * More chains can be supported in the future
  */
 
+import type { PaymentReceipt } from "@dstorage/payment";
+import type { PaymentAdapter } from "@dstorage/payment";
+
 /**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
@@ -41,6 +44,12 @@ export interface ChainWriteResult {
   blockHeight?: number;
   /** Timestamp of when the reference was written on-chain */
   writtenAt: number;
+  /**
+   * Payment receipt for the chain transaction fee, when the adapter handles
+   * payment internally (e.g. Midnight managed payment via signing server).
+   * When present, MetaTransaction uses this instead of the payment_chain step receipt.
+   */
+  paymentReceipt?: PaymentReceipt;
 }
 
 /**
@@ -64,6 +73,8 @@ export interface DataReferenceSummary {
 export interface ChainAdapter {
   readonly name: ChainProviderName;
   readonly providerName: string;
+  /** Payment adapter responsible for paying chain network fees for this adapter. */
+  readonly paymentAdapter: PaymentAdapter;
 
   /** Initialize the wallet: derive keys, wait for sync.
    *  Must be called before any read/write operations. */

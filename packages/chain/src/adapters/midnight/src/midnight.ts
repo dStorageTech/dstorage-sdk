@@ -22,7 +22,11 @@
  */
 
 import { base64urlToBytes, bytesToBase64url } from "@dstorage/crypto";
-import { ManagedPaymentAdapter } from "@dstorage/payment";
+import {
+  ManagedPaymentAdapter,
+  MidnightPaymentAdapter,
+} from "@dstorage/payment";
+import type { PaymentAdapter, PaymentReceipt } from "@dstorage/payment";
 
 import type {
   ChainAdapter,
@@ -204,6 +208,13 @@ function hexToUint8Array(hex: string): Uint8Array {
 export class MidnightChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = "midnight";
   readonly providerName: string = "Midnight";
+  readonly paymentAdapter: PaymentAdapter;
+
+  // FIXME: this won't be needed once we move
+  // the payment logic to the MidnightPaymentAdapter
+  readonly managedPaymentAdapter: PaymentAdapter | undefined;
+
+  _lastPaymentReceipt: PaymentReceipt | undefined;
 
   private facade: unknown | null = null;
   private connectorAPI: ConnectedAPI | null = null;
@@ -220,7 +231,6 @@ export class MidnightChainAdapter implements ChainAdapter {
   private readonly walletMode: "facade" | "connector";
   private readonly connectorName: string | null;
   private readonly logger: Logger | undefined;
-  private readonly managedPayment: ManagedPaymentAdapter | undefined;
 
   private _contractAddress: string | undefined;
   private _zkArtifactsPath: string | undefined;
@@ -308,7 +318,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       indexerWS: config.indexerWsEndpoint,
       node: config.nodeEndpoint,
       nodeWS: config.nodeWsEndpoint,
-      faucet: "https://faucet.preprod.midnight.network/api/request-tokens",
+      faucet: undefined,
       proofServer: config.proofServerEndpoint,
     };
 
@@ -318,9 +328,19 @@ export class MidnightChainAdapter implements ChainAdapter {
           "[dStorage/midnight] userId is required when signingServerUrl is set.",
         );
       }
-      this.managedPayment = new ManagedPaymentAdapter({
+      this.paymentAdapter = new ManagedPaymentAdapter({
+        network: this.name,
+        token: "DUST",
+        type: "chain",
         signingServerUrl: config.signingServerUrl,
         userId: config.userId,
+        ...(config.logger !== undefined ? { logger: config.logger } : {}),
+      });
+      this.managedPaymentAdapter = this.paymentAdapter;
+    } else {
+      // FIXME: we need to move logic from here onto this adapter's implementation
+      // At the moment this is a mock
+      this.paymentAdapter = new MidnightPaymentAdapter({
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     }
@@ -341,9 +361,9 @@ export class MidnightChainAdapter implements ChainAdapter {
    * returned unchanged.
    */
   private _wrapWithManagedPayment(walletProvider: any): any {
-    if (!this.managedPayment) return walletProvider;
+    if (!this.managedPaymentAdapter) return walletProvider;
 
-    const managedPayment = this.managedPayment;
+    const paymentAdapter = this.managedPaymentAdapter;
     const logger = this.logger;
 
     return {
@@ -360,7 +380,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           "dStorage/midnight",
           `balanceTx: delegating to managed payment service (serialized tx length=${txHex.length})`,
         );
-        const receipt = await managedPayment.pay({
+        const receipt = await paymentAdapter.pay({
           token: "DUST",
           amount: "0",
           type: "chain",
@@ -369,6 +389,8 @@ export class MidnightChainAdapter implements ChainAdapter {
           dataSizeBytes: txHex.length,
           expiresAt: Date.now() + 60_000,
         });
+        this._lastPaymentReceipt = receipt;
+
         if (!receipt.signedTx) {
           throw new Error(
             "[dStorage/midnight] Managed payment server did not return a balanced transaction.",
@@ -595,7 +617,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const walletFacade: WalletFacade = walletProvider.wallet;
     await walletProvider.start();
 
-    if (!this.managedPayment) {
+    if (!this.managedPaymentAdapter) {
       // When using the local wallet for fee payment, verify the wallet holds NIGHT
       // tokens (needed for DUST conversion). Waits for full sync if balance is zero.
       // Skipped in managed payment mode — the signing server covers fees, so the
@@ -814,11 +836,14 @@ export class MidnightChainAdapter implements ChainAdapter {
         `Reference written at block ${blockHeight} → refId: ${refIdHex}`,
       );
 
+      const paymentReceipt = this._lastPaymentReceipt;
+      this._lastPaymentReceipt = undefined;
       return {
         refId: refIdHex,
         provider: this.name,
         blockHeight,
         writtenAt: ref.writtenAt,
+        ...(paymentReceipt ? { paymentReceipt } : {}),
       };
     } catch (err) {
       this.logger?.error(

@@ -20,8 +20,6 @@
 
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
-import type { PaymentAdapter } from "@dstorage/payment";
-import { MockPaymentAdapter } from "@dstorage/payment";
 import { buildCostEstimate } from "./payment.js";
 import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
 
@@ -122,7 +120,6 @@ export interface MetaTxConfig {
 export interface DStorageContext {
   readonly storageAdapter: StorageAdapter;
   readonly chainAdapter: ChainAdapter;
-  readonly chainPaymentAdapter: PaymentAdapter | undefined;
   /** Wallet address of the connected user, or null if using init() / facade mode. */
   readonly connectedAddress: string | null;
   /**
@@ -190,8 +187,6 @@ export function validateFile(file: File): FileValidationResult {
 
 /**
  * Return the default chain payment token for a given chain provider name.
- * Used by MetaTransaction to instantiate MockPaymentAdapter with the right token
- * when no chainPaymentAdapter is configured.
  */
 export function defaultChainToken(chainProvider: string): TokenSymbol {
   switch (chainProvider) {
@@ -255,24 +250,12 @@ function buildInitialSteps(): MetaTxStepState[] {
 
 export class MetaTransaction {
   private sdk: DStorageContext;
-  private storagePaymentAdapter: PaymentAdapter;
-  private chainPaymentAdapter: PaymentAdapter;
   private progressCallback: ((p: MetaTxProgress) => void) | null = null;
   private steps: MetaTxStepState[] = buildInitialSteps();
   private startedAt = 0;
 
   constructor(sdk: DStorageContext) {
     this.sdk = sdk;
-
-    // Storage payment adapter is owned by the storage adapter itself.
-    this.storagePaymentAdapter = sdk.storageAdapter.paymentAdapter;
-    // Chain payment adapter can be overridden via DStorageConfig; falls back to Mock.
-    this.chainPaymentAdapter =
-      sdk.chainPaymentAdapter ??
-      new MockPaymentAdapter({
-        type: "chain",
-        token: defaultChainToken(sdk.chainAdapter.name),
-      });
   }
 
   /** Register a progress listener. Called after every step state change. */
@@ -295,8 +278,8 @@ export class MetaTransaction {
 
       // Fetch quotes from both payment adapters in parallel — they are independent.
       const [storageQuote, chainQuote] = await Promise.all([
-        this.storagePaymentAdapter.estimateCost(file.size),
-        this.chainPaymentAdapter.estimateCost(file.size),
+        this.sdk.storageAdapter.paymentAdapter.estimateCost(file.size),
+        this.sdk.chainAdapter.paymentAdapter.estimateCost(file.size),
       ]);
 
       const estimate = buildCostEstimate(storageQuote, chainQuote, file.size);
@@ -338,8 +321,8 @@ export class MetaTransaction {
 
       // If the storage payment adapter needs the data to build and sign the
       // payment transaction before broadcasting (e.g. Arweave), provide it now.
-      if (this.storagePaymentAdapter.provideUploadData) {
-        this.storagePaymentAdapter.provideUploadData(
+      if (this.sdk.storageAdapter.paymentAdapter.provideUploadData) {
+        this.sdk.storageAdapter.paymentAdapter.provideUploadData(
           uploadData,
           uploadMetadata,
         );
@@ -351,7 +334,7 @@ export class MetaTransaction {
         `Preparing ${storageQuote.amount} ${storageQuote.token} payment…`,
       );
 
-      const storageReceipt = await this.storagePaymentAdapter.pay(
+      const storageReceipt = await this.sdk.storageAdapter.paymentAdapter.pay(
         storageQuote,
         (msg) => this.updateStepDetail("payment_storage", msg),
       );
@@ -378,12 +361,15 @@ export class MetaTransaction {
       );
 
       // ── Step 4: Chain fee payment ────────────────────────────────────────
+      // FIXME: this step is invalid for Midnight with ManagerPaymentAdapter,
+      // the payment is made as part of next Step 5.
+
       this.startStep(
         "payment_chain",
         `Preparing ${chainQuote.amount} ${chainQuote.token} transaction…`,
       );
 
-      const chainReceipt = await this.chainPaymentAdapter.pay(
+      const chainReceipt = await this.sdk.chainAdapter.paymentAdapter.pay(
         chainQuote,
         (msg) => this.updateStepDetail("payment_chain", msg),
       );
@@ -407,6 +393,16 @@ export class MetaTransaction {
         dataLabel: file.name,
         writtenAt: Date.now(),
       });
+
+      // If the chain adapter handled payment internally (e.g. Midnight managed
+      // payment embedded in the transaction), use that receipt instead.
+      const finalChainReceipt = chainResult.paymentReceipt ?? chainReceipt;
+      if (chainResult.paymentReceipt) {
+        this.updateStepDetail(
+          "payment_chain",
+          `${finalChainReceipt.amount} ${finalChainReceipt.token}`,
+        );
+      }
 
       const circuitLabel = config.circuitName
         ? ` via ${config.circuitName}`
@@ -439,9 +435,9 @@ export class MetaTransaction {
           sizeBytes: file.size,
         },
         storagePayment: storageReceipt,
-        chainPayment: chainReceipt,
+        chainPayment: finalChainReceipt,
         storageToken: storageReceipt.token,
-        chainToken: chainReceipt.token,
+        chainToken: finalChainReceipt.token,
         ...(config.contractAddress
           ? {
               contract: {

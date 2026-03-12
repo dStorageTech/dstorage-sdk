@@ -18,42 +18,38 @@ function makeChainAdapter(token = "DUST" as const) {
 describe("MockPaymentAdapter", () => {
   describe("constructor defaults", () => {
     it("default token is MOCK", () => {
-      const adapter = new MockPaymentAdapter();
+      const adapter = new MockPaymentAdapter({ token: "MOCK", type: "chain" });
       expect(adapter.token).toBe("MOCK");
     });
 
     it('default type is "storage"', () => {
-      const adapter = new MockPaymentAdapter();
+      const adapter = new MockPaymentAdapter({
+        token: "MOCK",
+        type: "storage",
+      });
       expect(adapter.type).toBe("storage");
     });
 
     it('name is "mock"', () => {
-      const adapter = new MockPaymentAdapter();
-      expect(adapter.name).toBe("mock");
+      const adapter = new MockPaymentAdapter({ token: "MOCK", type: "chain" });
+      expect(adapter.network).toBe("mock");
     });
   });
 
   describe("constructor custom config", () => {
     it("accepts custom token", () => {
-      const adapter = new MockPaymentAdapter({ token: "AR" });
+      const adapter = new MockPaymentAdapter({ token: "AR", type: "chain" });
       expect(adapter.token).toBe("AR");
     });
 
     it("accepts chain type", () => {
-      const adapter = new MockPaymentAdapter({ type: "chain" });
+      const adapter = new MockPaymentAdapter({ token: "DUST", type: "chain" });
       expect(adapter.type).toBe("chain");
     });
 
     it("accepts all token symbols", () => {
-      for (const token of [
-        "AR",
-        "ANT",
-        "DUST",
-        "ETH",
-        "MATIC",
-        "MOCK",
-      ] as const) {
-        const adapter = new MockPaymentAdapter({ token });
+      for (const token of ["AR", "ANT", "DUST", "MOCK"] as const) {
+        const adapter = new MockPaymentAdapter({ token, type: "chain" });
         expect(adapter.token).toBe(token);
       }
     });
@@ -129,7 +125,11 @@ describe("MockPaymentAdapter", () => {
     });
 
     it("custom quoteValidityMs is respected", async () => {
-      const adapter = new MockPaymentAdapter({ quoteValidityMs: 60_000 });
+      const adapter = new MockPaymentAdapter({
+        token: "MOCK",
+        type: "chain",
+        quoteValidityMs: 60_000,
+      });
       const before = Date.now();
       const quote = await adapter.estimateCost(1024);
       const delta = quote.expiresAt - before;

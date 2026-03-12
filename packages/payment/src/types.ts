@@ -22,7 +22,7 @@ export interface Logger {
 // ── Token definitions ─────────────────────────────────────────────────────────
 
 /** All tokens the SDK knows about. MOCK is used for development and testing. */
-export type TokenSymbol = "AR" | "ANT" | "DUST" | "ETH" | "MATIC" | "MOCK";
+export type TokenSymbol = "AR" | "ANT" | "DUST" | "MOCK";
 
 /** Display metadata about a token — used for labels and cost conversion. */
 export interface Token {
@@ -36,12 +36,6 @@ export const TOKENS: Record<TokenSymbol, Token> = {
   AR: { symbol: "AR", name: "Arweave", decimals: 12 },
   ANT: { symbol: "ANT", name: "Autonomi", decimals: 9 },
   DUST: { symbol: "DUST", name: "Midnight", decimals: 6 },
-  ETH: { symbol: "ETH", name: "Ethereum", decimals: 18 },
-  MATIC: {
-    symbol: "MATIC",
-    name: "Polygon",
-    decimals: 18,
-  },
   MOCK: {
     symbol: "MOCK",
     name: "Mock Token",
@@ -51,8 +45,8 @@ export const TOKENS: Record<TokenSymbol, Token> = {
 
 // ── Provider name ─────────────────────────────────────────────────────────────
 
-/** Identifies which payment provider an adapter connects to. */
-export type PaymentProviderName = "mock" | "arweave" | "midnight" | "dstorage";
+/** Identifies which network the payment provider works for. */
+export type PaymentNetworkName = "mock" | "arweave" | "midnight";
 
 // ── PaymentQuote ──────────────────────────────────────────────────────────────
 
@@ -115,9 +109,7 @@ export interface PaymentReceipt {
   /** Timestamp of payment confirmation */
   paidAt: number;
   /**
-   * Opaque serialized balanced/signed transaction bytes (hex) returned by the
-   * signing server. Populated by ManagedPaymentAdapter after the server has
-   * funded and balanced the transaction.
+   * Opaque serialized balanced/signed transaction bytes (hex).
    * Example: serialized FinalizedTransaction hex for Midnight — the chain adapter
    * deserializes this and passes it directly to submitTx().
    */
@@ -137,8 +129,8 @@ export interface PaymentReceipt {
  * any orchestration code.
  */
 export interface PaymentAdapter {
-  /** Which payment provider this adapter connects to */
-  readonly name: PaymentProviderName;
+  /** Which network the payment works for */
+  readonly network: PaymentNetworkName;
 
   /**
    * The token this adapter transacts in.

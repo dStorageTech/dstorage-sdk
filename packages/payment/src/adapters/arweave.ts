@@ -39,7 +39,7 @@
 import type {
   Logger,
   PaymentAdapter,
-  PaymentProviderName,
+  PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
@@ -89,7 +89,7 @@ export interface SignedArweaveUpload {
 }
 
 export class ArweavePaymentAdapter implements PaymentAdapter {
-  readonly name: PaymentProviderName = "arweave";
+  readonly network: PaymentNetworkName = "arweave";
   readonly token: TokenSymbol = "AR";
   readonly type: "storage" | "chain" = "storage";
 
@@ -187,10 +187,10 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     );
 
     return {
-      token: "AR",
+      token: this.token,
       amount,
-      network: this.name,
-      type: "storage",
+      network: this.network,
+      type: this.type,
       dataSizeBytes,
       expiresAt: Date.now() + this.quoteValidityMs,
     };

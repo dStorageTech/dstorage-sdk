@@ -9,12 +9,11 @@
 
 import type {
   Logger,
-  PaymentAdapter,
   StorageAdapter,
   StorageProviderName,
   UploadResult,
 } from "../types.js";
-import { MockPaymentAdapter } from "@dstorage/payment";
+import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
 
 // In Node.js (no localStorage), fall back to an in-memory map.
 const memoryStore = new Map<string, string>();

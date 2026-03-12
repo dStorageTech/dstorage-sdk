@@ -5,7 +5,7 @@
 
 import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
-import type { PaymentAdapter } from "@dstorage/payment";
+import { CostEstimate } from "./payment";
 
 /**
  * Minimal logger interface accepted by every SDK class.
@@ -39,11 +39,6 @@ export interface DStorageConfig {
   storageAdapter: StorageAdapter;
   /** Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...) */
   chainAdapter: ChainAdapter;
-  /**
-   * Payment adapter for blockchain transaction fees (DUST, ETH, or MOCK).
-   * Defaults to MockPaymentAdapter with the token matching the chainAdapter.
-   */
-  chainPaymentAdapter?: PaymentAdapter;
   /** Optional label for the type of data being stored */
   defaultDataLabel?: string;
   /**
@@ -74,6 +69,8 @@ export interface UploadResult {
   chainProvider: ChainProviderName;
   /** Timestamp */
   uploadedAt: number;
+  /** Estimated cost of upload */
+  costEstimate: CostEstimate;
 }
 
 /** Result returned from dStorage.retrieve() */
