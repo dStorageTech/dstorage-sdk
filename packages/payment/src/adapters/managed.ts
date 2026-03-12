@@ -13,13 +13,17 @@
  * ── Arweave flow ──────────────────────────────────────────────────────────────
  *
  * Instead of signing the Arweave transaction locally (ArConnect or JWK),
- * this adapter constructs the Arweave transaction and sends its JSON
- * representation to a remote REST API. The server holds a funded Arweave
- * account, signs the transaction, and returns the signature and id.
+ * this adapter constructs the Arweave transaction, computes the Merkle tree
+ * (data_root) locally, then sends a stripped transaction JSON — containing
+ * only metadata, data_root, and data_size but NOT the raw file bytes — to a
+ * remote REST API. The server holds a funded Arweave account, signs the
+ * stripped transaction, and returns the signature and id. The file content
+ * never leaves the client.
  *
  *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
  *        → { txData: object, network: string, userId: string }
- *             txData   — full Arweave transaction JSON (tx.toJSON()).
+ *             txData   — Arweave transaction JSON with data stripped (tx.toJSON()
+ *                        after clearing tx.data; data_root + data_size preserved).
  *             network  — Arweave network identifier (e.g. "arweave", "arlocal").
  *             userId   — caller identity forwarded to the server.
  *        ← { txId: string, signature: string, publicKey: string, txAmount: string, ... }
@@ -184,9 +188,13 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   /**
    * Arweave remote-signing flow:
    *   1. Creates the Arweave transaction locally (data + tags, no local signing).
-   *   2. POSTs the full transaction JSON to the signing server.
-   *   3. Applies the returned id, signature, and owner to the transaction.
-   *   4. Stores the signed transaction for ArweaveStorageAdapter.upload() to post.
+   *   2. Calls prepareChunks() to compute data_root (Merkle root) locally.
+   *   3. Strips the raw data from the transaction before serialising — only the
+   *      data_root and data_size (not the actual bytes) are sent to the server.
+   *   4. POSTs the stripped transaction JSON to the signing server.
+   *   5. Applies the returned id, signature, and owner to the transaction.
+   *   6. Restores the raw data so the chunked uploader can post it directly to
+   *      the Arweave gateway — the server never sees the file content.
    *
    * Falls back to the base-class pass-through if provideUploadData() was not called.
    */
@@ -210,6 +218,17 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       tx.addTag(key, value);
     }
 
+    // Compute the Merkle tree (data_root) locally so the server can sign based
+    // on the data_root without ever receiving the raw file content.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    await tx.prepareChunks(tx.data);
+
+    // Strip the raw bytes before sending — only metadata + data_root travel
+    // to the signing server. Data is restored afterwards for the chunked uploader.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawData: any = tx.data;
+    tx.data = new Uint8Array(0);
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     const txJson = tx.toJSON();
 
@@ -222,6 +241,9 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     onStatus?.("Applying remote signature…");
     tx.setSignature({ id: txId, signature, owner: signedPublicKey });
+
+    // Restore raw data so the chunked uploader can post it to the gateway.
+    tx.data = rawData;
 
     this.signedUpload = { tx, arCost };
 
