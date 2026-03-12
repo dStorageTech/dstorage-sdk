@@ -126,28 +126,33 @@ function MetaTxView({ progress }: { progress: MetaTxProgress }) {
         </span>
       </div>
 
-      {progress.estimate && (
+      {(progress.receipt || progress.estimate) && (
         <div className="sdk-cost-row">
           <span className="sdk-cost-item">
             Storage:{" "}
             <strong>
-              {progress.estimate.storageCost.amount}{" "}
-              {progress.estimate.storageCost.token}
+              {progress.receipt
+                ? `${progress.receipt.storagePayment.amount} ${progress.receipt.storagePayment.token}`
+                : `${progress.estimate!.storageCost.amount} ${progress.estimate!.storageCost.token}`}
             </strong>
           </span>
           <span className="sdk-cost-sep">·</span>
           <span className="sdk-cost-item">
             Chain:{" "}
             <strong>
-              {progress.estimate.chainCost.amount}{" "}
-              {progress.estimate.chainCost.token}
+              {progress.receipt
+                ? `${progress.receipt.chainPayment.amount} ${progress.receipt.chainPayment.token}`
+                : `${progress.estimate!.chainCost.amount} ${progress.estimate!.chainCost.token}`}
             </strong>
           </span>
-          <span className="sdk-cost-sep">·</span>
-          <span className="sdk-cost-total">
-            Total ≈ ${progress.estimate.totalUsd}
-          </span>
-          <span className="sdk-sim-badge">simulated</span>
+          {progress.receipt ? (
+            progress.receipt.storagePayment.simulated &&
+            progress.receipt.chainPayment.simulated ? (
+              <span className="sdk-sim-badge">simulated</span>
+            ) : null
+          ) : (
+            <span className="sdk-sim-badge">estimate</span>
+          )}
         </div>
       )}
 

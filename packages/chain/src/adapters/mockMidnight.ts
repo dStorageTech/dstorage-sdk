@@ -26,8 +26,11 @@ import type {
   Logger,
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
-import { ManagedPaymentAdapter } from "@dstorage/payment";
-import type { ManagedPaymentAdapterConfig } from "@dstorage/payment";
+import { ManagedPaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
+import type {
+  ManagedPaymentAdapterConfig,
+  PaymentAdapter,
+} from "@dstorage/payment";
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
@@ -71,9 +74,9 @@ let mockBlockHeight = 1_000_000 + Math.floor(Math.random() * 10_000);
 export class MockMidnightChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = "midnight";
   readonly providerName: string = "Midnight-Mock";
+  readonly paymentAdapter: PaymentAdapter;
 
   private readonly proofServer: MockProofServer;
-  private readonly managedPayment: ManagedPaymentAdapter | undefined;
   private readonly logger: Logger | undefined;
 
   constructor(
@@ -105,9 +108,18 @@ export class MockMidnightChainAdapter implements ChainAdapter {
           "[dStorage/mock-midnight] userId is required when signingServerUrl is set.",
         );
       }
-      this.managedPayment = new ManagedPaymentAdapter({
+      this.paymentAdapter = new ManagedPaymentAdapter({
+        network: this.name,
+        token: "DUST",
+        type: "chain",
         signingServerUrl: options.signingServerUrl,
         userId: options.userId,
+        ...(options.logger !== undefined ? { logger: options.logger } : {}),
+      });
+    } else {
+      this.paymentAdapter = new MockPaymentAdapter({
+        token: "DUST",
+        type: "chain",
         ...(options.logger !== undefined ? { logger: options.logger } : {}),
       });
     }
@@ -131,16 +143,17 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     await this.proofServer.generateProof("storeReference");
 
     // Step 2: Sign the transaction via the managed payment service (if configured)
-    if (this.managedPayment) {
+    let paymentReceipt;
+    if (this.paymentAdapter) {
       this.logger?.log(
         "dStorage/mock-midnight",
         "Sending request to balance Tx to remote service…",
       );
-      await this.managedPayment.pay({
+      paymentReceipt = await this.paymentAdapter.pay({
         token: "DUST",
         amount: "0.1000",
         type: "chain",
-        network: "midnight",
+        network: this.name,
         dataSizeBytes: 0,
         expiresAt: Date.now() + 60_000,
       });
@@ -175,6 +188,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       provider: this.name,
       blockHeight: mockBlockHeight,
       writtenAt: ref.writtenAt,
+      ...(paymentReceipt ? { paymentReceipt } : {}),
     };
   }
 

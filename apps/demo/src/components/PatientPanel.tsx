@@ -6,8 +6,13 @@ import type {
   StoredRecord,
   StorageAdapterKey,
   ChainAdapterKey,
+  PaymentAdapterKey,
 } from "../App.tsx";
-import { ADAPTER_CONFIGS, CHAIN_ADAPTER_CONFIGS } from "../App.tsx";
+import {
+  ADAPTER_CONFIGS,
+  CHAIN_ADAPTER_CONFIGS,
+  PAYMENT_ADAPTER_CONFIGS,
+} from "../App.tsx";
 
 interface Props {
   step: AppStep;
@@ -15,9 +20,15 @@ interface Props {
   record: StoredRecord | null;
   storageAdapterKey: StorageAdapterKey;
   chainAdapterKey: ChainAdapterKey;
+  paymentAdapterKey: PaymentAdapterKey;
+  managedUserId: string;
+  managedServiceUrl: string;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onChainAdapterChange: (key: ChainAdapterKey) => void;
+  onPaymentAdapterChange: (key: PaymentAdapterKey) => void;
+  onManagedUserIdChange: (userId: string) => void;
   existingReferences: Array<DataReferenceSummary>;
+  onContinueFromSetup: () => void;
   onStartUploadFlow: () => Promise<void>;
   onLoadExistingReferences: () => Promise<void>;
   onUseExistingRecord: (refId: string) => Promise<void>;
@@ -32,9 +43,15 @@ export function PatientPanel({
   record,
   storageAdapterKey,
   chainAdapterKey,
+  paymentAdapterKey,
+  managedUserId,
+  managedServiceUrl,
   onStorageAdapterChange,
   onChainAdapterChange,
+  onPaymentAdapterChange,
+  onManagedUserIdChange,
   existingReferences,
+  onContinueFromSetup,
   onStartUploadFlow,
   onLoadExistingReferences,
   onUseExistingRecord,
@@ -53,6 +70,8 @@ export function PatientPanel({
 
   const activeAdapter = ADAPTER_CONFIGS[storageAdapterKey];
   const activeChainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
+  const managedUserIdRequired =
+    paymentAdapterKey === "managed" && !managedUserId.trim();
 
   useEffect(() => {
     if (existingReferences.length === 0 && selectedRefId) {
@@ -136,23 +155,10 @@ export function PatientPanel({
   const selectedRefCannotDecrypt =
     selectedReference && selectedReference.storageId === null;
 
-  // ── Step: Connect ──────────────────────────────────────────────────────────
+  // ── Step: Connect (adapter selection — full-width page) ───────────────────
   if (step === "connect")
     return (
       <div className="pp-section">
-        <div className="pp-intro">
-          <div className="pp-intro-icon">🔐</div>
-          <h2 className="pp-intro-title">
-            Your Health Records, Under Your Control
-          </h2>
-          <p className="pp-intro-body">
-            Choose your workflow to either upload a new insurance certificate or
-            use an existing one. Only you decide who can access your data — and
-            you can prove coverage to any clinic without ever sharing your
-            personal details.
-          </p>
-        </div>
-
         <div className="as-picker">
           <div className="as-picker-label">Storage Backend</div>
           <div className="as-cards">
@@ -223,6 +229,107 @@ export function PatientPanel({
           </div>
         </div>
 
+        <div className="as-picker">
+          <div className="as-picker-label">Payment Backend</div>
+          <div className="as-cards">
+            {(
+              Object.entries(PAYMENT_ADAPTER_CONFIGS) as [
+                PaymentAdapterKey,
+                (typeof PAYMENT_ADAPTER_CONFIGS)[PaymentAdapterKey],
+              ][]
+            ).map(([key, cfg]) => (
+              <button
+                key={key}
+                className={`as-card ${paymentAdapterKey === key ? "selected" : ""}`}
+                onClick={() => onPaymentAdapterChange(key)}
+              >
+                <div className="as-card-top">
+                  <span className="as-card-name">{cfg.label}</span>
+                  <span className={`as-card-status as-status-${cfg.status}`}>
+                    {cfg.status === "live"
+                      ? "Live"
+                      : cfg.status === "preview"
+                        ? "Preview"
+                        : "Soon"}
+                  </span>
+                </div>
+                <div className="as-card-desc">{cfg.description}</div>
+                {cfg.note && <div className="as-card-note">{cfg.note}</div>}
+              </button>
+            ))}
+          </div>
+          {paymentAdapterKey === "managed" && (
+            <div className="pp-payments-fields">
+              <div className="pp-contract-addr">
+                <label
+                  className="pp-contract-addr-label"
+                  htmlFor="managed-user-id"
+                >
+                  User ID
+                </label>
+                <input
+                  id="managed-user-id"
+                  className="pp-contract-addr-input"
+                  value={managedUserId}
+                  onChange={(e) => onManagedUserIdChange(e.target.value)}
+                  placeholder="Enter user id"
+                />
+              </div>
+              <div className="pp-contract-addr">
+                <label
+                  className="pp-contract-addr-label"
+                  htmlFor="managed-service-url"
+                >
+                  Service URL
+                </label>
+                <input
+                  id="managed-service-url"
+                  className="pp-contract-addr-input"
+                  value={managedServiceUrl}
+                  readOnly
+                />
+              </div>
+              {managedUserIdRequired && (
+                <div className="pp-error">
+                  User ID is required for managed payments.
+                </div>
+              )}
+            </div>
+          )}
+          <div className="as-picker-hint">
+            Choose how storage and chain fees are paid — swap with one line of
+            code.
+          </div>
+        </div>
+
+        <button
+          className="pp-btn pp-btn-primary pp-btn-full"
+          type="button"
+          disabled={managedUserIdRequired}
+          onClick={onContinueFromSetup}
+        >
+          Continue →
+        </button>
+      </div>
+    );
+
+  // ── Step: Ready (workflow selection — split screen patient panel) ──────────
+  if (step === "ready")
+    return (
+      <div className="pp-section">
+        <div className="pp-intro">
+          <div className="pp-intro-icon">🔐</div>
+          <h2 className="pp-intro-title">
+            Your Health Records, Under Your Control
+          </h2>
+          <p className="pp-intro-body">
+            Choose your workflow to either upload a new insurance certificate or
+            use an existing one. Only you decide who can access your data — and
+            you can prove coverage to any clinic without ever sharing your
+            personal details.
+          </p>
+        </div>
+
         <div className="pp-path-tabs">
           <div
             className="pp-path-tab-list"
@@ -260,7 +367,7 @@ export function PatientPanel({
                 <button
                   className="pp-btn pp-btn-primary pp-btn-full"
                   onClick={handleStartUploadFlow}
-                  disabled={!!loading}
+                  disabled={!!loading || managedUserIdRequired}
                 >
                   {loading === "start-upload" ? <Spinner /> : ""} Start Upload
                   Flow

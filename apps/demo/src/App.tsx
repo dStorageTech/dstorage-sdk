@@ -7,10 +7,10 @@ import {
   AutonomiStorageAdapter,
   MockMidnightChainAdapter,
   MidnightChainAdapter,
+  MidnightPaymentAdapter,
   connectDemoWallet,
   INSURANCE_CLAIMS,
   simulateZkProof,
-  MockPaymentAdapter,
 } from "@dstorage/core";
 import type {
   WalletInfo,
@@ -23,7 +23,13 @@ import { PatientPanel } from "./components/PatientPanel.tsx";
 import { VerifierPanel } from "./components/VerifierPanel.tsx";
 import { SdkDrawer } from "./components/SdkDrawer.tsx";
 
-export type AppStep = "connect" | "upload" | "uploaded" | "prove" | "done";
+export type AppStep =
+  | "connect"
+  | "ready"
+  | "upload"
+  | "uploaded"
+  | "prove"
+  | "done";
 export interface StoredRecord {
   dataId: string;
   storageId: string | null;
@@ -51,6 +57,7 @@ export type StorageAdapterKey =
   | "arweave"
   | "autonomi";
 export type ChainAdapterKey = "mock" | "midnight-connector";
+export type PaymentAdapterKey = "local" | "managed";
 
 const PROOF_SERVER_ENDPOINT = "http://127.0.0.1:6300";
 
@@ -78,7 +85,7 @@ export const ADAPTER_CONFIGS: Record<
   arweave: {
     label: "Arweave",
     description: "Pay-once permanent storage on the permaweb.",
-    status: "preview",
+    status: "live",
     note: "Requires the ArConnect browser extension",
   },
   autonomi: {
@@ -112,6 +119,29 @@ export const CHAIN_ADAPTER_CONFIGS: Record<
   },
 };
 
+export const PAYMENT_ADAPTER_CONFIGS: Record<
+  PaymentAdapterKey,
+  {
+    label: string;
+    description: string;
+    status: "live" | "preview" | "stub";
+    note?: string;
+  }
+> = {
+  local: {
+    label: "Local Payment",
+    description:
+      "Pay directly from your browser wallet extension (ArConnect for Arweave, Lace for Midnight).",
+    status: "live",
+  },
+  managed: {
+    label: "Managed Payment",
+    description: "dStorage API service handles payments on behalf of the user.",
+    status: "live",
+    note: "Requires a running dStorage payment service",
+  },
+};
+
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "light";
@@ -135,6 +165,10 @@ export default function App() {
     useState<StorageAdapterKey>("mock");
   const [chainAdapterKey, setChainAdapterKey] =
     useState<ChainAdapterKey>("mock");
+  const [paymentAdapterKey, setPaymentAdapterKey] =
+    useState<PaymentAdapterKey>("local");
+  const [managedUserId, setManagedUserId] = useState("");
+  const managedServiceUrl = "http://localhost:3000";
   const [existingReferences, setExistingReferences] = useState<
     DataReferenceSummary[]
   >([]);
@@ -164,24 +198,47 @@ export default function App() {
   );
 
   const buildSDK = useCallback(
-    async (storageKey: StorageAdapterKey, chainKey: ChainAdapterKey) => {
+    async (
+      storageKey: StorageAdapterKey,
+      chainKey: ChainAdapterKey,
+      paymentKey: PaymentAdapterKey,
+    ) => {
+      // Managed payment config — passed directly into adapter constructors that support it.
+      const managedConfig =
+        paymentKey === "managed"
+          ? {
+              signingServerUrl: managedServiceUrl,
+              userId: managedUserId.trim(),
+              logger: console,
+            }
+          : { logger: console };
+
+      if (paymentKey === "managed" && !managedUserId.trim()) {
+        throw new Error("Managed payments require a userId.");
+      }
+
+      // Storage adapter — ArweaveStorageAdapter accepts signingServerUrl/userId directly.
       let storageAdapter;
       if (storageKey === "arweave-local") {
-        // Auto-generate a test JWK wallet and mint AR tokens via arlocal — no ArConnect needed.
-        const { adapter } =
-          await ArweaveLocalStorageAdapter.createWithTestWallet();
-        storageAdapter = adapter;
+        if (paymentKey === "managed") {
+          // Managed payment: no local wallet needed — the server holds the funded wallet.
+          storageAdapter = new ArweaveLocalStorageAdapter(managedConfig);
+        } else {
+          // Auto-generate a test JWK wallet and mint AR tokens via arlocal.
+          const { adapter } =
+            await ArweaveLocalStorageAdapter.createWithTestWallet();
+          storageAdapter = adapter;
+        }
       } else {
         storageAdapter =
           storageKey === "arweave"
-            ? new ArweaveStorageAdapter()
+            ? new ArweaveStorageAdapter(managedConfig)
             : storageKey === "autonomi"
               ? new AutonomiStorageAdapter()
               : new MockStorageAdapter();
       }
 
       let chainAdapter;
-      let chainPaymentAdapter;
       if (chainKey === "midnight-connector") {
         // MidnightChainAdapter in connector mode is browser-safe.
         // All Node.js-only imports inside midnight.ts are /* @vite-ignore */ dynamic
@@ -198,26 +255,28 @@ export default function App() {
           proofServerEndpoint: PROOF_SERVER_ENDPOINT,
           // ZK artifacts are served from public/keys/ and public/zkir/
           zkConfigBaseUrl: window.location.origin,
+          ...managedConfig,
         };
         if (selectedContractAddress.trim()) {
           midnightConfig.contractAddress = selectedContractAddress.trim();
         }
         chainAdapter = new MidnightChainAdapter(midnightConfig);
-        // Midnight fees are managed internally by the Lace wallet — no separate payment adapter.
       } else {
-        chainAdapter = new MockMidnightChainAdapter();
-        chainPaymentAdapter = new MockPaymentAdapter({ token: "DUST" });
+        chainAdapter = new MockMidnightChainAdapter({
+          logger: console,
+        });
       }
 
-      const dstorageConfig: any = {
-        storageAdapter,
-        chainAdapter,
-        ...(chainPaymentAdapter ? { chainPaymentAdapter } : {}),
+      return {
+        sdk: new DStorage({ storageAdapter, chainAdapter, logger: console }),
       };
-
-      return { sdk: new DStorage(dstorageConfig) };
     },
-    [selectedContractAddress],
+    [
+      managedServiceUrl,
+      managedUserId,
+      paymentAdapterKey,
+      selectedContractAddress,
+    ],
   );
 
   /**
@@ -229,7 +288,11 @@ export default function App() {
   const ensureSdkReady = useCallback(async (): Promise<DStorage> => {
     if (dstorage) return dstorage;
 
-    const { sdk } = await buildSDK(storageAdapterKey, chainAdapterKey);
+    const { sdk } = await buildSDK(
+      storageAdapterKey,
+      chainAdapterKey,
+      paymentAdapterKey,
+    );
 
     if (chainAdapterKey === "midnight-connector") {
       const contractAddress = await sdk.init();
@@ -245,7 +308,13 @@ export default function App() {
     setWallet(connectedWallet);
     setDStorage(sdk);
     return sdk;
-  }, [buildSDK, chainAdapterKey, dstorage, storageAdapterKey]);
+  }, [
+    buildSDK,
+    chainAdapterKey,
+    dstorage,
+    paymentAdapterKey,
+    storageAdapterKey,
+  ]);
 
   const refreshExistingReferences = useCallback(
     async (sdk: DStorage): Promise<DataReferenceSummary[]> => {
@@ -267,6 +336,10 @@ export default function App() {
     },
     [storageAdapterKey],
   );
+
+  const handleContinueFromSetup = () => {
+    setStep("ready");
+  };
 
   const handleStartUploadFlow = async () => {
     try {
@@ -375,6 +448,23 @@ export default function App() {
     setDStorage(null);
     setWallet(null);
     setExistingReferences([]);
+  };
+
+  const handlePaymentAdapterChange = (next: PaymentAdapterKey) => {
+    if (next === paymentAdapterKey) return;
+    dstorage?.disconnect();
+    setPaymentAdapterKey(next);
+    setDStorage(null);
+    setWallet(null);
+  };
+
+  const handleManagedUserIdChange = (nextUserId: string) => {
+    setManagedUserId(nextUserId);
+    if (paymentAdapterKey === "managed") {
+      dstorage?.disconnect();
+      setDStorage(null);
+      setWallet(null);
+    }
   };
 
   const handleUpload = async (file: File) => {
@@ -601,43 +691,78 @@ export default function App() {
       </header>
 
       <main className="hv-main">
-        <div className="hv-panel hv-patient">
-          <div className="hv-panel-label">
-            <span>👤</span> Patient
+        {step === "connect" ? (
+          <div className="hv-setup-page">
+            <PatientPanel
+              step={step}
+              wallet={wallet}
+              record={record}
+              storageAdapterKey={storageAdapterKey}
+              chainAdapterKey={chainAdapterKey}
+              paymentAdapterKey={paymentAdapterKey}
+              managedUserId={managedUserId}
+              managedServiceUrl={managedServiceUrl}
+              onStorageAdapterChange={handleStorageAdapterChange}
+              onChainAdapterChange={handleChainAdapterChange}
+              onPaymentAdapterChange={handlePaymentAdapterChange}
+              onManagedUserIdChange={handleManagedUserIdChange}
+              existingReferences={existingReferences}
+              onContinueFromSetup={handleContinueFromSetup}
+              onStartUploadFlow={handleStartUploadFlow}
+              onLoadExistingReferences={handleLoadExistingReferences}
+              onUseExistingRecord={handleUseExistingRecord}
+              onContinueToProof={handleContinueToProof}
+              onUpload={handleUpload}
+              onGenerateProof={handleGenerateProof}
+            />
           </div>
-          <PatientPanel
-            step={step}
-            wallet={wallet}
-            record={record}
-            storageAdapterKey={storageAdapterKey}
-            chainAdapterKey={chainAdapterKey}
-            onStorageAdapterChange={handleStorageAdapterChange}
-            onChainAdapterChange={handleChainAdapterChange}
-            existingReferences={existingReferences}
-            onStartUploadFlow={handleStartUploadFlow}
-            onLoadExistingReferences={handleLoadExistingReferences}
-            onUseExistingRecord={handleUseExistingRecord}
-            onContinueToProof={handleContinueToProof}
-            onUpload={handleUpload}
-            onGenerateProof={handleGenerateProof}
-          />
-        </div>
-        <div className="hv-divider">
-          <div className="hv-div-line" />
-          <div className="hv-div-icon">⇄</div>
-          <div className="hv-div-line" />
-        </div>
-        <div className="hv-panel hv-verifier">
-          <div className="hv-panel-label">
-            <span>🏥</span> Clinic / Verifier
-          </div>
-          <VerifierPanel
-            step={step}
-            proof={proof}
-            verifying={verifying}
-            verified={verified}
-          />
-        </div>
+        ) : (
+          <>
+            <div className="hv-panel hv-patient">
+              <div className="hv-panel-label">
+                <span>👤</span> Patient
+              </div>
+              <PatientPanel
+                step={step}
+                wallet={wallet}
+                record={record}
+                storageAdapterKey={storageAdapterKey}
+                chainAdapterKey={chainAdapterKey}
+                paymentAdapterKey={paymentAdapterKey}
+                managedUserId={managedUserId}
+                managedServiceUrl={managedServiceUrl}
+                onStorageAdapterChange={handleStorageAdapterChange}
+                onChainAdapterChange={handleChainAdapterChange}
+                onPaymentAdapterChange={handlePaymentAdapterChange}
+                onManagedUserIdChange={handleManagedUserIdChange}
+                existingReferences={existingReferences}
+                onContinueFromSetup={handleContinueFromSetup}
+                onStartUploadFlow={handleStartUploadFlow}
+                onLoadExistingReferences={handleLoadExistingReferences}
+                onUseExistingRecord={handleUseExistingRecord}
+                onContinueToProof={handleContinueToProof}
+                onUpload={handleUpload}
+                onGenerateProof={handleGenerateProof}
+              />
+            </div>
+            <div className="hv-divider">
+              <div className="hv-div-line" />
+              <div className="hv-div-icon">⇄</div>
+              <div className="hv-div-line" />
+            </div>
+            <div className="hv-panel hv-verifier">
+              <div className="hv-panel-label">
+                <span>🏥</span> Clinic / Verifier
+              </div>
+              <VerifierPanel
+                step={step}
+                proof={proof}
+                verifying={verifying}
+                verified={verified}
+              />
+            </div>
+          </>
+        )}
       </main>
 
       <SdkDrawer
@@ -777,6 +902,7 @@ function buildCertificatePreview(content: string, bytes: Uint8Array) {
 function StepIndicator({ step }: { step: AppStep }) {
   const steps = [
     { id: "connect", label: "Choose Adapters" },
+    { id: "ready", label: "Choose Workflow" },
     { id: "upload", label: "Upload Certificate" },
     { id: "uploaded", label: "Upload Summary" },
     { id: "prove", label: "Generate Proof" },
