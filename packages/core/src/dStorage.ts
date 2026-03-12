@@ -36,6 +36,8 @@ import type {
   DStorageConfig,
   Logger,
   RetrieveResult,
+  UploadOptions,
+  UploadProgress,
   UploadResult,
   WalletInfo,
 } from "./types.js";
@@ -47,6 +49,7 @@ import type {
   MetaTxReceipt,
 } from "./metaTransaction.js";
 import { DataReferenceSummary } from "@dstorage/chain";
+import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
 export class DStorage implements DStorageContext {
   private config: DStorageConfig;
@@ -156,30 +159,40 @@ export class DStorage implements DStorageContext {
    * Encrypt content client-side, upload to decentralised storage,
    * and write a cryptographic reference on-chain.
    *
-   * @param content   Plain-text string or Uint8Array to store
-   * @param metadata  Optional key-value metadata attached to the storage transaction
-   * @returns         UploadResult containing the dataId needed to retrieve later
+   * Files larger than CHUNK_SIZE (5 MB) are automatically split into chunks,
+   * each encrypted and uploaded independently. A manifest file ties them together.
+   * Only the manifest's storageId is written on-chain.
+   *
+   * @param content          Plain-text string or Uint8Array to store
+   * @param metadataOrOptions  Optional metadata or UploadOptions (with onProgress callback)
+   * @returns                UploadResult containing the dataId needed to retrieve later
    */
   async upload(
     content: string | Uint8Array,
-    metadata: Record<string, string> = {},
+    metadataOrOptions: Record<string, string> | UploadOptions = {},
   ): Promise<UploadResult> {
     this.assertConnected();
 
     const bytes =
       typeof content === "string" ? new TextEncoder().encode(content) : content;
 
-    // NOTE: Large file support is a known limitation. The entire payload is held
-    // in memory (plaintext + ciphertext + base64-encoded form) which can peak at
-    // ~4× the file size. Streaming encryption and chunked uploads will be
-    // supported in a future release.
-    const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
-    if (bytes.byteLength > MAX_UPLOAD_BYTES) {
-      throw new Error(
-        `[dStorage] Content exceeds the 10 MB upload limit (${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB). ` +
-          "Large file support is planned for a future release.",
-      );
+    // Distinguish old-style metadata object from new UploadOptions.
+    let metadata: Record<string, string>;
+    let onProgress: ((p: UploadProgress) => void) | undefined;
+    if ("onProgress" in metadataOrOptions || "metadata" in metadataOrOptions) {
+      const opts = metadataOrOptions as UploadOptions;
+      metadata = opts.metadata ?? {};
+      onProgress = opts.onProgress;
+    } else {
+      metadata = metadataOrOptions as Record<string, string>;
     }
+
+    // Route large files through the chunked path.
+    if (bytes.length > CHUNK_SIZE) {
+      return this._uploadChunked(bytes, metadata, onProgress);
+    }
+
+    // ── Single-shot path (files ≤ 5 MB) ────────────────────────────────────
 
     // 1. Encrypt client-side if key is available; otherwise store raw bytes
     const uploadData = (await this.encryptPayload(bytes)) ?? bytes;
@@ -235,6 +248,8 @@ export class DStorage implements DStorageContext {
    * Retrieve and decrypt data by its storageId.
    * Decryption happens locally — the SDK never sends plaintext anywhere.
    *
+   * Automatically detects chunked manifests and reassembles the original file.
+   *
    * @param storageId  The storageId returned from upload()
    */
   async retrieveByStorageId(storageId: string): Promise<RetrieveResult> {
@@ -268,6 +283,20 @@ export class DStorage implements DStorageContext {
           `Retrieved non encrypted content of ${decryptedBytes.byteLength} bytes`,
         );
       }
+    }
+
+    // 3. Detect chunked manifest and reassemble transparently.
+    try {
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(decryptedBytes));
+      if (isManifest(parsed)) {
+        this.logger?.log(
+          "dStorage",
+          `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
+        );
+        return this._retrieveChunked(parsed);
+      }
+    } catch {
+      // Not JSON — treat as raw content, fall through.
     }
 
     this.logger?.log(
@@ -415,6 +444,186 @@ export class DStorage implements DStorageContext {
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Upload large content by splitting into CHUNK_SIZE pieces, encrypting each
+   * independently, and storing a manifest that ties them together.
+   * Only the manifest's storageId is written on-chain.
+   */
+  private async _uploadChunked(
+    bytes: Uint8Array,
+    metadata: Record<string, string>,
+    onProgress?: (p: UploadProgress) => void,
+  ): Promise<UploadResult> {
+    const totalChunks = Math.ceil(bytes.length / CHUNK_SIZE);
+    const sdkVersion = corePackageJson.version ?? "unknown";
+
+    this.logger?.log(
+      "dStorage",
+      `Chunked upload: ${bytes.length} bytes → ${totalChunks} chunks`,
+    );
+
+    const chunkEntries: ChunkManifest["chunks"] = [];
+    let bytesUploaded = 0;
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const chunk = bytes.subarray(start, start + CHUNK_SIZE);
+
+      onProgress?.({
+        phase: "encrypting",
+        chunksUploaded: i,
+        totalChunks,
+        bytesUploaded,
+        totalBytes: bytes.length,
+      });
+
+      const chunkData = (await this.encryptPayload(chunk)) ?? chunk;
+
+      onProgress?.({
+        phase: "uploading",
+        chunksUploaded: i,
+        totalChunks,
+        bytesUploaded,
+        totalBytes: bytes.length,
+      });
+
+      const chunkResult = await this.config.storageAdapter.upload(chunkData, {
+        ...metadata,
+        "dStorage-version": sdkVersion,
+        "Content-Type": "application/octet-stream",
+        "dstorage-chunk-index": String(i),
+        "dstorage-chunk-total": String(totalChunks),
+      });
+
+      chunkEntries.push({ index: i, storageId: chunkResult.id, size: chunk.length });
+      bytesUploaded += chunk.length;
+
+      onProgress?.({
+        phase: "uploading",
+        chunksUploaded: i + 1,
+        totalChunks,
+        bytesUploaded,
+        totalBytes: bytes.length,
+      });
+    }
+
+    // Build and upload the manifest.
+    onProgress?.({
+      phase: "finalizing",
+      chunksUploaded: totalChunks,
+      totalChunks,
+      bytesUploaded,
+      totalBytes: bytes.length,
+    });
+
+    // Re-upload first chunk to get provider name — we need a StorageResult to read it.
+    // Instead, upload manifest and read provider from its result.
+    const manifest: ChunkManifest = {
+      v: 1,
+      type: "dstorage-chunked-manifest",
+      totalSize: bytes.length,
+      chunkSize: CHUNK_SIZE,
+      chunkCount: totalChunks,
+      provider: "mock", // will be overwritten by manifestResult.provider below
+      chunks: chunkEntries,
+    };
+
+    const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
+    const manifestData = (await this.encryptPayload(manifestBytes)) ?? manifestBytes;
+
+    const manifestResult = await this.config.storageAdapter.upload(manifestData, {
+      "dStorage-version": sdkVersion,
+      "Content-Type": "application/octet-stream",
+      "dstorage-manifest-upload": "true",
+    });
+
+    // Update manifest provider now that we have it, and re-upload isn't needed —
+    // the provider field is informational only (retrieval uses stored chunk storageIds).
+    // We store the provider in the manifest for debugging; patch the in-memory object only.
+    manifest.provider = manifestResult.provider;
+
+    // Encrypt the manifest storageId for on-chain storage.
+    const encryptedManifestId =
+      (await this.encryptStorageIdForChain(manifestResult.id)) ??
+      manifestResult.id;
+
+    const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
+    const chainResult = await this.config.chainAdapter.writeReference({
+      storageId: encryptedManifestId,
+      storageProvider: manifestResult.provider,
+      ...(dataLabel !== undefined ? { dataLabel } : {}),
+      writtenAt: Date.now(),
+    });
+
+    const refId = chainResult.refId;
+    this.logger?.log(
+      "dStorage",
+      `Chunked upload complete → ${totalChunks} chunks + manifest, refId: ${refId}`,
+    );
+
+    return {
+      chainRefId: refId,
+      storageId: manifestResult.id,
+      storageProvider: manifestResult.provider,
+      chainProvider: chainResult.provider,
+      uploadedAt: manifestResult.uploadedAt,
+      costEstimate: {
+        storageCost: {
+          amount: manifestResult.cost ?? "unknown",
+          token: "AR",
+        },
+        chainCost: {
+          amount: chainResult.paymentReceipt?.amount ?? "unknown",
+          token: "DUST",
+        },
+        fileSizeBytes: bytes.length,
+      },
+    };
+  }
+
+  /**
+   * Reassemble a chunked file from its manifest.
+   * Fetches and decrypts each chunk sequentially to bound memory usage.
+   */
+  private async _retrieveChunked(manifest: ChunkManifest): Promise<RetrieveResult> {
+    const result = new Uint8Array(manifest.totalSize);
+    let offset = 0;
+
+    for (const entry of manifest.chunks) {
+      const rawChunkBytes = await this.config.storageAdapter.retrieve(entry.storageId);
+
+      let chunkBytes = rawChunkBytes;
+      if (this._encryptionKey) {
+        const encryptedPayload = deserializePayload(
+          new TextDecoder().decode(rawChunkBytes),
+        );
+        if (encryptedPayload) {
+          try {
+            chunkBytes = await decrypt(this._encryptionKey, encryptedPayload);
+          } catch (err) {
+            throw new Error(
+              `[dStorage] Failed to decrypt chunk ${entry.index}: ${err}`,
+            );
+          }
+        }
+      }
+
+      result.set(chunkBytes, offset);
+      offset += chunkBytes.length;
+
+      this.logger?.log(
+        "dStorage",
+        `Retrieved chunk ${entry.index + 1}/${manifest.chunkCount}: ${chunkBytes.length} bytes`,
+      );
+    }
+
+    return {
+      content: new TextDecoder().decode(result),
+      bytes: result,
+      metadata: {},
+    };
+  }
 
   /**
    * Decrypt a storageId retrieved from the chain back to the original storage network ID.

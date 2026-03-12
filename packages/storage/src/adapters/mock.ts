@@ -97,19 +97,6 @@ export class MockStorageAdapter implements StorageAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
-    // NOTE: Large file support is a known limitation. The entire payload is
-    // base64-encoded and stored in localStorage (browser) or an in-memory Map
-    // (Node.js). localStorage has a ~5 MB per-origin limit, and holding multiple
-    // large blobs in memory is impractical. Streaming storage will be supported
-    // in a future release.
-    const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
-    if (data.byteLength > MAX_UPLOAD_BYTES) {
-      throw new Error(
-        `[dStorage/mock] Data exceeds the 10 MB upload limit (${(data.byteLength / 1024 / 1024).toFixed(1)} MB). ` +
-          "Large file support is planned for a future release.",
-      );
-    }
-
     const id = generateId();
     const cost = await this.estimateCost(data);
 

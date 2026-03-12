@@ -63,18 +63,6 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     data: Uint8Array,
     _metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
-    // NOTE: Large file support is a known limitation. Autonomi natively supports
-    // self-encrypting large files via its chunk-based protocol, but the current
-    // adapter is a stub pending JS SDK stability. Once the real SDK is wired up,
-    // streaming/chunked uploads will be supported.
-    const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
-    if (data.byteLength > MAX_UPLOAD_BYTES) {
-      throw new Error(
-        `[dStorage/autonomi] Data exceeds the 10 MB upload limit (${(data.byteLength / 1024 / 1024).toFixed(1)} MB). ` +
-          "Large file support is planned for a future release.",
-      );
-    }
-
     /**
      * TODO: Replace with real Autonomi upload when JS SDK is stable.
      */

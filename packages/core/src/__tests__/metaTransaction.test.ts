@@ -96,21 +96,21 @@ describe("validateFile", () => {
     expect(result.error).toContain("empty");
   });
 
-  it("returns { valid: false } for a file over 10 MB", () => {
+  it("returns { valid: false } for a file over 2 GB", () => {
     // Fake a large file by overriding size via Object.defineProperty
     const file = makeFile("x", "large.txt", "text/plain");
-    Object.defineProperty(file, "size", { value: 11 * 1024 * 1024 });
+    Object.defineProperty(file, "size", { value: 3 * 1024 * 1024 * 1024 });
     const result = validateFile(file);
     expect(result.valid).toBe(false);
     expect(result.error).toContain("large");
-    expect(result.error).toContain("10 MB");
+    expect(result.error).toContain("2 GB");
   });
 
   it("error message for oversized file includes actual file size", () => {
     const file = makeFile("x", "large.txt", "text/plain");
-    Object.defineProperty(file, "size", { value: 11 * 1024 * 1024 });
+    Object.defineProperty(file, "size", { value: 3 * 1024 * 1024 * 1024 });
     const result = validateFile(file);
-    expect(result.error).toMatch(/\d+\.\d+ MB/);
+    expect(result.error).toMatch(/\d+\.\d+ (MB|GB)/);
   });
 
   it("returns { valid: false } for an unsupported MIME type", () => {

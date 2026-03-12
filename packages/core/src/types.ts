@@ -54,6 +54,19 @@ export interface DStorageConfig {
   logger?: Logger;
 }
 
+export interface UploadProgress {
+  phase: "encrypting" | "uploading" | "finalizing";
+  chunksUploaded: number;
+  totalChunks: number;
+  bytesUploaded: number;
+  totalBytes: number;
+}
+
+export interface UploadOptions {
+  metadata?: Record<string, string>;
+  onProgress?: (progress: UploadProgress) => void;
+}
+
 /** Result returned from dStorage.upload() */
 export interface UploadResult {
   /**

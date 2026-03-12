@@ -132,7 +132,7 @@ export interface DStorageContext {
 
 // ── File validation ───────────────────────────────────────────────────────────
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 
 const ALLOWED_MIME_TYPES = new Set([
   // Images
@@ -165,7 +165,7 @@ export function validateFile(file: File): FileValidationResult {
     const mb = (file.size / 1024 / 1024).toFixed(1);
     return {
       valid: false,
-      error: `File too large: ${mb} MB. Maximum is 10 MB.`,
+      error: `File too large: ${mb} MB. Maximum is 2 GB.`,
     };
   }
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
