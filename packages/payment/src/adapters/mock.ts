@@ -4,8 +4,7 @@
  * Mock payment adapter for development, testing, and demos.
  *
  * Simulates the full wallet-prompt → broadcast → confirmation UX with
- * realistic delays. No real token transfers occur — every receipt has
- * simulated: true.
+ * realistic delays. No real token transfers occur.
  *
  * The token and type (storage or chain) are set at construction time,
  * so a single adapter class covers both storage and chain payment slots.
@@ -113,7 +112,6 @@ export class MockPaymentAdapter implements PaymentAdapter {
       token: quote.token,
       amount: quote.amount,
       type: quote.type,
-      simulated: true,
       paidAt: Date.now(),
     };
   }

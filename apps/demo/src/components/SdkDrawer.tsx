@@ -106,7 +106,6 @@ function MetaTxView({ progress }: { progress: MetaTxProgress }) {
     encrypt: "🔒",
     payment_storage: "💳",
     upload: "↑",
-    payment_chain: "💳",
     chain_reference: "⛓",
     complete: "✓",
   };

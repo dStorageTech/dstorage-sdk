@@ -170,8 +170,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
-    console.log(`>>>>>> MOOOOOOOOOOO ${quote.network}`);
-
     if (quote.network === "midnight") {
       return this._payMidnight(quote, onStatus);
     } else if (quote.network === "arweave") {
@@ -237,7 +235,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       token: quote.token,
       amount: arCost,
       type: quote.type,
-      simulated: false,
       paidAt: Date.now(),
     };
   }
@@ -279,7 +276,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       amount: dustCost,
       type: quote.type,
       signedTx: signature,
-      simulated: false,
       paidAt: Date.now(),
     };
   }

@@ -147,14 +147,14 @@ describe("MockPaymentAdapter", () => {
   // ── pay ───────────────────────────────────────────────────────────────────
 
   describe("pay", () => {
-    it("returns a PaymentReceipt with simulated: true", async () => {
+    it("returns a PaymentReceipt with a txHash", async () => {
       vi.useFakeTimers();
       const adapter = makeStorageAdapter();
       const quote = await adapter.estimateCost(1024);
       const p = adapter.pay(quote);
       await vi.runAllTimersAsync();
       const receipt = await p;
-      expect(receipt.simulated).toBe(true);
+      expect(receipt.txHash).toBeTruthy();
     });
 
     it('txHash starts with "0x"', async () => {

@@ -144,7 +144,7 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
      *
      *   return {
      *     txHash: receipt.txHash, token: 'DUST', amount: quote.amount,
-     *     type: 'chain', simulated: false, paidAt: Date.now(),
+     *     type: 'chain', paidAt: Date.now(),
      *   };
      */
 
@@ -169,7 +169,6 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
       token: "DUST",
       amount: quote.amount,
       type: "chain",
-      simulated: true, // ← becomes false once the TODO above is wired up
       paidAt: Date.now(),
     };
   }

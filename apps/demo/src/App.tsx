@@ -284,10 +284,8 @@ export default function App() {
       file,
       (p) => setMetaTxProgress({ ...p }),
       {
-        contractAddress: "midnight:mock-contract",
-        contractName: "Midnight Identity Registry",
-        circuitId: "storeReference",
-        circuitName: "Store Reference",
+        contractAddress: "midnight:contract",
+        contractName: "Midnight Data Registry",
         metadata: { "record-type": "insurance", app: "healthvault" },
       },
     );
@@ -373,7 +371,9 @@ export default function App() {
         onContractAddressChange={setContractAddressInput}
         onDeployNew={handleDeployNewContract}
         onUseExisting={handleUseExistingContract}
-        onToggleTheme={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+        onToggleTheme={() =>
+          setTheme((t) => (t === "light" ? "dark" : "light"))
+        }
       />
     );
   }

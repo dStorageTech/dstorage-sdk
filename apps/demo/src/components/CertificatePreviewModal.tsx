@@ -22,8 +22,8 @@ export function CertificatePreviewModal({
         <p className="hv-contract-modal-body">
           The SDK fetched this document from{" "}
           <strong>{certificate.chainLabel}</strong> using refId{" "}
-          <code>{certificate.refId}</code> and decrypted it locally.
-          Confirm this is the certificate to use for the ZK proof step.
+          <code>{certificate.refId}</code> and decrypted it locally. Confirm
+          this is the certificate to use for the ZK proof step.
         </p>
 
         <div className="hv-cert-meta">

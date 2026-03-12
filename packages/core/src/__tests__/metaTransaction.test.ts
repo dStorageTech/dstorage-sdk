@@ -44,7 +44,6 @@ class InstantPaymentAdapter implements PaymentAdapter {
       amount: quote.amount,
       type: quote.type,
       paidAt: Date.now(),
-      simulated: true,
     };
   }
 }
@@ -333,7 +332,6 @@ describe("MetaTransaction.execute", () => {
       "encrypt",
       "payment_storage",
       "upload",
-      "payment_chain",
       "chain_reference",
       "complete",
     ];

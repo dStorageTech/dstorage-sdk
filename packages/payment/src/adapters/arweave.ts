@@ -220,7 +220,6 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
         token: "AR",
         amount: quote.amount,
         type: "storage",
-        simulated: false,
         paidAt: Date.now(),
       };
     }
@@ -260,7 +259,6 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       token: "AR",
       amount: quote.amount,
       type: "storage",
-      simulated: false,
       paidAt: Date.now(),
     };
   }

@@ -203,6 +203,18 @@ function hexToUint8Array(hex: string): Uint8Array {
   return out;
 }
 
+/**
+ * Extract raw transaction bytes from either a Midnight tagged string
+ * ("midnight:transaction[v9](...):hexdata") or a plain hex string.
+ */
+function parseSignedTxBytes(signedTx: string): Uint8Array {
+  if (signedTx.startsWith("midnight:")) {
+    const colonIdx = signedTx.lastIndexOf(":");
+    return hexToUint8Array(signedTx.slice(colonIdx + 1));
+  }
+  return hexToUint8Array(signedTx);
+}
+
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MidnightChainAdapter implements ChainAdapter {
@@ -375,18 +387,18 @@ export class MidnightChainAdapter implements ChainAdapter {
         tx: UnboundTransaction,
         _ttl?: Date,
       ): Promise<FinalizedTransaction> => {
-        const txHex = uint8ArrayToHex((tx as any).serialize());
+        const txData: string = uint8ArrayToHex(tx.serialize());
         logger?.log(
           "dStorage/midnight",
-          `balanceTx: delegating to managed payment service (serialized tx length=${txHex.length})`,
+          `balanceTx: delegating to managed payment service (serialized tx length=${txData.length})`,
         );
         const receipt = await paymentAdapter.pay({
           token: "DUST",
           amount: "0",
           type: "chain",
           network: this.name,
-          txData: txHex,
-          dataSizeBytes: txHex.length,
+          txData,
+          dataSizeBytes: txData.length,
           expiresAt: Date.now() + 60_000,
         });
         this._lastPaymentReceipt = receipt;
@@ -401,11 +413,13 @@ export class MidnightChainAdapter implements ChainAdapter {
           `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx.length})`,
         );
         const { Transaction } = await import("@midnight-ntwrk/ledger-v7");
+        // Server may return a tagged string or plain hex — extract raw bytes either way.
+        const signedBytes = parseSignedTxBytes(receipt.signedTx);
         return (Transaction as any).deserialize(
           "signature",
           "proof",
           "binding",
-          hexToUint8Array(receipt.signedTx),
+          signedBytes,
         );
       },
     };

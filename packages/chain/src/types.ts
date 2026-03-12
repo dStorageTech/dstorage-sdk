@@ -47,7 +47,7 @@ export interface ChainWriteResult {
   /**
    * Payment receipt for the chain transaction fee, when the adapter handles
    * payment internally (e.g. Midnight managed payment via signing server).
-   * When present, MetaTransaction uses this instead of the payment_chain step receipt.
+   * When present, MetaTransaction records this as the chain payment in the final receipt.
    */
   paymentReceipt?: PaymentReceipt;
 }

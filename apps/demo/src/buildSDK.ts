@@ -8,7 +8,11 @@ import {
   MidnightChainAdapter,
 } from "@dstorage/core";
 import { PROOF_SERVER_ENDPOINT } from "./adapterConfigs";
-import type { StorageAdapterKey, ChainAdapterKey, PaymentAdapterKey } from "./types";
+import type {
+  StorageAdapterKey,
+  ChainAdapterKey,
+  PaymentAdapterKey,
+} from "./types";
 
 export async function buildSDK(
   storageKey: StorageAdapterKey,

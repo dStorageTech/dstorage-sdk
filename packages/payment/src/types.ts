@@ -101,11 +101,6 @@ export interface PaymentReceipt {
   amount: string;
   /** What this payment covered */
   type: "storage" | "chain";
-  /**
-   * true  — no real token transfer occurred (MockPaymentAdapter).
-   * false — a real on-chain transaction was submitted.
-   */
-  simulated: boolean;
   /** Timestamp of payment confirmation */
   paidAt: number;
   /**

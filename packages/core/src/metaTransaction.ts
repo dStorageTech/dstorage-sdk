@@ -8,8 +8,7 @@
  *   [1] Encrypt    → AES-GCM encrypt the file client-side
  *   [2] PayStorage → simulate storage payment (AR / ANT / MOCK)
  *   [3] Upload     → upload encrypted blob to decentralised storage
- *   [4] PayChain   → simulate chain transaction fee payment
- *   [5] Reference  → write CID + metadata reference on-chain
+ *   [4] Reference  → pay chain fee + write CID + metadata reference on-chain
  *   [✓] Complete   → return full receipt
  *
  * Usage:
@@ -30,7 +29,6 @@ export type MetaTxStepId =
   | "encrypt"
   | "payment_storage"
   | "upload"
-  | "payment_chain"
   | "chain_reference"
   | "complete";
 
@@ -104,10 +102,6 @@ export interface MetaTxConfig {
   contractAddress?: string;
   /** Selected contract name (for display / receipt) */
   contractName?: string;
-  /** Selected circuit id to invoke on the contract */
-  circuitId?: string;
-  /** Selected circuit name (for display / receipt) */
-  circuitName?: string;
 }
 
 // ── SDK context interface ─────────────────────────────────────────────────────
@@ -223,12 +217,6 @@ function buildInitialSteps(): MetaTxStepState[] {
       id: "upload",
       label: "Upload to Storage",
       description: "Send encrypted file to decentralised network",
-      status: "pending",
-    },
-    {
-      id: "payment_chain",
-      label: "Chain Fee Payment",
-      description: "Pay blockchain transaction fee",
       status: "pending",
     },
     {
@@ -360,29 +348,10 @@ export class MetaTransaction {
         `Stored on ${uploadResult.provider} → ${truncateId(uploadResult.id)}`,
       );
 
-      // ── Step 4: Chain fee payment ────────────────────────────────────────
-      // FIXME: this step is invalid for Midnight with ManagerPaymentAdapter,
-      // the payment is made as part of next Step 5.
-
-      this.startStep(
-        "payment_chain",
-        `Preparing ${chainQuote.amount} ${chainQuote.token} transaction…`,
-      );
-
-      const chainReceipt = await this.sdk.chainAdapter.paymentAdapter.pay(
-        chainQuote,
-        (msg) => this.updateStepDetail("payment_chain", msg),
-      );
-
-      this.completeStep(
-        "payment_chain",
-        `${chainReceipt.amount} ${chainReceipt.token}`,
-      );
-
-      // ── Step 5: On-chain reference ───────────────────────────────────────
+      // ── Step 4: On-chain fee payment and write reference ───────────────────────────────────────
       this.startStep(
         "chain_reference",
-        `Writing reference to ${this.sdk.chainAdapter.name}…`,
+        `Fee payment and writing reference to ${this.sdk.chainAdapter.name}…`,
       );
 
       const chainResult = await this.sdk.chainAdapter.writeReference({
@@ -396,27 +365,20 @@ export class MetaTransaction {
 
       // If the chain adapter handled payment internally (e.g. Midnight managed
       // payment embedded in the transaction), use that receipt instead.
-      const finalChainReceipt = chainResult.paymentReceipt ?? chainReceipt;
-      if (chainResult.paymentReceipt) {
-        this.updateStepDetail(
-          "payment_chain",
-          `${finalChainReceipt.amount} ${finalChainReceipt.token}`,
-        );
-      }
-
-      const circuitLabel = config.circuitName
-        ? ` via ${config.circuitName}`
-        : "";
-      const contractLabel = config.contractName
-        ? ` on ${config.contractName}`
-        : "";
+      const finalChainReceipt = chainResult.paymentReceipt ?? {
+        amount: "<unknown>",
+        token: chainQuote.token,
+        txHash: "",
+        type: chainQuote.type,
+        paidAt: 0,
+      };
 
       this.completeStep(
         "chain_reference",
-        `Reference confirmed${contractLabel}${circuitLabel} → ${truncateId(chainResult.refId)}`,
+        `Reference written → ${finalChainReceipt.amount} ${finalChainReceipt.token} → ${truncateId(chainResult.refId)}`,
       );
 
-      // ── Step 6: Complete ─────────────────────────────────────────────────
+      // ── Step 5: Complete ─────────────────────────────────────────────────
       const dataId = `${uploadResult.id}::${chainResult.refId}`;
       const totalDurationMs = Date.now() - this.startedAt;
 
