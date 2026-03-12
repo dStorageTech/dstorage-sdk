@@ -22,6 +22,20 @@ const MOCK_TX_ID = "test_tx_id_local_001";
 
 const mockTx = { id: MOCK_TX_ID, addTag: vi.fn() };
 
+let localUploaderState = { calls: 0 };
+
+const mockLocalUploader = {
+  get isComplete() {
+    return localUploaderState.calls >= 1;
+  },
+  uploadedChunks: 0,
+  totalChunks: 1,
+  pctComplete: 100,
+  uploadChunk: vi.fn().mockImplementation(async () => {
+    localUploaderState.calls++;
+  }),
+};
+
 const mockArweaveInstance = {
   createTransaction: vi.fn().mockResolvedValue(mockTx),
   wallets: {
@@ -31,7 +45,7 @@ const mockArweaveInstance = {
   transactions: {
     getPrice: vi.fn().mockResolvedValue("500000"),
     sign: vi.fn().mockResolvedValue(undefined),
-    post: vi.fn().mockResolvedValue({ status: 200, statusText: "OK" }),
+    getUploader: vi.fn().mockResolvedValue(mockLocalUploader),
     getData: vi
       .fn()
       .mockResolvedValue(new TextEncoder().encode("test-retrieved-data")),
@@ -81,13 +95,14 @@ function makeAdapter(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localUploaderState = { calls: 0 };
   mockTx.id = MOCK_TX_ID;
   mockArweaveInstance.createTransaction.mockResolvedValue(mockTx);
   mockArweaveInstance.transactions.getPrice.mockResolvedValue("500000");
   mockArweaveInstance.transactions.sign.mockResolvedValue(undefined);
-  mockArweaveInstance.transactions.post.mockResolvedValue({
-    status: 200,
-    statusText: "OK",
+  mockArweaveInstance.transactions.getUploader.mockResolvedValue(mockLocalUploader);
+  mockLocalUploader.uploadChunk.mockImplementation(async () => {
+    localUploaderState.calls++;
   });
   mockArweaveInstance.transactions.getData.mockResolvedValue(
     new TextEncoder().encode("test-retrieved-data"),

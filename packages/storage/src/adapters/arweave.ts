@@ -269,8 +269,9 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     const { tx, arCost } = signed;
 
-    // Broadcast with retry.
-    await this.postWithRetry(arweave, tx);
+    // Broadcast via chunked uploader — sends 256 KB slices to /chunk endpoint.
+    // Supports transactions up to ~2 GB and retries failed slices independently.
+    await this.uploadWithChunker(arweave, tx);
 
     const txId = tx.id as string;
     const url = `${this.gateway.protocol}://${this.gateway.host}/${txId}`;
@@ -328,44 +329,53 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     return winstons as string;
   }
 
-  // ── Private: retry post ────────────────────────────────────────────────────────
+  // ── Private: chunked uploader ─────────────────────────────────────────────────
 
+  /**
+   * Upload a signed transaction using arweave-js getUploader().
+   *
+   * getUploader() sends just the tx header to /tx, then streams each 256 KB
+   * data slice to the /chunk endpoint. This avoids the ~12 MB HTTP body limit
+   * of transactions.post() and supports arbitrarily large transactions.
+   *
+   * Failed slices are retried individually up to maxRetries times with linear
+   * back-off, so a transient network error won't restart the entire upload.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async postWithRetry(arweave: any, tx: any): Promise<void> {
-    let lastError: Error | undefined;
-
+  private async uploadWithChunker(arweave: any, tx: any): Promise<void> {
     this.logger?.log(
       "dStorage/arweave",
-      `Posting tx id=${tx.id as string} owner=${(tx.owner as string)?.slice(0, 16)}… data_size=${tx.data_size as string} reward=${tx.reward as string} data_root=${(tx.data_root as string)?.slice(0, 16) ?? "(none)"}… sig_len=${(tx.signature as string)?.length ?? 0}`,
+      `Posting tx id=${tx.id as string} owner=${(tx.owner as string)?.slice(0, 16)}… data_size=${tx.data_size as string} reward=${tx.reward as string}`,
     );
 
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      const response = await arweave.transactions.post(tx);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const uploader: any = await arweave.transactions.getUploader(tx);
+    let chunkAttempt = 0;
 
-      if (response.status === 200 || response.status === 202) return;
-
-      // Try to surface the response body — arweave-js wraps it in response.data
-      const detail: string =
-        typeof response.data === "string"
-          ? response.data
-          : response.data
-            ? JSON.stringify(response.data)
-            : "";
-
-      lastError = new Error(
-        `[dStorage/arweave] Transaction post failed ` +
-          `(attempt ${attempt}/${this.maxRetries}): ` +
-          `HTTP ${response.status} ${response.statusText ?? ""}${detail ? ` — ${detail}` : ""}`.trimEnd(),
-      );
-      this.logger?.warn("dStorage/arweave", lastError.message);
-
-      if (attempt < this.maxRetries) {
-        // Linear back-off: 1 s, 2 s, 3 s…
-        await sleep(1_000 * attempt);
+    while (!uploader.isComplete) {
+      try {
+        await uploader.uploadChunk();
+        chunkAttempt = 0; // reset per-chunk retry count on success
+        if (uploader.totalChunks > 1) {
+          this.logger?.log(
+            "dStorage/arweave",
+            `Uploading: ${uploader.pctComplete as number}% (${uploader.uploadedChunks as number}/${uploader.totalChunks as number} network chunks)`,
+          );
+        }
+      } catch (err) {
+        chunkAttempt++;
+        if (chunkAttempt >= this.maxRetries) {
+          throw new Error(
+            `[dStorage/arweave] Chunk upload failed after ${this.maxRetries} attempts: ${err}`,
+          );
+        }
+        this.logger?.warn(
+          "dStorage/arweave",
+          `Chunk upload failed (attempt ${chunkAttempt}/${this.maxRetries}), retrying in ${chunkAttempt}s… ${err}`,
+        );
+        await sleep(1_000 * chunkAttempt);
       }
     }
-
-    throw lastError;
   }
 
   // ── Private: confirmation polling ─────────────────────────────────────────────

@@ -1,17 +1,30 @@
 /**
  * @dstorage/core — chunked upload / retrieve tests
  *
- * Verifies that large files are split into chunks, each uploaded independently,
- * and reassembled correctly on retrieval — using MockStorageAdapter + MockChainAdapter.
+ * CHUNK_SIZE is mocked to 512 bytes so round-trip tests run fast without
+ * hitting real AES-GCM on tens of megabytes. The logic under test is
+ * identical regardless of the chunk size value.
  */
 
 import { describe, it, expect, vi } from "vitest";
+
+// Override CHUNK_SIZE before any module that imports it resolves.
+// Must be 512 — a literal, not a variable reference — because vi.mock is hoisted.
+vi.mock("../chunked.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../chunked.js")>();
+  return { ...actual, CHUNK_SIZE: 512 };
+});
+
 import { DStorage } from "../dStorage.js";
 import { connectDemoWallet } from "../wallet.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
-import { CHUNK_SIZE, isManifest } from "../chunked.js";
+import { isManifest } from "../chunked.js";
 import type { DStorageConfig } from "../types.js";
+
+// Must match the mocked value above.
+const CHUNK_SIZE = 512;
 
 function makeConfig(): DStorageConfig {
   return {
@@ -82,10 +95,9 @@ describe("upload small file (≤ CHUNK_SIZE)", () => {
     const uploadSpy = vi.spyOn(storageAdapter, "upload");
 
     const ds = await makeConnectedDStorage(config);
-    const bytes = makeBytes(CHUNK_SIZE); // exactly 5 MB → 1 chunk, no manifest
+    const bytes = makeBytes(CHUNK_SIZE); // exactly at threshold → single-shot
     await ds.upload(bytes);
 
-    // Single-shot: exactly 1 upload call
     expect(uploadSpy).toHaveBeenCalledTimes(1);
   });
 });
@@ -99,7 +111,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const uploadSpy = vi.spyOn(storageAdapter, "upload");
 
     const ds = await makeConnectedDStorage(config);
-    const bytes = makeBytes(CHUNK_SIZE + 1); // 5 MB + 1 byte → 2 chunks
+    const bytes = makeBytes(CHUNK_SIZE + 1); // 2 chunks
     await ds.upload(bytes);
 
     // 2 chunk uploads + 1 manifest upload = 3 total
@@ -120,13 +132,13 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     expect(uploadSpy).toHaveBeenCalledTimes(chunkCount + 1);
   });
 
-  it("round-trip: retrieve reassembles original bytes", async () => {
+  it("round-trip: retrieve reassembles original bytes (2 chunks)", async () => {
     const ds = await makeConnectedDStorage();
-    const bytes = makeBytes(CHUNK_SIZE + 100); // spans 2 chunks
+    const bytes = makeBytes(CHUNK_SIZE + 100);
     const { chainRefId } = await ds.upload(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
-  }, 60_000);
+  });
 
   it("round-trip works for 3 chunks (2.5× CHUNK_SIZE)", async () => {
     const ds = await makeConnectedDStorage();
@@ -134,7 +146,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const { chainRefId } = await ds.upload(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
-  }, 120_000);
+  });
 
   it("UploadResult.storageId is the manifest's storageId", async () => {
     const config = makeConfig();
@@ -144,9 +156,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const bytes = makeBytes(CHUNK_SIZE + 1);
     const result = await ds.upload(bytes);
 
-    // The manifest storageId should be the last uploaded item.
     const allIds = storageAdapter.listAll();
-    // result.storageId must exist in the store
     expect(allIds).toContain(result.storageId);
   });
 
@@ -161,8 +171,6 @@ describe("upload large file (> CHUNK_SIZE)", () => {
       },
     });
 
-    // Should receive events with chunksUploaded 0, 1, 1, 2, 2, 3
-    // We care that it ends at totalChunks
     const maxSeen = Math.max(...progressEvents);
     expect(maxSeen).toBe(3);
   });
@@ -204,7 +212,6 @@ describe("upload backward compatibility", () => {
 
 describe("chunked upload without encryption key", () => {
   it("round-trips unencrypted chunked content", async () => {
-    // Use init() path which may have no encryption key (MockChainAdapter has none)
     const config = makeConfig();
     const ds = new DStorage(config);
     await ds.init(); // no key derived — MockChainAdapter has no getEncryptionKey()
@@ -213,5 +220,5 @@ describe("chunked upload without encryption key", () => {
     const { chainRefId } = await ds.upload(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
-  }, 30_000);
+  });
 });

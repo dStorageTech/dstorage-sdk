@@ -16,13 +16,34 @@ const mockTx = {
   data: "",
 };
 
+// Mutable state for the per-test uploader mock.
+let uploaderState = { calls: 0, totalChunks: 1 };
+
+const mockUploader = {
+  get isComplete() {
+    return uploaderState.calls >= uploaderState.totalChunks;
+  },
+  get uploadedChunks() {
+    return uploaderState.calls;
+  },
+  get totalChunks() {
+    return uploaderState.totalChunks;
+  },
+  get pctComplete() {
+    return Math.round((uploaderState.calls / uploaderState.totalChunks) * 100);
+  },
+  uploadChunk: vi.fn().mockImplementation(async () => {
+    uploaderState.calls++;
+  }),
+};
+
 const mockArweave = {
   // createTransaction is a top-level method on the Arweave instance
   createTransaction: vi.fn().mockResolvedValue(mockTx),
   transactions: {
     getPrice: vi.fn().mockResolvedValue("1000000"), // 1 winston
     sign: vi.fn().mockResolvedValue(undefined),
-    post: vi.fn().mockResolvedValue({ status: 200, statusText: "OK" }),
+    getUploader: vi.fn().mockResolvedValue(mockUploader),
     getData: vi
       .fn()
       .mockResolvedValue(new TextEncoder().encode("retrieved-data")),
@@ -58,14 +79,15 @@ function nodeAdapter(overrides: Record<string, unknown> = {}) {
 describe("ArweaveStorageAdapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset mockTx id and restore default mock implementations after clearAllMocks
+    // Reset uploader state and restore default mock implementations after clearAllMocks.
+    uploaderState = { calls: 0, totalChunks: 1 };
     mockTx.id = "mock_tx_id_abc123";
     mockArweave.createTransaction.mockResolvedValue(mockTx);
     mockArweave.transactions.getPrice.mockResolvedValue("1000000");
     mockArweave.transactions.sign.mockResolvedValue(undefined);
-    mockArweave.transactions.post.mockResolvedValue({
-      status: 200,
-      statusText: "OK",
+    mockArweave.transactions.getUploader.mockResolvedValue(mockUploader);
+    mockUploader.uploadChunk.mockImplementation(async () => {
+      uploaderState.calls++;
     });
     mockArweave.transactions.getData.mockResolvedValue(
       new TextEncoder().encode("retrieved-data"),
@@ -174,13 +196,13 @@ describe("ArweaveStorageAdapter", () => {
       expect(mockTx.addTag).toHaveBeenCalledWith("label", "test");
     });
 
-    it("signs the transaction before posting", async () => {
+    it("signs the transaction before uploading", async () => {
       await nodeAdapter().upload(enc("data"));
       const signOrder =
         mockArweave.transactions.sign.mock.invocationCallOrder[0];
-      const postOrder =
-        mockArweave.transactions.post.mock.invocationCallOrder[0] ?? 0;
-      expect(signOrder).toBeLessThan(postOrder);
+      const uploaderOrder =
+        mockArweave.transactions.getUploader.mock.invocationCallOrder[0] ?? 0;
+      expect(signOrder).toBeLessThan(uploaderOrder);
     });
 
     it("throws if Node.js walletKey is empty", async () => {
@@ -188,25 +210,26 @@ describe("ArweaveStorageAdapter", () => {
       await expect(adapter.upload(enc("data"))).rejects.toThrow(/walletKey/);
     });
 
-    it("retries on HTTP 500 and succeeds on second attempt", async () => {
-      mockArweave.transactions.post
-        .mockResolvedValueOnce({ status: 500, statusText: "Server Error" })
-        .mockResolvedValueOnce({ status: 200, statusText: "OK" });
+    it("retries a failed chunk and succeeds on second attempt", async () => {
+      mockUploader.uploadChunk
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockImplementationOnce(async () => {
+          uploaderState.calls++;
+        });
 
       const result = await nodeAdapter({ maxRetries: 3 }).upload(enc("data"));
       expect(result.id).toBe("mock_tx_id_abc123");
-      expect(mockArweave.transactions.post).toHaveBeenCalledTimes(2);
+      expect(mockUploader.uploadChunk).toHaveBeenCalledTimes(2);
     });
 
-    it("throws after exhausting all retries", async () => {
-      mockArweave.transactions.post.mockResolvedValue({
-        status: 500,
-        statusText: "Server Error",
-      });
+    it("throws after exhausting all chunk retries", async () => {
+      mockUploader.uploadChunk.mockRejectedValue(new Error("Persistent failure"));
 
       const adapter = nodeAdapter({ maxRetries: 2 });
-      await expect(adapter.upload(enc("data"))).rejects.toThrow(/HTTP 500/);
-      expect(mockArweave.transactions.post).toHaveBeenCalledTimes(2);
+      await expect(adapter.upload(enc("data"))).rejects.toThrow(
+        /failed after 2 attempts/,
+      );
+      expect(mockUploader.uploadChunk).toHaveBeenCalledTimes(2);
     });
   });
 
