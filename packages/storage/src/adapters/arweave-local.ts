@@ -295,6 +295,9 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   /** Access arlocal control methods: mint, mine, balance, reset. */
   readonly testnet: ArweaveLocalHelper;
 
+  /** Resolves when the wallet has been funded on arlocal (if walletKey was provided). */
+  private readonly _initMintPromise: Promise<void> | null;
+
   constructor(config: ArweaveLocalAdapterConfig = {}) {
     const gateway = config.gateway ?? ARWEAVE_LOCAL;
     super({ ...config, gateway });
@@ -303,6 +306,40 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     this.testnet = new ArweaveLocalHelper({
       url: `${protocol}://${host}:${port}`,
     });
+
+    // When a walletKey is provided, derive its address and auto-mint AR so the
+    // wallet can pay upload fees on arlocal without manual setup.
+    if (config.walletKey && Object.keys(config.walletKey).length > 0) {
+      this._initMintPromise = this._mintWallet(config.walletKey, gateway);
+    } else {
+      this._initMintPromise = null;
+    }
+  }
+
+  private async _mintWallet(
+    walletKey: Record<string, string>,
+    gateway: ArweaveGatewayConfig,
+  ): Promise<void> {
+    try {
+      const { default: Arweave } = await import("arweave");
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+      const arweave = Arweave.init(gateway);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      const address: string = await arweave.wallets.jwkToAddress(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        walletKey as any,
+      );
+      await this.testnet.mintTokens(address, 10_000_000_000_000n); // 10 AR
+      this.logger?.log(
+        "dStorage/arweave-local",
+        `Minted 10 AR to wallet ${address} on arlocal`,
+      );
+    } catch (err) {
+      this.logger?.warn(
+        "dStorage/arweave-local",
+        `Auto-mint failed (non-fatal): ${err}`,
+      );
+    }
   }
 
   /**
@@ -370,6 +407,9 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
+    // Ensure the wallet is funded before attempting the upload.
+    if (this._initMintPromise) await this._initMintPromise;
+
     const result = await super.upload(data, metadata);
     this.logger?.log(
       "dStorage/arweave-local",
