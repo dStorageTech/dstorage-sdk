@@ -9,6 +9,26 @@ import type { PaymentReceipt } from "@dstorage/payment";
 import type { PaymentAdapter } from "@dstorage/payment";
 
 /**
+ * The on-chain schema version reflected by this SDK build.
+ * Corresponds to the contractVersion ledger field in DataRegistry.compact.
+ * Bump this constant when the contract is redeployed with breaking schema changes.
+ */
+export const CONTRACT_VERSION = 0;
+
+/**
+ * Identifies the encryption algorithm used to encrypt a storageId.
+ * Recorded on-chain in ReferenceEntry.encryptionScheme so the SDK
+ * can dispatch the correct decryption function at read time.
+ *
+ * Current values:
+ *   "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key), 60-byte payload
+ *
+ * Post-quantum schemes are introduced in the PQ encryption PR and
+ * extend this union without breaking existing entries.
+ */
+export type EncryptionScheme = "aes-gcm-v1";
+
+/**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
  * Omit the field entirely to suppress all SDK output.
@@ -24,8 +44,18 @@ export type ChainProviderName = "mock" | "midnight";
 
 /** An on-chain reference record — what gets written to the smart contract. */
 export interface ChainReference {
-  /** The storage content ID (e.g. Arweave txId, Autonomi XOR address, etc.) */
+  /**
+   * The storage content ID, base64url-encoded after client-side encryption.
+   * (e.g. Arweave txId, encrypted before storage).
+   * The encryption algorithm is recorded in encryptionScheme.
+   */
   storageId: string;
+  /**
+   * Identifies the algorithm used to encrypt storageId.
+   * Enables the SDK to dispatch the correct decryption function at read time.
+   * Defaults to "aes-gcm-v1" for legacy entries that predate this field.
+   */
+  encryptionScheme?: EncryptionScheme;
   /** Storage network used */
   storageProvider: string;
   /** Optional label for the referenced data e.g. "profile", "document" */

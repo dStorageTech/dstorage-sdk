@@ -5,11 +5,7 @@
 // This contract stores data pointers (storage references).
 // Raw user data is NEVER written to this contract —
 // only opaque identifiers referencing encrypted blobs stored off-chain.
-// Encryption/decryption is handled by SDK clients before/after storage access.
-//
-// The storageId field holds a 60-byte AES-GCM encrypted payload:
-//   [ ciphertext: 32 bytes | IV: 12 bytes | auth tag: 16 bytes ]
-// This ensures the storage pointer is private and tamper-evident on-chain.
+// Encryption/decryption is handled by the dStorage SDK client-side before/after storage access.
 //
 // Circuits:
 //   deriveRefId     — deterministic helper to derive a refId from counter + storageId + instance salt
@@ -21,13 +17,19 @@ import CompactStandardLibrary;
 
 // A single storage reference entry stored on-chain.
 export struct ReferenceEntry {
-  // 60-byte AES-GCM encrypted storage content identifier:
-  //   [ ciphertext: 32 bytes | IV: 12 bytes | auth tag: 16 bytes ]
-  // The SDK encrypts the storage network ID client-side
-  // before writing, and decrypts it locally after retrieval.
-  storageId: Bytes<60>;
-  // Storage provider identifier ("arweave", "autonomi", "mock").
-  // This contract does not validate allowed values.
+  // Encrypted storage content identifier, base64url-encoded.
+  // The dStorage SDK encrypts the storage network ID client-side before writing,
+  // and decrypts it locally after retrieval. The encryption algorithm
+  // is recorded in the encryptionScheme field.
+  //
+  // Supported schemes and their byte layouts (before base64url encoding):
+  //   "aes-gcm-v1" : 60 bytes [ ciphertext(32) | IV(12) | auth-tag(16) ]
+  storageId: Opaque<"string">;
+  // Identifies the encryption algorithm used for both the storageId and the
+  // file/data stored off-chain. Enables the dStorage SDK to dispatch the
+  // correct decryption function at read time.
+  // Current value: "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key)
+  encryptionScheme: Opaque<"string">;
   storageProvider: Opaque<"string">;
   // Optional caller-defined label (e.g. "profile", "document").
   // This contract does not validate allowed values.
@@ -42,6 +44,10 @@ export ledger references: Map<Bytes<32>, ReferenceEntry>;
 // Monotonic counter used to derive unique refIds without randomness.
 export ledger refCounter: Counter;
 
+// Contract schema version. Initialized to 0.
+// Bumped with future breaking schema changes.
+export ledger contractVersion: Uint<16>;
+
 // Reserved for future access-control extensions.
 // Current contract logic does not read or enforce this field.
 export ledger owner: Bytes<32>;
@@ -49,6 +55,8 @@ export ledger owner: Bytes<32>;
 constructor() {
   // Start at 1 so the first stored entry uses a non-zero counter value.
   refCounter.increment(1);
+  // Schema version 0 (initial deployment).
+  contractVersion = 0;
 }
 
 // ── Circuits ──────────────────────────────────────────────────────────────────
@@ -62,11 +70,11 @@ constructor() {
 // Including the counter avoids collisions for repeated storageId values,
 // and including instance salt avoids cross-contract collisions.
 export circuit deriveRefId(
-                 storageId: Bytes<60>,
+                 storageId: Opaque<"string">,
                  refCounter: Bytes<32>,
                  instanceSalt: Bytes<32>
                  ): Bytes<32> {
-  const storageIdHash = persistentHash<Vector<1, Bytes<60>>>([storageId]);
+  const storageIdHash = persistentHash<Vector<1, Opaque<"string">>>([storageId]);
   return persistentHash<Vector<4, Bytes<32>>>(
            [pad(32, "dstorage:ref:"), refCounter, storageIdHash, instanceSalt]
            );
@@ -78,14 +86,17 @@ export circuit deriveRefId(
 // Returns the refId that can be used to retrieve or share this reference.
 //
 // Arguments:
-//   storageId       : 60-byte AES-GCM encrypted storage content ID
-//                     [ ciphertext(32) | IV(12) | auth tag(16) ]
-//   storageProvider : provider identifier (opaque string)
-//   dataLabel       : optional user-defined label (opaque string)
-//   writtenAt       : caller-provided timestamp
+//   storageId        : base64url-encoded encrypted storage content ID.
+//                      The byte layout depends on encryptionScheme.
+//   encryptionScheme : algorithm identifier used to encrypt storageId and file/data
+//                      (e.g. "aes-gcm-v1")
+//   storageProvider  : provider identifier (opaque string)
+//   dataLabel        : optional user-defined label (opaque string)
+//   writtenAt        : caller-provided timestamp
 //
 export circuit storeReference(
-                 storageId: Bytes<60>,
+                 storageId: Opaque<"string">,
+                 encryptionScheme: Opaque<"string">,
                  storageProvider: Opaque<"string">,
                  dataLabel: Opaque<"string">,
                  writtenAt: Uint<64>
@@ -94,7 +105,7 @@ export circuit storeReference(
   assert(!references.member(disclose(refId)), "Reference already stored");
 
   // Persist the reference entry.
-  const entry = ReferenceEntry { storageId, storageProvider, dataLabel, writtenAt };
+  const entry = ReferenceEntry { storageId, encryptionScheme, storageProvider, dataLabel, writtenAt };
   references.insert(disclose(refId), disclose(entry));
 
   // Increment after insertion so the next write gets a fresh refId.
