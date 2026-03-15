@@ -1,6 +1,7 @@
 import type * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
 
-export type ReferenceEntry = { storageId: Uint8Array;
+export type ReferenceEntry = { storageId: string;
+                               encryptionScheme: string;
                                storageProvider: string;
                                dataLabel: string;
                                writtenAt: bigint
@@ -11,25 +12,24 @@ export type Witnesses<PS> = {
 
 export type ImpureCircuits<PS> = {
   storeReference(context: __compactRuntime.CircuitContext<PS>,
-                 storageId_0: Uint8Array,
+                 storageId_0: string,
+                 encryptionScheme_0: string,
                  storageProvider_0: string,
                  dataLabel_0: string,
                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
 }
 
 export type PureCircuits = {
-  deriveRefId(storageId_0: Uint8Array,
-              refCounter_0: Uint8Array,
-              instanceSalt_0: Uint8Array): Uint8Array;
+  deriveRefId(refCounter_0: Uint8Array, instanceSalt_0: Uint8Array): Uint8Array;
 }
 
 export type Circuits<PS> = {
   deriveRefId(context: __compactRuntime.CircuitContext<PS>,
-              storageId_0: Uint8Array,
               refCounter_0: Uint8Array,
               instanceSalt_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
   storeReference(context: __compactRuntime.CircuitContext<PS>,
-                 storageId_0: Uint8Array,
+                 storageId_0: string,
+                 encryptionScheme_0: string,
                  storageProvider_0: string,
                  dataLabel_0: string,
                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
@@ -44,6 +44,7 @@ export type Ledger = {
     [Symbol.iterator](): Iterator<[Uint8Array, ReferenceEntry]>
   };
   readonly refCounter: bigint;
+  readonly contractVersion: bigint;
   readonly owner: Uint8Array;
 }
 

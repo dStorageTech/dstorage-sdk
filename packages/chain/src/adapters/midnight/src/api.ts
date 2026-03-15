@@ -35,7 +35,8 @@ export interface DeployedDataRegistryAPI {
   readonly state$: Observable<DataRegistryDerivedState>;
 
   storeReference: (
-    storageId: Uint8Array,
+    storageId: string,
+    encryptionScheme: string,
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
@@ -116,22 +117,19 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   readonly state$: Observable<DataRegistryDerivedState>;
 
   async storeReference(
-    storageId: Uint8Array,
+    storageId: string,
+    encryptionScheme: string,
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
     this.logger?.log(
       "dStorage/midnight",
-      `storing reference: ${toHex(storageId)}`,
+      `storing reference: storageId=${storageId}`,
     );
-    if (storageId.length !== 60) {
-      throw new Error(
-        `Storage Id is not 60 bytes long but instead ${storageId.length}`,
-      );
-    }
     const txData = await this.deployedContract.callTx.storeReference(
       storageId,
+      encryptionScheme,
       storageProvider,
       dataLabel,
       writtenAt,

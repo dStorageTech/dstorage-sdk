@@ -9,13 +9,6 @@
       "proof": false,
       "arguments": [
         {
-          "name": "storageId",
-          "type": {
-            "type-name": "Bytes",
-            "length": 60
-          }
-        },
-        {
           "name": "refCounter",
           "type": {
             "type-name": "Bytes",
@@ -43,8 +36,15 @@
         {
           "name": "storageId",
           "type": {
-            "type-name": "Bytes",
-            "length": 60
+            "type-name": "Opaque",
+            "tsType": "string"
+          }
+        },
+        {
+          "name": "encryptionScheme",
+          "type": {
+            "type-name": "Opaque",
+            "tsType": "string"
           }
         },
         {

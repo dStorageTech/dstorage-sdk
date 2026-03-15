@@ -206,8 +206,8 @@ export class DStorage implements DStorageContext {
     });
 
     // 3. Encrypt the storageId before writing on-chain — keeps the storage pointer private.
-    // The encrypted form is an 80-char base64url string (60 bytes), compatible with Bytes<60>.
-    // If no key is available we store it unencrytpted assuming is public data.
+    // The encrypted form is an 80-char base64url string stored as Opaque<"string"> in the contract.
+    // If no key is available we store it unencrypted assuming is public data.
     const encryptedStorageId =
       (await this.encryptStorageIdForChain(storageResult.id)) ??
       storageResult.id;
@@ -430,7 +430,7 @@ export class DStorage implements DStorageContext {
    * The storageId must be a 43-char base64url string (32 bytes decoded) —
    * this is the format used by Arweave txIds and MockStorageAdapter IDs.
    * AES-GCM encryption produces a 60-byte output (ciphertext + IV + tag),
-   * which is base64url-encoded to an 80-char string for the Bytes<60> contract field.
+   * which is base64url-encoded to an 80-char string stored as Opaque<"string"> in the contract.
    *
    * If no storageIdKey is available (e.g. unauthenticated state), it returns null
    *
@@ -535,7 +535,7 @@ export class DStorage implements DStorageContext {
     const manifestResult = await this.config.storageAdapter.upload(manifestData, {
       "dStorage-version": sdkVersion,
       "Content-Type": "application/octet-stream",
-      "dstorage-manifest-upload": "true",
+      "dStorage-manifest-upload": "true",
     });
 
     // Update manifest provider now that we have it, and re-upload isn't needed —
@@ -633,7 +633,7 @@ export class DStorage implements DStorageContext {
   private async _decryptStorageId(encryptedId: string): Promise<string | null> {
     if (!this._storageIdKey) return null;
     try {
-      const bytes = base64urlToBytes(encryptedId); // 60 bytes (80-char base64url input)
+      const bytes = base64urlToBytes(encryptedId); // 60 bytes: [ciphertext(32) | IV(12) | tag(16)]
       const decrypted = await decryptStorageId(this._storageIdKey, bytes); // 32 bytes
       return bytesToBase64url(decrypted); // 43-char base64url (original storage ID)
     } catch {

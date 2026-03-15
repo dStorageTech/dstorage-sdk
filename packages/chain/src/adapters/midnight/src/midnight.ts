@@ -21,7 +21,6 @@
  * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp
  */
 
-import { base64urlToBytes, bytesToBase64url } from "@dstorage/crypto";
 import {
   ManagedPaymentAdapter,
   MidnightPaymentAdapter,
@@ -789,7 +788,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     return Array.from(state.references.entries())
       .map(([refId, entry]) => ({
         refId,
-        storageId: this._decodeStorageId(entry.storageId),
+        storageId: entry.storageId,
         storageProvider: entry.storageProvider,
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
@@ -814,10 +813,10 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
 
     return {
-      storageId: this._decodeStorageId(refEntry.storageId),
+      storageId: refEntry.storageId,
       storageProvider: refEntry.storageProvider,
-      dataLabel: "TODO: refEntry.dataLabel",
-      writtenAt: 0, //refEntry.writtenAt
+      dataLabel: refEntry.dataLabel,
+      writtenAt: Number(refEntry.writtenAt),
     };
   }
 
@@ -830,15 +829,13 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
     try {
       const api = await this._getAPI();
-      this.logger?.log("dStorage/midnight", "Encoding storageId…");
-      const encodedStorageId = this._encodeStorageId(ref.storageId);
-
       this.logger?.log(
         "dStorage/midnight",
-        `Storing reference for storageId: ${uint8ArrayToHex(encodedStorageId)}`,
+        `Storing reference for storageId: ${ref.storageId}`,
       );
       const { refId, blockHeight } = await api.storeReference(
-        encodedStorageId,
+        ref.storageId,
+        ref.encryptionScheme ?? "aes-gcm-v1",
         ref.storageProvider,
         ref.dataLabel ?? "",
         BigInt(ref.writtenAt),
@@ -866,32 +863,6 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
       throw err;
     }
-  }
-
-  /**
-   * Encode a storage ID string into a 60-byte Uint8Array for the contract's Bytes<60> field.
-   *
-   * All storage IDs passed here must be 80-character base64url strings (60 bytes decoded).
-   * This format is produced by DStorage.ts after AES-GCM encryption:
-   *   [ciphertext(32) | IV(12) | tag(16)] = 60 bytes → 80 base64url chars
-   */
-  private _encodeStorageId(id: string): Uint8Array {
-    if (/^[A-Za-z0-9_-]{80}$/.test(id)) {
-      return base64urlToBytes(id); // 60 bytes
-    }
-    throw new Error(
-      `[dStorage/midnight] storageId "${id.slice(0, 20)}..." is not a valid 80-char base64url string. ` +
-        "All storage IDs must be 80 base64url chars (60 bytes) to fit in the Bytes<60> contract field. " +
-        "Ensure storageId encryption is enabled in the SDK (requires an encryption key).",
-    );
-  }
-
-  /**
-   * Decode a 32-byte storageId (as stored on-chain) back to a 43-char base64url string.
-   * The DStorage SDK layer decrypts this further to recover the original storage network ID.
-   */
-  private _decodeStorageId(bytes: Uint8Array): string {
-    return bytesToBase64url(bytes);
   }
 
   // ── DataRegistry deployment ────────────────────────────────────────────────

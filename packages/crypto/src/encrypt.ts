@@ -135,11 +135,14 @@ export function deserializePayload(raw: string): EncryptedPayload | null {
 
 // ── StorageId encryption (AES-GCM, authenticated) ────────────────────────────
 //
-// Uses AES-GCM (AEAD) so the on-chain encrypted storageId is tamper-evident:
+// Uses AES-GCM (AEAD) so the encrypted storageId is tamper-evident:
 // any bit-flip is detected during decryption via the authentication tag.
 //
-// The 60-byte on-chain payload layout is:
+// Binary payload layout (60 bytes):
 //   [ ciphertext: 32 bytes | IV: 12 bytes | auth tag: 16 bytes ]
+//
+// This 60-byte payload is base64url-encoded (80 chars) before being stored
+// on-chain as an Opaque<"string"> in the DataRegistry contract.
 //
 // A fresh random IV is generated per encryption (standard AES-GCM practice).
 // The storageId key is derived from the same root material as the data encryption

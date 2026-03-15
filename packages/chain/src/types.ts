@@ -21,7 +21,8 @@ export const CONTRACT_VERSION = 0;
  * can dispatch the correct decryption function at read time.
  *
  * Current values:
- *   "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key), 60-byte payload
+ *   "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key); 60-byte binary payload
+ *                 base64url-encoded to an 80-char string before writing on-chain
  *
  * Post-quantum schemes are introduced in the PQ encryption PR and
  * extend this union without breaking existing entries.
@@ -149,7 +150,7 @@ export interface ChainAdapter {
 
   /** Derive a deterministic AES-GCM key for storage ID encryption.
    *  Uses the same root credentials as getEncryptionKey() but a different PBKDF2 salt,
-   *  producing an authenticated cipher for the Bytes<60> contract field.
+   *  producing an authenticated cipher stored as an Opaque<"string"> in the contract.
    *  Optional — only for adapters that hold wallet credentials (e.g. facade mode).
    *  In connector mode the key is derived from the wallet signature in DStorage.connect(). */
   getStorageIdKey?(): Promise<CryptoKey | null>;
