@@ -33,6 +33,5 @@ export type StorageAdapterKey =
   | "mock"
   | "arweave-local"
   | "arweave"
-  | "autonomi";
 export type ChainAdapterKey = "mock" | "midnight-connector";
 export type PaymentAdapterKey = "local" | "managed";

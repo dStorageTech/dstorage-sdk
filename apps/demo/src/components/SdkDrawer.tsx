@@ -145,10 +145,7 @@ function MetaTxView({ progress }: { progress: MetaTxProgress }) {
             </strong>
           </span>
           {progress.receipt ? (
-            progress.receipt.storagePayment.simulated &&
-            progress.receipt.chainPayment.simulated ? (
-              <span className="sdk-sim-badge">simulated</span>
-            ) : null
+            null
           ) : (
             <span className="sdk-sim-badge">estimate</span>
           )}

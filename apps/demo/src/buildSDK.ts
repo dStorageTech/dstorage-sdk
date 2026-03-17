@@ -3,7 +3,6 @@ import {
   MockStorageAdapter,
   ArweaveStorageAdapter,
   ArweaveLocalStorageAdapter,
-  AutonomiStorageAdapter,
   MockMidnightChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage/core";
@@ -52,9 +51,7 @@ export async function buildSDK(
     storageAdapter =
       storageKey === "arweave"
         ? new ArweaveStorageAdapter(managedConfig)
-        : storageKey === "autonomi"
-          ? new AutonomiStorageAdapter()
-          : new MockStorageAdapter();
+        : new MockStorageAdapter();
   }
 
   let chainAdapter;

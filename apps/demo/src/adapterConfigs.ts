@@ -33,12 +33,6 @@ export const ADAPTER_CONFIGS: Record<
     status: "live",
     note: "Requires the ArConnect browser extension",
   },
-  autonomi: {
-    label: "Autonomi",
-    description:
-      "Self-encrypting decentralised network. Memory-backed in this preview.",
-    status: "stub",
-  },
 };
 
 export const CHAIN_ADAPTER_CONFIGS: Record<
