@@ -223,7 +223,9 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it("throws after exhausting all chunk retries", async () => {
-      mockUploader.uploadChunk.mockRejectedValue(new Error("Persistent failure"));
+      mockUploader.uploadChunk.mockRejectedValue(
+        new Error("Persistent failure"),
+      );
 
       const adapter = nodeAdapter({ maxRetries: 2 });
       await expect(adapter.upload(enc("data"))).rejects.toThrow(

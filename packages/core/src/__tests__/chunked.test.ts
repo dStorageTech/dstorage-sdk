@@ -11,8 +11,7 @@ import { describe, it, expect, vi } from "vitest";
 // Override CHUNK_SIZE before any module that imports it resolves.
 // Must be 512 — a literal, not a variable reference — because vi.mock is hoisted.
 vi.mock("../chunked.js", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../chunked.js")>();
+  const actual = await importOriginal<typeof import("../chunked.js")>();
   return { ...actual, CHUNK_SIZE: 512 };
 });
 

@@ -287,7 +287,9 @@ export class DStorage implements DStorageContext {
 
     // 3. Detect chunked manifest and reassemble transparently.
     try {
-      const parsed: unknown = JSON.parse(new TextDecoder().decode(decryptedBytes));
+      const parsed: unknown = JSON.parse(
+        new TextDecoder().decode(decryptedBytes),
+      );
       if (isManifest(parsed)) {
         this.logger?.log(
           "dStorage",
@@ -496,7 +498,11 @@ export class DStorage implements DStorageContext {
         "dstorage-chunk-total": String(totalChunks),
       });
 
-      chunkEntries.push({ index: i, storageId: chunkResult.id, size: chunk.length });
+      chunkEntries.push({
+        index: i,
+        storageId: chunkResult.id,
+        size: chunk.length,
+      });
       bytesUploaded += chunk.length;
 
       onProgress?.({
@@ -530,13 +536,17 @@ export class DStorage implements DStorageContext {
     };
 
     const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
-    const manifestData = (await this.encryptPayload(manifestBytes)) ?? manifestBytes;
+    const manifestData =
+      (await this.encryptPayload(manifestBytes)) ?? manifestBytes;
 
-    const manifestResult = await this.config.storageAdapter.upload(manifestData, {
-      "dStorage-version": sdkVersion,
-      "Content-Type": "application/octet-stream",
-      "dStorage-manifest-upload": "true",
-    });
+    const manifestResult = await this.config.storageAdapter.upload(
+      manifestData,
+      {
+        "dStorage-version": sdkVersion,
+        "Content-Type": "application/octet-stream",
+        "dStorage-manifest-upload": "true",
+      },
+    );
 
     // Update manifest provider now that we have it, and re-upload isn't needed —
     // the provider field is informational only (retrieval uses stored chunk storageIds).
@@ -586,12 +596,16 @@ export class DStorage implements DStorageContext {
    * Reassemble a chunked file from its manifest.
    * Fetches and decrypts each chunk sequentially to bound memory usage.
    */
-  private async _retrieveChunked(manifest: ChunkManifest): Promise<RetrieveResult> {
+  private async _retrieveChunked(
+    manifest: ChunkManifest,
+  ): Promise<RetrieveResult> {
     const result = new Uint8Array(manifest.totalSize);
     let offset = 0;
 
     for (const entry of manifest.chunks) {
-      const rawChunkBytes = await this.config.storageAdapter.retrieve(entry.storageId);
+      const rawChunkBytes = await this.config.storageAdapter.retrieve(
+        entry.storageId,
+      );
 
       let chunkBytes = rawChunkBytes;
       if (this._encryptionKey) {

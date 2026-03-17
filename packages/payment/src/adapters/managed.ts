@@ -322,16 +322,22 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     onStatus?.(`Sending ${network} transaction to signing server…`);
     let signResp: Response;
     try {
+      const body = JSON.stringify({
+        txData: txJson,
+        network,
+        userId: this.userId,
+      });
+      this.logger?.log(
+        "dStorage/managed-payment",
+        `${network}: delegating to managed payment service (serialized req length=${body.length})`,
+      );
+
       signResp = await fetch(
         `${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            txData: txJson,
-            network,
-            userId: this.userId,
-          }),
+          body,
         },
       );
     } catch (err) {

@@ -100,7 +100,9 @@ beforeEach(() => {
   mockArweaveInstance.createTransaction.mockResolvedValue(mockTx);
   mockArweaveInstance.transactions.getPrice.mockResolvedValue("500000");
   mockArweaveInstance.transactions.sign.mockResolvedValue(undefined);
-  mockArweaveInstance.transactions.getUploader.mockResolvedValue(mockLocalUploader);
+  mockArweaveInstance.transactions.getUploader.mockResolvedValue(
+    mockLocalUploader,
+  );
   mockLocalUploader.uploadChunk.mockImplementation(async () => {
     localUploaderState.calls++;
   });

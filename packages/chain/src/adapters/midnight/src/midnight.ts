@@ -387,10 +387,6 @@ export class MidnightChainAdapter implements ChainAdapter {
         _ttl?: Date,
       ): Promise<FinalizedTransaction> => {
         const txData: string = uint8ArrayToHex(tx.serialize());
-        logger?.log(
-          "dStorage/midnight",
-          `balanceTx: delegating to managed payment service (serialized tx length=${txData.length})`,
-        );
         const receipt = await paymentAdapter.pay({
           token: "DUST",
           amount: "0",
