@@ -409,10 +409,15 @@ export class DStorage implements DStorageContext {
       refs.map(async (item) => {
         let storageId: string | null = null;
         if (item.storageId) {
-          try {
-            storageId = await this._decryptStorageId(item.storageId);
-          } catch {
-            /* we cannot decrypt */
+          const isPublic = !item.encryptionScheme;
+          if (isPublic) {
+            storageId = item.storageId;
+          } else {
+            try {
+              storageId = await this._decryptStorageId(item.storageId);
+            } catch {
+              /* we cannot decrypt */
+            }
           }
         }
         return {

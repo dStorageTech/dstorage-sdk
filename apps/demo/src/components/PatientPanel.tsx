@@ -144,6 +144,8 @@ export function PatientPanel({
       ref.refId.length > 16
         ? `${ref.refId.slice(0, 8)}...${ref.refId.slice(-8)}`
         : ref.refId;
+    const isPublic = !ref.encryptionScheme;
+    if (isPublic) return `${shortRefId} (public)`;
     return ref.storageId
       ? shortRefId
       : `${shortRefId} (cannot decrypt content id)`;
