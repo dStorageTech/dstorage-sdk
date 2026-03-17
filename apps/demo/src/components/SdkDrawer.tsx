@@ -144,9 +144,7 @@ function MetaTxView({ progress }: { progress: MetaTxProgress }) {
                 : `${progress.estimate!.chainCost.amount} ${progress.estimate!.chainCost.token}`}
             </strong>
           </span>
-          {progress.receipt ? (
-            null
-          ) : (
+          {progress.receipt ? null : (
             <span className="sdk-sim-badge">estimate</span>
           )}
         </div>

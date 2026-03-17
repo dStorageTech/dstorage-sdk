@@ -179,23 +179,47 @@ export class DStorage implements DStorageContext {
     // Distinguish old-style metadata object from new UploadOptions.
     let metadata: Record<string, string>;
     let onProgress: ((p: UploadProgress) => void) | undefined;
-    if ("onProgress" in metadataOrOptions || "metadata" in metadataOrOptions) {
+    let isPublic = false;
+    if (
+      "onProgress" in metadataOrOptions ||
+      "metadata" in metadataOrOptions ||
+      "isPublic" in metadataOrOptions
+    ) {
       const opts = metadataOrOptions as UploadOptions;
       metadata = opts.metadata ?? {};
       onProgress = opts.onProgress;
+      isPublic = opts.isPublic ?? false;
     } else {
       metadata = metadataOrOptions as Record<string, string>;
     }
 
     // Route large files through the chunked path.
     if (bytes.length > CHUNK_SIZE) {
-      return this._uploadChunked(bytes, metadata, onProgress);
+      return this._uploadChunked(bytes, metadata, onProgress, isPublic);
     }
 
     // ── Single-shot path (files ≤ 5 MB) ────────────────────────────────────
 
-    // 1. Encrypt client-side if key is available; otherwise store raw bytes
-    const uploadData = (await this.encryptPayload(bytes)) ?? bytes;
+    let uploadData: Uint8Array;
+    let onChainStorageId: string;
+    const encryptionScheme = isPublic ? ("" as const) : ("aes-gcm-v1" as const);
+
+    if (isPublic) {
+      // 1a. Public: store raw bytes, write storageId as plaintext on-chain.
+      uploadData = bytes;
+      onChainStorageId = ""; // set after storage upload below
+    } else {
+      // 1b. Private: encrypt content — fail if no encryption key is available.
+      if (!this._encryptionKey || !this._storageIdKey) {
+        throw new Error(
+          "[dStorage] Encryption keys not available. Call connect() or init() before uploading private data.",
+        );
+      }
+      this.logger?.log("dStorage", "Encrypting content...");
+      const payload = await encrypt(this._encryptionKey, bytes);
+      uploadData = new TextEncoder().encode(serializePayload(payload));
+      onChainStorageId = ""; // set after storage upload below
+    }
 
     // 2. Upload to chosen storage network
     const sdkVersion = corePackageJson.version ?? "unknown";
@@ -205,17 +229,24 @@ export class DStorage implements DStorageContext {
       "Content-Type": "application/octet-stream",
     });
 
-    // 3. Encrypt the storageId before writing on-chain — keeps the storage pointer private.
-    // The encrypted form is an 80-char base64url string stored as Opaque<"string"> in the contract.
-    // If no key is available we store it unencrypted assuming is public data.
-    const encryptedStorageId =
-      (await this.encryptStorageIdForChain(storageResult.id)) ??
-      storageResult.id;
+    if (isPublic) {
+      // 3a. Public: write storageId as-is on-chain.
+      onChainStorageId = storageResult.id;
+    } else {
+      // 3b. Private: encrypt the storageId before writing on-chain.
+      // The encrypted form is an 80-char base64url string stored as Opaque<"string"> in the contract.
+      const encrypted = await encryptStorageId(
+        this._storageIdKey!,
+        base64urlToBytes(storageResult.id),
+      );
+      onChainStorageId = bytesToBase64url(encrypted);
+    }
 
-    // 4. Write on-chain reference — only the encrypted pointer, never the data
+    // 4. Write on-chain reference — only the storage pointer, never the data
     const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
-      storageId: encryptedStorageId,
+      storageId: onChainStorageId,
+      encryptionScheme,
       storageProvider: storageResult.provider,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
@@ -230,6 +261,7 @@ export class DStorage implements DStorageContext {
       storageProvider: storageResult.provider,
       chainProvider: chainResult.provider,
       uploadedAt: storageResult.uploadedAt,
+      encryptionScheme,
       costEstimate: {
         storageCost: {
           amount: storageResult.cost ?? "unknown",
@@ -252,16 +284,23 @@ export class DStorage implements DStorageContext {
    *
    * @param storageId  The storageId returned from upload()
    */
-  async retrieveByStorageId(storageId: string): Promise<RetrieveResult> {
+  async retrieveByStorageId(
+    storageId: string,
+    isPublic = false,
+  ): Promise<RetrieveResult> {
     this.assertConnected();
 
     // 1. Fetch blob from storage
     const rawBytes = await this.config.storageAdapter.retrieve(storageId);
 
-    // 2. Deserialize and decrypt if an encryption key is available
-    // If no encryption key — assume content was stored as raw bytes
+    // 2. Decrypt if content is private; return raw bytes if public.
     let decryptedBytes = rawBytes;
-    if (this._encryptionKey) {
+    if (!isPublic) {
+      if (!this._encryptionKey) {
+        throw new Error(
+          "[dStorage] Encryption key not available. Call connect() or init() before retrieving private data.",
+        );
+      }
       const encryptedPayload = deserializePayload(
         new TextDecoder().decode(rawBytes),
       );
@@ -295,7 +334,7 @@ export class DStorage implements DStorageContext {
           "dStorage",
           `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
         );
-        return this._retrieveChunked(parsed);
+        return this._retrieveChunked(parsed, isPublic);
       }
     } catch {
       // Not JSON — treat as raw content, fall through.
@@ -335,10 +374,24 @@ export class DStorage implements DStorageContext {
         `[dStorage] No on-chain reference found for refId: ${refId}`,
       );
 
-    // Decrypt the on-chain storageId to recover the original storage network ID.
-    const storageId =
-      (await this._decryptStorageId(ref.storageId)) ?? ref.storageId;
-    return await this.retrieveByStorageId(storageId);
+    // encryptionScheme === "aes-gcm-v1" means encrypted; "" or undefined means public.
+    const isPublic = !ref.encryptionScheme;
+
+    // For private data: decrypt the on-chain storageId to recover the original storage network ID.
+    // For public data: the storageId is already plaintext.
+    let storageId: string;
+    if (isPublic) {
+      storageId = ref.storageId;
+    } else {
+      const decrypted = await this._decryptStorageId(ref.storageId);
+      if (!decrypted) {
+        throw new Error(
+          `[dStorage] Failed to decrypt storageId for refId: ${refId}`,
+        );
+      }
+      storageId = decrypted;
+    }
+    return await this.retrieveByStorageId(storageId, isPublic);
   }
 
   /**
@@ -366,6 +419,7 @@ export class DStorage implements DStorageContext {
           refId: item.refId,
           storageId,
           storageProvider: item.storageProvider,
+          encryptionScheme: item.encryptionScheme,
         };
       }),
     );
@@ -456,9 +510,17 @@ export class DStorage implements DStorageContext {
     bytes: Uint8Array,
     metadata: Record<string, string>,
     onProgress?: (p: UploadProgress) => void,
+    isPublic = false,
   ): Promise<UploadResult> {
+    if (!isPublic && (!this._encryptionKey || !this._storageIdKey)) {
+      throw new Error(
+        "[dStorage] Encryption keys not available. Call connect() or init() before uploading private data.",
+      );
+    }
+
     const totalChunks = Math.ceil(bytes.length / CHUNK_SIZE);
     const sdkVersion = corePackageJson.version ?? "unknown";
+    const encryptionScheme = isPublic ? ("" as const) : ("aes-gcm-v1" as const);
 
     this.logger?.log(
       "dStorage",
@@ -480,7 +542,13 @@ export class DStorage implements DStorageContext {
         totalBytes: bytes.length,
       });
 
-      const chunkData = (await this.encryptPayload(chunk)) ?? chunk;
+      let chunkData: Uint8Array;
+      if (isPublic) {
+        chunkData = chunk;
+      } else {
+        const payload = await encrypt(this._encryptionKey!, chunk);
+        chunkData = new TextEncoder().encode(serializePayload(payload));
+      }
 
       onProgress?.({
         phase: "uploading",
@@ -523,8 +591,6 @@ export class DStorage implements DStorageContext {
       totalBytes: bytes.length,
     });
 
-    // Re-upload first chunk to get provider name — we need a StorageResult to read it.
-    // Instead, upload manifest and read provider from its result.
     const manifest: ChunkManifest = {
       v: 1,
       type: "dstorage-chunked-manifest",
@@ -536,8 +602,13 @@ export class DStorage implements DStorageContext {
     };
 
     const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
-    const manifestData =
-      (await this.encryptPayload(manifestBytes)) ?? manifestBytes;
+    let manifestData: Uint8Array;
+    if (isPublic) {
+      manifestData = manifestBytes;
+    } else {
+      const payload = await encrypt(this._encryptionKey!, manifestBytes);
+      manifestData = new TextEncoder().encode(serializePayload(payload));
+    }
 
     const manifestResult = await this.config.storageAdapter.upload(
       manifestData,
@@ -553,14 +624,23 @@ export class DStorage implements DStorageContext {
     // We store the provider in the manifest for debugging; patch the in-memory object only.
     manifest.provider = manifestResult.provider;
 
-    // Encrypt the manifest storageId for on-chain storage.
-    const encryptedManifestId =
-      (await this.encryptStorageIdForChain(manifestResult.id)) ??
-      manifestResult.id;
+    // For private data: encrypt the manifest storageId before writing on-chain.
+    // For public data: write the storageId as plaintext.
+    let onChainManifestId: string;
+    if (isPublic) {
+      onChainManifestId = manifestResult.id;
+    } else {
+      const encrypted = await encryptStorageId(
+        this._storageIdKey!,
+        base64urlToBytes(manifestResult.id),
+      );
+      onChainManifestId = bytesToBase64url(encrypted);
+    }
 
     const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
-      storageId: encryptedManifestId,
+      storageId: onChainManifestId,
+      encryptionScheme,
       storageProvider: manifestResult.provider,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
@@ -578,6 +658,7 @@ export class DStorage implements DStorageContext {
       storageProvider: manifestResult.provider,
       chainProvider: chainResult.provider,
       uploadedAt: manifestResult.uploadedAt,
+      encryptionScheme,
       costEstimate: {
         storageCost: {
           amount: manifestResult.cost ?? "unknown",
@@ -598,7 +679,14 @@ export class DStorage implements DStorageContext {
    */
   private async _retrieveChunked(
     manifest: ChunkManifest,
+    isPublic = false,
   ): Promise<RetrieveResult> {
+    if (!isPublic && !this._encryptionKey) {
+      throw new Error(
+        "[dStorage] Encryption key not available. Call connect() or init() before retrieving private data.",
+      );
+    }
+
     const result = new Uint8Array(manifest.totalSize);
     let offset = 0;
 
@@ -608,13 +696,13 @@ export class DStorage implements DStorageContext {
       );
 
       let chunkBytes = rawChunkBytes;
-      if (this._encryptionKey) {
+      if (!isPublic) {
         const encryptedPayload = deserializePayload(
           new TextDecoder().decode(rawChunkBytes),
         );
         if (encryptedPayload) {
           try {
-            chunkBytes = await decrypt(this._encryptionKey, encryptedPayload);
+            chunkBytes = await decrypt(this._encryptionKey!, encryptedPayload);
           } catch (err) {
             throw new Error(
               `[dStorage] Failed to decrypt chunk ${entry.index}: ${err}`,

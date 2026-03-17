@@ -17,18 +17,23 @@ import CompactStandardLibrary;
 
 // A single storage reference entry stored on-chain.
 export struct ReferenceEntry {
-  // Encrypted storage content identifier, base64url-encoded.
-  // The dStorage SDK encrypts the storage network ID client-side before writing,
-  // and decrypts it locally after retrieval. The encryption algorithm
-  // is recorded in the encryptionScheme field.
+  // Storage content identifier.
+  // For private (encrypted) uploads: base64url-encoded ciphertext of the storage
+  // network ID, encrypted client-side by the dStorage SDK before writing.
+  // The encryption algorithm is recorded in the encryptionScheme field.
+  // The SDK decrypts this locally after retrieval to obtain the real storage ID.
   //
-  // Supported schemes and their byte layouts (before base64url encoding):
+  // For public (unencrypted) uploads: the plain storage network ID (no encoding).
+  // In this case encryptionScheme is empty ("").
+  //
+  // Supported encryption schemes and their byte layouts (before base64url encoding):
   //   "aes-gcm-v1" : 60 bytes [ ciphertext(32) | IV(12) | auth-tag(16) ]
   storageId: Opaque<"string">;
   // Identifies the encryption algorithm used for both the storageId and the
   // file/data stored off-chain. Enables the dStorage SDK to dispatch the
   // correct decryption function at read time.
   // Current value: "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key)
+  // Empty string ("") when the data was published as public/unencrypted.
   encryptionScheme: Opaque<"string">;
   storageProvider: Opaque<"string">;
   // Optional caller-defined label (e.g. "profile", "document").
@@ -79,10 +84,11 @@ export circuit deriveRefId(refCounter: Bytes<32>, instanceSalt: Bytes<32>): Byte
 // Returns the refId that can be used to retrieve or share this reference.
 //
 // Arguments:
-//   storageId        : base64url-encoded encrypted storage content ID.
-//                      The byte layout depends on encryptionScheme.
+//   storageId        : for private uploads — base64url-encoded encrypted storage content ID
+//                      (byte layout depends on encryptionScheme);
+//                      for public uploads — plain storage network ID (unencrypted).
 //   encryptionScheme : algorithm identifier used to encrypt storageId and file/data
-//                      (e.g. "aes-gcm-v1")
+//                      (e.g. "aes-gcm-v1"); empty string ("") for public/unencrypted uploads.
 //   storageProvider  : provider identifier (opaque string)
 //   dataLabel        : optional user-defined label (opaque string)
 //   writtenAt        : caller-provided timestamp

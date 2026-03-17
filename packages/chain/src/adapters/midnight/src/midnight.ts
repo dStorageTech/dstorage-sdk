@@ -32,6 +32,7 @@ import type {
   ChainProviderName,
   ChainReference,
   ChainWriteResult,
+  EncryptionScheme,
   Logger,
   WalletBalances,
   DataReferenceSummary,
@@ -786,6 +787,8 @@ export class MidnightChainAdapter implements ChainAdapter {
         refId,
         storageId: entry.storageId,
         storageProvider: entry.storageProvider,
+        encryptionScheme: (entry.encryptionScheme ||
+          null) as EncryptionScheme | null,
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
   }
@@ -810,6 +813,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     return {
       storageId: refEntry.storageId,
+      encryptionScheme: refEntry.encryptionScheme as EncryptionScheme,
       storageProvider: refEntry.storageProvider,
       dataLabel: refEntry.dataLabel,
       writtenAt: Number(refEntry.writtenAt),
@@ -831,7 +835,9 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
       const { refId, blockHeight } = await api.storeReference(
         ref.storageId,
-        ref.encryptionScheme ?? "aes-gcm-v1",
+        ref.encryptionScheme !== undefined
+          ? ref.encryptionScheme
+          : "aes-gcm-v1",
         ref.storageProvider,
         ref.dataLabel ?? "",
         BigInt(ref.writtenAt),

@@ -206,6 +206,64 @@ describe("retrieveByRefId", () => {
   });
 });
 
+// ── public (isPublic: true) upload / retrieve ─────────────────────────────────
+
+describe("public upload and retrieve", () => {
+  it("uploads public content without requiring a wallet connection", async () => {
+    const ds = new DStorage(makeConfig());
+    // connect so assertConnected passes, but no encryption keys involved for public data
+    const wallet = await connectDemoWallet("0xPublicUser");
+    await ds.connect(wallet);
+    const result = await ds.upload("public data", { isPublic: true });
+    expect(result).toHaveProperty("chainRefId");
+    expect(result).toHaveProperty("storageId");
+  });
+
+  it("retrieves the original content via refId for public upload", async () => {
+    const ds = await makeConnectedDStorage();
+    const content = "hello, public world!";
+    const { chainRefId } = await ds.upload(content, { isPublic: true });
+    const result = await ds.retrieveByRefId(chainRefId);
+    expect(result.content).toBe(content);
+  });
+
+  it("retrieves the original bytes via refId for public upload", async () => {
+    const ds = await makeConnectedDStorage();
+    const content = "public bytes";
+    const { chainRefId } = await ds.upload(content, { isPublic: true });
+    const result = await ds.retrieveByRefId(chainRefId);
+    expect(result.bytes).toEqual(new TextEncoder().encode(content));
+  });
+
+  it("public storageId on-chain matches the raw storage id", async () => {
+    const ds = await makeConnectedDStorage();
+    const { chainRefId, storageId } = await ds.upload("public", {
+      isPublic: true,
+    });
+    const ref = await ds.chainAdapter.readReference(chainRefId);
+    // For public data the storageId on-chain must equal the raw storage id
+    expect(ref.storageId).toBe(storageId);
+    expect(ref.encryptionScheme).toBe("");
+  });
+
+  it("private upload stores an encrypted (different) storageId on-chain", async () => {
+    const ds = await makeConnectedDStorage();
+    const { chainRefId, storageId } = await ds.upload("private");
+    const ref = await ds.chainAdapter.readReference(chainRefId);
+    expect(ref.storageId).not.toBe(storageId);
+    expect(ref.encryptionScheme).toBe("aes-gcm-v1");
+  });
+
+  it("two users can both retrieve the same public content by refId", async () => {
+    const ds1 = await makeConnectedDStorage();
+    const ds2 = await makeConnectedDStorage();
+    const content = "shared public content";
+    const { chainRefId } = await ds1.upload(content, { isPublic: true });
+    const result = await ds2.retrieveByRefId(chainRefId);
+    expect(result.content).toBe(content);
+  });
+});
+
 // ── estimateCost ──────────────────────────────────────────────────────────────
 
 describe("estimateCost", () => {

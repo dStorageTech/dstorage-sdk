@@ -23,11 +23,12 @@ export const CONTRACT_VERSION = 0;
  * Current values:
  *   "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key); 60-byte binary payload
  *                 base64url-encoded to an 80-char string before writing on-chain
+ *   ""           — No encryption; storageId and content are stored as plaintext (public data)
  *
  * Post-quantum schemes are introduced in the PQ encryption PR and
  * extend this union without breaking existing entries.
  */
-export type EncryptionScheme = "aes-gcm-v1";
+export type EncryptionScheme = "aes-gcm-v1" | "";
 
 /**
  * Minimal logger interface accepted by every SDK class.
@@ -52,9 +53,9 @@ export interface ChainReference {
    */
   storageId: string;
   /**
-   * Identifies the algorithm used to encrypt storageId.
-   * Enables the SDK to dispatch the correct decryption function at read time.
-   * Defaults to "aes-gcm-v1" for legacy entries that predate this field.
+   * Identifies the algorithm used to encrypt storageId and content.
+   * "aes-gcm-v1" — encrypted with AES-256-GCM (PBKDF2-derived key).
+   * "" or undefined — unencrypted; storageId and content are stored as plaintext (public data).
    */
   encryptionScheme?: EncryptionScheme;
   /** Storage network used */
@@ -98,6 +99,8 @@ export interface DataReferenceSummary {
   storageId: string | null;
   /** Storage backend/provider where the encrypted payload is stored. */
   storageProvider: string;
+  /** Encryption scheme recorded on-chain. null/"" = public/unencrypted; "aes-gcm-v1" = encrypted. */
+  encryptionScheme: EncryptionScheme | null;
 }
 
 /** Every chain adapter must implement this interface */

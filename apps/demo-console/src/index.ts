@@ -327,10 +327,14 @@ async function main(): Promise<void> {
           }
           for (let i = 0; i < refs.length; i += 1) {
             const ref = refs[i]!;
+            const scheme = ref.encryptionScheme || null;
             console.log(`  [${i + 1}] refId = ${ref.refId}`);
-            console.log(`      storageProvider = ${ref.storageProvider}`);
+            console.log(`      storageProvider  = ${ref.storageProvider}`);
             console.log(
-              `      storageId = ${ref.storageId ?? "(cannot decrypt it)"}`,
+              `      encryptionScheme = ${scheme ?? "(public/unencrypted)"}`,
+            );
+            console.log(
+              `      storageId        = ${ref.storageId ?? "(cannot decrypt it)"}`,
             );
           }
           console.log("");
@@ -420,8 +424,14 @@ async function main(): Promise<void> {
         continue;
       }
 
+      const visibilityInput = (
+        await rl.question("  Upload as [1=private (default), 2=public]: ")
+      ).trim();
+      const isPublic =
+        visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
+
       console.log(
-        `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes)`,
+        `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes) [${isPublic ? "public" : "private"}]`,
       );
       console.log(
         `  Uploading to ${storageAdapter.name} storage and writing on-chain (${chainAdapter.name}) reference...`,
@@ -430,16 +440,23 @@ async function main(): Promise<void> {
       try {
         const result = await withTicker(
           () => "Generating ZK proof and submitting reference...",
-          () => sdk.upload(fileContent),
+          () => sdk.upload(fileContent, { isPublic }),
         );
 
+        const visibility = result.encryptionScheme
+          ? "private (encrypted)"
+          : "public (unencrypted)";
         console.log("\n  ✓ Upload complete!");
-        console.log(`  refId:           ${result.chainRefId}`);
-        console.log(`  storageId:       ${result.storageId}`);
-        console.log(`  storageProvider: ${result.storageProvider}`);
-        console.log(`  chainProvider:   ${result.chainProvider}`);
+        console.log(`  refId:            ${result.chainRefId}`);
+        console.log(`  storageId:        ${result.storageId}`);
+        console.log(`  storageProvider:  ${result.storageProvider}`);
+        console.log(`  chainProvider:    ${result.chainProvider}`);
         console.log(
-          `  uploadedAt:      ${new Date(result.uploadedAt).toISOString()}\n`,
+          `  encryptionScheme: ${result.encryptionScheme || "(none)"}`,
+        );
+        console.log(`  visibility:       ${visibility}`);
+        console.log(
+          `  uploadedAt:       ${new Date(result.uploadedAt).toISOString()}\n`,
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

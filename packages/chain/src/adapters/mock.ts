@@ -102,6 +102,7 @@ export class MockChainAdapter implements ChainAdapter {
       refId,
       storageId: ref.storageId,
       storageProvider: ref.storageProvider,
+      encryptionScheme: ref.encryptionScheme ?? null,
     }));
   }
 

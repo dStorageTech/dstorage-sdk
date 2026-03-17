@@ -65,6 +65,8 @@ export interface UploadProgress {
 export interface UploadOptions {
   metadata?: Record<string, string>;
   onProgress?: (progress: UploadProgress) => void;
+  /** When true, content is stored unencrypted and the storageId is written on-chain as plaintext. */
+  isPublic?: boolean;
 }
 
 /** Result returned from dStorage.upload() */
@@ -82,6 +84,12 @@ export interface UploadResult {
   chainProvider: ChainProviderName;
   /** Timestamp */
   uploadedAt: number;
+  /**
+   * Encryption algorithm used for the stored data and on-chain storageId.
+   * "aes-gcm-v1" for private (encrypted) uploads.
+   * Empty string ("") for public (unencrypted) uploads.
+   */
+  encryptionScheme: string;
   /** Estimated cost of upload */
   costEstimate: CostEstimate;
 }
