@@ -251,7 +251,7 @@ describe("public upload and retrieve", () => {
     const { chainRefId, storageId } = await ds.upload("private");
     const ref = await ds.chainAdapter.readReference(chainRefId);
     expect(ref.storageId).not.toBe(storageId);
-    expect(ref.encryptionScheme).toBe("aes-gcm-v1");
+    expect(ref.encryptionScheme).toBe("xchacha20poly1305-v1");
   });
 
   it("two users can both retrieve the same public content by refId", async () => {

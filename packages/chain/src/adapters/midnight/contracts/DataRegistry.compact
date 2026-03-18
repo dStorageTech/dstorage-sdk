@@ -8,7 +8,7 @@
 // Encryption/decryption is handled by the dStorage SDK client-side before/after storage access.
 //
 // Circuits:
-//   deriveRefId     — deterministic helper to derive a refId from counter + storageId + instance salt
+//   deriveRefId     — deterministic helper to derive a refId from counter + instance salt
 //   storeReference  — record a new storage reference, returns a unique refId
 //
 pragma language_version >= 0.20;
@@ -26,13 +26,13 @@ export struct ReferenceEntry {
   // For public (unencrypted) uploads: the plain storage network ID (no encoding).
   // In this case encryptionScheme is empty ("").
   //
-  // Supported encryption schemes and their byte layouts (before base64url encoding):
-  //   "aes-gcm-v1" : 60 bytes [ ciphertext(32) | IV(12) | auth-tag(16) ]
+  // Supported schemes and their byte layouts (before base64url encoding):
+  //   "aes-gcm-v1"                      : 60 bytes   [ ciphertext(32) | IV(12) | auth-tag(16) ]
+  //   "ml-kem-768+xchacha20poly1305-v1"  : 1160 bytes [ encapKey(1088) | nonce(24) | ciphertext(32) | auth-tag(16) ]
   storageId: Opaque<"string">;
   // Identifies the encryption algorithm used for both the storageId and the
   // file/data stored off-chain. Enables the dStorage SDK to dispatch the
   // correct decryption function at read time.
-  // Current value: "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key)
   // Empty string ("") when the data was published as public/unencrypted.
   encryptionScheme: Opaque<"string">;
   storageProvider: Opaque<"string">;
@@ -88,7 +88,7 @@ export circuit deriveRefId(refCounter: Bytes<32>, instanceSalt: Bytes<32>): Byte
 //                      (byte layout depends on encryptionScheme);
 //                      for public uploads — plain storage network ID (unencrypted).
 //   encryptionScheme : algorithm identifier used to encrypt storageId and file/data
-//                      (e.g. "aes-gcm-v1"); empty string ("") for public/unencrypted uploads.
+//                      (e.g. "aes-gcm-v1", "ml-kem-768+xchacha20poly1305-v1"); empty string ("") for public/unencrypted uploads.
 //   storageProvider  : provider identifier (opaque string)
 //   dataLabel        : optional user-defined label (opaque string)
 //   writtenAt        : caller-provided timestamp

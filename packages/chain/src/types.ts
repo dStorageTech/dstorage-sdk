@@ -7,6 +7,9 @@
 
 import type { PaymentReceipt } from "@dstorage/payment";
 import type { PaymentAdapter } from "@dstorage/payment";
+import type { CryptoScheme, EncryptionScheme } from "@dstorage/crypto";
+
+export type { EncryptionScheme, CryptoScheme } from "@dstorage/crypto";
 
 /**
  * The on-chain schema version reflected by this SDK build.
@@ -14,21 +17,6 @@ import type { PaymentAdapter } from "@dstorage/payment";
  * Bump this constant when the contract is redeployed with breaking schema changes.
  */
 export const CONTRACT_VERSION = 0;
-
-/**
- * Identifies the encryption algorithm used to encrypt a storageId.
- * Recorded on-chain in ReferenceEntry.encryptionScheme so the SDK
- * can dispatch the correct decryption function at read time.
- *
- * Current values:
- *   "aes-gcm-v1" — AES-256-GCM (PBKDF2-derived key); 60-byte binary payload
- *                 base64url-encoded to an 80-char string before writing on-chain
- *   ""           — No encryption; storageId and content are stored as plaintext (public data)
- *
- * Post-quantum schemes are introduced in the PQ encryption PR and
- * extend this union without breaking existing entries.
- */
-export type EncryptionScheme = "aes-gcm-v1" | "";
 
 /**
  * Minimal logger interface accepted by every SDK class.
@@ -147,14 +135,18 @@ export interface ChainAdapter {
   /** Get the contract address. **/
   getContractAddress(): string;
 
-  /** Derive a deterministic encryption key from the adapter's credentials.
-   *  Optional — only for adapters that hold wallet credentials (e.g. facade mode). */
-  getEncryptionKey?(): Promise<CryptoKey | null>;
+  /**
+   * Return raw seed bytes for CryptoSchemeRegistry derivation.
+   * Optional — only for adapters that hold wallet credentials (e.g. facade mode).
+   * In connector mode the seed is derived from the wallet signature in DStorage.connect().
+   */
+  getCredentialSeed?(): Promise<Uint8Array | null>;
 
-  /** Derive a deterministic AES-GCM key for storage ID encryption.
-   *  Uses the same root credentials as getEncryptionKey() but a different PBKDF2 salt,
-   *  producing an authenticated cipher stored as an Opaque<"string"> in the contract.
-   *  Optional — only for adapters that hold wallet credentials (e.g. facade mode).
-   *  In connector mode the key is derived from the wallet signature in DStorage.connect(). */
-  getStorageIdKey?(): Promise<CryptoKey | null>;
+  /**
+   * Receive the active CryptoScheme instance from the SDK.
+   * Called after the registry is built so the adapter can use the same scheme
+   * for any internal crypto operations without re-deriving keys.
+   * Optional — adapters that perform no crypto internally can omit this.
+   */
+  setScheme?(scheme: CryptoScheme): void;
 }

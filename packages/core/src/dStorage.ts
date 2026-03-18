@@ -16,18 +16,8 @@
  *   await ds.revoke(dataId, "0xRecipientAddress");
  */
 
-import {
-  encrypt,
-  decrypt,
-  serializePayload,
-  deserializePayload,
-  deriveKeyFromSignature,
-  deriveStorageIdKey,
-  encryptStorageId,
-  decryptStorageId,
-  base64urlToBytes,
-  bytesToBase64url,
-} from "@dstorage/crypto";
+import { CryptoSchemeRegistry } from "@dstorage/crypto";
+import type { CryptoScheme, EncryptionScheme } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import corePackageJson from "../package.json";
@@ -54,9 +44,9 @@ import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
-  private _encryptionKey: CryptoKey | null = null;
-  /** AES-GCM key for encrypting storage IDs — derived from the same root as _encryptionKey. */
-  private _storageIdKey: CryptoKey | null = null;
+  private _cryptoSchemes: CryptoSchemeRegistry | null = null; // null until connect() or init()
+  // Private config — which scheme to use for new writes. Exposed to users later.
+  private readonly _defaultScheme: EncryptionScheme = "xchacha20poly1305-v1";
   private _initialized = false;
   private readonly logger: Logger | undefined;
 
@@ -92,12 +82,13 @@ export class DStorage implements DStorageContext {
       await this.config.chainAdapter.init();
     }
 
-    // 2. Derive encryption keys from chain adapter credentials (facade mode)
-    if (this.config.chainAdapter.getEncryptionKey) {
-      this._encryptionKey = await this.config.chainAdapter.getEncryptionKey();
-    }
-    if (this.config.chainAdapter.getStorageIdKey) {
-      this._storageIdKey = await this.config.chainAdapter.getStorageIdKey();
+    // 2. Build crypto scheme registry from chain adapter credentials (facade mode only).
+    if (this.config.chainAdapter.getCredentialSeed) {
+      const seed = await this.config.chainAdapter.getCredentialSeed();
+      if (seed) {
+        this._cryptoSchemes = await CryptoSchemeRegistry.create(seed);
+        this.config.chainAdapter.setScheme?.(this._cryptoSchemes.getDefault());
+      }
     }
 
     this._initialized = true;
@@ -114,18 +105,15 @@ export class DStorage implements DStorageContext {
   async connect(walletInfo: WalletInfo): Promise<void> {
     this.wallet = walletInfo;
 
-    // Derive a deterministic AES-GCM key from the wallet signature.
-    // The key never leaves the device and is not persisted.
-    this._encryptionKey = await deriveKeyFromSignature(
-      walletInfo._signatureHex,
+    // Build the crypto scheme registry from the wallet signature.
+    // The address is used as context so keys are bound to a specific account.
+    // Key material never leaves the device and is not persisted.
+    const seedBytes = this._hexToBytes(walletInfo._signatureHex);
+    this._cryptoSchemes = await CryptoSchemeRegistry.create(
+      seedBytes,
       walletInfo.address,
     );
-
-    // Derive a separate AES-GCM key for storage ID encryption (same root, different salt).
-    this._storageIdKey = await deriveStorageIdKey(
-      walletInfo._signatureHex,
-      `dstorage-storageId-v1:${walletInfo.address}`,
-    );
+    this.config.chainAdapter.setScheme?.(this._cryptoSchemes.getDefault());
 
     this.logger?.log("dStorage", `Connected: ${walletInfo.address}`);
   }
@@ -133,8 +121,7 @@ export class DStorage implements DStorageContext {
   /** Disconnect and clear the in-memory encryption keys. */
   disconnect(): void {
     this.wallet = null;
-    this._encryptionKey = null;
-    this._storageIdKey = null;
+    this._cryptoSchemes = null;
     this._initialized = false;
     this.logger?.log(
       "dStorage",
@@ -144,7 +131,7 @@ export class DStorage implements DStorageContext {
 
   get isConnected(): boolean {
     return (
-      (this.wallet !== null && this._encryptionKey !== null) ||
+      (this.wallet !== null && this._cryptoSchemes !== null) ||
       this._initialized
     );
   }
@@ -202,7 +189,9 @@ export class DStorage implements DStorageContext {
 
     let uploadData: Uint8Array;
     let onChainStorageId: string;
-    const encryptionScheme = isPublic ? ("" as const) : ("aes-gcm-v1" as const);
+    const encryptionScheme = isPublic
+      ? ("" as const)
+      : ("xchacha20poly1305-v1" as const);
 
     if (isPublic) {
       // 1a. Public: store raw bytes, write storageId as plaintext on-chain.
@@ -210,14 +199,13 @@ export class DStorage implements DStorageContext {
       onChainStorageId = ""; // set after storage upload below
     } else {
       // 1b. Private: encrypt content — fail if no encryption key is available.
-      if (!this._encryptionKey || !this._storageIdKey) {
+      if (!this._cryptoSchemes) {
         throw new Error(
-          "[dStorage] Encryption keys not available. Call connect() or init() before uploading private data.",
+          "[dStorage] Encryption key not available. Call connect() or init() before uploading private data.",
         );
       }
       this.logger?.log("dStorage", "Encrypting content...");
-      const payload = await encrypt(this._encryptionKey, bytes);
-      uploadData = new TextEncoder().encode(serializePayload(payload));
+      uploadData = await this._cryptoSchemes.getDefault().encryptPayload(bytes);
       onChainStorageId = ""; // set after storage upload below
     }
 
@@ -233,13 +221,14 @@ export class DStorage implements DStorageContext {
       // 3a. Public: write storageId as-is on-chain.
       onChainStorageId = storageResult.id;
     } else {
-      // 3b. Private: encrypt the storageId before writing on-chain.
-      // The encrypted form is an 80-char base64url string stored as Opaque<"string"> in the contract.
-      const encrypted = await encryptStorageId(
-        this._storageIdKey!,
-        base64urlToBytes(storageResult.id),
-      );
-      onChainStorageId = bytesToBase64url(encrypted);
+      // 3b. Private: encrypt the storageId before writing on-chain using XChaCha20-Poly1305.
+      const encrypted = await this.encryptStorageIdForChain(storageResult.id);
+      if (!encrypted) {
+        throw new Error(
+          "[dStorage] Cannot encrypt storageId: no encryption key available. Call connect() or init() before uploading private data.",
+        );
+      }
+      onChainStorageId = encrypted;
     }
 
     // 4. Write on-chain reference — only the storage pointer, never the data
@@ -286,41 +275,44 @@ export class DStorage implements DStorageContext {
    */
   async retrieveByStorageId(
     storageId: string,
-    isPublic = false,
+    encryptionScheme?: EncryptionScheme,
   ): Promise<RetrieveResult> {
     this.assertConnected();
 
     // 1. Fetch blob from storage
     const rawBytes = await this.config.storageAdapter.retrieve(storageId);
 
-    // 2. Decrypt if content is private; return raw bytes if public.
-    let decryptedBytes = rawBytes;
-    if (!isPublic) {
-      if (!this._encryptionKey) {
+    return this._decryptAndReassemble(rawBytes, storageId, encryptionScheme);
+  }
+
+  // Accepts an optional encryptionScheme name to look up the correct scheme for
+  // backward-compat reads. Throws if private and the scheme is missing or not found.
+  private async _decryptAndReassemble(
+    rawBytes: Uint8Array,
+    storageId: string,
+    encryptionScheme?: EncryptionScheme,
+  ): Promise<RetrieveResult> {
+    let scheme: CryptoScheme | null = null;
+    if (encryptionScheme) {
+      scheme = this._cryptoSchemes?.get(encryptionScheme) ?? null;
+      if (scheme === null) {
         throw new Error(
-          "[dStorage] Encryption key not available. Call connect() or init() before retrieving private data.",
+          `[dStorage] Cannot decrypt: scheme '${encryptionScheme}' is not available in the registry.`,
         );
       }
-      const encryptedPayload = deserializePayload(
-        new TextDecoder().decode(rawBytes),
-      );
-      if (encryptedPayload) {
-        try {
-          decryptedBytes = await decrypt(this._encryptionKey, encryptedPayload);
-          this.logger?.log(
-            "dStorage",
-            `Data decrypted successfully: ${decryptedBytes.byteLength} bytes`,
-          );
-        } catch (err) {
-          throw new Error(`[dStorage] Failed to decrypt payload: ${err}`);
-        }
-      } else {
-        // It's not the expected payload for encrypted content,
-        // thus assume it's not encrypted
+    }
+
+    // 2. Decrypt if content is private; return raw bytes if public.
+    let decryptedBytes = rawBytes;
+    if (scheme) {
+      try {
+        decryptedBytes = await scheme.decryptPayload(rawBytes);
         this.logger?.log(
           "dStorage",
-          `Retrieved non encrypted content of ${decryptedBytes.byteLength} bytes`,
+          `Data decrypted successfully: ${decryptedBytes.byteLength} bytes`,
         );
+      } catch (err) {
+        throw new Error(`[dStorage] Failed to decrypt payload: ${err}`);
       }
     }
 
@@ -334,7 +326,7 @@ export class DStorage implements DStorageContext {
           "dStorage",
           `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
         );
-        return this._retrieveChunked(parsed, isPublic);
+        return this._retrieveChunked(parsed, scheme);
       }
     } catch {
       // Not JSON — treat as raw content, fall through.
@@ -374,7 +366,6 @@ export class DStorage implements DStorageContext {
         `[dStorage] No on-chain reference found for refId: ${refId}`,
       );
 
-    // encryptionScheme === "aes-gcm-v1" means encrypted; "" or undefined means public.
     const isPublic = !ref.encryptionScheme;
 
     // For private data: decrypt the on-chain storageId to recover the original storage network ID.
@@ -383,15 +374,19 @@ export class DStorage implements DStorageContext {
     if (isPublic) {
       storageId = ref.storageId;
     } else {
-      const decrypted = await this._decryptStorageId(ref.storageId);
-      if (!decrypted) {
+      const decrypted = await this._decryptStorageId(
+        ref.storageId,
+        ref.encryptionScheme ?? undefined,
+      );
+      if (decrypted === null) {
         throw new Error(
-          `[dStorage] Failed to decrypt storageId for refId: ${refId}`,
+          `[dStorage] Cannot decrypt storageId for refId ${refId}: scheme '${ref.encryptionScheme}' not available.`,
         );
       }
       storageId = decrypted;
     }
-    return await this.retrieveByStorageId(storageId, isPublic);
+
+    return await this.retrieveByStorageId(storageId, ref.encryptionScheme);
   }
 
   /**
@@ -414,7 +409,10 @@ export class DStorage implements DStorageContext {
             storageId = item.storageId;
           } else {
             try {
-              storageId = await this._decryptStorageId(item.storageId);
+              storageId = await this._decryptStorageId(
+                item.storageId,
+                item.encryptionScheme ?? undefined,
+              );
             } catch {
               /* we cannot decrypt */
             }
@@ -458,7 +456,7 @@ export class DStorage implements DStorageContext {
   ): Promise<MetaTxReceipt> {
     this.assertConnected();
 
-    if (!this._encryptionKey) {
+    if (!this._cryptoSchemes) {
       throw new Error(
         "[dStorage] executeMetaTransaction() requires an encryption key. " +
           "Call connect() with wallet credentials, or use init() with a facade-mode chain adapter.",
@@ -476,32 +474,27 @@ export class DStorage implements DStorageContext {
    * Returns null when no encryption key is available.
    */
   async encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null> {
-    if (this._encryptionKey) {
-      this.logger?.log("dStorage", "Encrypting content...");
-      const payload = await encrypt(this._encryptionKey, bytes);
-      return new TextEncoder().encode(serializePayload(payload));
-    } else {
-      return null;
-    }
+    if (!this._cryptoSchemes) return null;
+    this.logger?.log("dStorage", "Encrypting content...");
+    return this._cryptoSchemes.getDefault().encryptPayload(bytes);
   }
 
   /**
-   * Encrypt a storageId string before writing it to the chain.
+   * Encrypt a storageId string before writing it to the chain using XChaCha20-Poly1305.
    *
    * The storageId must be a 43-char base64url string (32 bytes decoded) —
    * this is the format used by Arweave txIds and MockStorageAdapter IDs.
-   * AES-GCM encryption produces a 60-byte output (ciphertext + IV + tag),
-   * which is base64url-encoded to an 80-char string stored as Opaque<"string"> in the contract.
+   * Encryption produces a 72-byte output:
+   *   [ nonce(24) | ciphertext(32) | auth-tag(16) ],
+   * which is base64url-encoded to a 96-char string stored as Opaque<"string"> in the contract.
    *
-   * If no storageIdKey is available (e.g. unauthenticated state), it returns null
+   * If no key is available (e.g. unauthenticated state), it returns null.
    *
    * @internal — part of DStorageContext; used by MetaTransaction.
    */
   async encryptStorageIdForChain(storageId: string): Promise<string | null> {
-    if (!this._storageIdKey) return null;
-    const bytes = base64urlToBytes(storageId); // 32 bytes (43-char base64url input)
-    const encrypted = await encryptStorageId(this._storageIdKey, bytes); // 60 bytes
-    return bytesToBase64url(encrypted); // 80-char base64url string
+    if (!this._cryptoSchemes) return null;
+    return this._cryptoSchemes.getDefault().encryptStorageId(storageId);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
@@ -517,15 +510,17 @@ export class DStorage implements DStorageContext {
     onProgress?: (p: UploadProgress) => void,
     isPublic = false,
   ): Promise<UploadResult> {
-    if (!isPublic && (!this._encryptionKey || !this._storageIdKey)) {
+    if (!isPublic && !this._cryptoSchemes) {
       throw new Error(
-        "[dStorage] Encryption keys not available. Call connect() or init() before uploading private data.",
+        "[dStorage] Encryption key not available. Call connect() or init() before uploading private data.",
       );
     }
 
     const totalChunks = Math.ceil(bytes.length / CHUNK_SIZE);
     const sdkVersion = corePackageJson.version ?? "unknown";
-    const encryptionScheme = isPublic ? ("" as const) : ("aes-gcm-v1" as const);
+    const encryptionScheme = isPublic
+      ? ("" as const)
+      : ("xchacha20poly1305-v1" as const);
 
     this.logger?.log(
       "dStorage",
@@ -551,8 +546,8 @@ export class DStorage implements DStorageContext {
       if (isPublic) {
         chunkData = chunk;
       } else {
-        const payload = await encrypt(this._encryptionKey!, chunk);
-        chunkData = new TextEncoder().encode(serializePayload(payload));
+        chunkData =
+          await this._cryptoSchemes!.getDefault().encryptPayload(chunk);
       }
 
       onProgress?.({
@@ -611,8 +606,8 @@ export class DStorage implements DStorageContext {
     if (isPublic) {
       manifestData = manifestBytes;
     } else {
-      const payload = await encrypt(this._encryptionKey!, manifestBytes);
-      manifestData = new TextEncoder().encode(serializePayload(payload));
+      manifestData =
+        await this._cryptoSchemes!.getDefault().encryptPayload(manifestBytes);
     }
 
     const manifestResult = await this.config.storageAdapter.upload(
@@ -629,17 +624,21 @@ export class DStorage implements DStorageContext {
     // We store the provider in the manifest for debugging; patch the in-memory object only.
     manifest.provider = manifestResult.provider;
 
-    // For private data: encrypt the manifest storageId before writing on-chain.
+    // For private data: encrypt the manifest storageId before writing on-chain using PQ encryption.
     // For public data: write the storageId as plaintext.
     let onChainManifestId: string;
     if (isPublic) {
       onChainManifestId = manifestResult.id;
     } else {
-      const encrypted = await encryptStorageId(
-        this._storageIdKey!,
-        base64urlToBytes(manifestResult.id),
+      const pqEncrypted = await this.encryptStorageIdForChain(
+        manifestResult.id,
       );
-      onChainManifestId = bytesToBase64url(encrypted);
+      if (!pqEncrypted) {
+        throw new Error(
+          "[dStorage] Cannot encrypt manifest storageId: no PQ keypair available. Call connect() or init() before uploading private data.",
+        );
+      }
+      onChainManifestId = pqEncrypted;
     }
 
     const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
@@ -684,14 +683,8 @@ export class DStorage implements DStorageContext {
    */
   private async _retrieveChunked(
     manifest: ChunkManifest,
-    isPublic = false,
+    scheme: CryptoScheme | null = null,
   ): Promise<RetrieveResult> {
-    if (!isPublic && !this._encryptionKey) {
-      throw new Error(
-        "[dStorage] Encryption key not available. Call connect() or init() before retrieving private data.",
-      );
-    }
-
     const result = new Uint8Array(manifest.totalSize);
     let offset = 0;
 
@@ -701,18 +694,13 @@ export class DStorage implements DStorageContext {
       );
 
       let chunkBytes = rawChunkBytes;
-      if (!isPublic) {
-        const encryptedPayload = deserializePayload(
-          new TextDecoder().decode(rawChunkBytes),
-        );
-        if (encryptedPayload) {
-          try {
-            chunkBytes = await decrypt(this._encryptionKey!, encryptedPayload);
-          } catch (err) {
-            throw new Error(
-              `[dStorage] Failed to decrypt chunk ${entry.index}: ${err}`,
-            );
-          }
+      if (scheme) {
+        try {
+          chunkBytes = await scheme!.decryptPayload(rawChunkBytes);
+        } catch (err) {
+          throw new Error(
+            `[dStorage] Failed to decrypt chunk ${entry.index}: ${err}`,
+          );
         }
       }
 
@@ -735,19 +723,35 @@ export class DStorage implements DStorageContext {
   /**
    * Decrypt a storageId retrieved from the chain back to the original storage network ID.
    *
-   * If no storageIdKey is available, returns null
+   * Returns null if no schemeName is provided or the scheme is not found in the registry.
    */
-  private async _decryptStorageId(encryptedId: string): Promise<string | null> {
-    if (!this._storageIdKey) return null;
+  private async _decryptStorageId(
+    encryptedId: string,
+    schemeName?: EncryptionScheme,
+  ): Promise<string | null> {
+    if (!schemeName) return null;
+    const scheme = this._cryptoSchemes?.get(schemeName) ?? null;
+    if (!scheme) return null;
     try {
-      const bytes = base64urlToBytes(encryptedId); // 60 bytes: [ciphertext(32) | IV(12) | tag(16)]
-      const decrypted = await decryptStorageId(this._storageIdKey, bytes); // 32 bytes
-      return bytesToBase64url(decrypted); // 43-char base64url (original storage ID)
+      return await scheme.decryptStorageId(encryptedId);
     } catch {
       throw new Error(
         "[dStorage] Failed to decrypt storageId — the record may have been encrypted with a different key.",
       );
     }
+  }
+
+  /**
+   * Convert a hex string (with or without 0x prefix) to a Uint8Array.
+   * Used to derive the seed bytes from the wallet signature hex.
+   */
+  private _hexToBytes(hex: string): Uint8Array {
+    const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+    const bytes = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
   }
 
   private assertConnected(): void {

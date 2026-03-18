@@ -209,11 +209,11 @@ describe("upload backward compatibility", () => {
 
 // ── Unencrypted chunked flow ───────────────────────────────────────────────────
 
-describe("chunked upload without encryption key", () => {
-  it("round-trips unencrypted chunked content", async () => {
+describe("chunked upload via init() with symmetric key from MockChainAdapter", () => {
+  it("round-trips chunked content using XChaCha20 encryption via init()", async () => {
     const config = makeConfig();
     const ds = new DStorage(config);
-    await ds.init(); // no key derived — MockChainAdapter has no getEncryptionKey()
+    await ds.init(); // symmetric key derived via MockChainAdapter.getSymmetricKey()
 
     const bytes = makeBytes(CHUNK_SIZE + 50);
     const { chainRefId } = await ds.upload(bytes);

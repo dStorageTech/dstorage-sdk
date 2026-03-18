@@ -18,6 +18,7 @@ import type {
   DataReferenceSummary,
 } from "../types.js";
 import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
+import type { CryptoScheme } from "@dstorage/crypto";
 
 // ── Storage helpers ──
 const refs = new Map<string, ChainReference>();
@@ -59,6 +60,10 @@ export class MockChainAdapter implements ChainAdapter {
 
   private contractAddress: string;
   private readonly logger: Logger | undefined;
+  // Fixed random seed per instance — consistent for the adapter's lifetime.
+  private readonly _seed = globalThis.crypto.getRandomValues(
+    new Uint8Array(32),
+  );
 
   constructor(logger?: Logger) {
     this.logger = logger;
@@ -128,20 +133,11 @@ export class MockChainAdapter implements ChainAdapter {
     return addr;
   }
 
-  async getEncryptionKey(): Promise<CryptoKey | null> {
-    // Generate a random ephemeral key — fine for mocking purposes
-    return globalThis.crypto.subtle.generateKey(
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt", "decrypt"],
-    );
+  async getCredentialSeed(): Promise<Uint8Array | null> {
+    return this._seed;
   }
 
-  async getStorageIdKey(): Promise<CryptoKey | null> {
-    return globalThis.crypto.subtle.generateKey(
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt", "decrypt"],
-    );
+  setScheme(_scheme: CryptoScheme): void {
+    // Mock adapter performs no crypto internally — scheme is used by the SDK layer.
   }
 }

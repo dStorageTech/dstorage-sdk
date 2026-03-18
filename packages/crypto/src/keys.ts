@@ -58,6 +58,14 @@ export class KeyDeriver {
     this.input = input;
   }
 
+  /**
+   * Return the raw seed bytes for use with CryptoSchemeRegistry.create().
+   * Each scheme derives its own key from these bytes internally.
+   */
+  async getSeed(): Promise<Uint8Array> {
+    return this.getSeedBuffer();
+  }
+
   /** Resolves and validates the seed as a Buffer. */
   private async getSeedBuffer(): Promise<Uint8Array> {
     if (this.input.seedHex) {
@@ -103,6 +111,23 @@ export class KeyDeriver {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
     return deriveKeyFromSignature(signatureHex, salt ?? "dstorage-v1");
+  }
+
+  /**
+   * Derives a deterministic 32-byte XChaCha20-Poly1305 symmetric key from the wallet seed.
+   * Uses HKDF-SHA-256 with a domain-separating salt, ensuring the derived key is
+   * cryptographically independent of other keys derived from the same seed.
+   *
+   * The same wallet seed always produces the same key.
+   *
+   * @param salt  Optional domain-separating salt (defaults to 'dstorage-xchacha-v1').
+   *              Include the wallet address when available to bind the key to a specific account.
+   * @returns 32-byte Uint8Array symmetric key
+   */
+  async deriveSymmetricKey(salt?: string): Promise<Uint8Array> {
+    const seed = await this.getSeedBuffer();
+    const { deriveSymmetricKeyFromSeed } = await import("./pq.js");
+    return deriveSymmetricKeyFromSeed(seed, salt ?? "dstorage-xchacha-v1");
   }
 
   /**
