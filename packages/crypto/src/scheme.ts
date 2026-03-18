@@ -171,22 +171,26 @@ export class AesGcmScheme implements CryptoScheme {
   /**
    * Derive AES-GCM keys from seed bytes using PBKDF2.
    *
-   * Uses hardcoded salts ("dstorage-v1" and "dstorage-storageId-v1") to remain
-   * backward-compatible with records encrypted by older SDK versions.
-   * The context parameter is intentionally ignored for this reason.
+   * Uses `context` (wallet address) as the PBKDF2 salt for
+   * key derivation: deriveKeyFromSignature(signatureHex, address).
+   * Falls back to default salts when context is absent (e.g. facade/init() mode).
    *
-   * @param seed  High-entropy seed bytes (wallet signature, BIP-39 seed, etc.)
+   * @param seed     High-entropy seed bytes (wallet signature, BIP-39 seed, etc.)
+   * @param context  Wallet address — used as PBKDF2 salt.
    */
   static async create(
     seed: Uint8Array,
-    _context?: string,
+    context?: string,
   ): Promise<AesGcmScheme> {
-    // PBKDF2 derivation expects a hex string — convert raw bytes to match
-    // the original key derivation path for backward compatibility.
+    // PBKDF2 derivation expects a hex string.
     const seedHex = uint8ArrayToHex(seed);
+    const contentSalt = context ?? "dstorage-v1";
+    const storageIdSalt = context
+      ? `dstorage-storageId-v1:${context}`
+      : "dstorage-storageId-v1";
     const [encKey, storageIdKey] = await Promise.all([
-      deriveKeyFromSignature(seedHex, "dstorage-v1"),
-      deriveStorageIdKey(seedHex, "dstorage-storageId-v1"),
+      deriveKeyFromSignature(seedHex, contentSalt),
+      deriveStorageIdKey(seedHex, storageIdSalt),
     ]);
     return new AesGcmScheme(encKey, storageIdKey);
   }

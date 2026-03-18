@@ -19,6 +19,7 @@
 
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
+import type { EncryptionScheme } from "@dstorage/crypto";
 import { buildCostEstimate } from "./payment.js";
 import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
 
@@ -124,10 +125,16 @@ export interface DStorageContext {
   encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null>;
   /**
    * Encrypts a plain storageId (43-char base64url) for on-chain storage.
-   * Returns the encrypted form (80-char base64url) when a storageIdKey is available,
-   * or the original id unchanged when not connected / no key.
+   * Returns the encrypted form when a key is available, null otherwise.
    */
   encryptStorageIdForChain(storageId: string): Promise<string | null>;
+  /**
+   * The encryption scheme used for new writes (e.g. "xchacha20poly1305-v1").
+   * Must be recorded on-chain alongside the encrypted storageId so the SDK
+   * can dispatch the correct decryption scheme on read.
+   * Empty string "" when no encryption is active.
+   */
+  readonly defaultEncryptionScheme: EncryptionScheme;
 }
 
 // ── File validation ───────────────────────────────────────────────────────────
@@ -354,10 +361,17 @@ export class MetaTransaction {
         `Fee payment and writing reference to ${this.sdk.chainAdapter.name}…`,
       );
 
+      const encryptedStorageId = await this.sdk.encryptStorageIdForChain(
+        uploadResult.id,
+      );
+      const onChainStorageId = encryptedStorageId ?? uploadResult.id;
+      const encryptionScheme: EncryptionScheme = encryptedStorageId
+        ? this.sdk.defaultEncryptionScheme
+        : "";
+
       const chainResult = await this.sdk.chainAdapter.writeReference({
-        storageId:
-          (await this.sdk.encryptStorageIdForChain(uploadResult.id)) ??
-          uploadResult.id,
+        storageId: onChainStorageId,
+        encryptionScheme,
         storageProvider: uploadResult.provider,
         dataLabel: file.name,
         writtenAt: Date.now(),

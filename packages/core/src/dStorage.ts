@@ -45,8 +45,8 @@ export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
   private _cryptoSchemes: CryptoSchemeRegistry | null = null; // null until connect() or init()
-  // Private config — which scheme to use for new writes. Exposed to users later.
-  private readonly _defaultScheme: EncryptionScheme = "xchacha20poly1305-v1";
+  /** Scheme used for all new writes. Part of DStorageContext — consumed by MetaTransaction. */
+  readonly defaultEncryptionScheme: EncryptionScheme = "xchacha20poly1305-v1";
   private _initialized = false;
   private readonly logger: Logger | undefined;
 
