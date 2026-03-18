@@ -7,7 +7,7 @@ import {
   decryptStorageIdXChaCha,
   serializeXChaChaPayload,
   deserializeXChaChaPayload,
-} from "../pq.js";
+} from "../xchacha.js";
 
 // ── deriveSymmetricKeyFromSeed ─────────────────────────────────────────────────
 

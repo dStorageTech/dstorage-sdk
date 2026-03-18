@@ -4,7 +4,7 @@ import {
   decrypt,
   serializePayload,
   deserializePayload,
-} from "../encrypt.js";
+} from "../aesgcm.js";
 import { deriveKeyFromSignature } from "../keys.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

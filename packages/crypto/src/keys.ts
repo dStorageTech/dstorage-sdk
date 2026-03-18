@@ -126,7 +126,7 @@ export class KeyDeriver {
    */
   async deriveSymmetricKey(salt?: string): Promise<Uint8Array> {
     const seed = await this.getSeedBuffer();
-    const { deriveSymmetricKeyFromSeed } = await import("./pq.js");
+    const { deriveSymmetricKeyFromSeed } = await import("./xchacha.js");
     return deriveSymmetricKeyFromSeed(seed, salt ?? "dstorage-xchacha-v1");
   }
 

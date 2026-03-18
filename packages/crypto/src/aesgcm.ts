@@ -1,10 +1,19 @@
 /**
- * @dstorage/crypto — encrypt.ts
- * AES-GCM encryption/decryption using the WebCrypto API.
+ * @dstorage/crypto — aesgcm.ts
+ * AES-256-GCM encryption/decryption using the WebCrypto API.
  * Works in both browser (native) and Node.js 18+ (globalThis.crypto).
+ *
+ * Supported for backward-compatible decryption of older on-chain records.
+ * New writes use XChaChaScheme (xchacha.ts) by default.
  */
 
-/** Shape of an encrypted payload stored alongside its IV. */
+import type { CryptoScheme } from "./types.js";
+import { base64urlToBytes, bytesToBase64url } from "./types.js";
+import { deriveKeyFromSignature, deriveStorageIdKey } from "./keys.js";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+/** Shape of an AES-GCM encrypted payload stored alongside its IV. */
 export interface EncryptedPayload {
   /** AES-GCM ciphertext as base64 string */
   ciphertext: string;
@@ -12,7 +21,7 @@ export interface EncryptedPayload {
   iv: string;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getCrypto(): Crypto {
   if (typeof globalThis.crypto !== "undefined") return globalThis.crypto;
@@ -43,27 +52,7 @@ function base64ToBuffer(b64: string): Uint8Array<ArrayBuffer> {
   return result;
 }
 
-// ── Base64url encoding (browser-safe, no Buffer) ──────────────────────────────
-
-/** Decode a base64url string to a Uint8Array. */
-export function base64urlToBytes(b64url: string): Uint8Array {
-  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-/** Encode a Uint8Array to a base64url string (no padding). */
-export function bytesToBase64url(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++)
-    binary += String.fromCharCode(bytes[i]!);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-// ── Core API ─────────────────────────────────────────────────────────────────
+// ── Core API ──────────────────────────────────────────────────────────────────
 
 /**
  * Encrypt arbitrary bytes using AES-GCM 256.
@@ -143,11 +132,6 @@ export function deserializePayload(raw: string): EncryptedPayload | null {
 //
 // This 60-byte payload is base64url-encoded (80 chars) before being stored
 // on-chain as an Opaque<"string"> in the DataRegistry contract.
-//
-// A fresh random IV is generated per encryption (standard AES-GCM practice).
-// The storageId key is derived from the same root material as the data encryption
-// key but with a different PBKDF2 salt ("dstorage-storageId-v1"), ensuring
-// cryptographic independence between the two keys.
 
 /**
  * Encrypt a 32-byte storage ID using AES-GCM.
@@ -204,4 +188,80 @@ export async function decryptStorageId(
     ciphertextWithTag.buffer as ArrayBuffer,
   );
   return new Uint8Array(decrypted);
+}
+
+// ── AesGcmScheme ──────────────────────────────────────────────────────────────
+
+function uint8ArrayToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * AES-256-GCM scheme. Keys derived via PBKDF2 (100k iterations).
+ * Supported for backward-compatible decryption of older on-chain records.
+ * New writes use XChaChaScheme by default.
+ */
+export class AesGcmScheme implements CryptoScheme {
+  readonly schemeName = "aes-gcm-v1" as const;
+  private readonly encKey: CryptoKey;
+  private readonly storageIdKey: CryptoKey;
+
+  private constructor(encKey: CryptoKey, storageIdKey: CryptoKey) {
+    this.encKey = encKey;
+    this.storageIdKey = storageIdKey;
+  }
+
+  /**
+   * Derive AES-GCM keys from seed bytes using PBKDF2.
+   *
+   * Uses `context` (wallet address) as the PBKDF2 salt for
+   * key derivation: deriveKeyFromSignature(signatureHex, address).
+   * Falls back to default salts when context is absent (e.g. facade/init() mode).
+   *
+   * @param seed     High-entropy seed bytes (wallet signature, BIP-39 seed, etc.)
+   * @param context  Wallet address — used as PBKDF2 salt.
+   */
+  static async create(
+    seed: Uint8Array,
+    context?: string,
+  ): Promise<AesGcmScheme> {
+    // PBKDF2 derivation expects a hex string.
+    const seedHex = uint8ArrayToHex(seed);
+    const contentSalt = context ?? "dstorage-v1";
+    const storageIdSalt = context
+      ? `dstorage-storageId-v1:${context}`
+      : "dstorage-storageId-v1";
+    const [encKey, storageIdKey] = await Promise.all([
+      deriveKeyFromSignature(seedHex, contentSalt),
+      deriveStorageIdKey(seedHex, storageIdSalt),
+    ]);
+    return new AesGcmScheme(encKey, storageIdKey);
+  }
+
+  async encryptPayload(bytes: Uint8Array): Promise<Uint8Array> {
+    const payload = await encrypt(this.encKey, bytes);
+    return new TextEncoder().encode(serializePayload(payload));
+  }
+
+  async decryptPayload(data: Uint8Array): Promise<Uint8Array> {
+    const payload = deserializePayload(new TextDecoder().decode(data));
+    if (!payload) {
+      throw new Error(
+        "[dStorage/crypto] AES-GCM: payload is missing required fields.",
+      );
+    }
+    return decrypt(this.encKey, payload);
+  }
+
+  async encryptStorageId(storageId: string): Promise<string> {
+    const bytes = base64urlToBytes(storageId);
+    const encrypted = await encryptStorageId(this.storageIdKey, bytes);
+    return bytesToBase64url(encrypted);
+  }
+
+  async decryptStorageId(encryptedId: string): Promise<string> {
+    const bytes = base64urlToBytes(encryptedId);
+    const decrypted = await decryptStorageId(this.storageIdKey, bytes);
+    return bytesToBase64url(decrypted);
+  }
 }

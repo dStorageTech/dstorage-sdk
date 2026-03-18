@@ -1,5 +1,5 @@
 /**
- * @dstorage/crypto — chacha.ts
+ * @dstorage/crypto — xchacha.ts
  * Symmetric authenticated encryption using XChaCha20-Poly1305.
  *
  * Key derivation:
@@ -30,6 +30,8 @@
  */
 
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
+import type { CryptoScheme } from "./types.js";
+import { base64urlToBytes, bytesToBase64url } from "./types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -244,5 +246,62 @@ export function deserializeXChaChaPayload(raw: string): XChaChaPayload | null {
     return parsed as XChaChaPayload;
   } catch {
     return null;
+  }
+}
+
+// ── XChaChaScheme ─────────────────────────────────────────────────────────────
+
+/** XChaCha20-Poly1305 scheme. Key derived via HKDF-SHA-256. */
+export class XChaChaScheme implements CryptoScheme {
+  readonly schemeName = "xchacha20poly1305-v1" as const;
+  private readonly key: Uint8Array;
+
+  private constructor(key: Uint8Array) {
+    this.key = key;
+  }
+
+  /**
+   * Derive a 32-byte XChaCha20-Poly1305 key from seed bytes using HKDF-SHA-256.
+   *
+   * @param seed     High-entropy seed bytes (wallet signature, BIP-39 seed, etc.)
+   * @param context  Optional wallet address or other binding context.
+   *                 Incorporated into the HKDF salt to bind the key to a specific account.
+   */
+  static async create(
+    seed: Uint8Array,
+    context?: string,
+  ): Promise<XChaChaScheme> {
+    const salt = context
+      ? `dstorage-xchacha-v1:${context}`
+      : "dstorage-xchacha-v1";
+    const key = await deriveSymmetricKeyFromSeed(seed, salt);
+    return new XChaChaScheme(key);
+  }
+
+  async encryptPayload(bytes: Uint8Array): Promise<Uint8Array> {
+    const payload = await encryptXChaCha(this.key, bytes);
+    return new TextEncoder().encode(serializeXChaChaPayload(payload));
+  }
+
+  async decryptPayload(data: Uint8Array): Promise<Uint8Array> {
+    const payload = deserializeXChaChaPayload(new TextDecoder().decode(data));
+    if (!payload) {
+      throw new Error(
+        "[dStorage/crypto] XChaCha: payload is missing required fields.",
+      );
+    }
+    return decryptXChaCha(this.key, payload);
+  }
+
+  async encryptStorageId(storageId: string): Promise<string> {
+    const bytes = base64urlToBytes(storageId);
+    const encrypted = await encryptStorageIdXChaCha(this.key, bytes);
+    return bytesToBase64url(encrypted);
+  }
+
+  async decryptStorageId(encryptedId: string): Promise<string> {
+    const bytes = base64urlToBytes(encryptedId);
+    const decrypted = await decryptStorageIdXChaCha(this.key, bytes);
+    return bytesToBase64url(decrypted);
   }
 }
