@@ -204,7 +204,10 @@ export class DStorage implements DStorageContext {
           "[dStorage] Encryption key not available. Call connect() or init() before uploading private data.",
         );
       }
-      this.logger?.log("dStorage", "Encrypting content...");
+      this.logger?.log(
+        "dStorage",
+        `Encrypting content using scheme: ${encryptionScheme}`,
+      );
       uploadData = await this._cryptoSchemes.getDefault().encryptPayload(bytes);
       onChainStorageId = ""; // set after storage upload below
     }
@@ -524,7 +527,7 @@ export class DStorage implements DStorageContext {
 
     this.logger?.log(
       "dStorage",
-      `Chunked upload: ${bytes.length} bytes → ${totalChunks} chunks`,
+      `Chunked upload: ${bytes.length} bytes → ${totalChunks} chunks${isPublic ? "" : `, encryption scheme: ${encryptionScheme}`}`,
     );
 
     const chunkEntries: ChunkManifest["chunks"] = [];
