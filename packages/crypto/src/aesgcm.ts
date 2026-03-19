@@ -9,7 +9,7 @@
 
 import type { CryptoScheme } from "./types.js";
 import { base64urlToBytes, bytesToBase64url } from "./types.js";
-import { deriveKeyFromSignature, deriveStorageIdKey } from "./keys.js";
+import { deriveKeyFromSignature } from "./keys.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,7 +136,6 @@ export function deserializePayload(raw: string): EncryptedPayload | null {
 /**
  * Encrypt a 32-byte storage ID using AES-GCM.
  * Output is exactly 60 bytes: [ciphertext(32) | IV(12) | tag(16)].
- * Use deriveStorageIdKey() to obtain the required AES-GCM CryptoKey.
  */
 export async function encryptStorageId(
   key: CryptoKey,
@@ -204,19 +203,17 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
 export class AesGcmScheme implements CryptoScheme {
   readonly schemeName = "aes-gcm-v1" as const;
   private readonly encKey: CryptoKey;
-  private readonly storageIdKey: CryptoKey;
 
-  private constructor(encKey: CryptoKey, storageIdKey: CryptoKey) {
+  private constructor(encKey: CryptoKey) {
     this.encKey = encKey;
-    this.storageIdKey = storageIdKey;
   }
 
   /**
-   * Derive AES-GCM keys from seed bytes using PBKDF2.
+   * Derive an AES-GCM key from seed bytes using PBKDF2.
+   * The same key is used for both content and storageId encryption.
    *
-   * Uses `context` (wallet address) as the PBKDF2 salt for
-   * key derivation: deriveKeyFromSignature(signatureHex, address).
-   * Falls back to default salts when context is absent (e.g. facade/init() mode).
+   * Uses `context` (wallet address) as the PBKDF2 salt.
+   * Falls back to a default salt when context is absent (e.g. facade/init() mode).
    *
    * @param seed     High-entropy seed bytes (wallet signature, BIP-39 seed, etc.)
    * @param context  Wallet address — used as PBKDF2 salt.
@@ -227,15 +224,9 @@ export class AesGcmScheme implements CryptoScheme {
   ): Promise<AesGcmScheme> {
     // PBKDF2 derivation expects a hex string.
     const seedHex = uint8ArrayToHex(seed);
-    const contentSalt = context ?? "dstorage-v1";
-    const storageIdSalt = context
-      ? `dstorage-storageId-v1:${context}`
-      : "dstorage-storageId-v1";
-    const [encKey, storageIdKey] = await Promise.all([
-      deriveKeyFromSignature(seedHex, contentSalt),
-      deriveStorageIdKey(seedHex, storageIdSalt),
-    ]);
-    return new AesGcmScheme(encKey, storageIdKey);
+    const salt = context ?? "dstorage-v1";
+    const encKey = await deriveKeyFromSignature(seedHex, salt);
+    return new AesGcmScheme(encKey);
   }
 
   async encryptPayload(bytes: Uint8Array): Promise<Uint8Array> {
@@ -255,13 +246,13 @@ export class AesGcmScheme implements CryptoScheme {
 
   async encryptStorageId(storageId: string): Promise<string> {
     const bytes = base64urlToBytes(storageId);
-    const encrypted = await encryptStorageId(this.storageIdKey, bytes);
+    const encrypted = await encryptStorageId(this.encKey, bytes);
     return bytesToBase64url(encrypted);
   }
 
   async decryptStorageId(encryptedId: string): Promise<string> {
     const bytes = base64urlToBytes(encryptedId);
-    const decrypted = await decryptStorageId(this.storageIdKey, bytes);
+    const decrypted = await decryptStorageId(this.encKey, bytes);
     return bytesToBase64url(decrypted);
   }
 }
