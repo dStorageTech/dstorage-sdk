@@ -115,19 +115,20 @@ export class KeyDeriver {
 
   /**
    * Derives a deterministic 32-byte XChaCha20-Poly1305 symmetric key from the wallet seed.
-   * Uses HKDF-SHA-256 with a domain-separating salt, ensuring the derived key is
-   * cryptographically independent of other keys derived from the same seed.
+   * Uses HKDF-SHA-256 with a fixed global salt and a versioned, optionally context-bound
+   * `info` string (RFC 5869), ensuring the derived key is cryptographically independent
+   * of other keys derived from the same seed.
    *
    * The same wallet seed always produces the same key.
    *
-   * @param salt  Optional domain-separating salt (defaults to 'dstorage-xchacha-v1').
-   *              Include the wallet address when available to bind the key to a specific account.
+   * @param context  Optional wallet address or other per-context binding value.
+   *                 Incorporated into the HKDF `info` to bind the key to a specific account.
    * @returns 32-byte Uint8Array symmetric key
    */
-  async deriveSymmetricKey(salt?: string): Promise<Uint8Array> {
+  async deriveSymmetricKey(context?: string): Promise<Uint8Array> {
     const seed = await this.getSeedBuffer();
     const { deriveSymmetricKeyFromSeed } = await import("./xchacha.js");
-    return deriveSymmetricKeyFromSeed(seed, salt ?? "dstorage-xchacha-v1");
+    return deriveSymmetricKeyFromSeed(seed, context);
   }
 
   /**

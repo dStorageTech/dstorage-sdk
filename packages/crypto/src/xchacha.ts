@@ -77,21 +77,21 @@ function base64ToBytes(b64: string): Uint8Array {
 /**
  * Derive a 32-byte symmetric key for XChaCha20-Poly1305 from arbitrary seed bytes.
  *
- * Uses HKDF-SHA-256 with a domain-separating salt so the derived key is
- * cryptographically independent of other keys derived from the same seed material.
+ * Uses HKDF-SHA-256 with a fixed global salt (domain separator) and a versioned,
+ * context-bound `info` string per RFC 5869:
+ *   - `salt`  = fixed application-level extraction key ("dstorage-xchacha-v1")
+ *   - `info`  = versioned label, optionally binding a wallet address
  *
- * In connector mode (browser wallet), pass the wallet address in the salt to
- * bind the key to a specific account and prevent cross-account key reuse:
- *   deriveSymmetricKeyFromSeed(signatureBytes, `dstorage-xchacha-v1:${address}`)
- *
- * @param seed  High-entropy seed bytes (wallet signature, BIP-39 seed, hex seed, etc.)
- * @param salt  Domain-separating salt; include wallet address when available
+ * @param seed     High-entropy seed bytes (wallet signature, BIP-39 seed, hex seed, etc.)
+ * @param context  Optional wallet address or other per-context binding value.
+ *                 Incorporated into `info` to bind the derived key to a specific account.
  */
 export async function deriveSymmetricKeyFromSeed(
   seed: Uint8Array,
-  salt = "dstorage-xchacha-v1",
+  context?: string,
 ): Promise<Uint8Array> {
   const crypto = getCrypto();
+  const enc = new TextEncoder();
   // new Uint8Array(seed) ensures a plain ArrayBuffer — required by WebCrypto importKey
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
@@ -100,12 +100,15 @@ export async function deriveSymmetricKeyFromSeed(
     false,
     ["deriveBits"],
   );
+  const info = context
+    ? `dstorage:xchacha20poly1305:v1:${context}`
+    : "dstorage:xchacha20poly1305:v1";
   const bits = await crypto.subtle.deriveBits(
     {
       name: "HKDF",
       hash: "SHA-256",
-      salt: new TextEncoder().encode(salt),
-      info: new TextEncoder().encode("xchacha20poly1305"),
+      salt: enc.encode("dstorage-xchacha-v1"), // fixed global domain separator
+      info: enc.encode(info), // versioned + optionally context-bound
     },
     keyMaterial,
     256,
@@ -271,10 +274,7 @@ export class XChaChaScheme implements CryptoScheme {
     seed: Uint8Array,
     context?: string,
   ): Promise<XChaChaScheme> {
-    const salt = context
-      ? `dstorage-xchacha-v1:${context}`
-      : "dstorage-xchacha-v1";
-    const key = await deriveSymmetricKeyFromSeed(seed, salt);
+    const key = await deriveSymmetricKeyFromSeed(seed, context);
     return new XChaChaScheme(key);
   }
 

@@ -277,40 +277,155 @@ User input
 
 ## Encryption Design
 
+### Encryption schemes
+
+The SDK supports two symmetric AEAD encryption schemes:
+
+| Scheme                     | Status               | Nonce  | Tag    | Birthday bound         | Notes                                     |
+| -------------------------- | -------------------- | ------ | ------ | ---------------------- | ----------------------------------------- |
+| **XChaCha20-Poly1305**     | Default (new writes) | 24 B   | 16 B   | 2⁸⁰ (negligible)      | 192-bit nonce; safe for random generation indefinitely |
+| **AES-256-GCM**            | Legacy (reads only)  | 12 B   | 16 B   | ~2³² (≈ 4 billion)    | Retired for writes; retained for backward-compatible decryption |
+
+XChaCha20-Poly1305 is preferred for new writes: its 192-bit nonce pushes the birthday bound to 2⁸⁰, making random nonce collision a non-issue in practice. AES-256-GCM's 96-bit nonce has a birthday bound of ~2³² random nonces before collision probability becomes material — acceptable for bounded use but a maintenance risk at scale. Since AES-GCM is now read-only, no new nonces are generated under it.
+
 ### Two-layer encryption
 
-The SDK encrypts two distinct things independently:
+The SDK encrypts two distinct things using the same derived key:
 
-| Layer               | What is encrypted                            | Key derivation salt               | Where it lives                       |
-| ------------------- | -------------------------------------------- | --------------------------------- | ------------------------------------ |
-| **Data**            | The user's file / content bytes              | `dstorage-v1:<address>`           | Off-chain storage (Arweave, Mock, …) |
-| **Storage pointer** | The storage network content ID (`storageId`) | `dstorage-storageId-v1:<address>` | On-chain (`DataRegistry` contract)   |
-
-Both keys are derived from the same root material — a wallet signature hex or BIP-39 seed — via **PBKDF2-SHA-256** (100 000 iterations) with different salts, making them cryptographically independent. Neither key ever leaves the user's device.
+| Layer               | What is encrypted                            | Where it lives                       |
+| ------------------- | -------------------------------------------- | ------------------------------------ |
+| **Data payload**    | The user's file / content bytes              | Off-chain storage (Arweave, Mock, …) |
+| **Storage pointer** | The storage network content ID (`storageId`) | On-chain (`DataRegistry` contract)   |
 
 Encrypting the storage pointer means a blockchain observer cannot learn which decentralised-storage resource belongs to which wallet, even though the on-chain record is public.
 
-### StorageId encryption layout (60 bytes)
+#### Public mode (`isPublic: true`)
 
-AES-GCM on a 32-byte storage ID produces a 48-byte output (`ciphertext + 16-byte auth tag`). Storing the 12-byte IV alongside gives exactly **60 bytes**:
+The SDK supports an explicit opt-in public mode:
 
+```typescript
+await sdk.upload(data, { isPublic: true });
 ```
-[ ciphertext: 32 bytes | IV: 12 bytes | auth tag: 16 bytes ]
+
+In public mode **neither layer is encrypted**:
+
+- The data payload is stored as raw bytes on the storage network — anyone with the storageId can read it.
+- The storageId is written to the chain as plaintext — anyone watching the chain can see which storage resource belongs to which on-chain record.
+- `connect()` / `init()` is not required; no wallet or encryption key is needed.
+- The on-chain `encryptionScheme` field is set to `""` (empty string), which the SDK uses on read to skip decryption entirely.
+
+> **Warning**: Public mode is a permanent, irreversible choice per upload. Once data is stored unencrypted on Arweave (or another permanent storage network) it cannot be made private retroactively. Only use `isPublic: true` for data you explicitly intend to be world-readable.
+
+The default (`isPublic` omitted or `false`) always encrypts both layers. Omitting the flag is safe — accidental public uploads require an explicit opt-in.
+
+**Key reuse across layers is safe** because both schemes generate a fresh random nonce per encryption call. Under XChaCha20-Poly1305 and AES-256-GCM, security only requires that the same (key, nonce) pair is never reused — the key itself may be reused across independent messages with distinct nonces. The data payload and the storageId are encrypted in separate calls with independently generated nonces, so there is no cross-layer nonce collision risk.
+
+### Key derivation by mode
+
+#### Facade mode (Node.js — BIP-39 mnemonic or hex seed)
+
+The raw seed bytes serve as HKDF / PBKDF2 input key material:
+
+| Scheme          | Primitive        | Salt (fixed)            | Info / extra parameter                          |
+| --------------- | ---------------- | ----------------------- | ----------------------------------------------- |
+| XChaCha20       | HKDF-SHA-256     | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1"`               |
+| AES-256-GCM     | PBKDF2-SHA-256   | `"dstorage-aes-v1"`     | 100 000 iterations                              |
+
+#### Connector mode (browser — Midnight Lace wallet)
+
+The wallet's shielded address is first converted to a 32-byte seed via HKDF, then the per-scheme key is derived from that seed:
+
+**Step 1 — address → seed:**
+```
+HKDF-SHA-256(
+  IKM  = shielded_address bytes,
+  salt = "dstorage-midnight-key-derivation-v1",
+  info = "dstorage:seed-derivation:v1"
+) → 32-byte seed
 ```
 
-This maps to the `Bytes<60>` field in the `DataRegistry` contract. It is base64url-encoded (80 chars) for wire transport and decoded back to 60 bytes before being handed to the contract.
+**Step 2 — seed → encryption key:**
+
+| Scheme          | Primitive        | Salt (fixed)            | Info                                                     |
+| --------------- | ---------------- | ----------------------- | -------------------------------------------------------- |
+| XChaCha20       | HKDF-SHA-256     | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1:{shielded_address}"`     |
+| AES-256-GCM     | PBKDF2-SHA-256   | `"dstorage-aes-v1:{shielded_address}"` | 100 000 iterations                        |
+
+### Why HKDF for XChaCha, PBKDF2 for AES-GCM
+
+Per RFC 5869, HKDF is designed for high-entropy inputs and uses a fixed `salt` as a global extraction key and a per-context `info` label for domain separation. PBKDF2's iteration work factor is only useful against low-entropy passwords.
+
+- **XChaCha20-Poly1305** uses HKDF because inputs (BIP-39 seed, shielded address) are always high-entropy. The address is bound into `info` rather than `salt` to follow RFC 5869's role separation.
+- **AES-256-GCM** retains PBKDF2 to preserve future password-based derivation compatibility. If the SDK ever accepts a user password as input, PBKDF2 is the correct primitive; switching to HKDF would be a security regression for that case.
+
+### Why HKDF (not PBKDF2) for connector-mode address → seed
+
+A Midnight shielded address has ~250 bits of entropy — far above the password threat model. PBKDF2's 100 000 iterations add ~100 ms of wasted CPU per `sdk.connect()` call with zero security benefit. HKDF is the correct primitive for high-entropy inputs.
+
+Password-based derivation, if ever supported, would go through the facade `KeyDeriver` path (BIP-39 mnemonic input), not through the connector path.
+
+### Wire formats
+
+#### Off-chain data payload
+
+The encrypted data payload is stored as a JSON object alongside the content. The `encryptionScheme` field in the on-chain `MetaTransaction` record tells the SDK which format to expect on read (see [Scheme detection](#scheme-detection-on-read)).
+
+**XChaCha20-Poly1305** (JSON):
+```json
+{
+  "ciphertext": "<base64 — XChaCha20 output: ciphertext || 16-byte Poly1305 tag>",
+  "nonce":      "<base64 — 24-byte random nonce>",
+  "algorithm":  "XChaCha20-Poly1305"
+}
+```
+
+**AES-256-GCM** (JSON):
+```json
+{
+  "ciphertext": "<base64 — AES-GCM ciphertext>",
+  "iv":         "<base64 — 12-byte IV>"
+}
+```
+The AES-GCM 16-byte auth tag is appended to the ciphertext by the WebCrypto API and stored as part of the `ciphertext` field.
+
+#### On-chain storageId encryption layouts
+
+**XChaCha20-Poly1305** (72 bytes, base64url-encoded → 96 chars):
+```
+[ nonce: 24 bytes | ciphertext: 32 bytes | Poly1305 tag: 16 bytes ]
+```
+
+**AES-256-GCM** (60 bytes, base64url-encoded → 80 chars):
+```
+[ ciphertext: 32 bytes | IV: 12 bytes | GCM tag: 16 bytes ]
+```
+
+### Scheme detection on read
+
+The encryption scheme used for a record is stored in the `encryptionScheme` field of the on-chain `MetaTransaction`. When reading, the SDK reads this field and dispatches to the matching scheme:
+
+| `encryptionScheme` value | Behaviour                                  |
+| ------------------------ | ------------------------------------------ |
+| `"xchacha20poly1305-v1"` | Decrypt with XChaCha20-Poly1305            |
+| `"aes-gcm-v1"`           | Decrypt with AES-256-GCM (legacy)          |
+| `""` or absent           | No decryption — content is public (see [Public mode](#public-mode-ispublic-true)) |
+
+Records written before encryption support was added have an empty `encryptionScheme` and are returned as plain bytes. Encrypted records always carry the scheme name that was active when they were written, so the SDK selects the correct cipher automatically without any action from the caller.
 
 ### Tamper detection
 
-AES-GCM is an **Authenticated Encryption with Associated Data (AEAD)** cipher. The 16-byte authentication tag covers the ciphertext. Any bit-flip in the on-chain encrypted pointer causes decryption to throw before the SDK ever attempts to fetch from storage, making storage-pointer tampering detectable client-side.
+Both schemes are **Authenticated Encryption with Associated Data (AEAD)**. The Poly1305 tag (XChaCha) or GCM tag (AES) covers the ciphertext. Any bit-flip in the on-chain encrypted pointer causes decryption to throw before the SDK ever attempts to fetch from storage.
 
 ### Storage ID format
 
-All storage IDs are 43-character base64url strings — 32 random bytes encoded without padding. This matches the Arweave transaction ID format and guarantees a fixed-width 32-byte plaintext input for the storageId encryption function.
+All storage IDs are 43-character base64url strings — 32 random bytes encoded without padding. This matches the Arweave transaction ID format and guarantees a fixed-width 32-byte plaintext input for the storageId encryption functions.
 
-### Key derivation primitive (PBKDF2 vs HKDF)
+### Key loss and data recovery
 
-PBKDF2 is retained over HKDF deliberately. HKDF is faster and more correct for high-entropy inputs (signatures, BIP-39 seeds), but is **unsafe for low-entropy passwords** (no work factor). Keeping PBKDF2 ensures that if the SDK ever adds password-based key derivation, no security regression occurs. If password-based derivation is never added and inputs remain exclusively high-entropy, migrating to HKDF with domain-separated `info` labels would be a clean improvement.
+Encryption keys are derived deterministically from the wallet seed or shielded address — no key material is stored by the SDK. This means:
+
+- The **same wallet always produces the same key**: reconnecting after a session gap decrypts existing data transparently.
+- **Losing the seed phrase or mnemonic means permanent data loss.** There is no key escrow, no recovery mechanism, and no way to decrypt data without the original key material. Users relying on facade mode (BIP-39 mnemonic) should follow standard seed-phrase backup practices.
 
 ---
 

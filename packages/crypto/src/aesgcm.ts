@@ -224,7 +224,7 @@ export class AesGcmScheme implements CryptoScheme {
   ): Promise<AesGcmScheme> {
     // PBKDF2 derivation expects a hex string.
     const seedHex = uint8ArrayToHex(seed);
-    const salt = context ?? "dstorage-v1";
+    const salt = context ? `dstorage-aes-v1:${context}` : "dstorage-aes-v1";
     const encKey = await deriveKeyFromSignature(seedHex, salt);
     return new AesGcmScheme(encKey);
   }

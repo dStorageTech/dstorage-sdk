@@ -106,10 +106,10 @@ export async function connectMetaMask(logger?: Logger): Promise<WalletInfo> {
  *   1. Locate the wallet via window.midnight[networkId]
  *   2. Call .enable() → ConnectedAPI
  *   3. Get shielded address via api.getShieldedAddress()
- *   4. Derive the encryption key seed from a PBKDF2 hash of the address
+ *   4. Derive the encryption key seed from an HKDF hash of the address
  *      (DApp Connector v3 intentionally omits signData() — signatures are
  *      embedded inside ZK proofs; to preserve the deterministic key-derivation
- *      property we use PBKDF2(address) as the seed instead.)
+ *      property we use HKDF(address) as the seed instead.)
  *   5. Return WalletInfo with walletApi for MidnightChainAdapter to reuse.
  *
  * @param networkId  Midnight network to connect to. Default: "preprod".
@@ -148,11 +148,12 @@ export async function connectMidnightWallet(
   //   authentication happens inside ZK proofs (the proof itself is the signature).
   //   Exposing a raw signing oracle would break the security model.
   //
-  // Why PBKDF2(address) instead of a random seed?
+  // Why HKDF(address) instead of a random seed?
   //   Key-derivation must be deterministic so the same wallet can always decrypt
-  //   its data without storing a secret. PBKDF2 with a fixed salt and the
-  //   shielded address as the password gives us that property while adding
-  //   computational cost against brute-force.
+  //   its data without storing a secret. HKDF with a fixed salt and the
+  //   shielded address as the input key material gives us that property.
+  //   The address has ~250 bits of entropy, so PBKDF2's iteration work factor
+  //   adds no security — HKDF is the correct primitive here.
   const signatureHex = await deriveKeySeedFromAddress(address);
 
   logger?.log(
@@ -169,27 +170,34 @@ export async function connectMidnightWallet(
 }
 
 /**
- * Derive a deterministic hex seed from a Midnight shielded address using PBKDF2.
+ * Derive a deterministic hex seed from a Midnight shielded address using HKDF.
  *
  * This replaces the wallet-signature used by MetaMask-style connectors.
  * The same address always produces the same seed, preserving determinism.
+ *
+ * Why HKDF instead of PBKDF2?
+ *   A Midnight shielded address has ~250 bits of entropy — far above the
+ *   password threat model that PBKDF2's iteration work factor defends against.
+ *   PBKDF2 here adds ~100ms of wasted CPU with zero security benefit.
+ *   HKDF is the correct primitive for high-entropy inputs.
  */
 async function deriveKeySeedFromAddress(address: string): Promise<string> {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     enc.encode(address),
-    { name: "PBKDF2" },
+    "HKDF",
     false,
     ["deriveBits"],
   );
 
-  // Fixed salt — namespaced to dStorage so the same wallet used in other
-  // dApps produces a different derived value.
-  const salt = enc.encode("dstorage-midnight-key-derivation-v1");
-
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: 100_000 },
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: enc.encode("dstorage-midnight-key-derivation-v1"),
+      info: enc.encode("dstorage:seed-derivation:v1"),
+    },
     keyMaterial,
     256,
   );
