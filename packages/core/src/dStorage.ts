@@ -82,25 +82,40 @@ export class DStorage implements DStorageContext {
       await this.config.chainAdapter.init();
     }
 
-    // 2. Build crypto scheme registry from chain adapter credentials (facade mode only).
-    if (this.config.chainAdapter.getCredentialSeed) {
-      const seed = await this.config.chainAdapter.getCredentialSeed();
-      if (seed) {
-        this._cryptoSchemes = await CryptoSchemeRegistry.create(seed);
-        this.config.chainAdapter.setScheme?.(this._cryptoSchemes.getDefault());
-      }
+    // 2. Resolve encryption seed and set up crypto scheme registry.
+    //    Priority: encryptionSeedProvider > chainAdapter.getCredentialSeed (legacy fallback).
+    const seed = await this._resolveSeed();
+    if (seed) {
+      this._cryptoSchemes = await CryptoSchemeRegistry.create(seed);
+      this.config.chainAdapter.setScheme?.(this._cryptoSchemes.getDefault());
     }
 
     this._initialized = true;
     return this.config.chainAdapter.getContractAddress();
   }
 
+  private async _resolveSeed(): Promise<Uint8Array | null> {
+    if (this.config.encryptionSeedProvider) {
+      return this.config.encryptionSeedProvider.getSeed();
+    }
+    // Backward-compat: chain adapter can provide seed (facade/mnemonic mode).
+    if (this.config.chainAdapter.getCredentialSeed) {
+      return this.config.chainAdapter.getCredentialSeed();
+    }
+    return null;
+  }
+
   /**
    * Bind the SDK to a connected wallet.
    * Must be called before upload() or retrieve().
    *
-   * The walletInfo is obtained from connectMetaMask() or connectMidnightWallet()
-   * helpers, which prompt the user to sign the key-derivation message.
+   * The walletInfo is obtained from whichever wallet connection helper matches
+   * the user's browser extension — e.g. connectMetaMask() for EIP-1193 wallets,
+   * or connectDemoWallet() for testing without an extension.
+   *
+   * When using MidnightChainAdapter in connector mode, call sdk.init() first
+   * (which connects the Midnight wallet and deploys/joins the contract), then
+   * call connect() with a WalletInfo supplying the encryption key seed.
    */
   async connect(walletInfo: WalletInfo): Promise<void> {
     this.wallet = walletInfo;

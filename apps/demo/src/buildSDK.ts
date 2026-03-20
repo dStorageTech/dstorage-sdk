@@ -6,6 +6,10 @@ import {
   MockMidnightChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage/core";
+import {
+  DemoSeedProvider,
+  MidnightConnectorSeedProvider,
+} from "@dstorage/seed-providers";
 import { PROOF_SERVER_ENDPOINT } from "./adapterConfigs";
 import type {
   StorageAdapterKey,
@@ -79,5 +83,15 @@ export async function buildSDK(
     });
   }
 
-  return new DStorage({ storageAdapter, chainAdapter, logger: console });
+  const encryptionSeedProvider =
+    chainKey === "midnight-connector"
+      ? new MidnightConnectorSeedProvider({ networkId: "preprod" })
+      : new DemoSeedProvider();
+
+  return new DStorage({
+    storageAdapter,
+    chainAdapter,
+    encryptionSeedProvider,
+    logger: console,
+  });
 }

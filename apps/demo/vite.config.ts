@@ -21,6 +21,10 @@ export default defineConfig({
         __dirname,
         "../../packages/crypto/src/index.ts",
       ),
+      "@dstorage/seed-providers": resolve(
+        __dirname,
+        "../../packages/seed-providers/src/index.ts",
+      ),
       "@dstorage/storage": resolve(
         __dirname,
         "../../packages/storage/src/index.ts",

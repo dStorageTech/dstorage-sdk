@@ -31,7 +31,7 @@
     "@midnight-ntwrk/midnight-js-types": "3.0.0",
     "@midnight-ntwrk/compact-runtime": "^0.14.0",
     "@midnight-ntwrk/testkit-js": "3.0.0",
-    "@midnight-ntwrk/dapp-connector-api": "^3.0.0",
+    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
     "@midnight-ntwrk/ledger-v7": "7.0.0",
     "@midnight-ntwrk/midnight-js-network-id": "^3.0.0",
     "@midnight-ntwrk/wallet-sdk-address-format": "^3.0.0",
@@ -89,6 +89,7 @@
     }
   },
   "devDependencies": {
+    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
     "typescript": "^5.4.5"
   }
 }

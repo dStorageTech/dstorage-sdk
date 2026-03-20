@@ -21,40 +21,7 @@ interface EIP1193Provider {
 declare global {
   interface Window {
     ethereum?: EIP1193Provider;
-    midnight?: MidnightWalletProvider;
   }
-}
-
-// ── Midnight DApp Connector v3 types ──────────────────────────────────────────
-
-/**
- * The top-level object injected by the Lace/Midnight browser extension.
- * window.midnight.<networkId>.enable() returns a ConnectedAPI.
- * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp/connect-wallet
- */
-interface MidnightDAppConnector {
-  apiVersion: string;
-  name: string;
-  enable(): Promise<MidnightConnectedAPI>;
-  isEnabled(): Promise<boolean>;
-}
-
-/**
- * Minimal surface of the connected DApp Connector v3 API.
- * Note: signData() is intentionally absent from v3 — signatures are embedded
- * inside ZK proofs and never exposed to dApp code.
- */
-interface MidnightConnectedAPI {
-  /** Returns the wallet's shielded (Bech32m) address for the connected network */
-  getShieldedAddress(): Promise<string>;
-  /** Balances a transaction by attaching DUST fees */
-  balanceUnsealedTransaction(tx: unknown): Promise<unknown>;
-  /** Broadcasts a balanced+proven transaction to the Midnight network */
-  submitTransaction(tx: unknown): Promise<{ txHash: string }>;
-}
-
-interface MidnightWalletProvider {
-  [networkId: string]: MidnightDAppConnector | undefined;
 }
 
 /**
@@ -100,114 +67,6 @@ export async function connectMetaMask(logger?: Logger): Promise<WalletInfo> {
 }
 
 /**
- * Connect to the Midnight wallet (Lace with Midnight extension).
- *
- * Implements the DApp Connector v3 flow:
- *   1. Locate the wallet via window.midnight[networkId]
- *   2. Call .enable() → ConnectedAPI
- *   3. Get shielded address via api.getShieldedAddress()
- *   4. Derive the encryption key seed from an HKDF hash of the address
- *      (DApp Connector v3 intentionally omits signData() — signatures are
- *      embedded inside ZK proofs; to preserve the deterministic key-derivation
- *      property we use HKDF(address) as the seed instead.)
- *   5. Return WalletInfo with walletApi for MidnightChainAdapter to reuse.
- *
- * @param networkId  Midnight network to connect to. Default: "preprod".
- *
- * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp/connect-wallet
- */
-export async function connectMidnightWallet(
-  networkId = "preprod",
-  logger?: Logger,
-): Promise<WalletInfo> {
-  if (typeof window === "undefined" || !window.midnight) {
-    throw new Error(
-      "[dStorage] Midnight wallet not detected. " +
-        "Please install the Lace wallet with Midnight extension.",
-    );
-  }
-
-  const connector = window.midnight[networkId];
-  if (!connector) {
-    throw new Error(
-      `[dStorage] Midnight wallet does not support network "${networkId}". ` +
-        `Available networks: ${Object.keys(window.midnight).join(", ")}`,
-    );
-  }
-
-  // Request connection — the user will see a confirmation prompt in Lace
-  const api = await connector.enable();
-
-  // Retrieve the shielded (Bech32m) address for this network
-  const address = await api.getShieldedAddress();
-
-  // Derive a deterministic encryption-key seed from the shielded address.
-  //
-  // Why not use signData()?
-  //   DApp Connector v3 omits signData() by design: on Midnight, all
-  //   authentication happens inside ZK proofs (the proof itself is the signature).
-  //   Exposing a raw signing oracle would break the security model.
-  //
-  // Why HKDF(address) instead of a random seed?
-  //   Key-derivation must be deterministic so the same wallet can always decrypt
-  //   its data without storing a secret. HKDF with a fixed salt and the
-  //   shielded address as the input key material gives us that property.
-  //   The address has ~250 bits of entropy, so PBKDF2's iteration work factor
-  //   adds no security — HKDF is the correct primitive here.
-  const signatureHex = await deriveKeySeedFromAddress(address);
-
-  logger?.log(
-    "dStorage",
-    `Midnight wallet connected: ${address} (network: ${networkId})`,
-  );
-
-  return {
-    address,
-    chainProvider: "midnight",
-    _signatureHex: signatureHex,
-    walletApi: api,
-  };
-}
-
-/**
- * Derive a deterministic hex seed from a Midnight shielded address using HKDF.
- *
- * This replaces the wallet-signature used by MetaMask-style connectors.
- * The same address always produces the same seed, preserving determinism.
- *
- * Why HKDF instead of PBKDF2?
- *   A Midnight shielded address has ~250 bits of entropy — far above the
- *   password threat model that PBKDF2's iteration work factor defends against.
- *   PBKDF2 here adds ~100ms of wasted CPU with zero security benefit.
- *   HKDF is the correct primitive for high-entropy inputs.
- */
-async function deriveKeySeedFromAddress(address: string): Promise<string> {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(address),
-    "HKDF",
-    false,
-    ["deriveBits"],
-  );
-
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: enc.encode("dstorage-midnight-key-derivation-v1"),
-      info: enc.encode("dstorage:seed-derivation:v1"),
-    },
-    keyMaterial,
-    256,
-  );
-
-  return Array.from(new Uint8Array(bits))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-/**
  * Demo helper: create a fake wallet connection without a real wallet.
  * Useful for testing and demos in environments without extensions.
  */
@@ -220,7 +79,7 @@ export async function connectDemoWallet(
 
   logger?.warn(
     "dStorage",
-    "Demo wallet connected — encryption is real but not wallet-bound. For production, use connectMetaMask() or connectMidnightWallet().",
+    "Demo wallet connected — encryption is real but not wallet-bound. For production, use connectMetaMask() or a real wallet adapter.",
   );
 
   return {

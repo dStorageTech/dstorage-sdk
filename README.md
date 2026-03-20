@@ -281,10 +281,10 @@ User input
 
 The SDK supports two symmetric AEAD encryption schemes:
 
-| Scheme                     | Status               | Nonce  | Tag    | Birthday bound         | Notes                                     |
-| -------------------------- | -------------------- | ------ | ------ | ---------------------- | ----------------------------------------- |
-| **XChaCha20-Poly1305**     | Default (new writes) | 24 B   | 16 B   | 2⁸⁰ (negligible)      | 192-bit nonce; safe for random generation indefinitely |
-| **AES-256-GCM**            | Legacy (reads only)  | 12 B   | 16 B   | ~2³² (≈ 4 billion)    | Retired for writes; retained for backward-compatible decryption |
+| Scheme                 | Status               | Nonce | Tag  | Birthday bound     | Notes                                                           |
+| ---------------------- | -------------------- | ----- | ---- | ------------------ | --------------------------------------------------------------- |
+| **XChaCha20-Poly1305** | Default (new writes) | 24 B  | 16 B | 2⁸⁰ (negligible)   | 192-bit nonce; safe for random generation indefinitely          |
+| **AES-256-GCM**        | Legacy (reads only)  | 12 B  | 16 B | ~2³² (≈ 4 billion) | Retired for writes; retained for backward-compatible decryption |
 
 XChaCha20-Poly1305 is preferred for new writes: its 192-bit nonce pushes the birthday bound to 2⁸⁰, making random nonce collision a non-issue in practice. AES-256-GCM's 96-bit nonce has a birthday bound of ~2³² random nonces before collision probability becomes material — acceptable for bounded use but a maintenance risk at scale. Since AES-GCM is now read-only, no new nonces are generated under it.
 
@@ -326,16 +326,17 @@ The default (`isPublic` omitted or `false`) always encrypts both layers. Omittin
 
 The raw seed bytes serve as HKDF / PBKDF2 input key material:
 
-| Scheme          | Primitive        | Salt (fixed)            | Info / extra parameter                          |
-| --------------- | ---------------- | ----------------------- | ----------------------------------------------- |
-| XChaCha20       | HKDF-SHA-256     | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1"`               |
-| AES-256-GCM     | PBKDF2-SHA-256   | `"dstorage-aes-v1"`     | 100 000 iterations                              |
+| Scheme      | Primitive      | Salt (fixed)            | Info / extra parameter            |
+| ----------- | -------------- | ----------------------- | --------------------------------- |
+| XChaCha20   | HKDF-SHA-256   | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1"` |
+| AES-256-GCM | PBKDF2-SHA-256 | `"dstorage-aes-v1"`     | 100 000 iterations                |
 
 #### Connector mode (browser — Midnight Lace wallet)
 
 The wallet's shielded address is first converted to a 32-byte seed via HKDF, then the per-scheme key is derived from that seed:
 
 **Step 1 — address → seed:**
+
 ```
 HKDF-SHA-256(
   IKM  = shielded_address bytes,
@@ -346,10 +347,10 @@ HKDF-SHA-256(
 
 **Step 2 — seed → encryption key:**
 
-| Scheme          | Primitive        | Salt (fixed)            | Info                                                     |
-| --------------- | ---------------- | ----------------------- | -------------------------------------------------------- |
-| XChaCha20       | HKDF-SHA-256     | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1:{shielded_address}"`     |
-| AES-256-GCM     | PBKDF2-SHA-256   | `"dstorage-aes-v1:{shielded_address}"` | 100 000 iterations                        |
+| Scheme      | Primitive      | Salt (fixed)                           | Info                                                 |
+| ----------- | -------------- | -------------------------------------- | ---------------------------------------------------- |
+| XChaCha20   | HKDF-SHA-256   | `"dstorage-xchacha-v1"`                | `"dstorage:xchacha20poly1305:v1:{shielded_address}"` |
+| AES-256-GCM | PBKDF2-SHA-256 | `"dstorage-aes-v1:{shielded_address}"` | 100 000 iterations                                   |
 
 ### Why HKDF for XChaCha, PBKDF2 for AES-GCM
 
@@ -371,31 +372,36 @@ Password-based derivation, if ever supported, would go through the facade `KeyDe
 The encrypted data payload is stored as a JSON object alongside the content. The `encryptionScheme` field in the on-chain `MetaTransaction` record tells the SDK which format to expect on read (see [Scheme detection](#scheme-detection-on-read)).
 
 **XChaCha20-Poly1305** (JSON):
+
 ```json
 {
   "ciphertext": "<base64 — XChaCha20 output: ciphertext || 16-byte Poly1305 tag>",
-  "nonce":      "<base64 — 24-byte random nonce>",
-  "algorithm":  "XChaCha20-Poly1305"
+  "nonce": "<base64 — 24-byte random nonce>",
+  "algorithm": "XChaCha20-Poly1305"
 }
 ```
 
 **AES-256-GCM** (JSON):
+
 ```json
 {
   "ciphertext": "<base64 — AES-GCM ciphertext>",
-  "iv":         "<base64 — 12-byte IV>"
+  "iv": "<base64 — 12-byte IV>"
 }
 ```
+
 The AES-GCM 16-byte auth tag is appended to the ciphertext by the WebCrypto API and stored as part of the `ciphertext` field.
 
 #### On-chain storageId encryption layouts
 
 **XChaCha20-Poly1305** (72 bytes, base64url-encoded → 96 chars):
+
 ```
 [ nonce: 24 bytes | ciphertext: 32 bytes | Poly1305 tag: 16 bytes ]
 ```
 
 **AES-256-GCM** (60 bytes, base64url-encoded → 80 chars):
+
 ```
 [ ciphertext: 32 bytes | IV: 12 bytes | GCM tag: 16 bytes ]
 ```
@@ -404,10 +410,10 @@ The AES-GCM 16-byte auth tag is appended to the ciphertext by the WebCrypto API 
 
 The encryption scheme used for a record is stored in the `encryptionScheme` field of the on-chain `MetaTransaction`. When reading, the SDK reads this field and dispatches to the matching scheme:
 
-| `encryptionScheme` value | Behaviour                                  |
-| ------------------------ | ------------------------------------------ |
-| `"xchacha20poly1305-v1"` | Decrypt with XChaCha20-Poly1305            |
-| `"aes-gcm-v1"`           | Decrypt with AES-256-GCM (legacy)          |
+| `encryptionScheme` value | Behaviour                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `"xchacha20poly1305-v1"` | Decrypt with XChaCha20-Poly1305                                                   |
+| `"aes-gcm-v1"`           | Decrypt with AES-256-GCM (legacy)                                                 |
 | `""` or absent           | No decryption — content is public (see [Public mode](#public-mode-ispublic-true)) |
 
 Records written before encryption support was added have an empty `encryptionScheme` and are returned as plain bytes. Encrypted records always carry the scheme name that was active when they were written, so the SDK selects the correct cipher automatically without any action from the caller.

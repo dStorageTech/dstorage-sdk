@@ -1,0 +1,33 @@
+{
+  "name": "@dstorage/seed-providers",
+  "version": "0.1.0",
+  "description": "Pluggable encryption seed providers for dStorage SDK",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --tsconfig tsconfig.build.json"
+  },
+  "dependencies": {
+    "@dstorage/crypto": "*"
+  },
+  "peerDependencies": {
+    "@midnight-ntwrk/dapp-connector-api": "^4.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@midnight-ntwrk/dapp-connector-api": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
+    "typescript": "^5.4.5"
+  }
+}

@@ -38,6 +38,7 @@ import type {
   DataReferenceSummary,
 } from "../../../types.js";
 
+import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
 import type { DataRegistryAPI } from "./api.js";
 import type { DataRegistryProviders } from "./common-types.js";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
@@ -51,40 +52,6 @@ export interface WalletAddresses {
   unshielded: string;
   shielded: string;
   dust: string;
-}
-
-// ── Connector API types (minimal surface from dApp connector spec) ────────────
-// See: https://docs.midnight.network/api-reference/dapp-connector
-
-/** ConnectedAPI: returned by wallet.connect(networkId). */
-interface ConnectedAPI {
-  // Configuration
-  getConfiguration(): Promise<{
-    networkId?: string;
-    indexerUri?: string;
-    indexerWsUri?: string;
-    proverServerUri?: string;
-    substrateNodeUri?: string;
-  }>;
-  // Wallet state
-  getShieldedBalances?(): Promise<unknown>;
-  getUnshieldedBalances?(): Promise<unknown>;
-  getDustBalance?(): Promise<unknown>;
-  getShieldedAddresses(): Promise<
-    | {
-        shieldedAddress: string;
-        shieldedCoinPublicKey: string;
-        shieldedEncryptionPublicKey: string;
-      }
-    | unknown
-  >;
-  getUnshieldedAddress?(): Promise<{ unshieldedAddress: string } | string>;
-  getDustAddress?(): Promise<{ dustAddress: string } | string>;
-  // Transaction methods
-  balanceUnsealedTransaction(tx: string): Promise<string | { tx: string }>;
-  submitTransaction(tx: string): Promise<string>;
-  // Proving
-  getProvingProvider?(): Promise<unknown>;
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -568,8 +535,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
         const received =
           await connectorAPI.balanceUnsealedTransaction(serializedTx);
-        const balancedHex =
-          typeof received === "string" ? received : (received as any).tx;
+        const balancedHex = received.tx;
         logger?.log(
           "dStorage/midnight",
           `balanceTx: received balanced tx length=${balancedHex?.length}`,

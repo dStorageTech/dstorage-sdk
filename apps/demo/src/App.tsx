@@ -1,12 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
-import {
-  DStorage,
-  connectDemoWallet,
-  INSURANCE_CLAIMS,
-  simulateZkProof,
-} from "@dstorage/core";
+import { DStorage, INSURANCE_CLAIMS, simulateZkProof } from "@dstorage/core";
 import type {
-  WalletInfo,
   DataReferenceSummary,
   MetaTxProgress,
   ZkProofResult,
@@ -37,7 +31,6 @@ export default function App() {
     const saved = window.localStorage.getItem("demo-theme");
     return saved === "dark" ? "dark" : "light";
   });
-  const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [dstorage, setDStorage] = useState<DStorage | null>(null);
   const [step, setStep] = useState<AppStep>("connect");
   const [record, setRecord] = useState<StoredRecord | null>(null);
@@ -86,9 +79,9 @@ export default function App() {
   );
 
   /**
-   * Smart connect: uses the selected adapters without forcing a specific wallet.
-   * For Midnight connector: calls sdk.init() which connects to the Lace wallet and
-   * deploys/joins the DataRegistry contract, then uses a demo wallet for encryption.
+   * Smart connect: initialises the SDK with the selected adapters.
+   * sdk.init() handles wallet connection, contract deployment/join, and
+   * encryption key derivation via the configured encryptionSeedProvider.
    */
   const ensureSdkReady = useCallback(async (): Promise<DStorage> => {
     if (dstorage) return dstorage;
@@ -100,18 +93,13 @@ export default function App() {
       { managedUserId, managedServiceUrl, selectedContractAddress },
     );
 
-    if (chainAdapterKey === "midnight-connector") {
-      const contractAddress = await sdk.init();
-      if (contractAddress) {
-        setSelectedContractAddress(contractAddress);
-        setContractAddressInput(contractAddress);
-        setDeployNewContractSelected(false);
-      }
+    const contractAddress = await sdk.init();
+    if (contractAddress) {
+      setSelectedContractAddress(contractAddress);
+      setContractAddressInput(contractAddress);
+      setDeployNewContractSelected(false);
     }
 
-    const connectedWallet = await connectDemoWallet();
-    await sdk.connect(connectedWallet);
-    setWallet(connectedWallet);
     setDStorage(sdk);
     return sdk;
   }, [
@@ -245,7 +233,6 @@ export default function App() {
     dstorage?.disconnect();
     setChainAdapterKey(next);
     setDStorage(null);
-    setWallet(null);
     setExistingReferences([]);
   };
 
@@ -254,7 +241,6 @@ export default function App() {
     dstorage?.disconnect();
     setStorageAdapterKey(next);
     setDStorage(null);
-    setWallet(null);
     setExistingReferences([]);
   };
 
@@ -263,7 +249,6 @@ export default function App() {
     dstorage?.disconnect();
     setPaymentAdapterKey(next);
     setDStorage(null);
-    setWallet(null);
   };
 
   const handleManagedUserIdChange = (nextUserId: string) => {
@@ -271,7 +256,6 @@ export default function App() {
     if (paymentAdapterKey === "managed") {
       dstorage?.disconnect();
       setDStorage(null);
-      setWallet(null);
     }
   };
 
@@ -328,7 +312,6 @@ export default function App() {
 
   const handleReset = async () => {
     dstorage?.disconnect();
-    setWallet(null);
     setDStorage(null);
     setStep("connect");
     setRecord(null);
@@ -435,7 +418,7 @@ export default function App() {
           </div>
 
           <div className="hv-header-right-meta">
-            {(wallet || step !== "connect") && (
+            {(dstorage !== null || step !== "connect") && (
               <button className="hv-reset-btn" onClick={() => handleReset()}>
                 New Session
               </button>
@@ -449,7 +432,7 @@ export default function App() {
           <div className="hv-setup-page">
             <PatientPanel
               step={step}
-              wallet={wallet}
+              connected={dstorage !== null}
               record={record}
               storageAdapterKey={storageAdapterKey}
               chainAdapterKey={chainAdapterKey}
@@ -478,7 +461,7 @@ export default function App() {
               </div>
               <PatientPanel
                 step={step}
-                wallet={wallet}
+                connected={dstorage !== null}
                 record={record}
                 storageAdapterKey={storageAdapterKey}
                 chainAdapterKey={chainAdapterKey}

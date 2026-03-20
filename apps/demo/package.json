@@ -14,6 +14,7 @@
     "@dstorage/chain": "*",
     "@dstorage/core": "*",
     "@dstorage/crypto": "*",
+    "@dstorage/seed-providers": "*",
     "@dstorage/storage": "*",
     "@midnight-ntwrk/compact-runtime": "^0.14.0",
     "@midnight-ntwrk/midnight-js-contracts": "^3.1.0",

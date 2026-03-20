@@ -5,7 +5,10 @@
 
 import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
+import type { EncryptionSeedProvider } from "@dstorage/seed-providers";
 import { CostEstimate } from "./payment";
+
+export type { EncryptionSeedProvider };
 
 /**
  * Minimal logger interface accepted by every SDK class.
@@ -25,12 +28,6 @@ export interface WalletInfo {
   chainProvider: ChainProviderName;
   /** The raw signature (or PBKDF2 seed) used to derive the encryption key (kept in memory only) */
   _signatureHex: string;
-  /**
-   * The raw DApp Connector API object returned by the wallet.
-   * Passed through to MidnightChainAdapter so it can balance and submit transactions
-   * without re-connecting. Present only when using connectMidnightWallet().
-   */
-  walletApi?: unknown;
 }
 
 /** Configuration passed to dStorage constructor */
@@ -39,6 +36,20 @@ export interface DStorageConfig {
   storageAdapter: StorageAdapter;
   /** Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...) */
   chainAdapter: ChainAdapter;
+  /**
+   * Seed provider that supplies the raw bytes used to derive encryption keys.
+   * When set, sdk.init() calls provider.getSeed() and sets up crypto automatically —
+   * no separate sdk.connect() call is needed.
+   *
+   * Choose the provider that matches the wallet available in your environment:
+   *   MetaMaskSeedProvider            — MetaMask / any EIP-1193 browser wallet
+   *   MidnightConnectorSeedProvider   — Midnight Lace browser extension (v4+ signData)
+   *   MnemonicSeedProvider            — BIP-39 mnemonic or hex seed (temporary, facade/Node.js only)
+   *   DemoSeedProvider                — fixed deterministic seed for testing
+   *
+   * When omitted, call sdk.connect(walletInfo) manually to supply the seed.
+   */
+  encryptionSeedProvider?: EncryptionSeedProvider;
   /** Optional label for the type of data being stored */
   defaultDataLabel?: string;
   /**

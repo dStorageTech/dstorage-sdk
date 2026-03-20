@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@dstorage/crypto": "*",
+    "@dstorage/seed-providers": "*",
     "@dstorage/storage": "*",
     "@dstorage/chain": "*",
     "@dstorage/payment": "*"

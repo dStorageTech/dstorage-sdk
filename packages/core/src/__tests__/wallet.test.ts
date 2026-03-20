@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  connectDemoWallet,
-  connectMetaMask,
-  connectMidnightWallet,
-} from "../wallet.js";
+import { connectDemoWallet, connectMetaMask } from "../wallet.js";
 
 // ── connectDemoWallet ─────────────────────────────────────────────────────────
 
@@ -44,11 +40,6 @@ describe("connectDemoWallet", () => {
     const b = await connectDemoWallet("0xBob");
     expect(a._signatureHex).not.toBe(b._signatureHex);
   });
-
-  it("walletApi is not set (no DApp Connector for demo mode)", async () => {
-    const info = await connectDemoWallet();
-    expect(info.walletApi).toBeUndefined();
-  });
 });
 
 // ── connectMetaMask ───────────────────────────────────────────────────────────
@@ -63,29 +54,5 @@ describe("connectMetaMask", () => {
 
   it("error message includes install link hint", async () => {
     await expect(connectMetaMask()).rejects.toThrow("metamask.io");
-  });
-});
-
-// ── connectMidnightWallet ─────────────────────────────────────────────────────
-
-describe("connectMidnightWallet", () => {
-  it("throws when window is not defined (Node.js environment)", async () => {
-    await expect(connectMidnightWallet()).rejects.toThrow(
-      "[dStorage] Midnight wallet not detected",
-    );
-  });
-
-  it("error message mentions Lace wallet", async () => {
-    await expect(connectMidnightWallet()).rejects.toThrow("Lace");
-  });
-
-  it("error message mentions Midnight extension", async () => {
-    await expect(connectMidnightWallet()).rejects.toThrow("Midnight");
-  });
-
-  it("accepts a custom networkId without additional errors (error still about missing wallet)", async () => {
-    await expect(connectMidnightWallet("mainnet")).rejects.toThrow(
-      "[dStorage] Midnight wallet not detected",
-    );
   });
 });

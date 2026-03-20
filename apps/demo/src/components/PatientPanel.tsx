@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { validateFile, INSURANCE_CLAIMS } from "@dstorage/core";
-import type { DataReferenceSummary, WalletInfo } from "@dstorage/core";
+import type { DataReferenceSummary } from "@dstorage/core";
 import type {
   AppStep,
   StoredRecord,
@@ -16,7 +16,7 @@ import {
 
 interface Props {
   step: AppStep;
-  wallet: WalletInfo | null;
+  connected: boolean;
   record: StoredRecord | null;
   storageAdapterKey: StorageAdapterKey;
   chainAdapterKey: ChainAdapterKey;
@@ -39,7 +39,7 @@ interface Props {
 
 export function PatientPanel({
   step,
-  wallet,
+  connected,
   record,
   storageAdapterKey,
   chainAdapterKey,
@@ -440,13 +440,12 @@ export function PatientPanel({
   if (step === "upload")
     return (
       <div className="pp-section">
-        <div className="pp-wallet-chip">
-          <div className="pp-wallet-dot" />
-          <span className="pp-wallet-addr">
-            {wallet?.address.slice(0, 14)}…{wallet?.address.slice(-6)}
-          </span>
-          <span className="pp-wallet-label">Connected</span>
-        </div>
+        {connected && (
+          <div className="pp-wallet-chip">
+            <div className="pp-wallet-dot" />
+            <span className="pp-wallet-label">SDK Connected</span>
+          </div>
+        )}
 
         <div className="as-active-row">
           <span className="as-active-label">Storage</span>
