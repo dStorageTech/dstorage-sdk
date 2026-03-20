@@ -10,7 +10,7 @@
  *   balanced.submit()                   → broadcast to Midnight network
  *
  * Requirements for real payments:
- *   - Lace wallet with Midnight extension (browser), OR
+ *   - Lace wallet extension (browser), OR
  *   - Programmatic Midnight wallet instance (Node.js)
  *   - DUST tokens (available from emissions of registered NIGHT)
  *

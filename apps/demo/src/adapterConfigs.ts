@@ -54,7 +54,7 @@ export const CHAIN_ADAPTER_CONFIGS: Record<
     label: "Midnight Network",
     description: "Real Midnight network via browser wallet extension.",
     status: "live",
-    note: "Requires Midnight Lace wallet extension",
+    note: "Requires Lace wallet extension",
   },
 };
 

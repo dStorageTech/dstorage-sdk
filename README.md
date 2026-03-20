@@ -17,6 +17,7 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Payments](#payments)
 - [Architecture](#architecture)
 - [Supported Providers](#supported-providers)
+- [Seed Providers](#seed-providers)
 - [Known Limitations](#known-limitations)
 - [High-Level Product Roadmap](#high-level-product-roadmap)
 
@@ -331,7 +332,7 @@ The raw seed bytes serve as HKDF / PBKDF2 input key material:
 | XChaCha20   | HKDF-SHA-256   | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1"` |
 | AES-256-GCM | PBKDF2-SHA-256 | `"dstorage-aes-v1"`     | 100 000 iterations                |
 
-#### Connector mode (browser — Midnight Lace wallet)
+#### Connector mode (browser — Lace wallet)
 
 The wallet's shielded address is first converted to a 32-byte seed via HKDF, then the per-scheme key is derived from that seed:
 
@@ -364,6 +365,58 @@ Per RFC 5869, HKDF is designed for high-entropy inputs and uses a fixed `salt` a
 A Midnight shielded address has ~250 bits of entropy — far above the password threat model. PBKDF2's 100 000 iterations add ~100 ms of wasted CPU per `sdk.connect()` call with zero security benefit. HKDF is the correct primitive for high-entropy inputs.
 
 Password-based derivation, if ever supported, would go through the facade `KeyDeriver` path (BIP-39 mnemonic input), not through the connector path.
+
+### Seed providers
+
+The `@dstorage/seed-providers` package is responsible for producing the raw seed bytes that feed the key-derivation functions above. Each provider has a different source of entropy, a different canonicalization requirement, and different portability guarantees when a user switches devices or wallets.
+
+| Provider                        | Seed source                                                    | Canonicalization                      | Cross-device / cross-wallet portability                               |
+| ------------------------------- | -------------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------- |
+| `MetaMaskSeedProvider`          | `personal_sign` over a fixed message via any EIP-1193 provider | **Low-s ECDSA normalization applied** | ✅ Same seed from any EIP-1193 wallet holding the same private key    |
+| `MidnightConnectorSeedProvider` | `signData()` via Midnight Lace DApp Connector                  | None needed                           | ✅ Same seed from any compatible Midnight wallet holding the same key |
+| `MnemonicSeedProvider`          | BIP-39 mnemonic phrase or 64-byte hex seed                     | None needed                           | ✅ Same seed wherever the same mnemonic/hex is imported               |
+| `DemoSeedProvider`              | SHA-256 of a fixed address string                              | None needed                           | ⚠️ Deterministic but predictable — development and testing only       |
+
+#### ECDSA signature canonicalization (`MetaMaskSeedProvider`)
+
+`personal_sign` returns a 65-byte Ethereum signature:
+
+```
+[ r: 32 bytes | s: 32 bytes | v: 1 byte (recovery param) ]
+```
+
+secp256k1 ECDSA has a **malleability** property: for any valid signature `(r, s)`, the pair `(r, n − s)` is also a valid signature over the same message, where `n` is the secp256k1 curve order. This means two mathematically equivalent signatures can exist for the same key and message. Different EIP-1193-compatible wallets (MetaMask, Ledger via WalletConnect, older custom signers) may return either form.
+
+If the raw signature bytes are used as seed material without normalization, a user whose wallet happens to return the high-s variant will derive a different encryption key than a user whose wallet returns the low-s variant for the same Ethereum private key — even though both signatures are cryptographically valid. This would lock the user out of their own encrypted data when switching wallets.
+
+The fix — mandated by EIP-2 for transaction signatures and by BIP-62 for Bitcoin — is to normalize to **low-s canonical form** before any use of the bytes:
+
+```
+if s > n / 2:
+    s = n − s          (v is preserved unchanged — not used for recovery here)
+```
+
+After normalization, every conforming EIP-1193 provider that holds the same Ethereum private key produces the same canonical 65-byte seed, regardless of whether it internally generates the high-s or low-s variant. RFC 6979 already guarantees that `(r, s_low)` is deterministic for a given key and message; the normalization step adds the invariant that `(r, s_high)` maps to the same canonical output.
+
+#### Which providers do not need canonicalization and why
+
+- **`MidnightConnectorSeedProvider`** — Midnight uses a different curve and signing scheme. The `signData()` API is deterministic by design and does not exhibit secp256k1 malleability. No normalization is needed.
+- **`MnemonicSeedProvider`** — the seed comes from BIP-39 entropy or a raw hex value, not from any ECDSA signing operation. The derivation is a direct function of the mnemonic bytes; there is no signature to canonicalize.
+- **`DemoSeedProvider`** — the seed is SHA-256 of a fixed address string, which is fully deterministic with no signing step involved.
+
+#### Cross-device and cross-wallet portability
+
+| Scenario                                                                          | Expected outcome                                                                                                                                                                            |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same MetaMask account, different browser or device                                | ✅ Same seed — MetaMask uses RFC 6979 (deterministic `k`) and EIP-2 (low-s). Canonicalization ensures the same result even if a future device returns high-s.                               |
+| MetaMask → Ledger via MetaMask (hardware signer, same Ethereum key)               | ✅ Same seed — Ledger exports the same private key and signs the same message; low-s normalization absorbs any variant differences.                                                         |
+| MetaMask → WalletConnect-bridged wallet (same Ethereum key)                       | ✅ Same seed — canonicalization ensures the invariant holds regardless of the bridge implementation's s-value convention.                                                                   |
+| MetaMask account A → MetaMask account B (different keys)                          | ❌ Different seed — the Ethereum address and private key differ, so `personal_sign` produces an unrelated signature. This is intentional: each account has its own isolated encryption key. |
+| Midnight Lace on device A → Midnight Lace on device B (same key, restored wallet) | ✅ Same seed — `signData()` is deterministic for a given key and message.                                                                                                                   |
+| Midnight Lace → different Midnight wallet implementation (same key)               | ✅ Same seed — no malleability concern; the output is scheme-deterministic.                                                                                                                 |
+| BIP-39 mnemonic imported on a different machine (`MnemonicSeedProvider`)          | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                                                                                                          |
+
+---
 
 ### Wire formats
 
