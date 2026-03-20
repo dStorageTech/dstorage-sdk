@@ -136,13 +136,6 @@ export interface ChainAdapter {
   getContractAddress(): string;
 
   /**
-   * Return raw seed bytes for CryptoSchemeRegistry derivation.
-   * Optional — only for adapters that hold wallet credentials (e.g. facade mode).
-   * In connector mode the seed is derived from the wallet signature in DStorage.connect().
-   */
-  getCredentialSeed?(): Promise<Uint8Array | null>;
-
-  /**
    * Receive the active CryptoScheme instance from the SDK.
    * Called after the registry is built so the adapter can use the same scheme
    * for any internal crypto operations without re-deriving keys.

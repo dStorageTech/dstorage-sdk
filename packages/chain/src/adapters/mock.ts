@@ -60,10 +60,6 @@ export class MockChainAdapter implements ChainAdapter {
 
   private contractAddress: string;
   private readonly logger: Logger | undefined;
-  // Fixed random seed per instance — consistent for the adapter's lifetime.
-  private readonly _seed = globalThis.crypto.getRandomValues(
-    new Uint8Array(32),
-  );
 
   constructor(logger?: Logger) {
     this.logger = logger;
@@ -131,10 +127,6 @@ export class MockChainAdapter implements ChainAdapter {
     );
     this.contractAddress = addr;
     return addr;
-  }
-
-  async getCredentialSeed(): Promise<Uint8Array | null> {
-    return this._seed;
   }
 
   setScheme(_scheme: CryptoScheme): void {

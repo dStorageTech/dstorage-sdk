@@ -11,6 +11,7 @@
   "dependencies": {
     "@dstorage/chain": "*",
     "@dstorage/core": "*",
+    "@dstorage/seed-providers": "*",
     "@dstorage/storage": "*",
     "@midnight-ntwrk/compact-runtime": "^0.14.0",
     "@midnight-ntwrk/ledger-v7": "7.0.0",

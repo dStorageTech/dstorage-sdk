@@ -38,8 +38,7 @@ export interface DStorageConfig {
   chainAdapter: ChainAdapter;
   /**
    * Seed provider that supplies the raw bytes used to derive encryption keys.
-   * When set, sdk.init() calls provider.getSeed() and sets up crypto automatically —
-   * no separate sdk.connect() call is needed.
+   * When set, sdk.init() calls provider.getSeed() and sets up crypto automatically.
    *
    * Choose the provider that matches the wallet available in your environment:
    *   MetaMaskSeedProvider            — MetaMask / any EIP-1193 browser wallet
@@ -47,7 +46,8 @@ export interface DStorageConfig {
    *   MnemonicSeedProvider            — BIP-39 mnemonic or hex seed (temporary, facade/Node.js only)
    *   DemoSeedProvider                — fixed deterministic seed for testing
    *
-   * When omitted, call sdk.connect(walletInfo) manually to supply the seed.
+   * When omitted, no encryption key is available and all uploaded data will be
+   * stored as plaintext (public).
    */
   encryptionSeedProvider?: EncryptionSeedProvider;
   /** Optional label for the type of data being stored */

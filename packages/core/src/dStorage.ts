@@ -77,60 +77,20 @@ export class DStorage implements DStorageContext {
    * Call this instead of connect() when using MidnightChainAdapter directly.
    */
   async init() {
-    // 1. Initialize chain adapter wallet (derives keys, syncs wallet, etc.)
+    // 1. Initialize chain adapter wallet (syncs wallet, etc.)
     if (this.config.chainAdapter.init) {
       await this.config.chainAdapter.init();
     }
 
     // 2. Resolve encryption seed and set up crypto scheme registry.
-    //    Priority: encryptionSeedProvider > chainAdapter.getCredentialSeed (legacy fallback).
-    const seed = await this._resolveSeed();
-    if (seed) {
+    if (this.config.encryptionSeedProvider) {
+      const seed = await this.config.encryptionSeedProvider.getSeed();
       this._cryptoSchemes = await CryptoSchemeRegistry.create(seed);
       this.config.chainAdapter.setScheme?.(this._cryptoSchemes.getDefault());
     }
 
     this._initialized = true;
     return this.config.chainAdapter.getContractAddress();
-  }
-
-  private async _resolveSeed(): Promise<Uint8Array | null> {
-    if (this.config.encryptionSeedProvider) {
-      return this.config.encryptionSeedProvider.getSeed();
-    }
-    // Backward-compat: chain adapter can provide seed (facade/mnemonic mode).
-    if (this.config.chainAdapter.getCredentialSeed) {
-      return this.config.chainAdapter.getCredentialSeed();
-    }
-    return null;
-  }
-
-  /**
-   * Bind the SDK to a connected wallet.
-   * Must be called before upload() or retrieve().
-   *
-   * The walletInfo is obtained from whichever wallet connection helper matches
-   * the user's browser extension — e.g. connectMetaMask() for EIP-1193 wallets,
-   * or connectDemoWallet() for testing without an extension.
-   *
-   * When using MidnightChainAdapter in connector mode, call sdk.init() first
-   * (which connects the Midnight wallet and deploys/joins the contract), then
-   * call connect() with a WalletInfo supplying the encryption key seed.
-   */
-  async connect(walletInfo: WalletInfo): Promise<void> {
-    this.wallet = walletInfo;
-
-    // Build the crypto scheme registry from the wallet signature.
-    // The address is used as context so keys are bound to a specific account.
-    // Key material never leaves the device and is not persisted.
-    const seedBytes = this._hexToBytes(walletInfo._signatureHex);
-    this._cryptoSchemes = await CryptoSchemeRegistry.create(
-      seedBytes,
-      walletInfo.address,
-    );
-    this.config.chainAdapter.setScheme?.(this._cryptoSchemes.getDefault());
-
-    this.logger?.log("dStorage", `Connected: ${walletInfo.address}`);
   }
 
   /** Disconnect and clear the in-memory encryption keys. */
@@ -216,7 +176,7 @@ export class DStorage implements DStorageContext {
       // 1b. Private: encrypt content — fail if no encryption key is available.
       if (!this._cryptoSchemes) {
         throw new Error(
-          "[dStorage] Encryption key not available. Call connect() or init() before uploading private data.",
+          "[dStorage] Encryption key not available. Call init() before uploading private data.",
         );
       }
       this.logger?.log(
@@ -243,7 +203,7 @@ export class DStorage implements DStorageContext {
       const encrypted = await this.encryptStorageIdForChain(storageResult.id);
       if (!encrypted) {
         throw new Error(
-          "[dStorage] Cannot encrypt storageId: no encryption key available. Call connect() or init() before uploading private data.",
+          "[dStorage] Cannot encrypt storageId: no encryption key available. Call init() before uploading private data.",
         );
       }
       onChainStorageId = encrypted;
@@ -476,8 +436,7 @@ export class DStorage implements DStorageContext {
 
     if (!this._cryptoSchemes) {
       throw new Error(
-        "[dStorage] executeMetaTransaction() requires an encryption key. " +
-          "Call connect() with wallet credentials, or use init() with a facade-mode chain adapter.",
+        "[dStorage] executeMetaTransaction() requires an encryption key."
       );
     }
 
@@ -530,7 +489,7 @@ export class DStorage implements DStorageContext {
   ): Promise<UploadResult> {
     if (!isPublic && !this._cryptoSchemes) {
       throw new Error(
-        "[dStorage] Encryption key not available. Call connect() or init() before uploading private data.",
+        "[dStorage] Encryption key not available. Call init() before uploading private data.",
       );
     }
 
@@ -653,7 +612,7 @@ export class DStorage implements DStorageContext {
       );
       if (!pqEncrypted) {
         throw new Error(
-          "[dStorage] Cannot encrypt manifest storageId: no PQ keypair available. Call connect() or init() before uploading private data.",
+          "[dStorage] Cannot encrypt manifest storageId: no PQ keypair available. Call init() before uploading private data.",
         );
       }
       onChainManifestId = pqEncrypted;

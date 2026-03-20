@@ -835,20 +835,6 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   // ── DataRegistry deployment ────────────────────────────────────────────────
 
-  /**
-   * Return raw credential seed bytes for CryptoSchemeRegistry derivation.
-   * Only available in facade mode (where credentials are held by the adapter).
-   * In connector mode, returns null — the seed is derived from the wallet
-   * signature in DStorage.connect().
-   */
-  async getCredentialSeed(): Promise<Uint8Array | null> {
-    if (this.walletMode === "facade" && this._credentials) {
-      const { KeyDeriver } = await import("@dstorage/crypto");
-      return new KeyDeriver(this._credentials).getSeed();
-    }
-    return null;
-  }
-
   setScheme(_scheme: unknown): void {
     // Midnight adapter performs no crypto internally — scheme is used by the SDK layer.
   }

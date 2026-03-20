@@ -7,27 +7,26 @@
  */
 import { describe, it, expect } from "vitest";
 import { DStorage } from "../dStorage.js";
-import { connectDemoWallet } from "../wallet.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
+import { DemoSeedProvider } from "@dstorage/seed-providers";
 import type { DStorageConfig } from "../types.js";
 
 // ── Shared adapters ───────────────────────────────────────────────────────────
 // Each test gets its own storage + chain adapter instances to avoid cross-test
 // state interference (module-level Maps in mock adapters are isolated per file).
 
-function makeConfig(): DStorageConfig {
+function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
+    encryptionSeedProvider: new DemoSeedProvider(address),
   };
 }
 
 async function makeUser(address: string): Promise<DStorage> {
-  const config = makeConfig();
-  const ds = new DStorage(config);
-  const wallet = await connectDemoWallet(address);
-  await ds.connect(wallet);
+  const ds = new DStorage(makeConfig(address));
+  await ds.init();
   return ds;
 }
 
@@ -82,28 +81,24 @@ describe("upload → retrieveByRefId round-trip", () => {
   });
 });
 
-// ── Wallet isolation ──────────────────────────────────────────────────────────
+// ── Seed provider isolation ───────────────────────────────────────────────────
 
 describe("wallet isolation", () => {
   it("Alice cannot decrypt Bob's data (different encryption keys)", async () => {
     // Use separate adapter instances so storage is shared but chain is separate
     const sharedStorage = new MockStorageAdapter();
-    const aliceConfig: DStorageConfig = {
+    const alice = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: new MockChainAdapter(),
-    };
-    const bobConfig: DStorageConfig = {
+      encryptionSeedProvider: new DemoSeedProvider("0xAlice_iso1"),
+    });
+    const bob = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: new MockChainAdapter(),
-    };
-
-    const alice = new DStorage(aliceConfig);
-    const bob = new DStorage(bobConfig);
-
-    const aliceWallet = await connectDemoWallet("0xAlice_iso1");
-    const bobWallet = await connectDemoWallet("0xBob_iso1");
-    await alice.connect(aliceWallet);
-    await bob.connect(bobWallet);
+      encryptionSeedProvider: new DemoSeedProvider("0xBob_iso1"),
+    });
+    await alice.init();
+    await bob.init();
 
     // Bob uploads something
     const { storageId, chainRefId } = await bob.upload("Bob private");
@@ -115,23 +110,20 @@ describe("wallet isolation", () => {
     await expect(alice.retrieveByRefId(refId)).rejects.toThrow();
   });
 
-  it("same wallet address always derives the same encryption key", async () => {
-    const config1 = makeConfig();
-    const config2 = makeConfig();
-
-    // Share storage adapter so the ciphertext is accessible
+  it("same address always derives the same encryption key", async () => {
     const sharedStorage = new MockStorageAdapter();
-    config1.storageAdapter = sharedStorage;
-    config2.storageAdapter = sharedStorage;
-
-    const ds1 = new DStorage(config1);
-    const ds2 = new DStorage(config2);
-
-    const wallet1 = await connectDemoWallet("0xAlice_iso2");
-    const wallet2 = await connectDemoWallet("0xAlice_iso2"); // same address
-
-    await ds1.connect(wallet1);
-    await ds2.connect(wallet2);
+    const ds1 = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: new MockChainAdapter(),
+      encryptionSeedProvider: new DemoSeedProvider("0xAlice_iso2"),
+    });
+    const ds2 = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: new MockChainAdapter(),
+      encryptionSeedProvider: new DemoSeedProvider("0xAlice_iso2"), // same address
+    });
+    await ds1.init();
+    await ds2.init();
 
     // Upload with ds1
     const { chainRefId } = await ds1.upload("Shared key test");
@@ -166,20 +158,26 @@ describe("multi-record scenarios", () => {
   });
 });
 
-// ── Disconnect / reconnect ────────────────────────────────────────────────────
+// ── Disconnect / re-init ──────────────────────────────────────────────────────
 
 describe("disconnect and reconnect", () => {
-  it("uploads before disconnect are still retrievable after reconnect", async () => {
-    const config = makeConfig();
-    const ds = new DStorage(config);
-    const wallet = await connectDemoWallet("0xAlice_drr1");
-    await ds.connect(wallet);
+  it("uploads before disconnect are still retrievable after re-init", async () => {
+    const sharedStorage = new MockStorageAdapter();
+    const makeDs = () =>
+      new DStorage({
+        storageAdapter: sharedStorage,
+        chainAdapter: new MockChainAdapter(),
+        encryptionSeedProvider: new DemoSeedProvider("0xAlice_drr1"),
+      });
+
+    const ds = makeDs();
+    await ds.init();
 
     const { chainRefId } = await ds.upload("persistent data");
     ds.disconnect();
 
-    // Reconnect with the same wallet
-    await ds.connect(wallet);
+    // Re-init with the same seed provider (same address → same key)
+    await ds.init();
     const { content } = await ds.retrieveByRefId(chainRefId);
     expect(content).toBe("persistent data");
   });

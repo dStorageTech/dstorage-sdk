@@ -233,14 +233,6 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return addr;
   }
 
-  async getCredentialSeed(): Promise<Uint8Array | null> {
-    const { KeyDeriver } = await import("@dstorage/crypto");
-    // Fixed test mnemonic for a deterministic mock credential seed.
-    return new KeyDeriver({
-      mnemonic: "test test test test test test test test test test test junk",
-    }).getSeed();
-  }
-
   setScheme(_scheme: unknown): void {
     // Mock adapter performs no crypto internally — scheme is used by the SDK layer.
   }

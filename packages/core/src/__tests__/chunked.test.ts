@@ -16,28 +16,27 @@ vi.mock("../chunked.js", async (importOriginal) => {
 });
 
 import { DStorage } from "../dStorage.js";
-import { connectDemoWallet } from "../wallet.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
+import { DemoSeedProvider } from "@dstorage/seed-providers";
 import { isManifest } from "../chunked.js";
 import type { DStorageConfig } from "../types.js";
 
 // Must match the mocked value above.
 const CHUNK_SIZE = 512;
 
-function makeConfig(): DStorageConfig {
+function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
+    encryptionSeedProvider: new DemoSeedProvider(address),
   };
 }
 
-async function makeConnectedDStorage(config?: DStorageConfig) {
-  const ds = new DStorage(config ?? makeConfig());
-  const wallet = await connectDemoWallet(
-    `0xTestUser_chunked_${Math.random().toString(36).slice(2)}`,
-  );
-  await ds.connect(wallet);
+async function makeInitedDStorage(config?: DStorageConfig) {
+  const addr = `0xTestUser_chunked_${Math.random().toString(36).slice(2)}`;
+  const ds = new DStorage(config ?? makeConfig(addr));
+  await ds.init();
   return ds;
 }
 
@@ -81,7 +80,7 @@ describe("isManifest", () => {
 
 describe("upload small file (≤ CHUNK_SIZE)", () => {
   it("single-shot path: upload returns a storageId, retrieve round-trips", async () => {
-    const ds = await makeConnectedDStorage();
+    const ds = await makeInitedDStorage();
     const content = "small file content";
     const { chainRefId } = await ds.upload(content);
     const { content: retrieved } = await ds.retrieveByRefId(chainRefId);
@@ -93,7 +92,7 @@ describe("upload small file (≤ CHUNK_SIZE)", () => {
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
     const uploadSpy = vi.spyOn(storageAdapter, "upload");
 
-    const ds = await makeConnectedDStorage(config);
+    const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE); // exactly at threshold → single-shot
     await ds.upload(bytes);
 
@@ -109,7 +108,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
     const uploadSpy = vi.spyOn(storageAdapter, "upload");
 
-    const ds = await makeConnectedDStorage(config);
+    const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE + 1); // 2 chunks
     await ds.upload(bytes);
 
@@ -122,7 +121,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
     const uploadSpy = vi.spyOn(storageAdapter, "upload");
 
-    const ds = await makeConnectedDStorage(config);
+    const ds = await makeInitedDStorage(config);
     const chunkCount = 4;
     const bytes = makeBytes(CHUNK_SIZE * chunkCount);
     await ds.upload(bytes);
@@ -132,7 +131,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
   });
 
   it("round-trip: retrieve reassembles original bytes (2 chunks)", async () => {
-    const ds = await makeConnectedDStorage();
+    const ds = await makeInitedDStorage();
     const bytes = makeBytes(CHUNK_SIZE + 100);
     const { chainRefId } = await ds.upload(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
@@ -140,7 +139,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
   });
 
   it("round-trip works for 3 chunks (2.5× CHUNK_SIZE)", async () => {
-    const ds = await makeConnectedDStorage();
+    const ds = await makeInitedDStorage();
     const bytes = makeBytes(Math.floor(CHUNK_SIZE * 2.5));
     const { chainRefId } = await ds.upload(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
@@ -151,7 +150,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const config = makeConfig();
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
 
-    const ds = await makeConnectedDStorage(config);
+    const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE + 1);
     const result = await ds.upload(bytes);
 
@@ -160,7 +159,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
   });
 
   it("onProgress is called with increasing chunksUploaded", async () => {
-    const ds = await makeConnectedDStorage();
+    const ds = await makeInitedDStorage();
     const bytes = makeBytes(CHUNK_SIZE * 3);
 
     const progressEvents: number[] = [];
@@ -175,7 +174,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
   });
 
   it("finalizing phase fires once", async () => {
-    const ds = await makeConnectedDStorage();
+    const ds = await makeInitedDStorage();
     const bytes = makeBytes(CHUNK_SIZE + 1);
 
     let finalizingCount = 0;
@@ -193,13 +192,13 @@ describe("upload large file (> CHUNK_SIZE)", () => {
 
 describe("upload backward compatibility", () => {
   it("accepts old-style metadata Record as second arg", async () => {
-    const ds = await makeConnectedDStorage();
+    const ds = await makeInitedDStorage();
     const result = await ds.upload("hello", { label: "my-label" });
     expect(result.chainRefId).toBeDefined();
   });
 
   it("accepts new UploadOptions with metadata", async () => {
-    const ds = await makeConnectedDStorage();
+    const ds = await makeInitedDStorage();
     const result = await ds.upload("hello", {
       metadata: { label: "my-label" },
     });
@@ -207,13 +206,11 @@ describe("upload backward compatibility", () => {
   });
 });
 
-// ── Unencrypted chunked flow ───────────────────────────────────────────────────
+// ── Encrypted chunked flow ─────────────────────────────────────────────────────
 
-describe("chunked upload via init() with symmetric key from MockChainAdapter", () => {
+describe("chunked upload via init() with encryptionSeedProvider", () => {
   it("round-trips chunked content using XChaCha20 encryption via init()", async () => {
-    const config = makeConfig();
-    const ds = new DStorage(config);
-    await ds.init(); // symmetric key derived via MockChainAdapter.getSymmetricKey()
+    const ds = await makeInitedDStorage();
 
     const bytes = makeBytes(CHUNK_SIZE + 50);
     const { chainRefId } = await ds.upload(bytes);

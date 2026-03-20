@@ -43,6 +43,7 @@ import {
   MidnightChainAdapter,
   //MockMidnightChainAdapter,
 } from "@dstorage/chain";
+import { MnemonicSeedProvider } from "@dstorage/seed-providers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -247,6 +248,7 @@ async function main(): Promise<void> {
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter,
+      encryptionSeedProvider: new MnemonicSeedProvider(credentials),
       logger,
       ...(contractAddressInput
         ? { dataRegistryAddress: contractAddressInput }
