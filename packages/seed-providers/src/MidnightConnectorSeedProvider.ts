@@ -14,9 +14,9 @@
  * The same wallet + network always produces the same seed (deterministic), giving
  * wallet-bound encryption keys without storing any secret.
  *
- * If the wallet extension does not implement signData() the error propagates —
- * no fallback is attempted. dStorage never derives keys from a weaker source
- * when the requested signing oracle is unavailable.
+ * If the wallet extension does not implement signData(), a temporary fallback
+ * derives the seed from the wallet's unshielded address instead.
+ * ⚠️  THIS FALLBACK IS UNSAFE FOR PRODUCTION — see the in-code warning.
  *
  * Note: This provider connects to the wallet independently of MidnightChainAdapter.
  * Both connect to the same extension, but serve distinct purposes — the chain
@@ -51,11 +51,37 @@ export class MidnightConnectorSeedProvider implements EncryptionSeedProvider {
 
   async getSeed(): Promise<Uint8Array> {
     const api = await this._connect();
-    const result = await api.signData(KEY_DERIVATION_MESSAGE, {
-      encoding: "text",
-      keyType: "unshielded",
-    });
-    return hexToBytes(result.signature);
+
+    try {
+      const result = await api.signData(KEY_DERIVATION_MESSAGE, {
+        encoding: "text",
+        keyType: "unshielded",
+      });
+      return hexToBytes(result.signature);
+    } catch {
+      // ╔══════════════════════════════════════════════════════════════════════╗
+      // ║  ⚠️  TEMPORARY FALLBACK — NOT SAFE FOR PRODUCTION  ⚠️              ║
+      // ║                                                                      ║
+      // ║  signData() is not implemented by this wallet version.               ║
+      // ║  Falling back to the wallet's unshielded address as the seed.        ║
+      // ║                                                                      ║
+      // ║  WHY THIS IS DANGEROUS:                                              ║
+      // ║  The unshielded address is a PUBLIC value — anyone who knows the     ║
+      // ║  address can derive the same seed, break the encryption, and read    ║
+      // ║  all data encrypted with keys derived from it.                       ║
+      // ║                                                                      ║
+      // ║  WHAT NEEDS TO BE FIXED:                                             ║
+      // ║  Remove this fallback once signData() is implemented by the wallet.  ║
+      // ║  Until then, treat any data encrypted under this seed as public.     ║
+      // ╚══════════════════════════════════════════════════════════════════════╝
+      console.warn(
+        "[dStorage] WARNING: wallet does not support signData() — " +
+          "falling back to unshielded address as encryption seed. " +
+          "THIS IS NOT SAFE FOR PRODUCTION.",
+      );
+      const { unshieldedAddress } = await api.getUnshieldedAddress();
+      return new TextEncoder().encode(unshieldedAddress);
+    }
   }
 
   private async _connect(): Promise<ConnectedAPI> {
