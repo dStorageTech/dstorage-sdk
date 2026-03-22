@@ -77,10 +77,10 @@ export interface ManagedPaymentAdapterConfig extends Omit<
    */
   signingServerUrl: string;
   /**
-   * Caller identity forwarded to every server request.
-   * Used by the server to look up the account and record transactions.
+   * Bearer token sent as the `Authorization` header to authenticate with the signing server.
+   * When omitted, requests are sent without an Authorization header.
    */
-  userId: string;
+  authToken?: string;
 }
 
 // ── Server response shapes ────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   override readonly type: "storage" | "chain";
 
   private readonly signingServerUrl: string;
-  private readonly userId: string;
+  private readonly authToken?: string;
 
   constructor(config: ManagedPaymentAdapterConfig) {
     // walletKey intentionally omitted — signing is remote
@@ -128,7 +128,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       ...(config.logger !== undefined ? { logger: config.logger } : {}),
     });
     this.signingServerUrl = config.signingServerUrl.replace(/\/$/, "");
-    this.userId = config.userId;
+    if (config.authToken !== undefined) this.authToken = config.authToken;
     this.network = config.network;
     this.token = config.token;
     this.type = config.type;
@@ -322,11 +322,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     onStatus?.(`Sending ${network} transaction to signing server…`);
     let signResp: Response;
     try {
-      const body = JSON.stringify({
-        txData: txJson,
-        network,
-        userId: this.userId,
-      });
+      const body = JSON.stringify({ txData: txJson, network });
       this.logger?.log(
         "dStorage/managed-payment",
         `${network}: delegating to managed payment service (serialized req length=${body.length})`,
@@ -336,7 +332,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         `${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(this.authToken
+              ? { Authorization: `Bearer ${this.authToken}` }
+              : {}),
+          },
           body,
         },
       );

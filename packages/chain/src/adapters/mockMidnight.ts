@@ -89,7 +89,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       contractAddress?: string;
       logger?: Logger;
     } & Partial<
-      Pick<ManagedPaymentAdapterConfig, "signingServerUrl" | "userId">
+      Pick<ManagedPaymentAdapterConfig, "signingServerUrl" | "authToken">
     > = {},
   ) {
     this.logger = options.logger;
@@ -103,17 +103,12 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       ...(options.logger !== undefined ? { logger: options.logger } : {}),
     });
     if (options.signingServerUrl) {
-      if (!options.userId) {
-        throw new Error(
-          "[dStorage/mock-midnight] userId is required when signingServerUrl is set.",
-        );
-      }
       this.paymentAdapter = new ManagedPaymentAdapter({
         network: this.name,
         token: "DUST",
         type: "chain",
         signingServerUrl: options.signingServerUrl,
-        userId: options.userId,
+        ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
         ...(options.logger !== undefined ? { logger: options.logger } : {}),
       });
     } else {

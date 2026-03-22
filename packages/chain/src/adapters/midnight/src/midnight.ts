@@ -92,14 +92,14 @@ interface BaseConfig {
   /**
    * Base URL of the dStorage managed payment signing server (no trailing slash).
    * When provided, transaction balancing is delegated to the server instead of
-   * the local wallet. Requires userId to also be set.
+   * the local wallet.
    */
   signingServerUrl?: string;
   /**
-   * Caller identity forwarded to the signing server.
-   * Required when signingServerUrl is set.
+   * Bearer token sent as the `Authorization` header to authenticate with the signing server.
+   * When omitted, requests are sent without an Authorization header.
    */
-  userId?: string;
+  authToken?: string;
 }
 
 export type MidnightChainAdapterConfig = BaseConfig &
@@ -302,17 +302,12 @@ export class MidnightChainAdapter implements ChainAdapter {
     };
 
     if (config.signingServerUrl) {
-      if (!config.userId) {
-        throw new Error(
-          "[dStorage/midnight] userId is required when signingServerUrl is set.",
-        );
-      }
       this.paymentAdapter = new ManagedPaymentAdapter({
         network: this.name,
         token: "DUST",
         type: "chain",
         signingServerUrl: config.signingServerUrl,
-        userId: config.userId,
+        ...(config.authToken !== undefined ? { authToken: config.authToken } : {}),
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
       this.managedPaymentAdapter = this.paymentAdapter;

@@ -22,25 +22,24 @@ export async function buildSDK(
   chainKey: ChainAdapterKey,
   paymentKey: PaymentAdapterKey,
   options: {
-    managedUserId: string;
+    managedAuthToken: string;
     managedServiceUrl: string;
     selectedContractAddress: string;
   },
 ): Promise<DStorage> {
-  const { managedUserId, managedServiceUrl, selectedContractAddress } = options;
+  const { managedAuthToken, managedServiceUrl, selectedContractAddress } =
+    options;
 
   const managedConfig =
     paymentKey === "managed"
       ? {
           signingServerUrl: managedServiceUrl,
-          userId: managedUserId.trim(),
+          ...(managedAuthToken.trim()
+            ? { authToken: managedAuthToken.trim() }
+            : {}),
           logger: console,
         }
       : { logger: console };
-
-  if (paymentKey === "managed" && !managedUserId.trim()) {
-    throw new Error("Managed payments require a userId.");
-  }
 
   let storageAdapter;
   if (storageKey === "arweave-local") {

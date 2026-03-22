@@ -49,7 +49,7 @@ export default function App() {
     useState<ChainAdapterKey>("mock");
   const [paymentAdapterKey, setPaymentAdapterKey] =
     useState<PaymentAdapterKey>("local");
-  const [managedUserId, setManagedUserId] = useState("");
+  const [managedAuthToken, setManagedAuthToken] = useState("");
   const managedServiceUrl = "http://localhost:3000";
   const [existingReferences, setExistingReferences] = useState<
     DataReferenceSummary[]
@@ -90,7 +90,7 @@ export default function App() {
       storageAdapterKey,
       chainAdapterKey,
       paymentAdapterKey,
-      { managedUserId, managedServiceUrl, selectedContractAddress },
+      { managedAuthToken, managedServiceUrl, selectedContractAddress },
     );
 
     const contractAddress = await sdk.init();
@@ -106,7 +106,7 @@ export default function App() {
     chainAdapterKey,
     dstorage,
     managedServiceUrl,
-    managedUserId,
+    managedAuthToken,
     paymentAdapterKey,
     selectedContractAddress,
     storageAdapterKey,
@@ -251,8 +251,8 @@ export default function App() {
     setDStorage(null);
   };
 
-  const handleManagedUserIdChange = (nextUserId: string) => {
-    setManagedUserId(nextUserId);
+  const handleManagedAuthTokenChange = (nextToken: string) => {
+    setManagedAuthToken(nextToken);
     if (paymentAdapterKey === "managed") {
       dstorage?.disconnect();
       setDStorage(null);
@@ -437,12 +437,12 @@ export default function App() {
               storageAdapterKey={storageAdapterKey}
               chainAdapterKey={chainAdapterKey}
               paymentAdapterKey={paymentAdapterKey}
-              managedUserId={managedUserId}
+              managedAuthToken={managedAuthToken}
               managedServiceUrl={managedServiceUrl}
               onStorageAdapterChange={handleStorageAdapterChange}
               onChainAdapterChange={handleChainAdapterChange}
               onPaymentAdapterChange={handlePaymentAdapterChange}
-              onManagedUserIdChange={handleManagedUserIdChange}
+              onManagedAuthTokenChange={handleManagedAuthTokenChange}
               existingReferences={existingReferences}
               onContinueFromSetup={handleContinueFromSetup}
               onStartUploadFlow={handleStartUploadFlow}
@@ -466,12 +466,12 @@ export default function App() {
                 storageAdapterKey={storageAdapterKey}
                 chainAdapterKey={chainAdapterKey}
                 paymentAdapterKey={paymentAdapterKey}
-                managedUserId={managedUserId}
+                managedAuthToken={managedAuthToken}
                 managedServiceUrl={managedServiceUrl}
                 onStorageAdapterChange={handleStorageAdapterChange}
                 onChainAdapterChange={handleChainAdapterChange}
                 onPaymentAdapterChange={handlePaymentAdapterChange}
-                onManagedUserIdChange={handleManagedUserIdChange}
+                onManagedAuthTokenChange={handleManagedAuthTokenChange}
                 existingReferences={existingReferences}
                 onContinueFromSetup={handleContinueFromSetup}
                 onStartUploadFlow={handleStartUploadFlow}

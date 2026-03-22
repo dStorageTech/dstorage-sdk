@@ -21,12 +21,12 @@ interface Props {
   storageAdapterKey: StorageAdapterKey;
   chainAdapterKey: ChainAdapterKey;
   paymentAdapterKey: PaymentAdapterKey;
-  managedUserId: string;
+  managedAuthToken: string;
   managedServiceUrl: string;
   onStorageAdapterChange: (key: StorageAdapterKey) => void;
   onChainAdapterChange: (key: ChainAdapterKey) => void;
   onPaymentAdapterChange: (key: PaymentAdapterKey) => void;
-  onManagedUserIdChange: (userId: string) => void;
+  onManagedAuthTokenChange: (token: string) => void;
   existingReferences: Array<DataReferenceSummary>;
   onContinueFromSetup: () => void;
   onStartUploadFlow: () => Promise<void>;
@@ -44,12 +44,12 @@ export function PatientPanel({
   storageAdapterKey,
   chainAdapterKey,
   paymentAdapterKey,
-  managedUserId,
+  managedAuthToken,
   managedServiceUrl,
   onStorageAdapterChange,
   onChainAdapterChange,
   onPaymentAdapterChange,
-  onManagedUserIdChange,
+  onManagedAuthTokenChange,
   existingReferences,
   onContinueFromSetup,
   onStartUploadFlow,
@@ -71,7 +71,7 @@ export function PatientPanel({
   const activeAdapter = ADAPTER_CONFIGS[storageAdapterKey];
   const activeChainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
   const managedUserIdRequired =
-    paymentAdapterKey === "managed" && !managedUserId.trim();
+    paymentAdapterKey === "managed" && !managedAuthToken.trim();
 
   useEffect(() => {
     if (existingReferences.length === 0 && selectedRefId) {
@@ -265,16 +265,16 @@ export function PatientPanel({
               <div className="pp-contract-addr">
                 <label
                   className="pp-contract-addr-label"
-                  htmlFor="managed-user-id"
+                  htmlFor="managed-auth-token"
                 >
-                  User ID
+                  Auth Token
                 </label>
                 <input
-                  id="managed-user-id"
+                  id="managed-auth-token"
                   className="pp-contract-addr-input"
-                  value={managedUserId}
-                  onChange={(e) => onManagedUserIdChange(e.target.value)}
-                  placeholder="Enter user id"
+                  value={managedAuthToken}
+                  onChange={(e) => onManagedAuthTokenChange(e.target.value)}
+                  placeholder="Enter auth token"
                 />
               </div>
               <div className="pp-contract-addr">
@@ -293,7 +293,7 @@ export function PatientPanel({
               </div>
               {managedUserIdRequired && (
                 <div className="pp-error">
-                  User ID is required for managed payments.
+                  Auth token is required for managed payments.
                 </div>
               )}
             </div>

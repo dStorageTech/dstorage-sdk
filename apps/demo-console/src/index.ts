@@ -189,7 +189,9 @@ async function main(): Promise<void> {
     }
 
     // ── 5. dStorage API services prompt ─────────────────────────────────────
-    const SIGNING_SERVER_URL = "http://localhost:3000";
+    const SIGNING_SERVER_URL =
+      process.env["DSTORAGE_SIGNING_SERVER_URL"]?.trim() ||
+      "http://localhost:3000";
     const useCloudApiInput = (
       await rl.question(
         `\nUse dStorage API services at ${SIGNING_SERVER_URL} for all payments? [y/N, default: N]: `,
@@ -199,6 +201,8 @@ async function main(): Promise<void> {
       .toLowerCase();
     const useCloudApiService =
       useCloudApiInput === "y" || useCloudApiInput === "yes";
+
+    const authToken = process.env["DSTORAGE_AUTH_TOKEN"]?.trim();
 
     if (useCloudApiService) {
       console.log(`  All payments via dStorage API ${SIGNING_SERVER_URL}`);
@@ -215,7 +219,7 @@ async function main(): Promise<void> {
       ...(useCloudApiService
         ? {
             signingServerUrl: SIGNING_SERVER_URL,
-            userId: process.env["DSTORAGE_USER_ID"]?.trim() || "user_1",
+            ...(authToken ? { authToken } : {}),
           }
         : {}),
     });
@@ -239,7 +243,7 @@ async function main(): Promise<void> {
       ...(useCloudApiService
         ? {
             signingServerUrl: SIGNING_SERVER_URL,
-            userId: process.env["DSTORAGE_USER_ID"]?.trim() || "user_1",
+            ...(authToken ? { authToken } : {}),
           }
         : {}),
     });

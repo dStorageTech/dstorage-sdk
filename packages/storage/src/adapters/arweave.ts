@@ -89,10 +89,10 @@ export interface ArweaveAdapterConfig {
   signingServerUrl?: string;
 
   /**
-   * Caller identity forwarded to the signing server.
-   * Required when signingServerUrl is set.
+   * Bearer token sent as the `Authorization` header to authenticate with the signing server.
+   * When omitted, requests are sent without an Authorization header.
    */
-  userId?: string;
+  authToken?: string;
 
   /**
    * How many times to retry a failed transaction post before throwing.
@@ -172,17 +172,10 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
     // transactions are sent unsigned to the remote server, which holds a
     // funded Arweave wallet and returns the signature.
-    // The userId must correspond to an account registered on the server with
-    // sufficient AR balance to cover upload fees.
     if (config.signingServerUrl) {
-      if (!config.userId) {
-        throw new Error(
-          "[dStorage/arweave-local] userId is required when signingServerUrl is set.",
-        );
-      }
       this.paymentAdapter = new ManagedPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
-        userId: config.userId,
+        ...(config.authToken !== undefined ? { authToken: config.authToken } : {}),
         network: this.name as PaymentNetworkName,
         token: "AR",
         type: "storage",
