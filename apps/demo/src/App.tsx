@@ -49,7 +49,9 @@ export default function App() {
     useState<ChainAdapterKey>("mock");
   const [paymentAdapterKey, setPaymentAdapterKey] =
     useState<PaymentAdapterKey>("local");
-  const [managedAuthToken, setManagedAuthToken] = useState("");
+  const [managedAuthToken, setManagedAuthToken] = useState(
+    import.meta.env["VITE_DSTORAGE_AUTH_TOKEN"] ?? "",
+  );
   const managedServiceUrl = "http://localhost:3000";
   const [existingReferences, setExistingReferences] = useState<
     DataReferenceSummary[]
