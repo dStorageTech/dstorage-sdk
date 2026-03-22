@@ -175,7 +175,9 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     if (config.signingServerUrl) {
       this.paymentAdapter = new ManagedPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
-        ...(config.authToken !== undefined ? { authToken: config.authToken } : {}),
+        ...(config.authToken !== undefined
+          ? { authToken: config.authToken }
+          : {}),
         network: this.name as PaymentNetworkName,
         token: "AR",
         type: "storage",

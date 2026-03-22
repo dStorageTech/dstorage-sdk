@@ -436,7 +436,7 @@ export class DStorage implements DStorageContext {
 
     if (!this._cryptoSchemes) {
       throw new Error(
-        "[dStorage] executeMetaTransaction() requires an encryption key."
+        "[dStorage] executeMetaTransaction() requires an encryption key.",
       );
     }
 

@@ -108,7 +108,9 @@ export class MockMidnightChainAdapter implements ChainAdapter {
         token: "DUST",
         type: "chain",
         signingServerUrl: options.signingServerUrl,
-        ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+        ...(options.authToken !== undefined
+          ? { authToken: options.authToken }
+          : {}),
         ...(options.logger !== undefined ? { logger: options.logger } : {}),
       });
     } else {

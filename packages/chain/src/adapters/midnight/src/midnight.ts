@@ -307,7 +307,9 @@ export class MidnightChainAdapter implements ChainAdapter {
         token: "DUST",
         type: "chain",
         signingServerUrl: config.signingServerUrl,
-        ...(config.authToken !== undefined ? { authToken: config.authToken } : {}),
+        ...(config.authToken !== undefined
+          ? { authToken: config.authToken }
+          : {}),
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
       this.managedPaymentAdapter = this.paymentAdapter;
