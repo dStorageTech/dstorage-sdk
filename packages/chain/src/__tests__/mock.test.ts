@@ -144,4 +144,40 @@ describe("MockChainAdapter", () => {
       expect(all.some((r) => r.refId === r2.refId)).toBe(true);
     });
   });
+
+  // ── removeReference ───────────────────────────────────────────────────────
+
+  describe("removeReference", () => {
+    it("removes the reference so it no longer appears in listReferences", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef("del1"));
+      await adapter.removeReference!(refId);
+      const all = await adapter.listReferences();
+      expect(all.find((r) => r.refId === refId)).toBeUndefined();
+    });
+
+    it("throws for an unknown refId", async () => {
+      const adapter = new MockChainAdapter();
+      await expect(adapter.removeReference!("ref_nonexistent")).rejects.toThrow(
+        "[dStorage/mock-chain] No reference found for refId: ref_nonexistent",
+      );
+    });
+
+    it("does not affect other references", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId: id1 } = await adapter.writeReference(uniqueRef("del3a"));
+      const { refId: id2 } = await adapter.writeReference(uniqueRef("del3b"));
+      await adapter.removeReference!(id1);
+      const all = await adapter.listReferences();
+      expect(all.find((r) => r.refId === id1)).toBeUndefined();
+      expect(all.find((r) => r.refId === id2)).toBeDefined();
+    });
+
+    it("readReference throws after removal", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef("del4"));
+      await adapter.removeReference!(refId);
+      await expect(adapter.readReference(refId)).rejects.toThrow();
+    });
+  });
 });

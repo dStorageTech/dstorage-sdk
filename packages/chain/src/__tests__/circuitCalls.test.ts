@@ -132,3 +132,63 @@ describe("MockMidnightChainAdapter.writeReference", () => {
     await expect(p).resolves.not.toThrow();
   });
 });
+
+// ── MockMidnightChainAdapter.removeReference ──────────────────────────────────
+
+describe("MockMidnightChainAdapter.removeReference", () => {
+  it("removes a written reference so it no longer appears in listReferences", async () => {
+    vi.useFakeTimers();
+    const adapter = new MockMidnightChainAdapter({
+      proofServerMinMs: 0,
+      proofServerMaxMs: 0,
+    });
+
+    const wp = adapter.writeReference(makeRef("rm1"));
+    await vi.runAllTimersAsync();
+    const { refId } = await wp;
+
+    const rp = adapter.removeReference!(refId);
+    await vi.runAllTimersAsync();
+    await rp;
+
+    const all = await adapter.listReferences();
+    expect(all.find((r) => r.refId === refId)).toBeUndefined();
+  });
+
+  it("throws for an unknown refId", async () => {
+    vi.useFakeTimers();
+    const adapter = new MockMidnightChainAdapter({
+      proofServerMinMs: 0,
+      proofServerMaxMs: 0,
+    });
+
+    const p = adapter.removeReference!("ref_nonexistent");
+    const assertion = expect(p).rejects.toThrow();
+    await vi.runAllTimersAsync();
+    await assertion;
+  });
+
+  it("does not affect other references", async () => {
+    vi.useFakeTimers();
+    const adapter = new MockMidnightChainAdapter({
+      proofServerMinMs: 0,
+      proofServerMaxMs: 0,
+    });
+
+    const wp1 = adapter.writeReference(makeRef("rm3a"));
+    await vi.runAllTimersAsync();
+    const { refId: id1 } = await wp1;
+
+    const wp2 = adapter.writeReference(makeRef("rm3b"));
+    await vi.runAllTimersAsync();
+    const { refId: id2 } = await wp2;
+
+    const rp = adapter.removeReference!(id1);
+    await vi.runAllTimersAsync();
+    await rp;
+
+    const all = await adapter.listReferences();
+    expect(all.find((r) => r.refId === id1)).toBeUndefined();
+    expect(all.find((r) => r.refId === id2)).toBeDefined();
+  });
+});

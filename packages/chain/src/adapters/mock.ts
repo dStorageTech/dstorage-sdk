@@ -104,7 +104,22 @@ export class MockChainAdapter implements ChainAdapter {
       storageId: ref.storageId,
       storageProvider: ref.storageProvider,
       encryptionScheme: ref.encryptionScheme ?? null,
+      ownerCommitment: "",
     }));
+  }
+
+  async removeReference(refId: string): Promise<void> {
+    if (!refs.has(refId)) {
+      throw new Error(
+        `[dStorage/mock-chain] No reference found for refId: ${refId}`,
+      );
+    }
+    refs.delete(refId);
+    persist("dstorage:chain:refs", Object.fromEntries(refs));
+    this.logger?.log(
+      "dStorage/mock-chain",
+      `Reference removed → refId: ${refId}`,
+    );
   }
 
   async getBalances(): Promise<WalletBalances> {

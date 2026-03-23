@@ -89,6 +89,11 @@ export interface DataReferenceSummary {
   storageProvider: string;
   /** Encryption scheme recorded on-chain. null/"" = public/unencrypted; "aes-gcm-v1" = encrypted. */
   encryptionScheme: EncryptionScheme | null;
+  /**
+   * Hex-encoded owner commitment stored on-chain.
+   * The commitment itself is public, but does not reveal the owner's identity.
+   */
+  ownerCommitment: string;
 }
 
 /** Every chain adapter must implement this interface */
@@ -142,4 +147,12 @@ export interface ChainAdapter {
    * Optional — adapters that perform no crypto internally can omit this.
    */
   setScheme?(scheme: CryptoScheme): void;
+
+  /**
+   * Remove a reference from the on-chain registry.
+   * Only the owner (the party whose public key produced the stored ownerCommitment)
+   * can successfully call this — the chain enforces this via ZK proof.
+   * Optional — adapters that do not support removal can omit this method.
+   */
+  removeReference?(refId: string): Promise<void>;
 }

@@ -206,7 +206,35 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       storageId: ref.storageId,
       storageProvider: ref.storageProvider,
       encryptionScheme: ref.encryptionScheme ?? null,
+      ownerCommitment: "",
     }));
+  }
+
+  async removeReference(refId: string): Promise<void> {
+    this.logger?.log(
+      "dStorage/mock-midnight",
+      "removeReference → calling proof server…",
+    );
+
+    // Simulate ZK proof generation for removeReference circuit
+    await this.proofServer.generateProof("removeReference");
+
+    // Simulate block inclusion delay
+    await sleep(150 + Math.random() * 250);
+
+    if (!refs.has(refId)) {
+      throw new Error(
+        `[dStorage/mock-midnight] No reference found for refId: ${refId}`,
+      );
+    }
+    refs.delete(refId);
+    persist("dstorage:midnight:refs", Object.fromEntries(refs));
+    mockBlockHeight += 1;
+
+    this.logger?.log(
+      "dStorage/mock-midnight",
+      `Reference removed at block ${mockBlockHeight} → refId: ${refId}`,
+    );
   }
 
   // ── DataRegistry deployment stubs ─────────────────────────────────────────

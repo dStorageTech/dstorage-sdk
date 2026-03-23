@@ -4,6 +4,47 @@
   "runtime-version": "0.14.0",
   "circuits": [
     {
+      "name": "computeOwnerCommitment",
+      "pure": true,
+      "proof": false,
+      "arguments": [
+        {
+          "name": "pk",
+          "type": {
+            "type-name": "Struct",
+            "name": "ZswapCoinPublicKey",
+            "elements": [
+              {
+                "name": "bytes",
+                "type": {
+                  "type-name": "Bytes",
+                  "length": 32
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "nonce",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "instanceSalt",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
       "name": "deriveRefId",
       "pure": true,
       "proof": false,
@@ -72,6 +113,25 @@
       "result-type": {
         "type-name": "Bytes",
         "length": 32
+      }
+    },
+    {
+      "name": "removeReference",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "refId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
       }
     }
   ],

@@ -366,8 +366,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           },
         );
         //const signedRecipe = await walletProvider.wallet.signRecipe(recipe);
-        const finalizedTx =
-          await walletProvider.wallet.finalizeRecipe(recipe);
+        const finalizedTx = await walletProvider.wallet.finalizeRecipe(recipe);
 
         const txData: string = uint8ArrayToHex(finalizedTx.serialize());
         const receipt = await paymentAdapter.pay({
@@ -770,6 +769,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         storageProvider: entry.storageProvider,
         encryptionScheme: (entry.encryptionScheme ||
           null) as EncryptionScheme | null,
+        ownerCommitment: uint8ArrayToHex(entry.ownerCommitment),
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
   }
@@ -843,6 +843,28 @@ export class MidnightChainAdapter implements ChainAdapter {
       this.logger?.error(
         "dStorage/midnight",
         `writeReference() failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
+    }
+  }
+
+  async removeReference(refId: string): Promise<void> {
+    this.logger?.log(
+      "dStorage/midnight",
+      `removeReference() called — refId: ${refId}`,
+    );
+    try {
+      const api = await this._getAPI();
+      const refIdBytes = hexToUint8Array(refId);
+      await api.removeReference(refIdBytes);
+      this.logger?.log(
+        "dStorage/midnight",
+        `Reference removed → refId: ${refId}`,
+      );
+    } catch (err) {
+      this.logger?.error(
+        "dStorage/midnight",
+        `removeReference() failed: ${err instanceof Error ? err.message : String(err)}`,
       );
       throw err;
     }

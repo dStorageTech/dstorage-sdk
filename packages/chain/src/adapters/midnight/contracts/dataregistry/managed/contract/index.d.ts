@@ -4,7 +4,8 @@ export type ReferenceEntry = { storageId: string;
                                encryptionScheme: string;
                                storageProvider: string;
                                dataLabel: string;
-                               writtenAt: bigint
+                               writtenAt: bigint;
+                               ownerCommitment: Uint8Array
                              };
 
 export type Witnesses<PS> = {
@@ -17,13 +18,22 @@ export type ImpureCircuits<PS> = {
                  storageProvider_0: string,
                  dataLabel_0: string,
                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
+  removeReference(context: __compactRuntime.CircuitContext<PS>,
+                  refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type PureCircuits = {
+  computeOwnerCommitment(pk_0: { bytes: Uint8Array },
+                         nonce_0: Uint8Array,
+                         instanceSalt_0: Uint8Array): Uint8Array;
   deriveRefId(refCounter_0: Uint8Array, instanceSalt_0: Uint8Array): Uint8Array;
 }
 
 export type Circuits<PS> = {
+  computeOwnerCommitment(context: __compactRuntime.CircuitContext<PS>,
+                         pk_0: { bytes: Uint8Array },
+                         nonce_0: Uint8Array,
+                         instanceSalt_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
   deriveRefId(context: __compactRuntime.CircuitContext<PS>,
               refCounter_0: Uint8Array,
               instanceSalt_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
@@ -33,6 +43,8 @@ export type Circuits<PS> = {
                  storageProvider_0: string,
                  dataLabel_0: string,
                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
+  removeReference(context: __compactRuntime.CircuitContext<PS>,
+                  refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type Ledger = {

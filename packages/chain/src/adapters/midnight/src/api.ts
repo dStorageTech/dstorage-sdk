@@ -2,6 +2,7 @@ import * as DataRegistry from "../contracts/dataregistry/managed/contract/index.
 
 import {
   type ContractAddress,
+  encodeContractAddress,
   //convertFieldToBytes,
 } from "@midnight-ntwrk/compact-runtime";
 import type { Logger } from "../../../types.js";
@@ -23,7 +24,7 @@ import {
   findDeployedContract,
 } from "@midnight-ntwrk/midnight-js-contracts";
 import { combineLatest, map, tap, from, type Observable } from "rxjs";
-import { toHex } from "@midnight-ntwrk/midnight-js-utils";
+import { fromHex, toHex } from "@midnight-ntwrk/midnight-js-utils";
 
 /** @internal */
 
@@ -41,6 +42,10 @@ export interface DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
   ) => Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }>;
+
+  removeReference: (
+    refId: Uint8Array,
+  ) => Promise<{ txHash: string; blockHeight: number }>;
 }
 
 /**
@@ -89,10 +94,25 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
           convertFieldToBytes(32, ledgerState.refCounter, 'api/src/index.ts'),
         );*/
 
+        const pk = providers.walletProvider.getCoinPublicKey();
+        const zswapPk = { bytes: fromHex(pk) };
+        const contractAddr = encodeContractAddress(
+          this.deployedContractAddress,
+        );
+
         const references = new Map<string, ReferenceEntry>();
         for (const [id, refEntry] of ledgerState.references) {
           const refId = toHex(id);
-          references.set(refId, refEntry);
+          const myCommitment = DataRegistry.pureCircuits.computeOwnerCommitment(
+            zswapPk,
+            id,
+            contractAddr,
+          );
+          const entry = {
+            ...refEntry,
+            isOurs: refEntry.ownerCommitment === myCommitment,
+          };
+          references.set(refId, entry);
         }
 
         return {
@@ -152,6 +172,29 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     );
 
     return { refId, txHash, blockHeight };
+  }
+
+  async removeReference(
+    refId: Uint8Array,
+  ): Promise<{ txHash: string; blockHeight: number }> {
+    this.logger?.log(
+      "dStorage/midnight",
+      `removing reference: ${toHex(refId)}`,
+    );
+    const txData = await this.deployedContract.callTx.removeReference(refId);
+
+    const txHash: string =
+      (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
+    const blockHeight: number = Number(
+      (txData as any).public?.blockHeight ?? 0,
+    );
+
+    this.logger?.debug?.(
+      "dStorage/midnight",
+      `transaction: circuit=removeReference txHash=${txHash} blockHeight=${blockHeight}`,
+    );
+
+    return { txHash, blockHeight };
   }
 
   /**

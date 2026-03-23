@@ -41,6 +41,9 @@ export struct ReferenceEntry {
   dataLabel: Opaque<"string">;
   // Caller-supplied write timestamp.
   writtenAt: Uint<64>;
+  // Hidden owner commitment: persistentHash of the caller's public key.
+  // Only the holder of the matching secret key can prove ownership and remove this entry.
+  ownerCommitment: Bytes<32>;
 }
 
 // Primary storage: refId → ReferenceEntry
@@ -66,6 +69,31 @@ constructor() {
 
 // ── Circuits ──────────────────────────────────────────────────────────────────
 
+// Create a shielded user ID.
+//
+// Purpose:
+// - Produces a deterministic, obfuscated identifier derived from the user's public key,
+//   a nonce, and an `instanceSalt` to scope IDs to this contract instance,
+//   so the client can determine which entries belong to the current user.
+//
+// Parameters:
+// - `pk`: user's public key for the identity being committed.
+// - `nonce`: to avoid linkability.
+// - `instanceSalt`: contract instance-specific salt (e.g. `kernel.self().bytes`)
+//   to avoid cross-contract collisions.
+//
+// Returns: computed user ID (Bytes<32>), disclosed to allow ledger usage as a map key.
+//
+export circuit computeOwnerCommitment(
+                 pk: ZswapCoinPublicKey,
+                 nonce: Bytes<32>,
+                 instanceSalt: Bytes<32>,
+                 ): Bytes<32> {
+  return disclose(persistentHash<Vector<4, Bytes<32>>>(
+                    [pad(32, "dstorage:owner:"), pk.bytes, nonce, instanceSalt]
+                    ));
+}
+
 // Derive a deterministic refId from:
 //   - a fixed domain separator ("dstorage:ref:")
 //   - current refCounter value (ensures uniqueness across repeated storageIds)
@@ -74,6 +102,7 @@ constructor() {
 // Note: storageId is NOT included in the hash because Opaque<"string"> types
 // have no ZK field element representation and cannot be used in persistentHash.
 // The counter already guarantees uniqueness per contract instance.
+//
 export circuit deriveRefId(refCounter: Bytes<32>, instanceSalt: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dstorage:ref:"), refCounter, instanceSalt]);
 }
@@ -103,15 +132,37 @@ export circuit storeReference(
   const refId = deriveRefId(refCounter as Bytes<32>, kernel.self().bytes);
   assert(!references.member(disclose(refId)), "Reference already stored");
 
+  // Derive owner commitment from the caller's public key.
+  const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
+
   // Persist the reference entry.
   const entry = ReferenceEntry { storageId,
                                  encryptionScheme,
                                  storageProvider,
                                  dataLabel,
-                                 writtenAt };
+                                 writtenAt,
+                                 ownerCommitment };
   references.insert(disclose(refId), disclose(entry));
 
   // Increment after insertion so the next write gets a fresh refId.
   refCounter.increment(1);
   return refId;
+}
+
+// removeReference
+//
+// Removes a stored reference from the ledger.
+// Only succeeds if the caller is the owner of the entry.
+// The circuit derives the commitment in-circuit and asserts it
+// matches the value stored in the entry.
+//
+// Arguments:
+//   refId : the 32-byte reference ID returned by storeReference
+//
+export circuit removeReference(refId: Bytes<32>): [] {
+  assert(references.member(disclose(refId)), "Reference not found");
+  const entry = references.lookup(disclose(refId));
+  const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
+  assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
+  references.remove(disclose(refId));
 }
