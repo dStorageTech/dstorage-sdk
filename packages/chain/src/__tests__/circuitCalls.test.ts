@@ -192,3 +192,83 @@ describe("MockMidnightChainAdapter.removeReference", () => {
     expect(all.find((r) => r.refId === id2)).toBeDefined();
   });
 });
+
+// ── MockMidnightChainAdapter.updateReference ──────────────────────────────────
+
+describe("MockMidnightChainAdapter.updateReference", () => {
+  it("updates the stored fields of a written reference", async () => {
+    vi.useFakeTimers();
+    const adapter = new MockMidnightChainAdapter({
+      proofServerMinMs: 0,
+      proofServerMaxMs: 0,
+    });
+
+    const wp = adapter.writeReference(makeRef("upd1"));
+    await vi.runAllTimersAsync();
+    const { refId } = await wp;
+
+    const up = adapter.updateReference!(refId, { dataLabel: "updated-label" });
+    await vi.runAllTimersAsync();
+    await up;
+
+    const ref = await adapter.readReference(refId);
+    expect(ref.dataLabel).toBe("updated-label");
+  });
+
+  it("preserves fields not included in the update", async () => {
+    vi.useFakeTimers();
+    const adapter = new MockMidnightChainAdapter({
+      proofServerMinMs: 0,
+      proofServerMaxMs: 0,
+    });
+
+    const original = makeRef("upd2");
+    const wp = adapter.writeReference(original);
+    await vi.runAllTimersAsync();
+    const { refId } = await wp;
+
+    const up = adapter.updateReference!(refId, { dataLabel: "new-label" });
+    await vi.runAllTimersAsync();
+    await up;
+
+    const ref = await adapter.readReference(refId);
+    expect(ref.storageId).toBe(original.storageId);
+    expect(ref.storageProvider).toBe(original.storageProvider);
+  });
+
+  it("throws for an unknown refId", async () => {
+    vi.useFakeTimers();
+    const adapter = new MockMidnightChainAdapter({
+      proofServerMinMs: 0,
+      proofServerMaxMs: 0,
+    });
+
+    const p = adapter.updateReference!("ref_nonexistent", { dataLabel: "x" });
+    const assertion = expect(p).rejects.toThrow();
+    await vi.runAllTimersAsync();
+    await assertion;
+  });
+
+  it("does not affect other references", async () => {
+    vi.useFakeTimers();
+    const adapter = new MockMidnightChainAdapter({
+      proofServerMinMs: 0,
+      proofServerMaxMs: 0,
+    });
+
+    const wp1 = adapter.writeReference(makeRef("upd4a"));
+    await vi.runAllTimersAsync();
+    const { refId: id1 } = await wp1;
+
+    const wp2 = adapter.writeReference(makeRef("upd4b"));
+    await vi.runAllTimersAsync();
+    const { refId: id2 } = await wp2;
+
+    const up = adapter.updateReference!(id1, { dataLabel: "changed" });
+    await vi.runAllTimersAsync();
+    await up;
+
+    const ref2 = await adapter.readReference(id2);
+    expect(ref2.dataLabel).not.toBe("changed");
+  });
+});

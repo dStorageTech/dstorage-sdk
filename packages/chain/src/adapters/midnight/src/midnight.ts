@@ -31,6 +31,7 @@ import type {
   ChainAdapter,
   ChainProviderName,
   ChainReference,
+  ChainReferenceUpdate,
   ChainWriteResult,
   EncryptionScheme,
   Logger,
@@ -865,6 +866,38 @@ export class MidnightChainAdapter implements ChainAdapter {
       this.logger?.error(
         "dStorage/midnight",
         `removeReference() failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
+    }
+  }
+
+  async updateReference(
+    refId: string,
+    update: ChainReferenceUpdate,
+  ): Promise<void> {
+    this.logger?.log(
+      "dStorage/midnight",
+      `updateReference() called — refId: ${refId}`,
+    );
+    try {
+      const api = await this._getAPI();
+      const refIdBytes = hexToUint8Array(refId);
+      await api.updateReference(
+        refIdBytes,
+        update.storageId,
+        update.encryptionScheme,
+        update.storageProvider,
+        update.dataLabel ?? "",
+        BigInt(update.writtenAt),
+      );
+      this.logger?.log(
+        "dStorage/midnight",
+        `Reference updated → refId: ${refId}`,
+      );
+    } catch (err) {
+      this.logger?.error(
+        "dStorage/midnight",
+        `updateReference() failed: ${err instanceof Error ? err.message : String(err)}`,
       );
       throw err;
     }

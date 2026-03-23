@@ -46,6 +46,15 @@ export interface DeployedDataRegistryAPI {
   removeReference: (
     refId: Uint8Array,
   ) => Promise<{ txHash: string; blockHeight: number }>;
+
+  updateReference: (
+    refId: Uint8Array,
+    storageId: string,
+    encryptionScheme: string,
+    storageProvider: string,
+    dataLabel: string,
+    writtenAt: bigint,
+  ) => Promise<{ txHash: string; blockHeight: number }>;
 }
 
 /**
@@ -192,6 +201,41 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     this.logger?.debug?.(
       "dStorage/midnight",
       `transaction: circuit=removeReference txHash=${txHash} blockHeight=${blockHeight}`,
+    );
+
+    return { txHash, blockHeight };
+  }
+
+  async updateReference(
+    refId: Uint8Array,
+    storageId: string,
+    encryptionScheme: string,
+    storageProvider: string,
+    dataLabel: string,
+    writtenAt: bigint,
+  ): Promise<{ txHash: string; blockHeight: number }> {
+    this.logger?.log(
+      "dStorage/midnight",
+      `updating reference: ${toHex(refId)}`,
+    );
+    const txData = await this.deployedContract.callTx.updateReference(
+      refId,
+      storageId,
+      encryptionScheme,
+      storageProvider,
+      dataLabel,
+      writtenAt,
+    );
+
+    const txHash: string =
+      (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
+    const blockHeight: number = Number(
+      (txData as any).public?.blockHeight ?? 0,
+    );
+
+    this.logger?.debug?.(
+      "dStorage/midnight",
+      `transaction: circuit=updateReference txHash=${txHash} blockHeight=${blockHeight}`,
     );
 
     return { txHash, blockHeight };

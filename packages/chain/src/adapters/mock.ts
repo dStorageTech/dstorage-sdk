@@ -12,6 +12,7 @@ import type {
   ChainAdapter,
   ChainProviderName,
   ChainReference,
+  ChainReferenceUpdate,
   ChainWriteResult,
   Logger,
   WalletBalances,
@@ -119,6 +120,24 @@ export class MockChainAdapter implements ChainAdapter {
     this.logger?.log(
       "dStorage/mock-chain",
       `Reference removed → refId: ${refId}`,
+    );
+  }
+
+  async updateReference(
+    refId: string,
+    update: ChainReferenceUpdate,
+  ): Promise<void> {
+    const existing = refs.get(refId);
+    if (!existing) {
+      throw new Error(
+        `[dStorage/mock-chain] No reference found for refId: ${refId}`,
+      );
+    }
+    refs.set(refId, { ...existing, ...update });
+    persist("dstorage:chain:refs", Object.fromEntries(refs));
+    this.logger?.log(
+      "dStorage/mock-chain",
+      `Reference updated → refId: ${refId}`,
     );
   }
 

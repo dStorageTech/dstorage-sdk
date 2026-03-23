@@ -96,6 +96,19 @@ export interface DataReferenceSummary {
   ownerCommitment: string;
 }
 
+/**
+ * Fields that can be updated in an existing reference.
+ * All fields are optional — only the provided fields will override the stored values.
+ * ownerCommitment is intentionally excluded; ownership cannot be transferred.
+ */
+export interface ChainReferenceUpdate {
+  storageId: string;
+  encryptionScheme: EncryptionScheme;
+  storageProvider: string;
+  dataLabel?: string;
+  writtenAt: number;
+}
+
 /** Every chain adapter must implement this interface */
 export interface ChainAdapter {
   readonly name: ChainProviderName;
@@ -155,4 +168,13 @@ export interface ChainAdapter {
    * Optional — adapters that do not support removal can omit this method.
    */
   removeReference?(refId: string): Promise<void>;
+
+  /**
+   * Update the mutable fields of an existing reference.
+   * Only the owner (the party whose public key produced the stored ownerCommitment)
+   * can successfully call this — the chain enforces this via ZK proof.
+   * Ownership (ownerCommitment) is preserved and cannot be changed.
+   * Optional — adapters that do not support updates can omit this method.
+   */
+  updateReference?(refId: string, update: ChainReferenceUpdate): Promise<void>;
 }

@@ -166,3 +166,39 @@ export circuit removeReference(refId: Bytes<32>): [] {
   assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
   references.remove(disclose(refId));
 }
+
+// updateReference
+//
+// Updates the mutable fields of an existing reference.
+// Only succeeds if the caller is the owner of the entry.
+// The ownerCommitment is preserved from the original entry —
+// ownership cannot be transferred via this circuit.
+//
+// Arguments:
+//   refId            : the 32-byte reference ID returned by storeReference
+//   storageId        : new storage content identifier
+//   encryptionScheme : new encryption scheme identifier
+//   storageProvider  : new storage provider identifier
+//   dataLabel        : new user-defined label
+//   writtenAt        : new timestamp
+//
+export circuit updateReference(
+                 refId: Bytes<32>,
+                 storageId: Opaque<"string">,
+                 encryptionScheme: Opaque<"string">,
+                 storageProvider: Opaque<"string">,
+                 dataLabel: Opaque<"string">,
+                 writtenAt: Uint<64>
+                 ): [] {
+  assert(references.member(disclose(refId)), "Reference not found");
+  const entry = references.lookup(disclose(refId));
+  const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
+  assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
+  const updatedEntry = ReferenceEntry { storageId,
+                                        encryptionScheme,
+                                        storageProvider,
+                                        dataLabel,
+                                        writtenAt,
+                                        ownerCommitment: entry.ownerCommitment };
+  references.insert(disclose(refId), disclose(updatedEntry));
+}

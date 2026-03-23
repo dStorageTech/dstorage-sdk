@@ -21,6 +21,7 @@ import type {
   ChainAdapter,
   ChainProviderName,
   ChainReference,
+  ChainReferenceUpdate,
   ChainWriteResult,
   DataReferenceSummary,
   Logger,
@@ -234,6 +235,37 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     this.logger?.log(
       "dStorage/mock-midnight",
       `Reference removed at block ${mockBlockHeight} → refId: ${refId}`,
+    );
+  }
+
+  async updateReference(
+    refId: string,
+    update: ChainReferenceUpdate,
+  ): Promise<void> {
+    this.logger?.log(
+      "dStorage/mock-midnight",
+      "updateReference → calling proof server…",
+    );
+
+    // Simulate ZK proof generation for updateReference circuit
+    await this.proofServer.generateProof("updateReference");
+
+    // Simulate block inclusion delay
+    await sleep(150 + Math.random() * 250);
+
+    const existing = refs.get(refId);
+    if (!existing) {
+      throw new Error(
+        `[dStorage/mock-midnight] No reference found for refId: ${refId}`,
+      );
+    }
+    refs.set(refId, { ...existing, ...update });
+    persist("dstorage:midnight:refs", Object.fromEntries(refs));
+    mockBlockHeight += 1;
+
+    this.logger?.log(
+      "dStorage/mock-midnight",
+      `Reference updated at block ${mockBlockHeight} → refId: ${refId}`,
     );
   }
 

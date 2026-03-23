@@ -20,6 +20,13 @@ export type ImpureCircuits<PS> = {
                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+  updateReference(context: __compactRuntime.CircuitContext<PS>,
+                  refId_0: Uint8Array,
+                  storageId_0: string,
+                  encryptionScheme_0: string,
+                  storageProvider_0: string,
+                  dataLabel_0: string,
+                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type PureCircuits = {
@@ -45,6 +52,13 @@ export type Circuits<PS> = {
                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+  updateReference(context: __compactRuntime.CircuitContext<PS>,
+                  refId_0: Uint8Array,
+                  storageId_0: string,
+                  encryptionScheme_0: string,
+                  storageProvider_0: string,
+                  dataLabel_0: string,
+                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type Ledger = {

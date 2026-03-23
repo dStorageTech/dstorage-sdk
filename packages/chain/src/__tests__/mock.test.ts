@@ -180,4 +180,44 @@ describe("MockChainAdapter", () => {
       await expect(adapter.readReference(refId)).rejects.toThrow();
     });
   });
+
+  // ── updateReference ───────────────────────────────────────────────────────
+
+  describe("updateReference", () => {
+    it("updates the stored fields", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef("upd1"));
+      await adapter.updateReference!(refId, { dataLabel: "updated-label" });
+      const ref = await adapter.readReference(refId);
+      expect(ref.dataLabel).toBe("updated-label");
+    });
+
+    it("preserves fields not included in the update", async () => {
+      const adapter = new MockChainAdapter();
+      const original = uniqueRef("upd2");
+      const { refId } = await adapter.writeReference(original);
+      await adapter.updateReference!(refId, { dataLabel: "new-label" });
+      const ref = await adapter.readReference(refId);
+      expect(ref.storageId).toBe(original.storageId);
+      expect(ref.storageProvider).toBe(original.storageProvider);
+    });
+
+    it("throws for an unknown refId", async () => {
+      const adapter = new MockChainAdapter();
+      await expect(
+        adapter.updateReference!("ref_nonexistent", { dataLabel: "x" }),
+      ).rejects.toThrow(
+        "[dStorage/mock-chain] No reference found for refId: ref_nonexistent",
+      );
+    });
+
+    it("does not affect other references", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId: id1 } = await adapter.writeReference(uniqueRef("upd4a"));
+      const { refId: id2 } = await adapter.writeReference(uniqueRef("upd4b"));
+      await adapter.updateReference!(id1, { dataLabel: "changed" });
+      const ref2 = await adapter.readReference(id2);
+      expect(ref2.dataLabel).not.toBe("changed");
+    });
+  });
 });
