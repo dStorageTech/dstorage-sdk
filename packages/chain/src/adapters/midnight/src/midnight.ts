@@ -349,9 +349,27 @@ export class MidnightChainAdapter implements ChainAdapter {
       getEncryptionPublicKey: () => walletProvider.getEncryptionPublicKey(),
       balanceTx: async (
         tx: UnboundTransaction,
-        _ttl?: Date,
+        ttl?: Date,
       ): Promise<FinalizedTransaction> => {
-        const txData: string = uint8ArrayToHex(tx.serialize());
+        // We only sign the transaction without fuding it with DUST;
+        // this allows us to correctly be considered the owner of the Tx
+        // when contracts verify our identity for ownership checks.
+        const recipe = await walletProvider.wallet.balanceUnboundTransaction(
+          tx,
+          {
+            shieldedSecretKeys: walletProvider.zswapSecretKeys,
+            dustSecretKey: walletProvider.dustSecretKey,
+          },
+          {
+            ttl,
+            tokenKindsToBalance: ["shielded", "unshielded"], // No DUST
+          },
+        );
+        //const signedRecipe = await walletProvider.wallet.signRecipe(recipe);
+        const finalizedTx =
+          await walletProvider.wallet.finalizeRecipe(recipe);
+
+        const txData: string = uint8ArrayToHex(finalizedTx.serialize());
         const receipt = await paymentAdapter.pay({
           token: "DUST",
           amount: "0",
