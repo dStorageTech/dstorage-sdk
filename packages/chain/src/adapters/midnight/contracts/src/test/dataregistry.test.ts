@@ -3,6 +3,12 @@ import {
   setNetworkId,
   NetworkId,
 } from "@midnight-ntwrk/midnight-js-network-id";
+import {
+  encodeContractAddress,
+  encodeCoinPublicKey,
+  convertFieldToBytes,
+} from "@midnight-ntwrk/compact-runtime";
+import { pureCircuits } from "../../dataregistry/managed/contract/index.js";
 import { DataRegistrySimulator } from "./dataregistry-simulator.js";
 import {
   randomBytes,
@@ -394,6 +400,135 @@ describe("DataRegistry contract", () => {
 
       const updated = simulator.getLedger().references.lookup(ownerRefId);
       expect(updated.storageId).toBe(newStorageId);
+    });
+  });
+
+  describe("pure circuit verification", () => {
+    it("returned refId matches deriveRefId(refCounter, contractAddress)", () => {
+      const instanceSalt = encodeContractAddress(simulator.contractAddress);
+
+      // Capture the counter value before the store — the circuit uses it as-is
+      const counterBefore = simulator.getLedger().refCounter;
+      const counterBytes = convertFieldToBytes(32, counterBefore);
+      const expectedRefId = pureCircuits.deriveRefId(
+        counterBytes,
+        instanceSalt,
+      );
+
+      const entry = randomEntry();
+      const actualRefId = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+      );
+
+      expect(Buffer.from(actualRefId).toString("hex")).toBe(
+        Buffer.from(expectedRefId).toString("hex"),
+      );
+    });
+
+    it("verifies deriveRefId for successive stores (counter increments each time)", () => {
+      const instanceSalt = encodeContractAddress(simulator.contractAddress);
+      const entry = randomEntry();
+
+      for (let i = 0; i < 3; i++) {
+        const counterBefore = simulator.getLedger().refCounter;
+        const expectedRefId = pureCircuits.deriveRefId(
+          convertFieldToBytes(32, counterBefore),
+          instanceSalt,
+        );
+
+        const actualRefId = simulator.storeReference(
+          randomString(),
+          entry.encryptionScheme,
+          entry.storageProvider,
+          entry.dataLabel,
+          randomTimestamp(),
+        );
+
+        expect(Buffer.from(actualRefId).toString("hex")).toBe(
+          Buffer.from(expectedRefId).toString("hex"),
+        );
+      }
+    });
+
+    it("stored ownerCommitment matches computeOwnerCommitment(pk, refId, contractAddress)", () => {
+      const instanceSalt = encodeContractAddress(simulator.contractAddress);
+      const pkBytes = encodeCoinPublicKey(owner.pk);
+
+      const entry = randomEntry();
+      const refId = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+      );
+
+      // The contract uses refId as the nonce in computeOwnerCommitment
+      const expectedCommitment = pureCircuits.computeOwnerCommitment(
+        { bytes: pkBytes },
+        refId,
+        instanceSalt,
+      );
+
+      const storedCommitment = simulator
+        .getLedger()
+        .references.lookup(refId).ownerCommitment;
+
+      expect(Buffer.from(storedCommitment).toString("hex")).toBe(
+        Buffer.from(expectedCommitment).toString("hex"),
+      );
+    });
+
+    it("ownerCommitment changes when a different user stores (different pk)", () => {
+      const instanceSalt = encodeContractAddress(simulator.contractAddress);
+      const entry = randomEntry();
+
+      // Owner stores
+      const refId1 = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+      );
+
+      // Other user stores
+      simulator.switchUser(other.secretKey, other.pk);
+      const refId2 = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+      );
+
+      // Verify both commitments match what computeOwnerCommitment produces for each pk
+      const ownerCommitment = pureCircuits.computeOwnerCommitment(
+        { bytes: encodeCoinPublicKey(owner.pk) },
+        refId1,
+        instanceSalt,
+      );
+      const otherCommitment = pureCircuits.computeOwnerCommitment(
+        { bytes: encodeCoinPublicKey(other.pk) },
+        refId2,
+        instanceSalt,
+      );
+
+      expect(
+        Buffer.from(
+          simulator.getLedger().references.lookup(refId1).ownerCommitment,
+        ).toString("hex"),
+      ).toBe(Buffer.from(ownerCommitment).toString("hex"));
+
+      expect(
+        Buffer.from(
+          simulator.getLedger().references.lookup(refId2).ownerCommitment,
+        ).toString("hex"),
+      ).toBe(Buffer.from(otherCommitment).toString("hex"));
     });
   });
 

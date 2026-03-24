@@ -25,10 +25,12 @@ export class DataRegistrySimulator {
   readonly contract: Contract<DataRegistryPrivateState>;
   readonly contractAddress: ContractAddress;
   circuitContext: CircuitContext<DataRegistryPrivateState>;
+  currentPk: string;
 
   constructor(secretKey: Uint8Array, senderPk: string) {
     this.contractAddress = sampleContractAddress();
     this.contract = new Contract<DataRegistryPrivateState>(witnesses);
+    this.currentPk = senderPk;
     const {
       currentPrivateState,
       currentContractState,
@@ -54,6 +56,7 @@ export class DataRegistrySimulator {
    * Switch to a different user (different secret key and public key).
    */
   public switchUser(secretKey: Uint8Array, senderPk: string): void {
+    this.currentPk = senderPk;
     this.circuitContext.currentZswapLocalState = emptyZswapLocalState(senderPk);
     this.circuitContext.currentPrivateState =
       createDataRegistryPrivateState(secretKey);
