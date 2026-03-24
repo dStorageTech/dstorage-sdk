@@ -163,33 +163,29 @@ It will start a CLI that:
 ## SDK Usage
 
 ```typescript
-import {
-  DStorage,
-  MockStorageAdapter,
-  MockChainAdapter,
-  connectMidnightWallet,
-} from "@dstorage/core";
+import { DStorage, MockStorageAdapter, MockChainAdapter } from "@dstorage/core";
+import { DemoSeedProvider } from "@dstorage/seed-providers";
 
-// 1. Init SDK with your chosen providers
-const ds = new DStorage({
-  storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter
-  chainAdapter: new MockChainAdapter(), // swap for MidnightChainAdapter
+// 1. Configure the SDK with your chosen adapters and an encryption seed provider
+const sdk = new DStorage({
+  storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter or ArweaveLocalStorageAdapter
+  chainAdapter: new MockChainAdapter(),     // swap for MidnightChainAdapter
+  encryptionSeedProvider: new DemoSeedProvider(), // swap for MnemonicSeedProvider, MetaMaskSeedProvider, etc.
 });
 
-// 2. Connect wallet
-const walletInfo = await connectDemoWallet();
-await ds.connect(walletInfo);
+// 2. Init — derives the encryption key and prepares the chain contract
+await sdk.init();
 
-// 3. Encrypt, store, and get an on-chain reference in one call
-const { dataId, refId } = await ds.upload("Hello, private world!");
+// 3. Encrypt, store, and write an on-chain reference in one call
+const { chainRefId, storageId } = await sdk.upload("Hello, private world!");
 
-// 4. Retrieve and decrypt
-const { content } = await ds.retrieve(dataId);
+// 4. Retrieve and decrypt by on-chain reference ID
+const { content } = await sdk.retrieveByRefId(chainRefId);
 console.log(content); // "Hello, private world!"
 
-// 5. Retrieve by on-chain reference ID
-const { content: byRef } = await ds.retrieveByRefId(refId);
-console.log(byRef); // "Hello, private world!"
+// 5. Or retrieve directly by storage ID
+const { content: direct } = await sdk.retrieveByStorageId(storageId);
+console.log(direct); // "Hello, private world!"
 ```
 
 ---
@@ -202,17 +198,17 @@ Every upload involves two costs — paying storage and chain operations. The SDK
 
 ```typescript
 // Estimate costs before committing
-const estimate = await ds.estimateCost("example payload");
+const estimate = await sdk.estimateCost(new TextEncoder().encode("example payload"));
 // -> returns a human-readable estimate string for the configured storage adapter
 
-// Execute the full meta-transaction (encrypt → pay storage → upload → pay chain → write reference)
-const receipt = await ds.executeMetaTransaction(file, (progress) => {
-  console.log(progress.currentStepId); // 'estimate' | 'encrypt' | 'payment_storage' | 'upload' | 'payment_chain' | 'chain_reference' | 'complete'
+// Execute the full meta-transaction (estimate → encrypt → pay storage → upload → write reference)
+const receipt = await sdk.executeMetaTransaction(file, (progress) => {
+  console.log(progress.currentStepId); // 'estimate' | 'encrypt' | 'payment_storage' | 'upload' | 'chain_reference' | 'complete'
 });
 
-console.log(receipt.totalUsd); // Total cost in USD
 console.log(receipt.storagePayment); // Payment receipt for storage
-console.log(receipt.chainPayment); // Payment receipt for chain tx
+console.log(receipt.chainPayment);   // Payment receipt for chain tx
+console.log(receipt.chainRefId);     // On-chain reference ID
 ```
 
 ### Supported tokens
@@ -224,14 +220,7 @@ console.log(receipt.chainPayment); // Payment receipt for chain tx
 | `MOCK`                  | Mock           | Development & testing (simulated)                |
 | `ANT` / `ETH` / `MATIC` | Token registry | Defined token metadata for future/override use   |
 
-Tokens are selected automatically based on your chosen adapters, or you can override them explicitly:
-
-```typescript
-await ds.executeMetaTransaction(file, onProgress, {
-  storageToken: "AR",
-  chainToken: "DUST",
-});
-```
+Tokens are selected automatically based on your chosen adapters.
 
 ### Pricing model (current adapters)
 
@@ -244,11 +233,12 @@ await ds.executeMetaTransaction(file, onProgress, {
 ## Architecture
 
 ```
-@dstorage/core          ← Developer-facing API (this is what you import)
-    ├── @dstorage/crypto    ← AES-GCM encryption, wallet key derivation
-    ├── @dstorage/storage   ← Storage adapters: Mock | Arweave | Arweave Local | Autonomi(stub)
-    ├── @dstorage/chain     ← Chain adapters:   Mock | MockMidnight | Midnight
-    └── @dstorage/payment   ← Payment adapters: Mock | Arweave(preview) | Midnight(preview)
+@dstorage/core              ← Developer-facing API (this is what you import)
+    ├── @dstorage/crypto        ← XChaCha20-Poly1305 / AES-GCM encryption, key derivation
+    ├── @dstorage/seed-providers← Seed providers: DemoSeedProvider | MnemonicSeedProvider | MetaMaskSeedProvider | MidnightConnectorSeedProvider
+    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | Arweave Local | Autonomi(stub)
+    ├── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight
+    └── @dstorage/payment       ← Payment adapters: Mock | Arweave(preview) | Midnight(preview)
 ```
 
 ### Data Flow
@@ -272,7 +262,8 @@ User input
 [reference]    → Storage pointer + owner → Midnight / Mock chain
     │              (owner hidden behind ZK proof on Midnight)
     ▼
- dataId        ← "<storageId>::<chainRefId>"
+ chainRefId    ← on-chain reference ID (use to retrieve later)
+ storageId     ← storage network content ID
  private state ← owner's on-chain record updated (ZK-shielded, not publicly readable)
 ```
 
