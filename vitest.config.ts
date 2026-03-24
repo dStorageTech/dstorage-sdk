@@ -8,7 +8,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["packages/*/src/__tests__/**/*.test.ts"],
+    include: [
+      "packages/*/src/__tests__/**/*.test.ts",
+      "packages/chain/src/adapters/midnight/contracts/src/test/**/*.test.ts",
+    ],
     testTimeout: 15_000,
     coverage: {
       provider: "v8",
