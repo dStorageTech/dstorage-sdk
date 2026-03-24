@@ -590,6 +590,25 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
+   * Resolve the wallet seed as a hex string from credentials.
+   * If seedHex is provided directly, return it as-is.
+   * If only a mnemonic is provided, derive the 64-byte seed via KeyDeriver
+   * and return it as a 128-char hex string so the wallet always uses the same keys.
+   */
+  private async _resolveSeedHex(): Promise<string | undefined> {
+    if (this._credentials.seedHex) return this._credentials.seedHex;
+    if (this._credentials.mnemonic) {
+      const { KeyDeriver } = await import("@dstorage/crypto");
+      const deriver = new KeyDeriver({ mnemonic: this._credentials.mnemonic });
+      const seed = await deriver.getSeed();
+      return Array.from(seed)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
+    return undefined;
+  }
+
+  /**
    * Build a DataRegistryProviders object by combining the Midnight providers
    * (wallet, proof server, indexer, node) with an in-memory private state store.
    */
@@ -602,7 +621,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
     const walletProvider = await MidnightWalletProvider.build(
       this.config,
-      this._credentials.seedHex,
+      await this._resolveSeedHex(),
       this.logger,
     );
     const walletFacade: WalletFacade = walletProvider.wallet;
