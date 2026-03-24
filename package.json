@@ -32,15 +32,15 @@
   "devDependencies": {
     "@midnight-ntwrk/compact-runtime": "^0.14.0",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^3.1.0",
-    "@typescript-eslint/eslint-plugin": "^8.57.0",
-    "@typescript-eslint/parser": "^8.57.0",
-    "@vitest/coverage-v8": "^3.2.4",
-    "eslint": "^8.57.0",
-    "jsdom": "^25.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "@vitest/coverage-v8": "^4.1.1",
+    "eslint": "^10.1.0",
+    "jsdom": "^29.0.1",
     "prettier": "^3.8.1",
     "tsup": "^8.0.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.4.5",
-    "vitest": "^3.2.4"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.1"
   }
 }
