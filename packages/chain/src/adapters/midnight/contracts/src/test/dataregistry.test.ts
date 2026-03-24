@@ -409,7 +409,7 @@ describe("DataRegistry contract", () => {
 
       // Capture the counter value before the store — the circuit uses it as-is
       const counterBefore = simulator.getLedger().refCounter;
-      const counterBytes = convertFieldToBytes(32, counterBefore);
+      const counterBytes = convertFieldToBytes(32, counterBefore, "test");
       const expectedRefId = pureCircuits.deriveRefId(
         counterBytes,
         instanceSalt,
@@ -436,7 +436,7 @@ describe("DataRegistry contract", () => {
       for (let i = 0; i < 3; i++) {
         const counterBefore = simulator.getLedger().refCounter;
         const expectedRefId = pureCircuits.deriveRefId(
-          convertFieldToBytes(32, counterBefore),
+          convertFieldToBytes(32, counterBefore, "test"),
           instanceSalt,
         );
 
