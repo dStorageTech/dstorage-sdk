@@ -1,5 +1,5 @@
 import * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
-__compactRuntime.checkRuntimeVersion('0.14.0');
+__compactRuntime.checkRuntimeVersion('0.15.0');
 
 const _descriptor_0 = new __compactRuntime.CompactTypeBytes(32);
 
@@ -243,6 +243,11 @@ export class Contract {
       }
     };
     this.impureCircuits = {
+      storeReference: this.circuits.storeReference,
+      removeReference: this.circuits.removeReference,
+      updateReference: this.circuits.updateReference
+    };
+    this.provableCircuits = {
       storeReference: this.circuits.storeReference,
       removeReference: this.circuits.removeReference,
       updateReference: this.circuits.updateReference

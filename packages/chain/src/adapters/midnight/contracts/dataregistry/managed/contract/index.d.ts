@@ -29,6 +29,24 @@ export type ImpureCircuits<PS> = {
                   writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, []>;
 }
 
+export type ProvableCircuits<PS> = {
+  storeReference(context: __compactRuntime.CircuitContext<PS>,
+                 storageId_0: string,
+                 encryptionScheme_0: string,
+                 storageProvider_0: string,
+                 dataLabel_0: string,
+                 writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
+  removeReference(context: __compactRuntime.CircuitContext<PS>,
+                  refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+  updateReference(context: __compactRuntime.CircuitContext<PS>,
+                  refId_0: Uint8Array,
+                  storageId_0: string,
+                  encryptionScheme_0: string,
+                  storageProvider_0: string,
+                  dataLabel_0: string,
+                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+}
+
 export type PureCircuits = {
   computeOwnerCommitment(pk_0: { bytes: Uint8Array },
                          nonce_0: Uint8Array,
@@ -82,6 +100,7 @@ export declare class Contract<PS = any, W extends Witnesses<PS> = Witnesses<PS>>
   witnesses: W;
   circuits: Circuits<PS>;
   impureCircuits: ImpureCircuits<PS>;
+  provableCircuits: ProvableCircuits<PS>;
   constructor(witnesses: W);
   initialState(context: __compactRuntime.ConstructorContext<PS>): __compactRuntime.ConstructorResult<PS>;
 }
