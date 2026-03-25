@@ -45,7 +45,7 @@ describe("DataRegistry contract", () => {
   beforeEach(() => {
     owner = randomUser();
     other = randomUser();
-    simulator = new DataRegistrySimulator(owner.secretKey, owner.pk);
+    simulator = new DataRegistrySimulator(owner.pk);
   });
 
   describe("initial state", () => {
@@ -161,7 +161,7 @@ describe("DataRegistry contract", () => {
         entry1.writtenAt,
       );
 
-      simulator.switchUser(other.secretKey, other.pk);
+      simulator.switchUser(other.pk);
       const entry2 = randomEntry();
       const refId2 = simulator.storeReference(
         entry2.storageId,
@@ -228,7 +228,7 @@ describe("DataRegistry contract", () => {
       );
 
       // Switch to a different user
-      simulator.switchUser(other.secretKey, other.pk);
+      simulator.switchUser(other.pk);
 
       expect(() => simulator.removeReference(refId)).toThrow("Not the owner");
     });
@@ -350,7 +350,7 @@ describe("DataRegistry contract", () => {
         entry.writtenAt,
       );
 
-      simulator.switchUser(other.secretKey, other.pk);
+      simulator.switchUser(other.pk);
 
       expect(() =>
         simulator.updateReference(
@@ -376,7 +376,7 @@ describe("DataRegistry contract", () => {
       );
 
       // Other user stores their own reference
-      simulator.switchUser(other.secretKey, other.pk);
+      simulator.switchUser(other.pk);
       const otherEntry = randomEntry();
       simulator.storeReference(
         otherEntry.storageId,
@@ -387,7 +387,7 @@ describe("DataRegistry contract", () => {
       );
 
       // Owner switches back and updates their own reference
-      simulator.switchUser(owner.secretKey, owner.pk);
+      simulator.switchUser(owner.pk);
       const newStorageId = randomString();
       simulator.updateReference(
         ownerRefId,
@@ -497,7 +497,7 @@ describe("DataRegistry contract", () => {
       );
 
       // Other user stores
-      simulator.switchUser(other.secretKey, other.pk);
+      simulator.switchUser(other.pk);
       const refId2 = simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
@@ -573,7 +573,7 @@ describe("DataRegistry contract", () => {
         ts,
       );
 
-      simulator.switchUser(other.secretKey, other.pk);
+      simulator.switchUser(other.pk);
       const refId2 = simulator.storeReference(
         storageId,
         "aes-gcm-v1",

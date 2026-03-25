@@ -3,7 +3,6 @@ import * as DataRegistry from "../contracts/dataregistry/managed/contract/index.
 import {
   type ContractAddress,
   encodeContractAddress,
-  //convertFieldToBytes,
 } from "@midnight-ntwrk/compact-runtime";
 import type { Logger } from "../../../types.js";
 import {
@@ -15,7 +14,7 @@ import {
 } from "./common-types.js";
 import {
   ReferenceEntry,
-  CompiledDataRegistryContractContract,
+  CompiledDataRegistryContract,
   createDataRegistryPrivateState,
   DataRegistryPrivateState,
 } from "../contracts/src/index";
@@ -256,7 +255,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     logger?.log("dStorage/midnight", "deploying DataRegistry contract...");
 
     const deployedDataRegistryContract = await deployContract(providers, {
-      compiledContract: CompiledDataRegistryContractContract,
+      compiledContract: CompiledDataRegistryContract,
       privateStateId: dataRegistryPrivateStateKey,
       initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
     });
@@ -286,7 +285,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     const deployedDataRegistryContract =
       await findDeployedContract<DataRegistryContract>(providers, {
         contractAddress,
-        compiledContract: CompiledDataRegistryContractContract,
+        compiledContract: CompiledDataRegistryContract,
         privateStateId: dataRegistryPrivateStateKey,
         initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
       });
@@ -300,9 +299,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     const existingPrivateState = await providers.privateStateProvider.get(
       dataRegistryPrivateStateKey,
     );
-    return (
-      existingPrivateState ?? createDataRegistryPrivateState(randomBytes(32))
-    );
+    return existingPrivateState ?? createDataRegistryPrivateState();
   }
 }
 

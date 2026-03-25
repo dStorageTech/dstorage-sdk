@@ -1,17 +1,16 @@
 import { CompiledContract } from "@midnight-ntwrk/compact-js";
+import { Contract } from "../dataregistry/managed/contract/index.js";
+
 export * from "../dataregistry/managed/contract/index.js";
-export * from "./witnesses.js";
 
-import * as CompiledDataRegistryContract from "../dataregistry/managed/contract/index.js";
-import * as Witnesses from "./witnesses.js";
+export const witnesses = {};
 
-export const CompiledDataRegistryContractContract = CompiledContract.make<
-  CompiledDataRegistryContract.Contract<Witnesses.DataRegistryPrivateState>
->(
-  "DataRegistry",
-  CompiledDataRegistryContract.Contract<Witnesses.DataRegistryPrivateState>,
-).pipe(
-  //CompiledContract.withWitnesses(Witnesses.witnesses),
+export type DataRegistryPrivateState = null;
+
+export const createDataRegistryPrivateState = () => null;
+
+export const CompiledDataRegistryContract = CompiledContract.make<
+  Contract<DataRegistryPrivateState>
+>("DataRegistry", Contract<DataRegistryPrivateState>).pipe(
   CompiledContract.withVacantWitnesses,
-  //CompiledContract.withCompiledFileAssets("../dataregistry/managed"),
 );

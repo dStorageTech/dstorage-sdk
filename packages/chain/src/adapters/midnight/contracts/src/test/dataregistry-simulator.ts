@@ -16,7 +16,7 @@ import {
   type DataRegistryPrivateState,
   witnesses,
   createDataRegistryPrivateState,
-} from "../witnesses.js";
+} from "../index.js";
 
 /**
  * Serves as a testbed to exercise the DataRegistry contract in tests.
@@ -27,7 +27,7 @@ export class DataRegistrySimulator {
   circuitContext: CircuitContext<DataRegistryPrivateState>;
   currentPk: string;
 
-  constructor(secretKey: Uint8Array, senderPk: string) {
+  constructor(senderPk: string) {
     this.contractAddress = sampleContractAddress();
     this.contract = new Contract<DataRegistryPrivateState>(witnesses);
     this.currentPk = senderPk;
@@ -36,10 +36,7 @@ export class DataRegistrySimulator {
       currentContractState,
       currentZswapLocalState,
     } = this.contract.initialState(
-      createConstructorContext(
-        createDataRegistryPrivateState(secretKey),
-        senderPk,
-      ),
+      createConstructorContext(createDataRegistryPrivateState(), senderPk),
     );
     this.circuitContext = {
       currentPrivateState,
@@ -55,11 +52,10 @@ export class DataRegistrySimulator {
   /**
    * Switch to a different user (different secret key and public key).
    */
-  public switchUser(secretKey: Uint8Array, senderPk: string): void {
+  public switchUser(senderPk: string): void {
     this.currentPk = senderPk;
     this.circuitContext.currentZswapLocalState = emptyZswapLocalState(senderPk);
-    this.circuitContext.currentPrivateState =
-      createDataRegistryPrivateState(secretKey);
+    this.circuitContext.currentPrivateState = createDataRegistryPrivateState();
   }
 
   public getLedger(): Ledger {
