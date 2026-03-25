@@ -189,12 +189,16 @@ async function main(): Promise<void> {
     }
 
     // ── 5. dStorage API services prompt ─────────────────────────────────────
-    const SIGNING_SERVER_URL =
-      process.env["DSTORAGE_SIGNING_SERVER_URL"]?.trim() ||
-      "http://localhost:3000";
+    console.log(`
+  ── dStorage Managed Payment Service ────────────────────────────────────────────────
+  The dStorage managed payment service handles both Midnight transaction and
+  Arweave storage fees on your behalf. To use it you need either:
+    • A dStorage Pro account — sign up or manage your account at https://dstorage.pro
+    • A locally running dStorage Pro service (for testing purposes only)
+  ────────────────────────────────────────────────────────────────────────────────────`);
     const useCloudApiInput = (
       await rl.question(
-        `\nUse dStorage API services at ${SIGNING_SERVER_URL} for all payments? [y/N, default: N]: `,
+        `Use dStorage managed payment service? [y/N, default: N]: `,
       )
     )
       .trim()
@@ -202,9 +206,40 @@ async function main(): Promise<void> {
     const useCloudApiService =
       useCloudApiInput === "y" || useCloudApiInput === "yes";
 
-    const authToken = process.env["DSTORAGE_AUTH_TOKEN"]?.trim();
+    let SIGNING_SERVER_URL = process.env["DSTORAGE_SIGNING_SERVER_URL"]?.trim();
+    let authToken = process.env["DSTORAGE_AUTH_TOKEN"]?.trim();
 
     if (useCloudApiService) {
+      if (!SIGNING_SERVER_URL) {
+        console.log(`
+  Select the service URL:
+    1. dStorage Pro (https://dstorage.pro)
+    2. Local testing service (http://localhost:3000) [default]
+    3. Enter a custom URL`);
+        const urlChoice = (
+          await rl.question("  Choice [1/2/3, default: 2]: ")
+        ).trim();
+        if (urlChoice === "1") {
+          SIGNING_SERVER_URL = "https://dstorage.pro";
+        } else if (urlChoice === "3") {
+          SIGNING_SERVER_URL =
+            (await rl.question("  Service URL: ")).trim() ||
+            "http://localhost:3000";
+        } else {
+          SIGNING_SERVER_URL = "http://localhost:3000";
+        }
+      }
+
+      if (!authToken) {
+        authToken = await promptSecret(
+          "  Auth token for dStorage API service (input hidden): ",
+        );
+        if (!authToken) {
+          console.log(
+            "⚠️  Warning: no auth token provided — requests may be rejected by the service.",
+          );
+        }
+      }
       console.log(`  All payments via dStorage API ${SIGNING_SERVER_URL}`);
     }
 
