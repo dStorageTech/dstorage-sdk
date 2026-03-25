@@ -8,7 +8,7 @@
  *       a. Build chain and storage adapters
  *       b. Derives keys, builds WalletFacade, and waits for sync
  *       c. Deploys a new DataRegistry if no address was given (requires ZK artifacts)
- *       d. Derives an AES-GCM encryption key from the seed
+ *       d. Derives encryption key from the seed
  *  4. Displays chain wallet addresses and balances
  *  5. Upload loop: asks for a local file path, reads its contents, calls
  *       sdk.upload(content) → encrypt → mock-store → write on-chain reference
@@ -69,7 +69,7 @@ const DATA_REGISTRY_ZK_PATH = path.resolve(
   "../../../packages/chain/src/adapters/midnight/contracts/dataregistry/managed",
 );
 
-// ── Network defaults ───────────────────────────────────────────────────────────
+// ── Network default endpoints ──────────────────────────────────────────────────
 
 const NETWORKS = {
   preprod: {
@@ -130,29 +130,17 @@ async function main(): Promise<void> {
       );
     }
     const networkName = networkInput as NetworkName;
-    const defaults = NETWORKS[networkName];
+    const defaultEndpoints = NETWORKS[networkName];
 
     console.log(`Network: ${networkName}\n`);
 
-    // ── 2. Endpoints ────────────────────────────────────────────────────────
-    const nodeEndpoint =
-      (await rl.question(`Node RPC endpoint [${defaults.node}]: `)).trim() ||
-      defaults.node;
-    const nodeWsEndpoint =
-      (await rl.question(`Node WS endpoint [${defaults.nodeWs}]: `)).trim() ||
-      defaults.nodeWs;
-    const indexerHttp =
-      (
-        await rl.question(`Indexer HTTP endpoint [${defaults.indexerHttp}]: `)
-      ).trim() || defaults.indexerHttp;
-    const indexerWs =
-      (
-        await rl.question(`Indexer WS endpoint [${defaults.indexerWs}]: `)
-      ).trim() || defaults.indexerWs;
+    // ── 2. Proof server endpoint ─────────────────────────────────────────────
     const proofServerEndpoint =
       (
-        await rl.question(`Proof server endpoint [${defaults.proofServer}]: `)
-      ).trim() || defaults.proofServer;
+        await rl.question(
+          `Proof server endpoint [${defaultEndpoints.proofServer}]: `,
+        )
+      ).trim() || defaultEndpoints.proofServer;
 
     // ── 3. Mnemonic or hex seed ─────────────────────────────────────────────
     let seedRaw = process.env["DSTORAGE_SEED"]?.trim() ?? "";
@@ -233,10 +221,10 @@ async function main(): Promise<void> {
       ...(contractAddressInput
         ? { contractAddress: contractAddressInput }
         : {}),
-      nodeEndpoint,
-      nodeWsEndpoint,
-      indexerEndpoint: indexerHttp,
-      indexerWsEndpoint: indexerWs,
+      nodeEndpoint: defaultEndpoints.node,
+      nodeWsEndpoint: defaultEndpoints.nodeWs,
+      indexerEndpoint: defaultEndpoints.indexerHttp,
+      indexerWsEndpoint: defaultEndpoints.indexerWs,
       proofServerEndpoint,
       // ZK artifacts for the DataRegistry storeReference circuit
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
