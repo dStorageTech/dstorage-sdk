@@ -53,7 +53,7 @@ These setup steps are mainly for the current monorepo/development workflow and a
 
 - Node.js 22+ and npm (Download from [nodejs.org](nodejs.org))
 - Docker for Midnight Proof server and Arweave local (Download from [docker.com/get-started](https://www.docker.com/get-started))
-- Midnight [Compact developer tools](https://docs.midnight.network/blog/compact-developer-tools) — **version 0.29.0 required** (the ZK artifacts in this repository were built against that version)
+- Midnight [Compact developer tools](https://docs.midnight.network/blog/compact-developer-tools) — **version 0.30.0 required** (the ZK artifacts in this repository were built against that version)
 - [Lace](https://www.lace.io) wallet extension for Midnight (browser connector flows)
 - [Wander](https://www.wander.app) wallet extension for Arweave (browser connector flows)
 
@@ -72,8 +72,8 @@ The `DataRegistry` contract is the on-chain index used by the SDK. It records re
 Install the Compact toolchain:
 
 ```sh
-# Compact v0.29.0 matching the committed contract artifacts
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/download/v0.29.0/compact-installer.sh | sh
+# Compact v0.30.0 matching the committed contract artifacts
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/download/v0.30.0/compact-installer.sh | sh
 ```
 
 Compile the contract:
@@ -97,7 +97,7 @@ Note: Any time you modify any of the packages, e.g. `packages/crypto` or `packag
 Follow the Midnight [documentation to start the local proof server](https://docs.midnight.network/getting-started/installation#run-the-proof-server).
 
 ```sh
-docker run -p 6300:6300 midnightntwrk/proof-server:7.0.0 -- midnight-proof-server -v
+docker run -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v
 ```
 
 ### 5. Run Arweave Local server
