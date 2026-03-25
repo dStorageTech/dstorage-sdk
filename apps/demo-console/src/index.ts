@@ -25,6 +25,7 @@ import WebSocket from "ws";
 // @ts-expect-error — ws type doesn't perfectly match the DOM WebSocket interface
 globalThis.WebSocket = WebSocket;
 
+import { randomBytes } from "node:crypto";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
@@ -150,10 +151,21 @@ async function main(): Promise<void> {
       console.log(
         "\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).",
       );
+      console.log("Leave blank to auto-generate a new random seed.");
       rl.close();
       seedRaw = (await promptSecret("Mnemonic / hex seed: ")).trim();
       rl = createInterface({ input, output });
       process.stdout.write("\n");
+
+      if (!seedRaw) {
+        seedRaw = randomBytes(32).toString("hex");
+        console.log("\n⚠️  A new random seed has been generated for you.");
+        console.log(
+          "   Save it somewhere secure — losing it means permanent loss of",
+        );
+        console.log("   access to your wallet and any data stored with it.\n");
+        console.log(`   Seed: ${seedRaw}\n`);
+      }
     }
     if (!seedRaw) throw new Error("Mnemonic or seed is required.");
 
