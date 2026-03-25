@@ -51,12 +51,11 @@ These setup steps are mainly for the current monorepo/development workflow and a
 
 ### Prerequisites
 
-- Node.js 22+ and npm
-- Docker for Midnight Proof server
-- Midnight [Compact deveoper tools](https://docs.midnight.network/blog/compact-developer-tools)
-- Optional: Docker for local Arweave via `arlocal`
-- Optional: [Lace](https://www.lace.io) wallet extension for Midnight (browser connector flows)
-- Optional: [Wander](https://www.wander.app) wallet extension for Arweave (browser connector flows)
+- Node.js 22+ and npm (Download from [nodejs.org](nodejs.org))
+- Docker for Midnight Proof server and Arweave local (Download from [docker.com/get-started](https://www.docker.com/get-started))
+- Midnight [Compact developer tools](https://docs.midnight.network/blog/compact-developer-tools) — **version 0.29.0 required** (the ZK artifacts in this repository were built against that version)
+- [Lace](https://www.lace.io) wallet extension for Midnight (browser connector flows)
+- [Wander](https://www.wander.app) wallet extension for Arweave (browser connector flows)
 
 ### 1. Install Dependencies
 
@@ -73,7 +72,8 @@ The `DataRegistry` contract is the on-chain index used by the SDK. It records re
 Install the Compact toolchain:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+# Compact v0.29.0 matching the committed contract artifacts
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/download/v0.29.0/compact-installer.sh | sh
 ```
 
 Compile the contract:
