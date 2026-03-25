@@ -155,6 +155,24 @@ export type MidnightChainAdapterConfig = BaseConfig &
       }
   );
 
+// ── Private state store password ──────────────────────────────────────────────
+//
+// TODO: This password protects the LevelDB private state store used by the
+// Midnight wallet (signing keys, ZK circuit private inputs). It is currently a
+// hardcoded placeholder and must be replaced before production use.
+//
+// Recommended approaches:
+//   - Derive it from the wallet seed/mnemonic using a separate HKDF/PBKDF2 path
+//     (distinct from the encryption key) so the password is deterministic and
+//     portable across sessions without user interaction.
+//   - Accept it as an explicit config option on MidnightChainAdapterConfig,
+//     allowing callers to supply a user-provided passphrase or a secret loaded
+//     from a secrets manager / environment variable.
+//
+// Until this is addressed, the private state database is effectively unencrypted
+// from a security standpoint — anyone with filesystem access can read it.
+const PRIVATE_STATE_STORE_PASSWORD = "key-just-for-testing-here!";
+
 // ── Browser-safe byte/encoding helpers ────────────────────────────────────────
 
 /** Convert a Uint8Array to a lowercase hex string (browser-safe, no Buffer). */
@@ -689,9 +707,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const basePrivateStateProvider = (levelPrivateStateProvider as any)({
       privateStateStoreName,
       signingKeyStoreName: `${privateStateStoreName}-signing-keys`,
-      privateStoragePasswordProvider: () => {
-        return "key-just-for-testing-here!";
-      },
+      privateStoragePasswordProvider: () => PRIVATE_STATE_STORE_PASSWORD,
     });
     const providers = await this._assembleDataRegistryProviders({
       privateStateProvider: basePrivateStateProvider,
