@@ -528,7 +528,7 @@ export function PatientPanel({
         <div className="pp-encrypt-note">
           <div className="pp-encrypt-steps">
             {[
-              "Clide side encryption",
+              "Client side encryption",
               "Decentralised storage",
               "On-chain reference",
             ].map((s, i) => (

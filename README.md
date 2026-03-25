@@ -102,18 +102,31 @@ docker run -p 6300:6300 midnightntwrk/proof-server:7.0.0 -- midnight-proof-serve
 
 ### 5. Run Arweave Local server
 
-This step is optional. Run Arweave Local only if you want to test against a local Arweave-compatible node (`ArweaveLocalStorageAdapter`) instead of using the in-memory `MockStorageAdapter`.
+The console demo (`demo-console:run`) uses **Arweave Local** as its storage backend, so this step is required for it.
 
 Start Arweave Local with Docker:
 
 ```sh
-docker run --rm -p 1984:1984 textury/arlocal
+docker run -d --rm -p 1984:1984 textury/arlocal
 
 # or run it with `npx`:
 npx arlocal
 ```
 
-If you are using the mock storage adapter path, you can skip this step.
+The console demo also requires a local Arweave wallet key file at the app root.
+This file (`apps/demo-console/test-arweave-wallet-key.json`) is used by `ArweaveLocalStorageAdapter` in the console demo. It is funded automatically by arlocal — no real AR tokens are needed. A test wallet file is already provided at this location, if you still want to generate a new one use the following NodeJs code:
+
+```sh
+# Generate a fresh wallet key (requires arweave-js):
+node -e "
+const Arweave = require('arweave');
+const arweave = Arweave.init({});
+arweave.wallets.generate().then(key => {
+  require('fs').writeFileSync('apps/demo-console/test-arweave-wallet-key.json', JSON.stringify(key));
+  console.log('Wallet key saved.');
+});
+"
+```
 
 ### 6. Run any of the demo apps
 
@@ -169,7 +182,7 @@ import { DemoSeedProvider } from "@dstorage/seed-providers";
 // 1. Configure the SDK with your chosen adapters and an encryption seed provider
 const sdk = new DStorage({
   storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter or ArweaveLocalStorageAdapter
-  chainAdapter: new MockChainAdapter(),     // swap for MidnightChainAdapter
+  chainAdapter: new MockChainAdapter(), // swap for MidnightChainAdapter
   encryptionSeedProvider: new DemoSeedProvider(), // swap for MnemonicSeedProvider, MetaMaskSeedProvider, etc.
 });
 
@@ -198,7 +211,9 @@ Every upload involves two costs — paying storage and chain operations. The SDK
 
 ```typescript
 // Estimate costs before committing
-const estimate = await sdk.estimateCost(new TextEncoder().encode("example payload"));
+const estimate = await sdk.estimateCost(
+  new TextEncoder().encode("example payload"),
+);
 // -> returns a human-readable estimate string for the configured storage adapter
 
 // Execute the full meta-transaction (estimate → encrypt → pay storage → upload → write reference)
@@ -207,8 +222,8 @@ const receipt = await sdk.executeMetaTransaction(file, (progress) => {
 });
 
 console.log(receipt.storagePayment); // Payment receipt for storage
-console.log(receipt.chainPayment);   // Payment receipt for chain tx
-console.log(receipt.chainRefId);     // On-chain reference ID
+console.log(receipt.chainPayment); // Payment receipt for chain tx
+console.log(receipt.chainRefId); // On-chain reference ID
 ```
 
 ### Supported tokens
