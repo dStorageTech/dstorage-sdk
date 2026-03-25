@@ -43,9 +43,9 @@ import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
 import type { DataRegistryAPI } from "./api.js";
 import type { DataRegistryProviders } from "./common-types.js";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-import type { EnvironmentConfiguration } from "@midnight-ntwrk/testkit-js";
+import type { EnvironmentConfiguration } from "./wallet-provider.js";
 import { UnboundTransaction } from "@midnight-ntwrk/midnight-js-types";
-import { type FinalizedTransaction } from "@midnight-ntwrk/ledger-v7";
+import { type FinalizedTransaction } from "@midnight-ntwrk/ledger-v8";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -408,7 +408,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           "dStorage/midnight",
           `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx.length})`,
         );
-        const { Transaction } = await import("@midnight-ntwrk/ledger-v7");
+        const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
         // Server may return a tagged string or plain hex — extract raw bytes either way.
         const signedBytes = parseSignedTxBytes(receipt.signedTx);
         return (Transaction as any).deserialize(
@@ -546,7 +546,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Use browser-safe helpers defined at module level — compact-runtime's toHex/fromHex
     // use Buffer internally and are not safe in the browser.
-    const { Transaction } = await import("@midnight-ntwrk/ledger-v7");
+    const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
 
     const connectorAPI = this.connectorAPI;
     const logger = this.logger;
@@ -573,7 +573,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           "dStorage/midnight",
           `balanceTx: received balanced tx length=${balancedHex?.length}`,
         );
-        // Transaction.deserialize takes (sigType, proofType, bindingType, bytes) — see ledger-v7 API.
+        // Transaction.deserialize takes (sigType, proofType, bindingType, bytes) — see ledger-v8 API.
         return (Transaction as any).deserialize(
           "signature",
           "proof",
@@ -654,7 +654,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         /* @vite-ignore */ "./wallet-utils.js"
       );
       const { unshieldedToken } = await import(
-        /* @vite-ignore */ "@midnight-ntwrk/ledger-v7"
+        /* @vite-ignore */ "@midnight-ntwrk/ledger-v8"
       );
       const unshieldedState = await waitForUnshieldedFunds(
         walletFacade,
@@ -708,6 +708,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       privateStateStoreName,
       signingKeyStoreName: `${privateStateStoreName}-signing-keys`,
       privateStoragePasswordProvider: () => PRIVATE_STATE_STORE_PASSWORD,
+      accountId: this.addresses!.unshielded,
     });
     const providers = await this._assembleDataRegistryProviders({
       privateStateProvider: basePrivateStateProvider,
@@ -1175,7 +1176,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
       const { firstValueFrom } = await import("rxjs");
       const { unshieldedToken } = await import(
-        /* @vite-ignore */ "@midnight-ntwrk/ledger-v7"
+        /* @vite-ignore */ "@midnight-ntwrk/ledger-v8"
       );
       const state = await firstValueFrom((this.facade as any).state() as any);
       const nightToken = unshieldedToken();

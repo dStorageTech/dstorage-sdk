@@ -4,7 +4,7 @@ import {
   KEY_DERIVATION_MESSAGE,
   KeyDeriver,
 } from "../keys.js";
-import { ZswapSecretKeys, DustSecretKey } from "@midnight-ntwrk/ledger-v7";
+import { ZswapSecretKeys, DustSecretKey } from "@midnight-ntwrk/ledger-v8";
 import {
   ShieldedAddress,
   ShieldedCoinPublicKey,

@@ -1,42 +1,12 @@
-import { UnshieldedTokenType } from "@midnight-ntwrk/ledger-v7";
+import { type UnshieldedTokenType } from "@midnight-ntwrk/ledger-v8";
 import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
-import {
-  type UnshieldedWallet,
-  UnshieldedWalletState,
-} from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
+import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import * as Rx from "rxjs";
 
-import { type EnvironmentConfiguration } from "@midnight-ntwrk/testkit-js";
 import type { Logger } from "../../../types.js";
 import { UnshieldedAddress } from "@midnight-ntwrk/wallet-sdk-address-format";
 import { getNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
-
-export const getInitialState = async (
-  wallet: ShieldedWallet | UnshieldedWallet,
-): Promise<unknown> => {
-  if (wallet instanceof ShieldedWallet) {
-    return Rx.firstValueFrom((wallet as ShieldedWallet).state);
-  } else {
-    return Rx.firstValueFrom((wallet as UnshieldedWallet).state);
-  }
-};
-
-export const getInitialShieldedState = async (
-  wallet: ShieldedWallet,
-  logger?: Logger,
-): Promise<unknown> => {
-  logger?.log("dStorage/midnight", "Getting initial state of wallet...");
-  return Rx.firstValueFrom(wallet.state);
-};
-
-export const getInitialUnshieldedState = async (
-  wallet: UnshieldedWallet,
-  logger?: Logger,
-) => {
-  logger?.log("dStorage/midnight", "Getting initial state of wallet...");
-  return Rx.firstValueFrom(wallet.state);
-};
+import type { EnvironmentConfiguration } from "./wallet-provider.js";
 
 export const syncWallet = (
   wallet: WalletFacade,
@@ -48,34 +18,13 @@ export const syncWallet = (
 
   return Rx.firstValueFrom(
     wallet.state().pipe(
-      /*Rx.tap((state) => {
-        logger?.log(
-          `Wallet synced state emission: { shielded=${state.shielded.state.progress.isStrictlyComplete()}, unshielded=${state.unshielded.progress.isStrictlyComplete()}, dust=${state.dust.state.progress.isStrictlyComplete()} }`,
-        );
-      }),*/
       Rx.throttleTime(throttleTime),
-      /*Rx.tap((state) => {
-        const isSynced =
-          state.shielded.state.progress.isStrictlyComplete() &&
-          state.dust.state.progress.isStrictlyComplete() &&
-          state.unshielded.progress?.isStrictlyComplete() === true;
-
-        logger?.log(
-          `Wallet synced state emission (synced=${isSynced}): { shielded=${state.shielded.state.progress.isStrictlyComplete()}, unshielded=${state.unshielded.progress.isStrictlyComplete()}, dust=${state.dust.state.progress.isStrictlyComplete()} }`,
-        );
-      }),*/
-      Rx.filter(
-        (state) =>
-          state.shielded.state.progress.isStrictlyComplete() &&
-          state.dust.state.progress.isStrictlyComplete() &&
-          state.unshielded.progress.isStrictlyComplete() === true,
-      ),
+      Rx.filter((state) => state.isSynced),
       Rx.tap(() => logger?.log("dStorage/midnight", "Sync complete")),
       Rx.tap((state) => {
         const shieldedBalances = state.shielded.balances || {};
         const unshieldedBalances = state.unshielded.balances || {};
-        const dustBalances =
-          state.dust.walletBalance(new Date(Date.now())) || 0n;
+        const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
 
         logger?.log(
           "dStorage/midnight",
@@ -99,10 +48,7 @@ export const waitForUnshieldedFunds = async (
   tokenType: UnshieldedTokenType,
   logger?: Logger,
 ): Promise<UnshieldedWalletState> => {
-  const initialState = await getInitialUnshieldedState(
-    wallet.unshielded,
-    logger,
-  );
+  const initialState = await Rx.firstValueFrom(wallet.unshielded.state);
   const unshieldedAddress = UnshieldedAddress.codec.encode(
     getNetworkId(),
     initialState.address,

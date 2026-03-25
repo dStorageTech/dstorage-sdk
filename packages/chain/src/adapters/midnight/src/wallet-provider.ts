@@ -5,27 +5,74 @@ import {
   type FinalizedTransaction,
   LedgerParameters,
   ZswapSecretKeys,
-} from "@midnight-ntwrk/ledger-v7";
+} from "@midnight-ntwrk/ledger-v8";
 import {
   type MidnightProvider,
   UnboundTransaction,
   type WalletProvider,
 } from "@midnight-ntwrk/midnight-js-types";
 import { ttlOneHour } from "@midnight-ntwrk/midnight-js-utils";
-import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
+import {
+  createKeystore,
+  InMemoryTransactionHistoryStorage,
+  PublicKey,
+  type UnshieldedKeystore,
+  UnshieldedWallet,
+} from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
+import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
+import { HDWallet, Roles } from "@midnight-ntwrk/wallet-sdk-hd";
 import type { Logger } from "../../../types.js";
 
-//import { getInitialShieldedState } from "./wallet-utils";
-import {
-  DustWalletOptions,
-  EnvironmentConfiguration,
-  FluentWalletBuilder,
-} from "@midnight-ntwrk/testkit-js";
-import { NetworkId } from "@midnight-ntwrk/wallet-sdk-abstractions";
+// ── Local environment config type ─────────────────────────────────────────────
+// Inlined from testkit-js EnvironmentConfiguration to avoid importing that package.
+export interface EnvironmentConfiguration {
+  walletNetworkId: string;
+  networkId: string;
+  indexer: string;
+  indexerWS: string;
+  node: string;
+  nodeWS: string;
+  faucet: string | undefined;
+  proofServer: string;
+}
+
+// ── Seed derivation ────────────────────────────────────────────────────────────
+
+/**
+ * Derive a single wallet role seed from a master hex seed via HD derivation.
+ * HDWallet.fromSeed → selectAccount(0) → selectRole(role) → deriveKeyAt(0)
+ */
+function deriveRoleSeed(masterSeedHex: string, role: number): Uint8Array {
+  const seedBytes = hexToUint8Array(masterSeedHex);
+  const result = HDWallet.fromSeed(seedBytes);
+  if (result.type !== "seedOk") {
+    throw new Error("[dStorage/midnight] HDWallet.fromSeed failed: invalid seed.");
+  }
+  const derivation = result.hdWallet.selectAccount(0).selectRole(role).deriveKeyAt(0);
+  result.hdWallet.clear();
+  if (derivation.type !== "keyDerived") {
+    throw new Error(`[dStorage/midnight] Key derivation out of bounds for role ${role}.`);
+  }
+  return derivation.key;
+}
+
+function hexToUint8Array(hex: string): Uint8Array {
+  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++)
+    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+// ── Provider ───────────────────────────────────────────────────────────────────
 
 /**
  * Provider class that implements wallet functionality for the Midnight network.
  * Handles transaction balancing, submission, and wallet state management.
+ *
+ * Built directly from wallet-sdk-* packages (no testkit-js dependency).
  */
 export class MidnightWalletProvider
   implements MidnightProvider, WalletProvider
@@ -34,6 +81,7 @@ export class MidnightWalletProvider
   readonly wallet: WalletFacade;
   readonly zswapSecretKeys: ZswapSecretKeys;
   readonly dustSecretKey: DustSecretKey;
+  private readonly keystore: UnshieldedKeystore;
   private readonly logger: Logger | undefined;
 
   private constructor(
@@ -41,12 +89,14 @@ export class MidnightWalletProvider
     wallet: WalletFacade,
     zswapSecretKeys: ZswapSecretKeys,
     dustSecretKey: DustSecretKey,
+    keystore: UnshieldedKeystore,
     logger?: Logger,
   ) {
     this.env = environmentConfiguration;
     this.wallet = wallet;
     this.zswapSecretKeys = zswapSecretKeys;
     this.dustSecretKey = dustSecretKey;
+    this.keystore = keystore;
     this.logger = logger;
   }
 
@@ -70,7 +120,11 @@ export class MidnightWalletProvider
       },
       { ttl },
     );
-    return await this.wallet.finalizeRecipe(recipe);
+    const signedRecipe = await this.wallet.signRecipe(
+      recipe,
+      (data) => this.keystore.signData(data),
+    );
+    return await this.wallet.finalizeRecipe(signedRecipe);
   }
 
   submitTx(tx: FinalizedTransaction): Promise<string> {
@@ -92,37 +146,63 @@ export class MidnightWalletProvider
     seed?: string,
     logger?: Logger,
   ): Promise<MidnightWalletProvider> {
-    const DEFAULT_DUST_OPTIONS: DustWalletOptions = {
-      ledgerParams: LedgerParameters.initialParameters(),
-      additionalFeeOverhead: 1_000n, // changed midnight-js code FROM 500_000_000_000_000_000n TO 1000n
-      feeBlocksMargin: 5,
-    };
-    const dustOptions = {
-      ...DEFAULT_DUST_OPTIONS,
-    };
-    if (env.walletNetworkId === NetworkId.NetworkId.Undeployed) {
-      dustOptions["additionalFeeOverhead"] = 500_000_000_000_000_000n;
-    }
-    const builder =
-      FluentWalletBuilder.forEnvironment(env).withDustOptions(dustOptions);
-    const buildResult = seed
-      ? await builder.withSeed(seed).buildWithoutStarting()
-      : await builder.withRandomSeed().buildWithoutStarting();
-    const { wallet, seeds } = buildResult as {
-      wallet: WalletFacade;
-      seeds: { masterSeed: string; shielded: Uint8Array; dust: Uint8Array };
+    // Derive per-role seeds from the master hex seed.
+    // If no seed is provided, generate a random 32-byte master seed.
+    const masterSeedHex =
+      seed ??
+      Array.from(
+        crypto.getRandomValues(new Uint8Array(32)),
+        (b) => b.toString(16).padStart(2, "0"),
+      ).join("");
+
+    const shieldedSeed = deriveRoleSeed(masterSeedHex, Roles.Zswap);
+    const unshieldedSeed = deriveRoleSeed(masterSeedHex, Roles.NightExternal);
+    const dustSeed = deriveRoleSeed(masterSeedHex, Roles.Dust);
+
+    // Fee overhead: undeployed networks need a much larger overhead.
+    const additionalFeeOverhead =
+      env.walletNetworkId === "undeployed"
+        ? 500_000_000_000_000_000n
+        : 1_000n;
+
+    const walletConfig = {
+      networkId: env.walletNetworkId,
+      indexerClientConnection: {
+        indexerHttpUrl: env.indexer,
+        indexerWsUrl: env.indexerWS,
+      },
+      relayURL: new URL(env.nodeWS),
+      provingServerUrl: new URL(env.proofServer),
+      txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+      costParameters: {
+        additionalFeeOverhead,
+        feeBlocksMargin: 5,
+      },
     };
 
-    /*const initialState = await getInitialShieldedState(wallet.shielded, logger);
-    /*logger?.log(
-      `Your wallet address is: ${initialState.address.coinPublicKeyString()}`,
-    );*/
+    // Dust protocol parameters from the initial ledger state.
+    const dustParameters = LedgerParameters.initialParameters().dust;
+
+    const keystore = createKeystore(unshieldedSeed, env.walletNetworkId);
+    const shieldedWallet = ShieldedWallet(walletConfig).startWithSeed(shieldedSeed);
+    const unshieldedWallet = UnshieldedWallet(walletConfig).startWithPublicKey(
+      PublicKey.fromKeyStore(keystore),
+    );
+    const dustWallet = DustWallet(walletConfig).startWithSeed(dustSeed, dustParameters);
+
+    const walletFacade = await WalletFacade.init({
+      configuration: walletConfig,
+      shielded: () => shieldedWallet,
+      unshielded: () => unshieldedWallet,
+      dust: () => dustWallet,
+    });
 
     return new MidnightWalletProvider(
       env,
-      wallet,
-      ZswapSecretKeys.fromSeed(seeds.shielded),
-      DustSecretKey.fromSeed(seeds.dust),
+      walletFacade,
+      ZswapSecretKeys.fromSeed(shieldedSeed),
+      DustSecretKey.fromSeed(dustSeed),
+      keystore,
       logger,
     );
   }

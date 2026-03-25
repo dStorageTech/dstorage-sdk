@@ -25,7 +25,7 @@ export const KEY_DERIVATION_MESSAGE =
 // ── KeyDeriver ────────────────────────────────────────────────────────────────
 
 /**
- * Raw seed material for a Midnight wallet, ready to be passed to ledger-v7:
+ * Raw seed material for a Midnight wallet, ready to be passed to ledger-v8:
  *   ZswapSecretKeys.fromSeed(zswapSeed)
  *   DustSecretKey.fromSeed(dustSeed)
  *   createKeystore(nightExternalSeed, networkId)
@@ -136,7 +136,7 @@ export class KeyDeriver {
    *   account 0 → roles [Zswap, NightExternal, Dust] → index 0
    *
    * Requires @midnight-ntwrk/wallet-sdk-hd to be installed.
-   * Returns raw Uint8Array seeds; pass them to ledger-v7 to get typed keys.
+   * Returns raw Uint8Array seeds; pass them to ledger-v8 to get typed keys.
    */
   async deriveMidnightSigningKeys(): Promise<MidnightSigningKeys> {
     const seed = await this.getSeedBuffer();
