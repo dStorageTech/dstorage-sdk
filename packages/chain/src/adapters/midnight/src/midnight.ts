@@ -155,23 +155,23 @@ export type MidnightChainAdapterConfig = BaseConfig &
       }
   );
 
-// ── Private state store password ──────────────────────────────────────────────
-//
-// TODO: This password protects the LevelDB private state store used by the
-// Midnight wallet (signing keys, ZK circuit private inputs). It is currently a
-// hardcoded placeholder and must be replaced before production use.
-//
-// Recommended approaches:
-//   - Derive it from the wallet seed/mnemonic using a separate HKDF/PBKDF2 path
-//     (distinct from the encryption key) so the password is deterministic and
-//     portable across sessions without user interaction.
-//   - Accept it as an explicit config option on MidnightChainAdapterConfig,
-//     allowing callers to supply a user-provided passphrase or a secret loaded
-//     from a secrets manager / environment variable.
-//
-// Until this is addressed, the private state database is effectively unencrypted
-// from a security standpoint — anyone with filesystem access can read it.
-const PRIVATE_STATE_STORE_PASSWORD = "key-just-for-testing-here!";
+/**
+ * Derive a deterministic LevelDB encryption password from the wallet seed hex.
+ *
+ * The password policy requires at least 3 of 4 character classes (uppercase,
+ * lowercase, digits, special characters). A raw hex seed only contains lowercase
+ * letters + digits (2 classes), so we prefix with "Aa1!" which adds uppercase
+ * and a special character, guaranteeing all 4 classes are present.
+ * The prefix is fixed — the same seed always produces the same password.
+ */
+function derivePrivateStatePassword(seedHex: string | undefined): string {
+  if (!seedHex) {
+    throw new Error(
+      "[dStorage/midnight] Cannot derive private state password: no wallet seed available.",
+    );
+  }
+  return "Aa1!" + seedHex;
+}
 
 // ── Browser-safe byte/encoding helpers ────────────────────────────────────────
 
@@ -475,16 +475,22 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   /**
    * midnight-js-contracts expects privateStateProvider.setContractAddress().
-   * Some providers do not implement it, so we add a no-op shim.
+   * Some providers (e.g. in-memory) do not implement it, so we add a no-op shim.
+   * Providers that already implement it (e.g. levelPrivateStateProvider) are left
+   * untouched — their real implementation must run so the contract address is set
+   * before any private state access.
    */
   private _withContractAddressShim<T extends object>(
     privateStateProvider: T,
   ): T & { setContractAddress: (address: string) => void } {
-    return Object.assign(privateStateProvider, {
-      setContractAddress: (_address: string) => {
-        /* no-op: provider scopes by privateStateId */
-      },
-    });
+    if (!("setContractAddress" in privateStateProvider)) {
+      (privateStateProvider as any).setContractAddress = (_address: string) => {
+        /* no-op: provider doesn't use contract address for scoping */
+      };
+    }
+    return privateStateProvider as T & {
+      setContractAddress: (address: string) => void;
+    };
   }
 
   /**
@@ -637,9 +643,10 @@ export class MidnightChainAdapter implements ChainAdapter {
     const { MidnightWalletProvider } = await import(
       /* @vite-ignore */ "./wallet-provider.js"
     );
+    const seedHex = await this._resolveSeedHex();
     const walletProvider = await MidnightWalletProvider.build(
       this.config,
-      await this._resolveSeedHex(),
+      seedHex,
       this.logger,
     );
     const walletFacade: WalletFacade = walletProvider.wallet;
@@ -707,7 +714,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const basePrivateStateProvider = (levelPrivateStateProvider as any)({
       privateStateStoreName,
       signingKeyStoreName: `${privateStateStoreName}-signing-keys`,
-      privateStoragePasswordProvider: () => PRIVATE_STATE_STORE_PASSWORD,
+      privateStoragePasswordProvider: () => derivePrivateStatePassword(seedHex),
       accountId: this.addresses!.unshielded,
     });
     const providers = await this._assembleDataRegistryProviders({

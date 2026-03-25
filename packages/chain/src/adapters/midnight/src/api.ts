@@ -254,10 +254,12 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   ): Promise<DataRegistryAPI> {
     logger?.log("dStorage/midnight", "deploying DataRegistry contract...");
 
+    // For a fresh deployment there is no prior private state — always start clean.
+    // We cannot call setContractAddress() here because the address doesn't exist yet.
     const deployedDataRegistryContract = await deployContract(providers, {
       compiledContract: CompiledDataRegistryContract,
       privateStateId: dataRegistryPrivateStateKey,
-      initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
+      initialPrivateState: createDataRegistryPrivateState(),
     });
 
     return new DataRegistryAPI(deployedDataRegistryContract, providers, logger);
@@ -281,6 +283,12 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       "dStorage/midnight",
       `joining DataRegistry contract at: ${contractAddress}`,
     );
+
+    // Set the contract address on the private state provider BEFORE calling get(),
+    // because levelPrivateStateProvider requires it to be set before any access.
+    // findDeployedContract() will also call setContractAddress() internally, but by
+    // then getPrivateState() below would have already thrown without this pre-call.
+    providers.privateStateProvider.setContractAddress(contractAddress);
 
     const deployedDataRegistryContract =
       await findDeployedContract<DataRegistryContract>(providers, {

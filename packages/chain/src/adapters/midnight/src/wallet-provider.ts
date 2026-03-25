@@ -48,12 +48,19 @@ function deriveRoleSeed(masterSeedHex: string, role: number): Uint8Array {
   const seedBytes = hexToUint8Array(masterSeedHex);
   const result = HDWallet.fromSeed(seedBytes);
   if (result.type !== "seedOk") {
-    throw new Error("[dStorage/midnight] HDWallet.fromSeed failed: invalid seed.");
+    throw new Error(
+      "[dStorage/midnight] HDWallet.fromSeed failed: invalid seed.",
+    );
   }
-  const derivation = result.hdWallet.selectAccount(0).selectRole(role).deriveKeyAt(0);
+  const derivation = result.hdWallet
+    .selectAccount(0)
+    .selectRole(role)
+    .deriveKeyAt(0);
   result.hdWallet.clear();
   if (derivation.type !== "keyDerived") {
-    throw new Error(`[dStorage/midnight] Key derivation out of bounds for role ${role}.`);
+    throw new Error(
+      `[dStorage/midnight] Key derivation out of bounds for role ${role}.`,
+    );
   }
   return derivation.key;
 }
@@ -120,9 +127,8 @@ export class MidnightWalletProvider
       },
       { ttl },
     );
-    const signedRecipe = await this.wallet.signRecipe(
-      recipe,
-      (data) => this.keystore.signData(data),
+    const signedRecipe = await this.wallet.signRecipe(recipe, (data) =>
+      this.keystore.signData(data),
     );
     return await this.wallet.finalizeRecipe(signedRecipe);
   }
@@ -150,9 +156,8 @@ export class MidnightWalletProvider
     // If no seed is provided, generate a random 32-byte master seed.
     const masterSeedHex =
       seed ??
-      Array.from(
-        crypto.getRandomValues(new Uint8Array(32)),
-        (b) => b.toString(16).padStart(2, "0"),
+      Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
+        b.toString(16).padStart(2, "0"),
       ).join("");
 
     const shieldedSeed = deriveRoleSeed(masterSeedHex, Roles.Zswap);
@@ -161,9 +166,7 @@ export class MidnightWalletProvider
 
     // Fee overhead: undeployed networks need a much larger overhead.
     const additionalFeeOverhead =
-      env.walletNetworkId === "undeployed"
-        ? 500_000_000_000_000_000n
-        : 1_000n;
+      env.walletNetworkId === "undeployed" ? 500_000_000_000_000_000n : 1_000n;
 
     const walletConfig = {
       networkId: env.walletNetworkId,
@@ -184,11 +187,15 @@ export class MidnightWalletProvider
     const dustParameters = LedgerParameters.initialParameters().dust;
 
     const keystore = createKeystore(unshieldedSeed, env.walletNetworkId);
-    const shieldedWallet = ShieldedWallet(walletConfig).startWithSeed(shieldedSeed);
+    const shieldedWallet =
+      ShieldedWallet(walletConfig).startWithSeed(shieldedSeed);
     const unshieldedWallet = UnshieldedWallet(walletConfig).startWithPublicKey(
       PublicKey.fromKeyStore(keystore),
     );
-    const dustWallet = DustWallet(walletConfig).startWithSeed(dustSeed, dustParameters);
+    const dustWallet = DustWallet(walletConfig).startWithSeed(
+      dustSeed,
+      dustParameters,
+    );
 
     const walletFacade = await WalletFacade.init({
       configuration: walletConfig,
