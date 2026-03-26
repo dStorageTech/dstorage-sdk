@@ -177,13 +177,6 @@ export function PatientPanel({
               >
                 <div className="as-card-top">
                   <span className="as-card-name">{cfg.label}</span>
-                  <span className={`as-card-status as-status-${cfg.status}`}>
-                    {cfg.status === "live"
-                      ? "Live"
-                      : cfg.status === "preview"
-                        ? "Preview"
-                        : "Soon"}
-                  </span>
                 </div>
                 <div className="as-card-desc">{cfg.description}</div>
                 {cfg.note && <div className="as-card-note">{cfg.note}</div>}
@@ -212,13 +205,6 @@ export function PatientPanel({
               >
                 <div className="as-card-top">
                   <span className="as-card-name">{cfg.label}</span>
-                  <span className={`as-card-status as-status-${cfg.status}`}>
-                    {cfg.status === "live"
-                      ? "Live"
-                      : cfg.status === "preview"
-                        ? "Preview"
-                        : "Soon"}
-                  </span>
                 </div>
                 <div className="as-card-desc">{cfg.description}</div>
                 {cfg.note && <div className="as-card-note">{cfg.note}</div>}
@@ -247,13 +233,6 @@ export function PatientPanel({
               >
                 <div className="as-card-top">
                   <span className="as-card-name">{cfg.label}</span>
-                  <span className={`as-card-status as-status-${cfg.status}`}>
-                    {cfg.status === "live"
-                      ? "Live"
-                      : cfg.status === "preview"
-                        ? "Preview"
-                        : "Soon"}
-                  </span>
                 </div>
                 <div className="as-card-desc">{cfg.description}</div>
                 {cfg.note && <div className="as-card-note">{cfg.note}</div>}
