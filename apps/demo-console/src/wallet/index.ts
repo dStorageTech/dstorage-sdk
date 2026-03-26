@@ -35,7 +35,7 @@ export function derivePrivateStatePassword(
 ): string {
   if (!seedHex) {
     throw new Error(
-      "[dStorage/midnight] Cannot derive private state password: no wallet seed available.",
+      "Cannot derive private state password: no wallet seed available.",
     );
   }
   return "Aa1!" + seedHex;
@@ -72,17 +72,50 @@ export async function resolveSeedHex(credentials: {
  * HD-derives per-role seeds (Zswap, NightExternal, Dust) and initialises
  * the WalletFacade. The returned provider is already started.
  */
-export async function buildWalletProvider(
+async function buildWalletProvider(
   env: EnvironmentConfiguration,
   seedHex: string | undefined,
-  logger?: { log: (ns: string, msg: string) => void },
 ): Promise<MidnightWalletProvider> {
-  const walletProvider = await MidnightWalletProvider.build(
-    env,
-    seedHex,
-    logger,
-  );
+  const walletProvider = await MidnightWalletProvider.build(env, seedHex);
   await walletProvider.start();
+  return walletProvider;
+}
+
+// ── Wallet initialisation ─────────────────────────────────────────────────────
+
+export async function initWallet(
+  envConfig: EnvironmentConfiguration,
+  seedHex: string | undefined,
+  skipFundCheck: boolean,
+  ticker: <T>(statusLine: () => string, fn: () => Promise<T>) => Promise<T>,
+): Promise<MidnightWalletProvider> {
+  const { setNetworkId } =
+    await import("@midnight-ntwrk/midnight-js-network-id");
+  setNetworkId(envConfig.networkId);
+
+  const walletProvider = await ticker(
+    () => "Building wallet...",
+    () => buildWalletProvider(envConfig, seedHex),
+  );
+  await ticker(
+    () => "Syncing wallet...",
+    () => syncWallet(walletProvider.wallet, 2_000, 360_000),
+  );
+  if (!skipFundCheck) {
+    const { unshieldedToken } = await import("@midnight-ntwrk/ledger-v8");
+    const unshieldedState = await ticker(
+      () => "Waiting for NIGHT funds...",
+      () => waitForUnshieldedFunds(walletProvider.wallet, unshieldedToken()),
+    );
+    const nightBalance = unshieldedState.balances[unshieldedToken().raw];
+    if (nightBalance === undefined) {
+      console.log("No funds received, exiting...");
+      throw new Error("No NIGHT funds received/detected.");
+    }
+    console.log(`Your NIGHT wallet balance is: ${nightBalance}`);
+  } else {
+    console.log("Managed payment mode — skipping NIGHT balance check.");
+  }
   return walletProvider;
 }
 
@@ -92,22 +125,20 @@ export const syncWallet = (
   wallet: WalletFacade,
   throttleTime = 2_000,
   timeout = 360_000,
-  logger?: { log: (ns: string, msg: string) => void },
 ) => {
-  logger?.log("dStorage/midnight", "Syncing wallet...");
+  console.log("Syncing wallet...");
 
   return Rx.firstValueFrom(
     wallet.state().pipe(
       Rx.throttleTime(throttleTime),
       Rx.filter((state) => state.isSynced),
-      Rx.tap(() => logger?.log("dStorage/midnight", "Sync complete")),
+      Rx.tap(() => console.log("Sync complete")),
       Rx.tap((state) => {
         const shieldedBalances = state.shielded.balances || {};
         const unshieldedBalances = state.unshielded.balances || {};
         const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
 
-        logger?.log(
-          "dStorage/midnight",
+        console.log(
           `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Unshielded: ${JSON.stringify(unshieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Dust: ${dustBalances}`,
         );
       }),
@@ -126,27 +157,21 @@ export const syncWallet = (
 
 export const waitForUnshieldedFunds = async (
   wallet: WalletFacade,
-  env: EnvironmentConfiguration,
   tokenType: UnshieldedTokenType,
-  logger?: { log: (ns: string, msg: string) => void },
 ): Promise<UnshieldedWalletState> => {
   const initialState = await Rx.firstValueFrom(wallet.unshielded.state);
   const unshieldedAddress = UnshieldedAddress.codec.encode(
     getNetworkId(),
     initialState.address,
   );
-  logger?.log(
-    "dStorage/midnight",
+  console.log(
     `Using unshielded address: ${unshieldedAddress.toString()} waiting for funds...`,
   );
   const initialBalance = initialState.balances[tokenType.raw];
   if (initialBalance === undefined || initialBalance === 0n) {
-    logger?.log(
-      "dStorage/midnight",
-      "Your wallet initial balance is: 0 (not yet initialized)",
-    );
-    logger?.log("dStorage/midnight", "Waiting to receive tokens...");
-    const facadeState = await syncWallet(wallet, 2_000, 360_000, logger);
+    console.log("Your wallet initial balance is: 0 (not yet initialized)");
+    console.log("Waiting to receive tokens...");
+    const facadeState = await syncWallet(wallet, 2_000, 360_000);
     return facadeState.unshielded;
   }
   return initialState;

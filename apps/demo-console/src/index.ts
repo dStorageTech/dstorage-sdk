@@ -47,10 +47,8 @@ import {
 import {
   type EnvironmentConfiguration,
   resolveSeedHex,
-  buildWalletProvider,
-  syncWallet,
-  waitForUnshieldedFunds,
   derivePrivateStatePassword,
+  initWallet,
 } from "./wallet/index.js";
 import { MnemonicSeedProvider } from "@dstorage/seed-providers";
 
@@ -115,55 +113,6 @@ async function withTicker<T>(
   } finally {
     clearInterval(id);
   }
-}
-
-// ── Wallet initialisation ─────────────────────────────────────────────────────
-
-async function initWallet(
-  envConfig: EnvironmentConfiguration,
-  seedHex: string | undefined,
-  skipFundCheck: boolean,
-) {
-  const { setNetworkId } =
-    await import("@midnight-ntwrk/midnight-js-network-id");
-  setNetworkId(envConfig.networkId as any);
-
-  const walletProvider = await withTicker(
-    () => "Building wallet...",
-    () => buildWalletProvider(envConfig, seedHex, logger),
-  );
-  await withTicker(
-    () => "Syncing wallet...",
-    () => syncWallet(walletProvider.wallet, 2_000, 360_000, logger),
-  );
-  if (!skipFundCheck) {
-    const { unshieldedToken } = await import("@midnight-ntwrk/ledger-v8");
-    const unshieldedState = await withTicker(
-      () => "Waiting for NIGHT funds...",
-      () =>
-        waitForUnshieldedFunds(
-          walletProvider.wallet,
-          envConfig,
-          unshieldedToken(),
-          logger,
-        ),
-    );
-    const nightBalance = unshieldedState.balances[unshieldedToken().raw];
-    if (nightBalance === undefined) {
-      logger.log("dStorage/midnight", "No funds received, exiting...");
-      throw new Error("[dStorage/midnight] No NIGHT funds received/detected.");
-    }
-    logger.log(
-      "dStorage/midnight",
-      `Your NIGHT wallet balance is: ${nightBalance}`,
-    );
-  } else {
-    logger.log(
-      "dStorage/midnight",
-      "Managed payment mode — skipping NIGHT balance check.",
-    );
-  }
-  return walletProvider;
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -260,13 +209,13 @@ async function main(): Promise<void> {
     )
       .trim()
       .toLowerCase();
-    const useCloudApiService =
+    const useManagedPaymentService =
       useCloudApiInput === "y" || useCloudApiInput === "yes";
 
     let SIGNING_SERVER_URL = process.env["DSTORAGE_SIGNING_SERVER_URL"]?.trim();
     let authToken = process.env["DSTORAGE_AUTH_TOKEN"]?.trim();
 
-    if (useCloudApiService) {
+    if (useManagedPaymentService) {
       if (!SIGNING_SERVER_URL) {
         console.log(`
   Select the service URL:
@@ -299,6 +248,12 @@ async function main(): Promise<void> {
       }
       console.log(`  All payments via dStorage API ${SIGNING_SERVER_URL}`);
     }
+    const managedPaymentService = useManagedPaymentService
+      ? {
+          signingServerUrl: SIGNING_SERVER_URL!,
+          ...(authToken ? { authToken } : {}),
+        }
+      : {};
 
     // ── 6. Build the storage adapter ──────────────────────────────────────────
 
@@ -308,12 +263,7 @@ async function main(): Promise<void> {
         fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
       ),
       logger,
-      ...(useCloudApiService
-        ? {
-            signingServerUrl: SIGNING_SERVER_URL,
-            ...(authToken ? { authToken } : {}),
-          }
-        : {}),
+      ...managedPaymentService,
     });
 
     // ── 7. Build the wallet and sync ────────────────────────────────────────
@@ -325,14 +275,14 @@ async function main(): Promise<void> {
       indexerWS: defaultEndpoints.indexerWs,
       node: defaultEndpoints.node,
       nodeWS: defaultEndpoints.nodeWs,
-      faucet: undefined,
       proofServer: proofServerEndpoint,
     };
 
     const walletProvider = await initWallet(
       envConfig,
       seedHex,
-      useCloudApiService,
+      useManagedPaymentService,
+      withTicker,
     );
 
     // ── 8. Build the chain adapter ──────────────────────────────────────────
@@ -352,12 +302,7 @@ async function main(): Promise<void> {
       proofServerEndpoint,
       // ZK artifacts for the DataRegistry storeReference circuit
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
-      ...(useCloudApiService
-        ? {
-            signingServerUrl: SIGNING_SERVER_URL,
-            ...(authToken ? { authToken } : {}),
-          }
-        : {}),
+      ...managedPaymentService,
     });
 
     // ── 9. Initialise the DStorage SDK ──────────────────────────────────────

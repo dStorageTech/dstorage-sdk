@@ -22,9 +22,7 @@ import {
   UnshieldedWallet,
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
-import { HDWallet, Roles } from "@midnight-ntwrk/wallet-sdk-hd";
-import type { Logger as DStorageLogger } from "@dstorage/core";
-type Logger = DStorageLogger;
+import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
 
 // ── Local environment config type ─────────────────────────────────────────────
 // Inlined from testkit-js EnvironmentConfiguration to avoid importing that package.
@@ -35,7 +33,6 @@ export interface EnvironmentConfiguration {
   indexerWS: string;
   node: string;
   nodeWS: string;
-  faucet: string | undefined;
   proofServer: string;
 }
 
@@ -45,13 +42,11 @@ export interface EnvironmentConfiguration {
  * Derive a single wallet role seed from a master hex seed via HD derivation.
  * HDWallet.fromSeed → selectAccount(0) → selectRole(role) → deriveKeyAt(0)
  */
-function deriveRoleSeed(masterSeedHex: string, role: number): Uint8Array {
+function deriveRoleSeed(masterSeedHex: string, role: Role): Uint8Array {
   const seedBytes = hexToUint8Array(masterSeedHex);
   const result = HDWallet.fromSeed(seedBytes);
   if (result.type !== "seedOk") {
-    throw new Error(
-      "[dStorage/midnight] HDWallet.fromSeed failed: invalid seed.",
-    );
+    throw new Error("HDWallet.fromSeed failed: invalid seed.");
   }
   const derivation = result.hdWallet
     .selectAccount(0)
@@ -59,9 +54,7 @@ function deriveRoleSeed(masterSeedHex: string, role: number): Uint8Array {
     .deriveKeyAt(0);
   result.hdWallet.clear();
   if (derivation.type !== "keyDerived") {
-    throw new Error(
-      `[dStorage/midnight] Key derivation out of bounds for role ${role}.`,
-    );
+    throw new Error(`Key derivation out of bounds for role ${role}.`);
   }
   return derivation.key;
 }
@@ -90,7 +83,6 @@ export class MidnightWalletProvider
   readonly zswapSecretKeys: ZswapSecretKeys;
   readonly dustSecretKey: DustSecretKey;
   private readonly keystore: UnshieldedKeystore;
-  private readonly logger: Logger | undefined;
 
   private constructor(
     environmentConfiguration: EnvironmentConfiguration,
@@ -98,14 +90,12 @@ export class MidnightWalletProvider
     zswapSecretKeys: ZswapSecretKeys,
     dustSecretKey: DustSecretKey,
     keystore: UnshieldedKeystore,
-    logger?: Logger,
   ) {
     this.env = environmentConfiguration;
     this.wallet = wallet;
     this.zswapSecretKeys = zswapSecretKeys;
     this.dustSecretKey = dustSecretKey;
     this.keystore = keystore;
-    this.logger = logger;
   }
 
   getCoinPublicKey(): CoinPublicKey {
@@ -140,7 +130,7 @@ export class MidnightWalletProvider
 
   // We do not wait for funds, it's done outside
   async start(): Promise<void> {
-    this.logger?.log("dStorage/midnight", "Starting wallet...");
+    console.log("Starting wallet...");
     await this.wallet.start(this.zswapSecretKeys, this.dustSecretKey);
   }
 
@@ -151,7 +141,6 @@ export class MidnightWalletProvider
   static async build(
     env: EnvironmentConfiguration,
     seed?: string,
-    logger?: Logger,
   ): Promise<MidnightWalletProvider> {
     // Derive per-role seeds from the master hex seed.
     // If no seed is provided, generate a random 32-byte master seed.
@@ -211,7 +200,6 @@ export class MidnightWalletProvider
       ZswapSecretKeys.fromSeed(shieldedSeed),
       DustSecretKey.fromSeed(dustSeed),
       keystore,
-      logger,
     );
   }
 }
