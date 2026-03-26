@@ -241,6 +241,33 @@ export function PatientPanel({
           </div>
           {paymentAdapterKey === "managed" && (
             <div className="pp-payments-fields">
+              <div className="pp-managed-info">
+                <div className="pp-managed-info-title">
+                  dStorage Managed Payment Service
+                </div>
+                <p className="pp-managed-info-body">
+                  The dStorage managed payment service handles both Midnight
+                  transaction and Arweave storage fees on your behalf. To use it
+                  you need either:
+                </p>
+                <ul className="pp-managed-info-list">
+                  <li>
+                    A <strong>dStorage Pro</strong> account — sign up or manage
+                    your account at{" "}
+                    <a
+                      href="https://dstorage.pro"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      dstorage.pro
+                    </a>
+                  </li>
+                  <li>
+                    A <strong>locally running dStorage Pro service</strong> (for
+                    testing purposes only)
+                  </li>
+                </ul>
+              </div>
               <div className="pp-contract-addr">
                 <label
                   className="pp-contract-addr-label"

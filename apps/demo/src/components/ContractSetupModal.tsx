@@ -43,8 +43,19 @@ export function ContractSetupModal({
             </button>
           </div>
           <p className="hv-contract-modal-body">
-            Before starting, choose how the demo should work with the Midnight
-            DataRegistry contract.
+            The <strong>DataRegistry</strong> is a smart contract deployed on
+            the Midnight blockchain. It acts as a tamper-proof index that maps
+            your encrypted files — stored off-chain on Arweave or another
+            storage backend — to on-chain references only you control.
+          </p>
+          <p className="hv-contract-modal-body">
+            Every time you upload a file, the SDK writes a reference into this
+            contract so you can later retrieve, prove ownership of, or share
+            access to your data — without ever exposing the contents on-chain.
+          </p>
+          <p className="hv-contract-modal-body">
+            Deploy a new contract for a fresh session, or paste an existing
+            address to continue where you left off.
           </p>
 
           <div className="hv-contract-actions">

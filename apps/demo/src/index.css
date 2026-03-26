@@ -570,6 +570,42 @@ code {
   gap: 10px;
 }
 
+.pp-managed-info {
+  background: var(--c-surface-2, #1e2130);
+  border: 1px solid var(--c-border, #2a2f45);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--c-text-muted, #8b92a8);
+}
+
+.pp-managed-info-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text, #e2e8f0);
+  margin-bottom: 8px;
+}
+
+.pp-managed-info-body {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.pp-managed-info-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
+.pp-managed-info-list a {
+  color: var(--c-accent, #7c6af7);
+  text-decoration: none;
+}
+
+.pp-managed-info-list a:hover {
+  text-decoration: underline;
+}
+
 .pp-ref-warning {
   font-size: 12px;
   color: var(--c-red);
