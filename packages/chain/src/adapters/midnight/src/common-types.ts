@@ -1,4 +1,9 @@
-import { type MidnightProviders } from "@midnight-ntwrk/midnight-js-types";
+import {
+  type MidnightProviders,
+  type MidnightProvider,
+  type WalletProvider,
+} from "@midnight-ntwrk/midnight-js-types";
+import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import { type FoundContract } from "@midnight-ntwrk/midnight-js-contracts";
 import type {
   DataRegistryPrivateState,
@@ -6,6 +11,16 @@ import type {
   Contract,
   Witnesses,
 } from "../contracts/src/index";
+
+/**
+ * Minimal interface the adapter requires from a wallet provider passed via
+ * walletMode: "provider". Any object implementing WalletProvider and
+ * MidnightProvider with an accessible WalletFacade satisfies this.
+ */
+export interface AdapterWalletProvider
+  extends WalletProvider, MidnightProvider {
+  readonly wallet: WalletFacade;
+}
 
 export const dataRegistryPrivateStateKey = "DataRegistryPrivateState";
 export type PrivateStateId = typeof dataRegistryPrivateStateKey;

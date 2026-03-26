@@ -5,9 +5,10 @@ export * from "../dataregistry/managed/contract/index.js";
 
 export const witnesses = {};
 
-export type DataRegistryPrivateState = null;
+export type DataRegistryPrivateState = Record<string, never>;
 
-export const createDataRegistryPrivateState = () => null;
+export const createDataRegistryPrivateState =
+  (): DataRegistryPrivateState => ({});
 
 export const CompiledDataRegistryContract = CompiledContract.make<
   Contract<DataRegistryPrivateState>

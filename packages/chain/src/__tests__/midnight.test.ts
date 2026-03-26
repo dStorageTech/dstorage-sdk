@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MidnightChainAdapter } from "../adapters/midnight/src/midnight.js";
 
-const MOCK_CREDENTIALS = {
-  mnemonic: "test test test test test test test test test test test junk",
-};
+const MOCK_WALLET_PROVIDER = { wallet: {} } as any;
+const MOCK_PRIVATE_STATE_PASSWORD = "Aa1!mockseedfortest";
 const MOCK_NETWORK = "undeployed" as const;
 
 describe("MidnightChainAdapter", () => {
@@ -18,7 +17,9 @@ describe("MidnightChainAdapter", () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: "0xContract",
         network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
+        walletMode: "provider",
+        walletProvider: MOCK_WALLET_PROVIDER,
+        privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
       });
       expect(adapter.name).toBe("midnight");
     });
@@ -29,7 +30,9 @@ describe("MidnightChainAdapter", () => {
           new MidnightChainAdapter({
             contractAddress: "",
             network: MOCK_NETWORK,
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
           }),
       ).toThrow("[dStorage/midnight] contractAddress is required");
     });
@@ -40,22 +43,11 @@ describe("MidnightChainAdapter", () => {
           new MidnightChainAdapter({
             contractAddress: "",
             network: MOCK_NETWORK,
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
           }),
       ).toThrow("Deploy your DataRegistry contract");
-    });
-
-    it("throws if credentials are not provided (undefined)", () => {
-      expect(
-        // @ts-expect-error — intentional: testing runtime validation
-        () =>
-          new MidnightChainAdapter({
-            contractAddress: "0xContract",
-            network: MOCK_NETWORK,
-          }),
-      ).toThrow(
-        "[dStorage/midnight] credentials.mnemonic or credentials.seedHex is required",
-      );
     });
 
     it("throws if network is not provided (undefined)", () => {
@@ -64,21 +56,11 @@ describe("MidnightChainAdapter", () => {
         () =>
           new MidnightChainAdapter({
             contractAddress: "0xContract",
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
           }),
       ).toThrow("[dStorage/midnight] network is required");
-    });
-
-    it("throws if credentials.mnemonic and credentials.seedHex are both missing in facade mode", () => {
-      expect(
-        () =>
-          new MidnightChainAdapter({
-            contractAddress: "0xContract",
-            network: MOCK_NETWORK,
-            walletMode: "facade",
-            credentials: {},
-          }),
-      ).toThrow("credentials.mnemonic or credentials.seedHex is required");
     });
 
     it("does not throw when credentials are missing in connector mode", () => {
@@ -92,13 +74,15 @@ describe("MidnightChainAdapter", () => {
       ).not.toThrow();
     });
 
-    it("does not throw with valid contractAddress and credentials in facade mode", () => {
+    it("does not throw with valid contractAddress in provider mode", () => {
       expect(
         () =>
           new MidnightChainAdapter({
             contractAddress: "0xABC",
             network: MOCK_NETWORK,
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
           }),
       ).not.toThrow();
     });
@@ -119,9 +103,45 @@ describe("MidnightChainAdapter", () => {
         () =>
           new MidnightChainAdapter({
             network: MOCK_NETWORK,
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
           }),
       ).not.toThrow();
+    });
+  });
+
+  // ── Provider mode validation ──────────────────────────────────────────────
+
+  describe('walletMode: "provider"', () => {
+    it("throws if walletProvider is missing", () => {
+      expect(
+        // @ts-expect-error — intentional: testing runtime validation
+        () =>
+          new MidnightChainAdapter({
+            contractAddress: "0xContract",
+            network: MOCK_NETWORK,
+            walletMode: "provider",
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+          }),
+      ).toThrow(
+        '[dStorage/midnight] walletProvider is required (walletMode: "provider")',
+      );
+    });
+
+    it("throws if privateStatePassword is missing", () => {
+      expect(
+        // @ts-expect-error — intentional: testing runtime validation
+        () =>
+          new MidnightChainAdapter({
+            contractAddress: "0xContract",
+            network: MOCK_NETWORK,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+          }),
+      ).toThrow(
+        '[dStorage/midnight] privateStatePassword is required (walletMode: "provider")',
+      );
     });
   });
 
@@ -134,7 +154,9 @@ describe("MidnightChainAdapter", () => {
           new MidnightChainAdapter({
             contractAddress: "0xContract",
             network: MOCK_NETWORK,
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
             nodeEndpoint: "https://custom.node.example.com",
           }),
       ).not.toThrow();
@@ -146,7 +168,9 @@ describe("MidnightChainAdapter", () => {
           new MidnightChainAdapter({
             contractAddress: "0xContract",
             network: MOCK_NETWORK,
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
             indexerEndpoint: "https://custom.indexer.example.com/graphql",
           }),
       ).not.toThrow();
@@ -158,7 +182,9 @@ describe("MidnightChainAdapter", () => {
           new MidnightChainAdapter({
             contractAddress: "0xContract",
             network: MOCK_NETWORK,
-            credentials: MOCK_CREDENTIALS,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
             proofServerEndpoint: "http://proof-server.internal:6300",
           }),
       ).not.toThrow();
@@ -168,11 +194,13 @@ describe("MidnightChainAdapter", () => {
   // ── Runtime behaviour when wallet is not initialized ─────────────────────
 
   describe("runtime behaviour when wallet is not initialized", () => {
-    it("writeReference throws about wallet not initialized (facade mode)", async () => {
+    it("writeReference throws about wallet not initialized (provider mode)", async () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: "0xContract",
         network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
+        walletMode: "provider",
+        walletProvider: MOCK_WALLET_PROVIDER,
+        privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
       });
       await expect(
         adapter.writeReference({
@@ -209,7 +237,9 @@ describe("MidnightChainAdapter", () => {
       const adapter = new MidnightChainAdapter({
         contractAddress: "0xOld",
         network: MOCK_NETWORK,
-        credentials: MOCK_CREDENTIALS,
+        walletMode: "provider",
+        walletProvider: MOCK_WALLET_PROVIDER,
+        privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
       });
       expect(() => adapter.setContractAddress("0xNew")).not.toThrow();
     });

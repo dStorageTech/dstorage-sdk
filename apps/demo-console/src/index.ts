@@ -44,6 +44,14 @@ import {
   MidnightChainAdapter,
   //MockMidnightChainAdapter,
 } from "@dstorage/chain";
+import {
+  type EnvironmentConfiguration,
+  resolveSeedHex,
+  buildWalletProvider,
+  syncWallet,
+  waitForUnshieldedFunds,
+  derivePrivateStatePassword,
+} from "./wallet/index.js";
 import { MnemonicSeedProvider } from "@dstorage/seed-providers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -107,6 +115,55 @@ async function withTicker<T>(
   } finally {
     clearInterval(id);
   }
+}
+
+// ── Wallet initialisation ─────────────────────────────────────────────────────
+
+async function initWallet(
+  envConfig: EnvironmentConfiguration,
+  seedHex: string | undefined,
+  skipFundCheck: boolean,
+) {
+  const { setNetworkId } =
+    await import("@midnight-ntwrk/midnight-js-network-id");
+  setNetworkId(envConfig.networkId as any);
+
+  const walletProvider = await withTicker(
+    () => "Building wallet...",
+    () => buildWalletProvider(envConfig, seedHex, logger),
+  );
+  await withTicker(
+    () => "Syncing wallet...",
+    () => syncWallet(walletProvider.wallet, 2_000, 360_000, logger),
+  );
+  if (!skipFundCheck) {
+    const { unshieldedToken } = await import("@midnight-ntwrk/ledger-v8");
+    const unshieldedState = await withTicker(
+      () => "Waiting for NIGHT funds...",
+      () =>
+        waitForUnshieldedFunds(
+          walletProvider.wallet,
+          envConfig,
+          unshieldedToken(),
+          logger,
+        ),
+    );
+    const nightBalance = unshieldedState.balances[unshieldedToken().raw];
+    if (nightBalance === undefined) {
+      logger.log("dStorage/midnight", "No funds received, exiting...");
+      throw new Error("[dStorage/midnight] No NIGHT funds received/detected.");
+    }
+    logger.log(
+      "dStorage/midnight",
+      `Your NIGHT wallet balance is: ${nightBalance}`,
+    );
+  } else {
+    logger.log(
+      "dStorage/midnight",
+      "Managed payment mode — skipping NIGHT balance check.",
+    );
+  }
+  return walletProvider;
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -259,12 +316,32 @@ async function main(): Promise<void> {
         : {}),
     });
 
-    // ── 7. Build the chain adapter ──────────────────────────────────────────
+    // ── 7. Build the wallet and sync ────────────────────────────────────────
+    const seedHex = await resolveSeedHex(credentials);
+    const envConfig: EnvironmentConfiguration = {
+      walletNetworkId: networkName,
+      networkId: networkName,
+      indexer: defaultEndpoints.indexerHttp,
+      indexerWS: defaultEndpoints.indexerWs,
+      node: defaultEndpoints.node,
+      nodeWS: defaultEndpoints.nodeWs,
+      faucet: undefined,
+      proofServer: proofServerEndpoint,
+    };
+
+    const walletProvider = await initWallet(
+      envConfig,
+      seedHex,
+      useCloudApiService,
+    );
+
+    // ── 8. Build the chain adapter ──────────────────────────────────────────
     chainAdapter = new MidnightChainAdapter({
       logger,
       network: networkName,
-      walletMode: "facade",
-      credentials,
+      walletMode: "provider",
+      walletProvider,
+      privateStatePassword: derivePrivateStatePassword(seedHex),
       ...(contractAddressInput
         ? { contractAddress: contractAddressInput }
         : {}),
@@ -283,7 +360,7 @@ async function main(): Promise<void> {
         : {}),
     });
 
-    // ── 8. Initialise the DStorage SDK ──────────────────────────────────────
+    // ── 9. Initialise the DStorage SDK ──────────────────────────────────────
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter,
@@ -294,11 +371,11 @@ async function main(): Promise<void> {
         : {}),
     });
 
-    // sdk.init() calls chain.init() (wallet sync), then sets/deploys the contract,
-    // and derives an AES-GCM encryption key from the seed.
-    console.log("\nInitialising wallet, syncing, and preparing contract...");
+    // sdk.init() deploys or joins the DataRegistry contract and derives the
+    // AES-GCM encryption key from the seed. Wallet is already synced at this point.
+    console.log("\nPreparing contract...");
     const dataRegistryAddress = await withTicker(
-      () => "Building wallet and syncing...",
+      () => "Deploying or joining DataRegistry contract...",
       () => sdk.init(),
     );
     console.log(`\nContract:   ${dataRegistryAddress}`);

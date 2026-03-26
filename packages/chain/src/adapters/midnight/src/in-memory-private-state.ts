@@ -1,9 +1,12 @@
 /**
  * In-memory private state provider for browser environments.
- * Ported from the Midnight example-bboard project.
  *
  * State is NOT persisted across page reloads — suitable for demos and
  * browser dApps where per-session state is sufficient.
+ *
+ * In the future, dStorage could provide alternative private state providers
+ * that persist state on decentralised networks, enabling cross-device access
+ * and resilience without relying on any centralised storage backend.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

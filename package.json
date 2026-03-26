@@ -12,7 +12,6 @@
     "compile:contract": "compact compile packages/chain/src/adapters/midnight/contracts/DataRegistry.compact packages/chain/src/adapters/midnight/contracts/dataregistry/managed",
     "demo:run": "npm run --workspace=apps/demo copy-zk-artifacts && npm run dev --workspace=apps/demo",
     "demo-console:run": "npm run start --workspace=apps/demo-console",
-    "example": "tsx examples/basic-flow.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

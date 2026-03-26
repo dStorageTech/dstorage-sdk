@@ -23,7 +23,8 @@ import {
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { HDWallet, Roles } from "@midnight-ntwrk/wallet-sdk-hd";
-import type { Logger } from "../../../types.js";
+import type { Logger as DStorageLogger } from "@dstorage/core";
+type Logger = DStorageLogger;
 
 // ── Local environment config type ─────────────────────────────────────────────
 // Inlined from testkit-js EnvironmentConfiguration to avoid importing that package.

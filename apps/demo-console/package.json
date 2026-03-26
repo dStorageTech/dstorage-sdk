@@ -5,8 +5,7 @@
   "description": "Console demo for Midnight-only dStorage SDK usage with real wallet",
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts",
-    "compile:contract": "compact compile contracts/bboard.compact contracts/managed/bboard"
+    "start": "tsx src/index.ts"
   },
   "dependencies": {
     "@dstorage/chain": "*",

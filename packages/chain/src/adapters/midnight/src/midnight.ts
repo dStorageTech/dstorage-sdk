@@ -8,7 +8,7 @@
  * midnight.ts only needs to manage the wallet lifecycle and provider assembly.
  *
  * Wallet lifecycle:
- *   - 'facade': derive keys, build WalletFacade, wait for sync (Node.js CLI)
+ *   - 'provider': accepts a pre-built wallet provider (Node.js CLI)
  *   - 'connector': connect to browser wallet extension (browser dApp)
  *
  * Transaction flow (handled by DataRegistryAPI internally):
@@ -40,10 +40,10 @@ import type {
 } from "../../../types.js";
 
 import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
-import type { DataRegistryAPI } from "./api.js";
+import type { DataRegistryAPI } from "./contract-api.js";
 import type { DataRegistryProviders } from "./common-types.js";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-import type { EnvironmentConfiguration } from "./wallet-provider.js";
+import type { AdapterWalletProvider } from "./common-types.js";
 import { UnboundTransaction } from "@midnight-ntwrk/midnight-js-types";
 import { type FinalizedTransaction } from "@midnight-ntwrk/ledger-v8";
 
@@ -53,6 +53,17 @@ export interface WalletAddresses {
   unshielded: string;
   shielded: string;
   dust: string;
+}
+
+/** Internal environment configuration passed to wallet SDK providers. */
+interface EnvironmentConfiguration {
+  walletNetworkId: string;
+  networkId: string;
+  indexer: string;
+  indexerWS: string;
+  node: string;
+  nodeWS: string;
+  proofServer: string;
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -107,19 +118,23 @@ export type MidnightChainAdapterConfig = BaseConfig &
   (
     | {
         /**
-         * Wallet mode. Default: 'facade' (uses wallet-sdk-facade for Node.js CLI).
-         * Set to 'connector' to use browser wallet extension (e.g., Midnight Lace).
+         * Provider mode: the caller builds, starts, syncs, and passes in a wallet provider.
+         * The adapter uses it directly without managing any wallet lifecycle.
+         * Use this mode for Node.js CLI apps (e.g., the dStorage console demo).
          */
-        walletMode: "facade";
+        walletMode: "provider";
         /**
-         * Wallet credentials. Provide exactly one of mnemonic or seedHex.
-         * Used by init() to derive Midnight signing keys in facade mode.
-         * Required only when walletMode is 'facade'.
+         * A fully initialised wallet provider (started and synced before passing in).
+         * Must implement AdapterWalletProvider (WalletProvider + MidnightProvider + .wallet).
          */
-        credentials: {
-          mnemonic?: string; // BIP-39 mnemonic
-          seedHex?: string; // 64 or 128 hex chars
-        };
+        walletProvider: AdapterWalletProvider;
+        /**
+         * LevelDB encryption password for the private state store.
+         * Must satisfy the policy: at least 3 of 4 character classes
+         * (uppercase, lowercase, digits, special characters).
+         * Recommended derivation: "Aa1!" + seedHex (all 4 classes guaranteed).
+         */
+        privateStatePassword: string;
         /**
          * Path to the directory that contains the compiled DataRegistry contract's ZK artifacts.
          * Expected sub-directories:
@@ -127,7 +142,7 @@ export type MidnightChainAdapterConfig = BaseConfig &
          *   ${zkArtifactsPath}/keys/${circuitId}.verifier
          *   ${zkArtifactsPath}/zkir/${circuitId}.bzkir
          *
-         * Required for write operations (storeReference, etc.) in facade mode.
+         * Required for write operations (storeReference, etc.) in provider mode.
          */
         zkArtifactsPath?: string;
       }
@@ -154,24 +169,6 @@ export type MidnightChainAdapterConfig = BaseConfig &
         zkConfigBaseUrl?: string;
       }
   );
-
-/**
- * Derive a deterministic LevelDB encryption password from the wallet seed hex.
- *
- * The password policy requires at least 3 of 4 character classes (uppercase,
- * lowercase, digits, special characters). A raw hex seed only contains lowercase
- * letters + digits (2 classes), so we prefix with "Aa1!" which adds uppercase
- * and a special character, guaranteeing all 4 classes are present.
- * The prefix is fixed — the same seed always produces the same password.
- */
-function derivePrivateStatePassword(seedHex: string | undefined): string {
-  if (!seedHex) {
-    throw new Error(
-      "[dStorage/midnight] Cannot derive private state password: no wallet seed available.",
-    );
-  }
-  return "Aa1!" + seedHex;
-}
 
 // ── Browser-safe byte/encoding helpers ────────────────────────────────────────
 
@@ -226,7 +223,7 @@ export class MidnightChainAdapter implements ChainAdapter {
   private connectorIndexerWs: string | null = null;
   private connectorProofServer: string | null = null;
 
-  private readonly walletMode: "facade" | "connector";
+  private readonly walletMode: "connector" | "provider";
   private readonly connectorName: string | null;
   private readonly logger: Logger | undefined;
 
@@ -239,7 +236,8 @@ export class MidnightChainAdapter implements ChainAdapter {
   // Reset to null when contract address changes (setContractAddress) or on stop().
   private _api: DataRegistryAPI | null = null;
 
-  private readonly _credentials: { mnemonic?: string; seedHex?: string };
+  private _injectedWalletProvider: AdapterWalletProvider | null = null;
+  private _injectedPrivateStatePassword: string | null = null;
 
   private readonly config: EnvironmentConfiguration;
 
@@ -255,22 +253,25 @@ export class MidnightChainAdapter implements ChainAdapter {
       throw new Error("[dStorage/midnight] network is required.");
     }
 
-    // Determine wallet mode and validate credentials
-    const walletMode =
-      "walletMode" in config ? (config.walletMode ?? "facade") : "facade";
-    if (walletMode === "facade") {
-      const facadeConfig = config as Extract<
+    // Determine wallet mode and validate required fields
+    const walletMode = config.walletMode;
+    if (walletMode === "provider") {
+      const providerConfig = config as Extract<
         MidnightChainAdapterConfig,
-        { walletMode?: "facade" }
+        { walletMode: "provider" }
       >;
-      if (
-        !facadeConfig.credentials?.mnemonic &&
-        !facadeConfig.credentials?.seedHex
-      ) {
+      if (!providerConfig.walletProvider) {
         throw new Error(
-          '[dStorage/midnight] credentials.mnemonic or credentials.seedHex is required (walletMode: "facade").',
+          '[dStorage/midnight] walletProvider is required (walletMode: "provider").',
         );
       }
+      if (!providerConfig.privateStatePassword) {
+        throw new Error(
+          '[dStorage/midnight] privateStatePassword is required (walletMode: "provider").',
+        );
+      }
+      this._injectedWalletProvider = providerConfig.walletProvider;
+      this._injectedPrivateStatePassword = providerConfig.privateStatePassword;
     }
 
     this.logger = config.logger;
@@ -286,16 +287,12 @@ export class MidnightChainAdapter implements ChainAdapter {
         : null;
 
     this._contractAddress = config.contractAddress;
-    this._credentials =
-      walletMode === "facade" && "credentials" in config
-        ? config.credentials
-        : {};
     this._zkArtifactsPath =
-      walletMode === "facade" && "zkArtifactsPath" in config
+      walletMode === "provider" && "zkArtifactsPath" in config
         ? (
             config as Extract<
               MidnightChainAdapterConfig,
-              { walletMode: "facade" }
+              { walletMode: "provider" }
             >
           ).zkArtifactsPath
         : undefined;
@@ -316,7 +313,6 @@ export class MidnightChainAdapter implements ChainAdapter {
       indexerWS: config.indexerWsEndpoint,
       node: config.nodeEndpoint,
       nodeWS: config.nodeWsEndpoint,
-      faucet: undefined,
       proofServer: config.proofServerEndpoint,
     };
 
@@ -614,78 +610,15 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
-   * Resolve the wallet seed as a hex string from credentials.
-   * If seedHex is provided directly, return it as-is.
-   * If only a mnemonic is provided, derive the 64-byte seed via KeyDeriver
-   * and return it as a 128-char hex string so the wallet always uses the same keys.
+   * Build DataRegistryProviders using a pre-built, already-started wallet provider.
+   * The caller is responsible for wallet construction, sync, and fund-waiting before
+   * passing the provider to the adapter via walletMode: "provider".
    */
-  private async _resolveSeedHex(): Promise<string | undefined> {
-    if (this._credentials.seedHex) return this._credentials.seedHex;
-    if (this._credentials.mnemonic) {
-      const { KeyDeriver } = await import("@dstorage/crypto");
-      const deriver = new KeyDeriver({ mnemonic: this._credentials.mnemonic });
-      const seed = await deriver.getSeed();
-      return Array.from(seed)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-    }
-    return undefined;
-  }
-
-  /**
-   * Build a DataRegistryProviders object by combining the Midnight providers
-   * (wallet, proof server, indexer, node) with an in-memory private state store.
-   */
-  private async _buildDataRegistryProviders(): Promise<DataRegistryProviders> {
-    // Facade mode (Node.js CLI only — uses WalletFacade and levelDb private state).
-    const zkConfigProvider = await this._buildZkConfigProvider();
-
-    const { MidnightWalletProvider } = await import(
-      /* @vite-ignore */ "./wallet-provider.js"
-    );
-    const seedHex = await this._resolveSeedHex();
-    const walletProvider = await MidnightWalletProvider.build(
-      this.config,
-      seedHex,
-      this.logger,
-    );
+  private async _buildWalletProviderMode(): Promise<DataRegistryProviders> {
+    const walletProvider = this._injectedWalletProvider!;
     const walletFacade: WalletFacade = walletProvider.wallet;
-    await walletProvider.start();
 
-    if (!this.managedPaymentAdapter) {
-      // When using the local wallet for fee payment, verify the wallet holds NIGHT
-      // tokens (needed for DUST conversion). Waits for full sync if balance is zero.
-      // Skipped in managed payment mode — the signing server covers fees, so the
-      // local wallet does not need any NIGHT balance.
-      const { waitForUnshieldedFunds } = await import(
-        /* @vite-ignore */ "./wallet-utils.js"
-      );
-      const { unshieldedToken } = await import(
-        /* @vite-ignore */ "@midnight-ntwrk/ledger-v8"
-      );
-      const unshieldedState = await waitForUnshieldedFunds(
-        walletFacade,
-        this.config,
-        unshieldedToken(),
-        this.logger,
-      );
-      const nightBalance = unshieldedState.balances[unshieldedToken().raw];
-      if (nightBalance === undefined) {
-        this.logger?.log("dStorage/midnight", "No funds received, exiting...");
-        throw new Error(
-          "[dStorage/midnight] No NIGHT funds received/detected.",
-        );
-      }
-      this.logger?.log(
-        "dStorage/midnight",
-        `Your NIGHT wallet balance is: ${nightBalance}`,
-      );
-    } else {
-      this.logger?.log(
-        "dStorage/midnight",
-        "Managed payment mode — skipping NIGHT balance check.",
-      );
-    }
+    const zkConfigProvider = await this._buildZkConfigProvider();
 
     const { firstValueFrom } = await import("rxjs");
     const facadeState = await firstValueFrom(
@@ -714,7 +647,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const basePrivateStateProvider = (levelPrivateStateProvider as any)({
       privateStateStoreName,
       signingKeyStoreName: `${privateStateStoreName}-signing-keys`,
-      privateStoragePasswordProvider: () => derivePrivateStatePassword(seedHex),
+      privateStoragePasswordProvider: () => this._injectedPrivateStatePassword!,
       accountId: this.addresses!.unshielded,
     });
     const providers = await this._assembleDataRegistryProviders({
@@ -750,10 +683,10 @@ export class MidnightChainAdapter implements ChainAdapter {
     if (this.walletMode === "connector") {
       providers = await this._buildConnectorProviders();
     } else {
-      providers = await this._buildDataRegistryProviders();
+      providers = await this._buildWalletProviderMode();
     }
 
-    const { DataRegistryAPI } = await import("./api.js");
+    const { DataRegistryAPI } = await import("./contract-api.js");
     if (!this._contractAddress) {
       this.logger?.log("dStorage/midnight", "Deploying DataRegistry contract…");
       this._api = await DataRegistryAPI.deploy(providers, this.logger);
@@ -1169,12 +1102,12 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   /**
    * Read NIGHT and DUST balances.
-   * - Facade mode: reads from synced wallet state
+   * - Provider mode: reads from synced wallet state
    * TODO:
    * - Connector mode: returns 0n (known limitation)
    */
   async getBalances(): Promise<WalletBalances> {
-    if (this.walletMode === "facade") {
+    if (this.walletMode === "provider") {
       if (!this.facade) {
         throw new Error(
           "[dStorage/midnight] getBalances() called before init().",
