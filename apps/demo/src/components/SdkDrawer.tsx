@@ -1,6 +1,14 @@
 import type { MetaTxProgress, ZkProofProgress } from "@dstorage/core";
-import type { ChainAdapterKey, StorageAdapterKey } from "../types";
-import { ADAPTER_CONFIGS, CHAIN_ADAPTER_CONFIGS } from "../adapterConfigs";
+import type {
+  ChainAdapterKey,
+  PaymentAdapterKey,
+  StorageAdapterKey,
+} from "../types";
+import {
+  ADAPTER_CONFIGS,
+  CHAIN_ADAPTER_CONFIGS,
+  PAYMENT_ADAPTER_CONFIGS,
+} from "../adapterConfigs";
 
 interface Props {
   open: boolean;
@@ -9,6 +17,7 @@ interface Props {
   zkProgress: ZkProofProgress | null;
   storageAdapterKey: StorageAdapterKey;
   chainAdapterKey: ChainAdapterKey;
+  paymentAdapterKey: PaymentAdapterKey;
   onToggle: () => void;
 }
 
@@ -19,10 +28,12 @@ export function SdkDrawer({
   zkProgress,
   storageAdapterKey,
   chainAdapterKey,
+  paymentAdapterKey,
   onToggle,
 }: Props) {
   const storageAdapter = ADAPTER_CONFIGS[storageAdapterKey];
   const chainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
+  const paymentAdapter = PAYMENT_ADAPTER_CONFIGS[paymentAdapterKey];
   const hasActivity = !!(metaTxProgress || zkProgress);
 
   return (
@@ -45,6 +56,10 @@ export function SdkDrawer({
           <span className="sdk-tab-config-sep">·</span>
           <span className={`as-badge as-badge-${chainAdapter.status}`}>
             {chainAdapter.label}
+          </span>
+          <span className="sdk-tab-config-sep">·</span>
+          <span className={`as-badge as-badge-${paymentAdapter.status}`}>
+            {paymentAdapter.label}
           </span>
         </div>
         <div className="sdk-tab-right">
@@ -81,6 +96,15 @@ export function SdkDrawer({
                 </span>
                 <span className="sdk-idle-desc">
                   {chainAdapter.description}
+                </span>
+              </div>
+              <div className="sdk-idle-row">
+                <span className="sdk-idle-label">Payment</span>
+                <span className={`as-badge as-badge-${paymentAdapter.status}`}>
+                  {paymentAdapter.label}
+                </span>
+                <span className="sdk-idle-desc">
+                  {paymentAdapter.description}
                 </span>
               </div>
             </div>

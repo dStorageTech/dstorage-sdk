@@ -511,6 +511,7 @@ export default function App() {
         zkProgress={zkProgress}
         storageAdapterKey={storageAdapterKey}
         chainAdapterKey={chainAdapterKey}
+        paymentAdapterKey={paymentAdapterKey}
         onToggle={() => setDrawerOpen((o) => !o)}
       />
 

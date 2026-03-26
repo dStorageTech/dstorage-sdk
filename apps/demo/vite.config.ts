@@ -58,11 +58,8 @@ export default defineConfig({
       external: [
         // Midnight wallet SDK (Node.js / facade mode only)
         /^@midnight-ntwrk\/wallet-sdk/,
-        /^@midnight-ntwrk\/testkit-js/,
         /^@midnight-ntwrk\/midnight-js-node-zk-config-provider/,
         /^@midnight-ntwrk\/midnight-js-level-private-state-provider/,
-        // testcontainers + native binaries (transitively from testkit-js)
-        /^testcontainers/,
         /^ssh2/,
         "leveldown",
         "level",
@@ -115,7 +112,6 @@ export default defineConfig({
       "@midnight-ntwrk/onchain-runtime-v2",
       "@midnight-ntwrk/midnight-js-node-zk-config-provider",
       "@midnight-ntwrk/midnight-js-level-private-state-provider",
-      "@midnight-ntwrk/testkit-js",
       "@midnight-ntwrk/wallet-sdk-facade",
       "@midnight-ntwrk/wallet-sdk-shielded",
       "@midnight-ntwrk/wallet-sdk-unshielded-wallet",
