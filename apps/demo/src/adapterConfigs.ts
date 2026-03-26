@@ -13,6 +13,7 @@ export const ADAPTER_CONFIGS: Record<
     description: string;
     status: "live" | "preview" | "stub";
     note?: string;
+    cmd?: string;
   }
 > = {
   mock: {
@@ -25,7 +26,8 @@ export const ADAPTER_CONFIGS: Record<
     label: "Arweave Local",
     description: "Local arlocal node — real Arweave flow, no AR tokens needed.",
     status: "live",
-    note: "docker run -d --rm -p 1984:1984 textury/arlocal  (or: npx arlocal)",
+    note: "Requires a local arlocal server running at http://localhost:1984",
+    cmd: "docker run -d --rm -p 1984:1984 textury/arlocal",
   },
   arweave: {
     label: "Arweave",

@@ -180,6 +180,12 @@ export function PatientPanel({
                 </div>
                 <div className="as-card-desc">{cfg.description}</div>
                 {cfg.note && <div className="as-card-note">{cfg.note}</div>}
+                {cfg.cmd && storageAdapterKey === key && (
+                  <div className="as-card-cmd">
+                    <span className="as-card-cmd-label">Run locally:</span>
+                    <code className="as-card-cmd-code">{cfg.cmd}</code>
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -239,6 +245,47 @@ export function PatientPanel({
               </button>
             ))}
           </div>
+          {paymentAdapterKey === "local" &&
+            (storageAdapterKey === "arweave" ||
+              chainAdapterKey === "midnight-connector") && (
+              <div className="pp-managed-info">
+                <div className="pp-managed-info-title">
+                  Browser Wallet Extensions Required
+                </div>
+                <p className="pp-managed-info-body">
+                  Local payment uses your browser wallet extension to sign and
+                  pay fees directly — no intermediary service involved.
+                </p>
+                <ul className="pp-managed-info-list">
+                  {storageAdapterKey === "arweave" && (
+                    <li>
+                      <strong>Wander</strong> — required for Arweave storage
+                      fees. Install from{" "}
+                      <a
+                        href="https://www.wander.app/"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        wander.app
+                      </a>
+                    </li>
+                  )}
+                  {chainAdapterKey === "midnight-connector" && (
+                    <li>
+                      <strong>Lace</strong> — required for Midnight transaction
+                      fees. Install from{" "}
+                      <a
+                        href="https://www.lace.io/"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        lace.io
+                      </a>
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
           {paymentAdapterKey === "managed" && (
             <div className="pp-payments-fields">
               <div className="pp-managed-info">

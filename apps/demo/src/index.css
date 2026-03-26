@@ -900,6 +900,33 @@ code {
   font-style: italic;
   margin-top: 4px;
 }
+
+.as-card-cmd {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  background: var(--c-surface-3, #141720);
+  border: 1px solid var(--c-accent, #7c6af7);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.as-card-cmd-label {
+  font-size: 10px;
+  color: var(--c-accent, #7c6af7);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.as-card-cmd-code {
+  font-family: "JetBrains Mono", "Fira Code", "Menlo", monospace;
+  font-size: 11px;
+  color: var(--c-text, #e2e8f0);
+  word-break: break-all;
+  user-select: all;
+}
 .as-card-status {
   font-size: 9px;
   font-weight: 700;
