@@ -25,7 +25,6 @@ import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
 
 // ── Local environment config type ─────────────────────────────────────────────
-// Inlined from testkit-js EnvironmentConfiguration to avoid importing that package.
 export interface EnvironmentConfiguration {
   walletNetworkId: string;
   networkId: string;
@@ -73,7 +72,7 @@ function hexToUint8Array(hex: string): Uint8Array {
  * Provider class that implements wallet functionality for the Midnight network.
  * Handles transaction balancing, submission, and wallet state management.
  *
- * Built directly from wallet-sdk-* packages (no testkit-js dependency).
+ * Built directly from wallet-sdk-* packages.
  */
 export class MidnightWalletProvider
   implements MidnightProvider, WalletProvider
@@ -116,12 +115,12 @@ export class MidnightWalletProvider
         shieldedSecretKeys: this.zswapSecretKeys,
         dustSecretKey: this.dustSecretKey,
       },
-      { ttl },
+      {
+        ttl,
+        tokenKindsToBalance: ["dust"], // only DUST
+      },
     );
-    const signedRecipe = await this.wallet.signRecipe(recipe, (data) =>
-      this.keystore.signData(data),
-    );
-    return await this.wallet.finalizeRecipe(signedRecipe);
+    return await this.wallet.finalizeRecipe(recipe);
   }
 
   submitTx(tx: FinalizedTransaction): Promise<string> {

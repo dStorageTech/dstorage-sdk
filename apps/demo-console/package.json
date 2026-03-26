@@ -20,6 +20,7 @@
     "@midnight-ntwrk/wallet-sdk-address-format": "^3.0.0",
     "@midnight-ntwrk/wallet-sdk-dust-wallet": "^3.0.0",
     "@midnight-ntwrk/wallet-sdk-facade": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.0",
     "@midnight-ntwrk/wallet-sdk-shielded": "^2.1.0",
     "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^2.1.0",
     "axios": "^1.13.6",

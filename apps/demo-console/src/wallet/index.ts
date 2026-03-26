@@ -97,11 +97,15 @@ export async function initWallet(
     () => "Building wallet...",
     () => buildWalletProvider(envConfig, seedHex),
   );
-  await ticker(
-    () => "Syncing wallet...",
-    () => syncWallet(walletProvider.wallet, 2_000, 360_000),
-  );
-  if (!skipFundCheck) {
+  if (skipFundCheck) {
+    console.log(
+      "Managed payment mode — skipping wallet sync and NIGHT balance check.",
+    );
+  } else {
+    await ticker(
+      () => "Syncing wallet...",
+      () => syncWallet(walletProvider.wallet, 2_000, 360_000),
+    );
     const { unshieldedToken } = await import("@midnight-ntwrk/ledger-v8");
     const unshieldedState = await ticker(
       () => "Waiting for NIGHT funds...",
@@ -113,8 +117,6 @@ export async function initWallet(
       throw new Error("No NIGHT funds received/detected.");
     }
     console.log(`Your NIGHT wallet balance is: ${nightBalance}`);
-  } else {
-    console.log("Managed payment mode — skipping NIGHT balance check.");
   }
   return walletProvider;
 }
