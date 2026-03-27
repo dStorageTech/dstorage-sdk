@@ -2,7 +2,6 @@ export * from "./types.js"; // includes Logger
 export * from "./dStorage.js";
 export { CHUNK_SIZE, isManifest } from "./chunked.js";
 export type { ChunkManifest, ChunkEntry } from "./chunked.js";
-export * from "./wallet.js";
 export * from "./payment.js";
 export * from "./metaTransaction.js";
 export * from "./contracts.js";
