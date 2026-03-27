@@ -50,8 +50,6 @@ export interface DStorageConfig {
    * stored as plaintext (public).
    */
   encryptionSeedProvider?: EncryptionSeedProvider;
-  /** Optional label for the type of data being stored */
-  defaultDataLabel?: string;
   /**
    * On-chain address of an already-deployed DataRegistry contract.
    * If omitted, sdk.init() will deploy a new contract and return its address.
@@ -107,8 +105,6 @@ export interface UploadResult {
 
 /** Result returned from dStorage.retrieve() */
 export interface RetrieveResult {
-  /** The decrypted content as a UTF-8 string */
-  content: string;
   /** The raw decrypted bytes */
   bytes: Uint8Array;
   /** Metadata attached at upload time */

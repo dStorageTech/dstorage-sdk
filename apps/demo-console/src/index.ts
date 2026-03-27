@@ -450,8 +450,9 @@ async function main(): Promise<void> {
                 `  Hex preview (first 64 bytes): ${preview}${result.bytes.byteLength > 64 ? "…" : ""}\n`,
               );
             } else {
-              const preview = result.content.slice(0, 512);
-              const truncated = result.content.length > 512 ? "…" : "";
+              const decoded = new TextDecoder().decode(result.bytes);
+              const preview = decoded.slice(0, 512);
+              const truncated = decoded.length > 512 ? "…" : "";
               console.log(
                 `\n  ✓ Retrieved (${result.bytes.byteLength} bytes):`,
               );

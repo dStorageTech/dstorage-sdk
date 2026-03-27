@@ -82,9 +82,9 @@ describe("upload small file (≤ CHUNK_SIZE)", () => {
   it("single-shot path: upload returns a storageId, retrieve round-trips", async () => {
     const ds = await makeInitedDStorage();
     const content = "small file content";
-    const { chainRefId } = await ds.upload(content);
-    const { content: retrieved } = await ds.retrieveByRefId(chainRefId);
-    expect(retrieved).toBe(content);
+    const { chainRefId } = await ds.upload(new TextEncoder().encode(content));
+    const { bytes } = await ds.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe(content);
   });
 
   it("file exactly CHUNK_SIZE bytes uses single-shot path (1 storage entry)", async () => {
@@ -193,13 +193,15 @@ describe("upload large file (> CHUNK_SIZE)", () => {
 describe("upload backward compatibility", () => {
   it("accepts old-style metadata Record as second arg", async () => {
     const ds = await makeInitedDStorage();
-    const result = await ds.upload("hello", { label: "my-label" });
+    const result = await ds.upload(new TextEncoder().encode("hello"), {
+      label: "my-label",
+    });
     expect(result.chainRefId).toBeDefined();
   });
 
   it("accepts new UploadOptions with metadata", async () => {
     const ds = await makeInitedDStorage();
-    const result = await ds.upload("hello", {
+    const result = await ds.upload(new TextEncoder().encode("hello"), {
       metadata: { label: "my-label" },
     });
     expect(result.chainRefId).toBeDefined();

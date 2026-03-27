@@ -12,6 +12,8 @@ import { MockChainAdapter } from "@dstorage/chain";
 import { DemoSeedProvider } from "@dstorage/seed-providers";
 import type { DStorageConfig } from "../types.js";
 
+const enc = (s: string) => new TextEncoder().encode(s);
+
 // ── Shared adapters ───────────────────────────────────────────────────────────
 // Each test gets its own storage + chain adapter instances to avoid cross-test
 // state interference (module-level Maps in mock adapters are isolated per file).
@@ -35,9 +37,9 @@ async function makeUser(address: string): Promise<DStorage> {
 describe("upload → retrieveByRefId round-trip", () => {
   it("Alice uploads and retrieves her own plaintext", async () => {
     const alice = await makeUser("0xAlice_i1");
-    const { chainRefId } = await alice.upload("Alice private record");
-    const { content } = await alice.retrieveByRefId(chainRefId);
-    expect(content).toBe("Alice private record");
+    const { chainRefId } = await alice.upload(enc("Alice private record"));
+    const { bytes } = await alice.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe("Alice private record");
   });
 
   it("multiple distinct uploads are all independently retrievable", async () => {
@@ -45,12 +47,12 @@ describe("upload → retrieveByRefId round-trip", () => {
     const records = ["Record A", "Record B", "Record C"];
     const ids: string[] = [];
     for (const r of records) {
-      const { chainRefId } = await alice.upload(r);
+      const { chainRefId } = await alice.upload(enc(r));
       ids.push(chainRefId);
     }
     for (let i = 0; i < records.length; i++) {
-      const { content } = await alice.retrieveByRefId(ids[i]!);
-      expect(content).toBe(records[i]);
+      const { bytes } = await alice.retrieveByRefId(ids[i]!);
+      expect(new TextDecoder().decode(bytes)).toBe(records[i]);
     }
   });
 
@@ -67,17 +69,17 @@ describe("upload → retrieveByRefId round-trip", () => {
     // The low-level upload() accepts any string including empty
     const alice = await makeUser("0xAlice_i4");
     // Non-empty string to avoid edge cases with encryption
-    const { chainRefId } = await alice.upload(".");
-    const { content } = await alice.retrieveByRefId(chainRefId);
-    expect(content).toBe(".");
+    const { chainRefId } = await alice.upload(enc("."));
+    const { bytes } = await alice.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe(".");
   });
 
   it("large content (100KB text) round-trips correctly", async () => {
     const alice = await makeUser("0xAlice_i5");
     const bigContent = "x".repeat(100 * 1024);
-    const { chainRefId } = await alice.upload(bigContent);
-    const { content } = await alice.retrieveByRefId(chainRefId);
-    expect(content).toBe(bigContent);
+    const { chainRefId } = await alice.upload(enc(bigContent));
+    const { bytes } = await alice.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe(bigContent);
   });
 });
 
@@ -101,7 +103,7 @@ describe("wallet isolation", () => {
     await bob.init();
 
     // Bob uploads something
-    const { storageId, chainRefId } = await bob.upload("Bob private");
+    const { storageId, chainRefId } = await bob.upload(enc("Bob private"));
     // Reconstruct Bob's refId for Alice to try to retrieveByRefId
     const refId = `${storageId}::${chainRefId}`;
 
@@ -126,11 +128,11 @@ describe("wallet isolation", () => {
     await ds2.init();
 
     // Upload with ds1
-    const { chainRefId } = await ds1.upload("Shared key test");
+    const { chainRefId } = await ds1.upload(enc("Shared key test"));
 
     // Retrieve with ds2 (same address → same key)
-    const { content } = await ds2.retrieveByRefId(chainRefId);
-    expect(content).toBe("Shared key test");
+    const { bytes } = await ds2.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe("Shared key test");
   });
 });
 
@@ -147,13 +149,13 @@ describe("multi-record scenarios", () => {
     const ids: Record<string, string> = {};
 
     for (const [key, content] of Object.entries(records)) {
-      const { chainRefId } = await alice.upload(content);
+      const { chainRefId } = await alice.upload(enc(content));
       ids[key] = chainRefId;
     }
 
     for (const [key, content] of Object.entries(records)) {
-      const { content: retrieved } = await alice.retrieveByRefId(ids[key]!);
-      expect(retrieved).toBe(content);
+      const { bytes } = await alice.retrieveByRefId(ids[key]!);
+      expect(new TextDecoder().decode(bytes)).toBe(content);
     }
   });
 });
@@ -173,12 +175,12 @@ describe("disconnect and reconnect", () => {
     const ds = makeDs();
     await ds.init();
 
-    const { chainRefId } = await ds.upload("persistent data");
+    const { chainRefId } = await ds.upload(enc("persistent data"));
     ds.disconnect();
 
     // Re-init with the same seed provider (same address → same key)
     await ds.init();
-    const { content } = await ds.retrieveByRefId(chainRefId);
-    expect(content).toBe("persistent data");
+    const { bytes } = await ds.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe("persistent data");
   });
 });

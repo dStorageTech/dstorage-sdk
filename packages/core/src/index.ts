@@ -4,8 +4,6 @@ export { CHUNK_SIZE, isManifest } from "./chunked.js";
 export type { ChunkManifest, ChunkEntry } from "./chunked.js";
 export * from "./payment.js";
 export * from "./metaTransaction.js";
-export * from "./contracts.js";
-export * from "./zkProof.js";
 
 // Re-export adapters for convenience — developers only need to import @dstorage/core
 export {

@@ -10,7 +10,7 @@
  * Developer API:
  *   const ds = new DStorage(config);
  *   await ds.connect(walletInfo);
- *   const { dataId } = await ds.upload("hello, private world");
+ *   const { dataId } = await ds.upload(new TextEncoder().encode("hello, private world"));
  *   const { content } = await ds.retrieve(dataId);
  *   await ds.grant(dataId, "0xRecipientAddress");
  *   await ds.revoke(dataId, "0xRecipientAddress");
@@ -125,18 +125,15 @@ export class DStorage implements DStorageContext {
    * each encrypted and uploaded independently. A manifest file ties them together.
    * Only the manifest's storageId is written on-chain.
    *
-   * @param content          Plain-text string or Uint8Array to store
+   * @param content          Uint8Array to store
    * @param metadataOrOptions  Optional metadata or UploadOptions (with onProgress callback)
    * @returns                UploadResult containing the dataId needed to retrieve later
    */
   async upload(
-    content: string | Uint8Array,
+    bytes: Uint8Array,
     metadataOrOptions: Record<string, string> | UploadOptions = {},
   ): Promise<UploadResult> {
     this.assertConnected();
-
-    const bytes =
-      typeof content === "string" ? new TextEncoder().encode(content) : content;
 
     // Distinguish old-style metadata object from new UploadOptions.
     let metadata: Record<string, string>;
@@ -210,7 +207,7 @@ export class DStorage implements DStorageContext {
     }
 
     // 4. Write on-chain reference — only the storage pointer, never the data
-    const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
+    const dataLabel = metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
       storageId: onChainStorageId,
       encryptionScheme,
@@ -316,7 +313,6 @@ export class DStorage implements DStorageContext {
     );
 
     return {
-      content: new TextDecoder().decode(decryptedBytes),
       bytes: decryptedBytes,
       metadata: {},
     };
@@ -619,7 +615,7 @@ export class DStorage implements DStorageContext {
       onChainManifestId = pqEncrypted;
     }
 
-    const dataLabel = this.config.defaultDataLabel ?? metadata["label"];
+    const dataLabel = metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
       storageId: onChainManifestId,
       encryptionScheme,
@@ -692,7 +688,6 @@ export class DStorage implements DStorageContext {
     }
 
     return {
-      content: new TextDecoder().decode(result),
       bytes: result,
       metadata: {},
     };
