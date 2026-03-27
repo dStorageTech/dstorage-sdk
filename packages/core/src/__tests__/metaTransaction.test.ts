@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MetaTransaction, validateFile } from "../metaTransaction.js";
-import type { DStorageContext } from "../metaTransaction.js";
+import { MetaTx, validateFile } from "../metaTx/index.js";
+import type { DStorageContext } from "../metaTx/index.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
 import type { PaymentAdapter, PaymentQuote } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
-import type { MetaTxProgress, MetaTxStepId } from "../metaTransaction.js";
+import type { MetaTxProgress, MetaTxStepId } from "../metaTx/index.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -155,27 +155,27 @@ describe("validateFile", () => {
   }
 });
 
-// ── MetaTransaction constructor ────────────────────────────────────────────────
+// ── MetaTx constructor ────────────────────────────────────────────────
 
-describe("MetaTransaction constructor", () => {
+describe("MetaTx constructor", () => {
   it("creates an instance", () => {
-    const metaTx = new MetaTransaction(makeSdkContext("0xTestOwner"));
+    const metaTx = new MetaTx(makeSdkContext("0xTestOwner"));
     expect(metaTx).toBeDefined();
   });
 
   it("onProgress registers a callback and returns this (for chaining)", () => {
-    const metaTx = new MetaTransaction(makeSdkContext("0xTestOwner"));
+    const metaTx = new MetaTx(makeSdkContext("0xTestOwner"));
     const returned = metaTx.onProgress(() => {});
     expect(returned).toBe(metaTx);
   });
 });
 
-// ── MetaTransaction.execute ────────────────────────────────────────────────────
+// ── MetaTx.execute ────────────────────────────────────────────────────
 
-describe("MetaTransaction.execute", () => {
+describe("MetaTx.execute", () => {
   it("returns a MetaTxReceipt with all required fields", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec1"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec1"));
 
     const file = makeFile("Hello private world", "hello.txt", "text/plain");
     const p = tx.execute(file);
@@ -196,7 +196,7 @@ describe("MetaTransaction.execute", () => {
 
   it('dataId is "<storageId>::<chainRefId>"', async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec2"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec2"));
 
     const file = makeFile("test", "test.txt", "text/plain");
     const p = tx.execute(file);
@@ -208,7 +208,7 @@ describe("MetaTransaction.execute", () => {
 
   it("file metadata in receipt matches the input file", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec3"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec3"));
 
     const content = "patient record data";
     const file = makeFile(content, "record.txt", "text/plain");
@@ -223,7 +223,7 @@ describe("MetaTransaction.execute", () => {
 
   it('storageToken and chainToken are "MOCK" when using InstantPaymentAdapter', async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec4"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec4"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file);
@@ -236,7 +236,7 @@ describe("MetaTransaction.execute", () => {
 
   it("totalDurationMs is a positive number", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec5"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec5"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file);
@@ -248,7 +248,7 @@ describe("MetaTransaction.execute", () => {
 
   it("fires onProgress callbacks at least once per step (7 steps minimum)", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec6"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec6"));
 
     const updates: MetaTxProgress[] = [];
     tx.onProgress((p) => updates.push(p));
@@ -263,7 +263,7 @@ describe("MetaTransaction.execute", () => {
 
   it('overallStatus transitions to "complete" on success', async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec7"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec7"));
 
     const statuses: MetaTxProgress["overallStatus"][] = [];
     tx.onProgress((p) => statuses.push(p.overallStatus));
@@ -278,7 +278,7 @@ describe("MetaTransaction.execute", () => {
 
   it("the last progress update includes the receipt", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec8"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec8"));
 
     let lastProgress: MetaTxProgress | null = null;
     tx.onProgress((p) => {
@@ -296,7 +296,7 @@ describe("MetaTransaction.execute", () => {
 
   it("CostEstimate is included in progress after the estimate step", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec9"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec9"));
 
     const estimates: MetaTxProgress[] = [];
     tx.onProgress((p) => {
@@ -314,7 +314,7 @@ describe("MetaTransaction.execute", () => {
 
   it("all 7 step IDs appear in the progress steps array", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec10"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec10"));
 
     let lastProgress: MetaTxProgress | null = null;
     tx.onProgress((p) => {
@@ -342,7 +342,7 @@ describe("MetaTransaction.execute", () => {
 
   it('all steps have status "done" on successful completion', async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec11"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec11"));
 
     let lastProgress: MetaTxProgress | null = null;
     tx.onProgress((p) => {
@@ -361,7 +361,7 @@ describe("MetaTransaction.execute", () => {
 
   it("contract and circuit info is included in receipt when provided via config", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec12"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec12"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file, {
@@ -378,7 +378,7 @@ describe("MetaTransaction.execute", () => {
 
   it("works without an onProgress callback", async () => {
     vi.useFakeTimers();
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec13"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec13"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const p = tx.execute(file);
@@ -390,7 +390,7 @@ describe("MetaTransaction.execute", () => {
     // Do NOT use fake timers here — MockPaymentAdapter has ~1900ms of real delays.
     // Real timers are used; the timeout is set to 10s to accommodate the storage payment delay.
     // MockStorageAdapter owns its own MockPaymentAdapter({ token: 'MOCK' })
-    const tx = new MetaTransaction(makeSdkContext("0xOwner_exec14"));
+    const tx = new MetaTx(makeSdkContext("0xOwner_exec14"));
 
     const file = makeFile("data", "data.txt", "text/plain");
     const receipt = await tx.execute(file);

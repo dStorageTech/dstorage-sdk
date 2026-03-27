@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { validateFile, INSURANCE_CLAIMS } from "@dstorage/core";
+import { validateFile } from "@dstorage/core";
+import { INSURANCE_CLAIMS } from "../zkProof.js";
 import type { DataReferenceSummary } from "@dstorage/core";
 import type {
   AppStep,
@@ -696,7 +697,10 @@ export function PatientPanel({
           </div>
         </div>
 
-        <h3 className="pp-step-title">Generate Insurance Proof</h3>
+        <h3 className="pp-step-title">
+          Generate Insurance Proof{" "}
+          <span className="as-badge as-badge-preview">Simulation</span>
+        </h3>
         <p className="pp-step-body">
           Select a claim to prove to the clinic. A ZK proof will be generated
           from your encrypted record —{" "}

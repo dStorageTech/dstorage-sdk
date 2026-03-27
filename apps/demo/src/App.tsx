@@ -1,11 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
-import { DStorage, INSURANCE_CLAIMS, simulateZkProof } from "@dstorage/core";
-import type {
-  DataReferenceSummary,
-  MetaTxProgress,
-  ZkProofResult,
-  ZkProofProgress,
-} from "@dstorage/core";
+import { DStorage } from "@dstorage/core";
+import { INSURANCE_CLAIMS, simulateZkProof } from "./zkProof.js";
+import type { DataReferenceSummary, MetaTxProgress } from "@dstorage/core";
+import type { ZkProofResult, ZkProofProgress } from "./zkProof.js";
 import type {
   AppStep,
   StoredRecord,
@@ -166,7 +163,10 @@ export default function App() {
 
       const result = await sdk.retrieveByRefId(selected.refId);
       const { preview, previewKind, truncated, pdfUrl } =
-        buildCertificatePreview(result.content, result.bytes);
+        buildCertificatePreview(
+          new TextDecoder().decode(result.bytes),
+          result.bytes,
+        );
       const nextRecord = {
         dataId: `${selected.storageId}::${selected.refId}`,
         storageId: selected.storageId,

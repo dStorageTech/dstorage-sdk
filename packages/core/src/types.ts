@@ -6,7 +6,7 @@
 import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
 import type { EncryptionSeedProvider } from "@dstorage/seed-providers";
-import { CostEstimate } from "./payment";
+import type { CostEstimate } from "./metaTx/payment.js";
 
 export type { EncryptionSeedProvider };
 

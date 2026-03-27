@@ -1,4 +1,5 @@
-import type { MetaTxProgress, ZkProofProgress } from "@dstorage/core";
+import type { MetaTxProgress } from "@dstorage/core";
+import type { ZkProofProgress } from "../zkProof.js";
 import type {
   ChainAdapterKey,
   PaymentAdapterKey,
@@ -245,6 +246,7 @@ function ZkProofView({ progress }: { progress: ZkProofProgress }) {
     <div className="sdk-view">
       <div className="sdk-view-header">
         <span className="sdk-view-label">ZK Proof Pipeline</span>
+        <span className="as-badge as-badge-preview">Simulation</span>
         <span className="sdk-view-chip">Midnight Compact</span>
       </div>
 

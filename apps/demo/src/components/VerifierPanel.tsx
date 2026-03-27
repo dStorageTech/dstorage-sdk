@@ -1,4 +1,4 @@
-import type { ZkProofResult } from "@dstorage/core";
+import type { ZkProofResult } from "../zkProof.js";
 import type { AppStep } from "../types";
 
 interface Props {
@@ -84,7 +84,10 @@ export function VerifierPanel({ step, proof, verifying, verified }: Props) {
         </div>
 
         <div className="vp-proof-details">
-          <div className="vp-detail-title">Proof Details</div>
+          <div className="vp-detail-title">
+            Proof Details{" "}
+            <span className="as-badge as-badge-preview">Simulation</span>
+          </div>
 
           <div className="vp-detail-row">
             <span className="vp-detail-label">Claim Proved</span>

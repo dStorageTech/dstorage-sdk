@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildCostEstimate, TOKENS } from "../payment.js";
-import { defaultChainToken } from "../metaTransaction.js";
-import type { PaymentQuote } from "../payment.js";
+import {
+  buildCostEstimate,
+  TOKENS,
+  defaultChainToken,
+} from "../metaTx/index.js";
+import type { PaymentQuote } from "../metaTx/index.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

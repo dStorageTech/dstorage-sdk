@@ -1,5 +1,5 @@
 /**
- * @dstorage/core — payment.ts
+ * @dstorage/core — metaTx/payment.ts
  *
  * Payment utilities for the core orchestration layer.
  *
@@ -44,7 +44,7 @@ export interface CostEstimate {
 
 /**
  * Build a CostEstimate from two PaymentQuotes.
- * Called inside MetaTransaction.execute() during the estimate step.
+ * Called inside MetaTx.execute() during the estimate step.
  */
 export function buildCostEstimate(
   storageQuote: PaymentQuote,

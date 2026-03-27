@@ -31,13 +31,13 @@ import type {
   UploadResult,
   WalletInfo,
 } from "./types.js";
-import { MetaTransaction } from "./metaTransaction.js";
+import { MetaTx } from "./metaTx/index.js";
 import type {
   DStorageContext,
   MetaTxConfig,
   MetaTxProgress,
   MetaTxReceipt,
-} from "./metaTransaction.js";
+} from "./metaTx/index.js";
 import { DataReferenceSummary } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
@@ -437,7 +437,7 @@ export class DStorage implements DStorageContext {
       );
     }
 
-    const metaTx = new MetaTransaction(this);
+    const metaTx = new MetaTx(this);
     metaTx.onProgress(onProgress);
     return metaTx.execute(file, config);
   }

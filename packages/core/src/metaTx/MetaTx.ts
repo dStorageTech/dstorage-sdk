@@ -1,7 +1,7 @@
 /**
- * @dstorage/core — metaTransaction.ts
+ * @dstorage/core — metaTx/MetaTx.ts
  *
- * The MetaTransaction orchestrator.
+ * The MetaTx orchestrator.
  *
  * Presents a single conceptual action to the user while internally executing:
  *   [0] Estimate   → compute storage + chain costs
@@ -12,238 +12,29 @@
  *   [✓] Complete   → return full receipt
  *
  * Usage:
- *   const metaTx = new MetaTransaction(dStorage);
+ *   const metaTx = new MetaTx(dStorage);
  *   metaTx.onProgress((progress) => updateUI(progress));
  *   const receipt = await metaTx.execute(file);
  */
 
-import type { StorageAdapter } from "@dstorage/storage";
-import type { ChainAdapter } from "@dstorage/chain";
 import type { EncryptionScheme } from "@dstorage/crypto";
 import { buildCostEstimate } from "./payment.js";
-import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
+import type {
+  DStorageContext,
+  MetaTxConfig,
+  MetaTxProgress,
+  MetaTxReceipt,
+  MetaTxStepId,
+  MetaTxStepState,
+} from "./types.js";
+import {
+  buildInitialSteps,
+  readFileAsBytes,
+  sleep,
+  truncateId,
+} from "./utils.js";
 
-// ── Step definitions ──────────────────────────────────────────────────────────
-
-export type MetaTxStepId =
-  | "estimate"
-  | "encrypt"
-  | "payment_storage"
-  | "upload"
-  | "chain_reference"
-  | "complete";
-
-export type MetaTxStepStatus = "pending" | "running" | "done" | "error";
-
-export interface MetaTxStepState {
-  id: MetaTxStepId;
-  label: string;
-  description: string;
-  status: MetaTxStepStatus;
-  /** Live detail message updated during the step */
-  detail?: string;
-  /** Duration in ms (set when done) */
-  durationMs?: number;
-  startedAt?: number;
-}
-
-// ── Progress snapshot ─────────────────────────────────────────────────────────
-
-export interface MetaTxProgress {
-  steps: MetaTxStepState[];
-  currentStepId: MetaTxStepId | null;
-  overallStatus:
-    | "idle"
-    | "awaiting_confirmation"
-    | "running"
-    | "complete"
-    | "error";
-  /** Cost estimate — set after 'estimate' step completes */
-  estimate?: CostEstimate;
-  /** Final receipt — set when complete */
-  receipt?: MetaTxReceipt;
-  /** Error message if overallStatus is 'error' */
-  error?: string;
-}
-
-// ── Final receipt ─────────────────────────────────────────────────────────────
-
-export interface MetaTxReceipt {
-  dataId: string;
-  storageId: string;
-  chainRefId: string;
-  /** Original file info */
-  file: {
-    name: string;
-    type: string;
-    sizeBytes: number;
-  };
-  /** Payment receipts */
-  storagePayment: PaymentReceipt;
-  chainPayment: PaymentReceipt;
-  /** Tokens used */
-  storageToken: TokenSymbol;
-  chainToken: TokenSymbol;
-  /** Contract invoked (if selected) */
-  contract?: {
-    address: string;
-    name: string;
-  };
-  completedAt: number;
-  /** Duration of the full meta-transaction in ms */
-  totalDurationMs: number;
-}
-
-// ── Config ────────────────────────────────────────────────────────────────────
-
-export interface MetaTxConfig {
-  /** Optional metadata to attach to the on-chain reference */
-  metadata?: Record<string, string>;
-  /** Selected contract address (from the contract registry) */
-  contractAddress?: string;
-  /** Selected contract name (for display / receipt) */
-  contractName?: string;
-}
-
-// ── SDK context interface ─────────────────────────────────────────────────────
-
-/**
- * Minimal SDK surface required by MetaTransaction.
- * Implemented by DStorage — MetaTransaction receives the SDK instance directly
- * rather than individual adapters/keys/address to avoid redundant constructor args.
- */
-export interface DStorageContext {
-  readonly storageAdapter: StorageAdapter;
-  readonly chainAdapter: ChainAdapter;
-  /** Wallet address of the connected user, or null if using init() / facade mode. */
-  readonly connectedAddress: string | null;
-  /**
-   * Encrypt raw payload bytes with the active client-side key and serialize them
-   * into the SDK wire format expected by storage adapters.
-   * Returns null when no encryption key is available.
-   */
-  encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null>;
-  /**
-   * Encrypts a plain storageId (43-char base64url) for on-chain storage.
-   * Returns the encrypted form when a key is available, null otherwise.
-   */
-  encryptStorageIdForChain(storageId: string): Promise<string | null>;
-  /**
-   * The encryption scheme used for new writes (e.g. "xchacha20poly1305-v1").
-   * Must be recorded on-chain alongside the encrypted storageId so the SDK
-   * can dispatch the correct decryption scheme on read.
-   * Empty string "" when no encryption is active.
-   */
-  readonly defaultEncryptionScheme: EncryptionScheme;
-}
-
-// ── File validation ───────────────────────────────────────────────────────────
-
-const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
-
-const ALLOWED_MIME_TYPES = new Set([
-  // Images
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/svg+xml",
-  // Documents
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-  "text/markdown",
-  "application/json",
-  // Archives
-  "application/zip",
-]);
-
-export interface FileValidationResult {
-  valid: boolean;
-  error?: string;
-}
-
-export function validateFile(file: File): FileValidationResult {
-  if (file.size === 0) {
-    return { valid: false, error: "File is empty." };
-  }
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    const mb = (file.size / 1024 / 1024).toFixed(1);
-    return {
-      valid: false,
-      error: `File too large: ${mb} MB. Maximum is 2 GB.`,
-    };
-  }
-  if (!ALLOWED_MIME_TYPES.has(file.type)) {
-    return {
-      valid: false,
-      error: `File type not supported: ${file.type || "unknown"}. Allowed: images, PDF, text, JSON, ZIP.`,
-    };
-  }
-  return { valid: true };
-}
-
-// ── Token selector helpers ────────────────────────────────────────────────────
-
-/**
- * Return the default chain payment token for a given chain provider name.
- */
-export function defaultChainToken(chainProvider: string): TokenSymbol {
-  switch (chainProvider) {
-    case "midnight":
-      return "DUST";
-    default:
-      return "MOCK";
-  }
-}
-
-// ── Initial step states ───────────────────────────────────────────────────────
-
-function buildInitialSteps(): MetaTxStepState[] {
-  return [
-    {
-      id: "estimate",
-      label: "Estimate Costs",
-      description: "Calculate storage fee + chain transaction fee",
-      status: "pending",
-    },
-    {
-      id: "encrypt",
-      label: "Encrypt File",
-      description: "Client side encryption using your wallet key",
-      status: "pending",
-    },
-    {
-      id: "payment_storage",
-      label: "Storage Payment",
-      description: "Pay storage network fee",
-      status: "pending",
-    },
-    {
-      id: "upload",
-      label: "Upload to Storage",
-      description: "Send encrypted file to decentralised network",
-      status: "pending",
-    },
-    {
-      id: "chain_reference",
-      label: "Write On-Chain Reference",
-      description: "Store file pointer + metadata on blockchain",
-      status: "pending",
-    },
-    {
-      id: "complete",
-      label: "Complete",
-      description: "Meta-transaction finalised",
-      status: "pending",
-    },
-  ];
-}
-
-// ── MetaTransaction class ─────────────────────────────────────────────────────
-
-export class MetaTransaction {
+export class MetaTx {
   private sdk: DStorageContext;
   private progressCallback: ((p: MetaTxProgress) => void) | null = null;
   private steps: MetaTxStepState[] = buildInitialSteps();
@@ -355,7 +146,7 @@ export class MetaTransaction {
         `Stored on ${uploadResult.provider} → ${truncateId(uploadResult.id)}`,
       );
 
-      // ── Step 4: On-chain fee payment and write reference ───────────────────────────────────────
+      // ── Step 4: On-chain fee payment and write reference ────────────────
       this.startStep(
         "chain_reference",
         `Fee payment and writing reference to ${this.sdk.chainAdapter.name}…`,
@@ -481,23 +272,4 @@ export class MetaTransaction {
       ...overrides,
     });
   }
-}
-
-// ── Utility ───────────────────────────────────────────────────────────────────
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function truncateId(id: string): string {
-  return id.length > 20 ? `${id.slice(0, 10)}…${id.slice(-6)}` : id;
-}
-
-async function readFileAsBytes(file: File): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
-    reader.onerror = () => reject(new Error("Failed to read file."));
-    reader.readAsArrayBuffer(file);
-  });
 }
