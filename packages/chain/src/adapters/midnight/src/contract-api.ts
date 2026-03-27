@@ -28,6 +28,7 @@ import {
   tap,
   from,
   firstValueFrom,
+  shareReplay,
   type Observable,
 } from "rxjs";
 import { fromHex, toHex } from "@midnight-ntwrk/midnight-js-utils";
@@ -156,6 +157,17 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
           contractVersion: ledgerState.contractVersion,
         };
       },
+    ).pipe(
+      // Keep one live subscription to the indexer WebSocket for the lifetime of
+      // this API instance. Without shareReplay, each firstValueFrom(state$) call
+      // creates a new subscription — the indexer does not replay the last emitted
+      // state to new subscribers, so callers would receive stale data until the
+      // next on-chain change arrives. shareReplay(1) ensures:
+      //   1. The indexer connection is established once and kept alive.
+      //   2. Every new subscriber (e.g. listReferences, readReference) immediately
+      //      receives the most recently emitted state.
+      //   3. Future indexer pushes (after upload/remove txs) still update the cache.
+      shareReplay({ bufferSize: 1, refCount: false }),
     );
   }
 
