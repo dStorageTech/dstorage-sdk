@@ -124,6 +124,24 @@ async function main(): Promise<void> {
   try {
     console.log("\n=== dStorage Midnight Console Demo ===\n");
 
+    console.log(`
+  ── Prerequisites ──────────────────────────────────────────────────────────────────
+  Requires two local services and Preprod wallet tokens:
+
+  1) Proof Server (port 6300)
+       docker run -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v
+     Docs: https://docs.midnight.network/getting-started/installation#run-the-proof-server
+
+  2) Arweave Local (port 1984)
+       docker run -d --rm -p 1984:1984 textury/arlocal
+     A pre-funded test wallet key is provided at apps/demo-console/test-arweave-wallet-key.json.
+
+  3) Preprod tokens
+     - NIGHT: https://faucet.preprod.midnight.network/
+     - DUST:  open Lace → Settings → register wallet on Preprod for initial allocation
+  ──────────────────────────────────────────────────────────────────────────────────────
+`);
+
     // ── 1. Network selection ────────────────────────────────────────────────
     const networkInput = (
       await rl.question(
