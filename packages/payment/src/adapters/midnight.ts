@@ -29,6 +29,9 @@ import type {
   TokenSymbol,
 } from "../types.js";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type WalletProvider = any;
+
 export interface MidnightPaymentAdapterConfig {
   /**
    * Midnight node RPC endpoint.
@@ -73,6 +76,26 @@ export class MidnightPaymentAdapter implements PaymentAdapter {
       "dStorage/midnight-payment",
       "Midnight payment adapter — real DUST fee deduction.",
     );
+  }
+
+  /**
+   * Wraps a Midnight wallet provider to intercept balanceTx() calls for payment.
+   *
+   * Default (non-managed) implementation: returns the provider unchanged.
+   * The native Midnight wallet (Lace or facade) handles transaction balancing internally.
+   *
+   * ManagedPaymentAdapter overrides this to route balanceTx() through the signing server.
+   *
+   * @param walletProvider  The original Midnight wallet provider.
+   * @param onReceipt       Called with the PaymentReceipt once the payment completes.
+   * @returns               A (possibly wrapped) wallet provider.
+   */
+  wrapWalletProvider(
+    walletProvider: WalletProvider,
+    _onReceipt: (receipt: PaymentReceipt) => void,
+    _deserializeTx?: (signedTx: string) => Promise<unknown>,
+  ): WalletProvider {
+    return walletProvider;
   }
 
   async estimateCost(dataSizeBytes: number): Promise<PaymentQuote> {

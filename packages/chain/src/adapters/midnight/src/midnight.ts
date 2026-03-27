@@ -44,8 +44,6 @@ import type { DataRegistryAPI } from "./contract-api.js";
 import type { DataRegistryProviders } from "./common-types.js";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import type { AdapterWalletProvider } from "./common-types.js";
-import { UnboundTransaction } from "@midnight-ntwrk/midnight-js-types";
-import { type FinalizedTransaction } from "@midnight-ntwrk/ledger-v8";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -205,10 +203,6 @@ export class MidnightChainAdapter implements ChainAdapter {
   readonly providerName: string = "Midnight";
   readonly paymentAdapter: PaymentAdapter;
 
-  // FIXME: this won't be needed once we move
-  // the payment logic to the MidnightPaymentAdapter
-  readonly managedPaymentAdapter: PaymentAdapter | undefined;
-
   _lastPaymentReceipt: PaymentReceipt | undefined;
 
   private facade: unknown | null = null;
@@ -327,80 +321,40 @@ export class MidnightChainAdapter implements ChainAdapter {
           : {}),
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
-      this.managedPaymentAdapter = this.paymentAdapter;
     } else {
-      // FIXME: we need to move logic from here onto this adapter's implementation
-      // At the moment this is a mock
       this.paymentAdapter = new MidnightPaymentAdapter({
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     }
   }
 
-  // ── Managed payment wrapper ───────────────────────────────────────────────
+  // ── Payment provider wrapping ─────────────────────────────────────────────
 
   /**
-   * Returns a walletProvider that overrides balanceTx() to route through
-   * ManagedPaymentAdapter instead of the local wallet.
+   * Delegates wallet provider wrapping to the payment adapter.
+   * MidnightPaymentAdapter returns the provider unchanged (no-op).
+   * ManagedPaymentAdapter overrides balanceTx() to route through the signing server.
    *
-   * The wrapper serializes the UnboundTransaction to hex, POSTs it to the
-   * signing server via ManagedPaymentAdapter.pay(), and deserializes the
-   * FinalizedTransaction from PaymentReceipt.signedTx in the response.
-   * All other WalletProvider methods are delegated to the original provider.
-   *
-   * If no ManagedPaymentAdapter is configured, the original provider is
-   * returned unchanged.
+   * Transaction.deserialize (which loads the ledger-v8 WASM) is provided as a
+   * callback so it is always resolved relative to the chain package, not payment.
    */
-  private _wrapWithManagedPayment(walletProvider: any): any {
-    if (!this.managedPaymentAdapter) return walletProvider;
-
-    const paymentAdapter = this.managedPaymentAdapter;
-    const logger = this.logger;
-
-    return {
-      // Explicitly delegate all WalletProvider methods so prototype methods on
-      // class instances (e.g. MidnightWalletProvider) are not lost by spreading.
-      getCoinPublicKey: () => walletProvider.getCoinPublicKey(),
-      getEncryptionPublicKey: () => walletProvider.getEncryptionPublicKey(),
-      balanceTx: async (
-        tx: UnboundTransaction,
-        ttl?: Date,
-      ): Promise<FinalizedTransaction> => {
-        // FIXME: We need to only sign the transaction without fuding it with DUST
-        // or any other token; this allows us to correctly be considered the
-        // owner/sender of the Tx when contracts verify our identity for ownership checks.
-        const txData: string = uint8ArrayToHex(tx.serialize());
-        const receipt = await paymentAdapter.pay({
-          token: "DUST",
-          amount: "0",
-          type: "chain",
-          network: this.name,
-          txData,
-          dataSizeBytes: txData.length,
-          expiresAt: Date.now() + 60_000,
-        });
+  private _wrapPaymentProvider(walletProvider: unknown): unknown {
+    return (this.paymentAdapter as MidnightPaymentAdapter).wrapWalletProvider(
+      walletProvider,
+      (receipt) => {
         this._lastPaymentReceipt = receipt;
-
-        if (!receipt.signedTx) {
-          throw new Error(
-            "[dStorage/midnight] Managed payment server did not return a balanced transaction.",
-          );
-        }
-        logger?.log(
-          "dStorage/midnight",
-          `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx.length})`,
-        );
+      },
+      async (signedTx) => {
         const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
-        // Server may return a tagged string or plain hex — extract raw bytes either way.
-        const signedBytes = parseSignedTxBytes(receipt.signedTx);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (Transaction as any).deserialize(
           "signature",
           "proof",
           "binding",
-          signedBytes,
+          parseSignedTxBytes(signedTx),
         );
       },
-    };
+    );
   }
 
   // ── ZK config provider ─────────────────────────────────────────────────────
@@ -590,7 +544,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       indexerHttp,
       indexerWs,
       proofServer,
-      walletProvider: this._wrapWithManagedPayment(walletProvider),
+      walletProvider: this._wrapPaymentProvider(walletProvider),
       midnightProvider,
     });
   }
@@ -642,7 +596,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       indexerHttp: this.config.indexer,
       indexerWs: this.config.indexerWS,
       proofServer: this.config.proofServer,
-      walletProvider: this._wrapWithManagedPayment(walletProvider),
+      walletProvider: this._wrapPaymentProvider(walletProvider),
       midnightProvider: walletProvider,
     });
 

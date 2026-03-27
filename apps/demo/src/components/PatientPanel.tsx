@@ -753,7 +753,10 @@ export function PatientPanel({
     <div className="pp-section">
       <div className="pp-done">
         <div className="pp-done-icon">✓</div>
-        <div className="pp-done-title">Proof Submitted</div>
+        <div className="pp-done-title">
+          Proof Submitted{" "}
+          <span className="as-badge as-badge-preview">Simulation</span>
+        </div>
         <div className="pp-done-body">
           Your insurance eligibility has been proven to the clinic without
           revealing any personal data.
