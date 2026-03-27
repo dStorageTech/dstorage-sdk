@@ -56,6 +56,7 @@ These setup steps are mainly for the current monorepo/development workflow and a
 - Midnight [Compact developer tools](https://docs.midnight.network/blog/compact-developer-tools) — **version 0.30.0 required** (the ZK artifacts in this repository were built against that version)
 - [Lace](https://www.lace.io) wallet extension for Midnight (browser connector flows)
 - [Wander](https://www.wander.app) wallet extension for Arweave (browser connector flows)
+- NIGHT test tokens for Midnight Preprod — request them from the [Midnight Preprod Faucet](https://faucet.preprod.midnight.network/)
 
 ### 1. Install Dependencies
 

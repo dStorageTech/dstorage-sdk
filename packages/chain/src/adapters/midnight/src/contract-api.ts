@@ -22,10 +22,42 @@ import {
   deployContract,
   findDeployedContract,
 } from "@midnight-ntwrk/midnight-js-contracts";
-import { combineLatest, map, tap, from, type Observable } from "rxjs";
+import {
+  combineLatest,
+  map,
+  tap,
+  from,
+  firstValueFrom,
+  type Observable,
+} from "rxjs";
 import { fromHex, toHex } from "@midnight-ntwrk/midnight-js-utils";
 
 /** @internal */
+
+/**
+ * The only contract schema version this SDK knows how to interpret.
+ * When a future deployment bumps `contractVersion`, the SDK must be updated
+ * before it can join that contract.
+ */
+export const SUPPORTED_CONTRACT_VERSION = 0n;
+
+/**
+ * Asserts that the on-chain `contractVersion` matches the version this SDK supports.
+ * Throws a descriptive error when they differ so callers receive clear guidance
+ * instead of a silent data-interpretation failure.
+ */
+export function validateContractVersion(
+  version: bigint,
+  contractAddress: string,
+): void {
+  if (version !== SUPPORTED_CONTRACT_VERSION) {
+    throw new Error(
+      `[dStorage/midnight] Unsupported contract version ${version} at ${contractAddress}. ` +
+        `This SDK supports version ${SUPPORTED_CONTRACT_VERSION} only. ` +
+        `Deploy a compatible DataRegistry contract or upgrade the SDK.`,
+    );
+  }
+}
 
 /**
  * An API for a deployed DataRegistry.
@@ -97,11 +129,6 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       ],
       // ...and combine them to produce the required derived state.
       (ledgerState, _privateState) => {
-        /*const hashedSecretKey = DataRegistry.pureCircuits.publicKey(
-          privateState.secretKey,
-          convertFieldToBytes(32, ledgerState.refCounter, 'api/src/index.ts'),
-        );*/
-
         const pk = providers.walletProvider.getCoinPublicKey();
         const zswapPk = { bytes: fromHex(pk) };
         const contractAddr = encodeContractAddress(
@@ -126,8 +153,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         return {
           references,
           refCounter: ledgerState.refCounter,
-          owner: toHex(ledgerState.owner),
-          isOwner: false, //toHex(ledgerState.owner) === toHex(hashedSecretKey),
+          contractVersion: ledgerState.contractVersion,
         };
       },
     );
@@ -297,6 +323,14 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         privateStateId: dataRegistryPrivateStateKey,
         initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
       });
+
+    // Validate the on-chain contract version before accepting the contract.
+    const contractVersion = await firstValueFrom(
+      providers.publicDataProvider
+        .contractStateObservable(contractAddress, { type: "latest" })
+        .pipe(map((s) => DataRegistry.ledger(s.data).contractVersion)),
+    );
+    validateContractVersion(contractVersion, contractAddress);
 
     return new DataRegistryAPI(deployedDataRegistryContract, providers, logger);
   }

@@ -16,6 +16,10 @@ import {
   randomString,
   randomTimestamp,
 } from "./utils.js";
+import {
+  SUPPORTED_CONTRACT_VERSION,
+  validateContractVersion,
+} from "../../../src/contract-api.js";
 
 setNetworkId("undeployed" as NetworkId);
 
@@ -59,8 +63,65 @@ describe("DataRegistry contract", () => {
       expect(simulator.getLedger().refCounter).toBe(1n);
     });
 
-    it("has contractVersion 0", () => {
-      expect(simulator.getLedger().contractVersion).toBe(0n);
+    it("has contractVersion equal to SUPPORTED_CONTRACT_VERSION", () => {
+      expect(simulator.getLedger().contractVersion).toBe(
+        SUPPORTED_CONTRACT_VERSION,
+      );
+    });
+  });
+
+  describe("contract version validation", () => {
+    it("validateContractVersion accepts the current contract version", () => {
+      const version = simulator.getLedger().contractVersion;
+      expect(() =>
+        validateContractVersion(version, "0xTestContract"),
+      ).not.toThrow();
+    });
+
+    it("validateContractVersion throws for an unsupported version", () => {
+      expect(() =>
+        validateContractVersion(
+          SUPPORTED_CONTRACT_VERSION + 1n,
+          "0xTestContract",
+        ),
+      ).toThrow("Unsupported contract version");
+    });
+
+    it("validateContractVersion error includes the version number and address", () => {
+      const addr = "0xDeadBeef";
+      expect(() => validateContractVersion(99n, addr)).toThrow(addr);
+      expect(() => validateContractVersion(99n, addr)).toThrow("99");
+    });
+
+    it("contractVersion is immutable — stays at SUPPORTED_CONTRACT_VERSION after all circuit calls", () => {
+      const entry = randomEntry();
+      const refId = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+      );
+      expect(simulator.getLedger().contractVersion).toBe(
+        SUPPORTED_CONTRACT_VERSION,
+      );
+
+      simulator.updateReference(
+        refId,
+        randomString(),
+        "",
+        "ipfs",
+        "updated",
+        randomTimestamp(),
+      );
+      expect(simulator.getLedger().contractVersion).toBe(
+        SUPPORTED_CONTRACT_VERSION,
+      );
+
+      simulator.removeReference(refId);
+      expect(simulator.getLedger().contractVersion).toBe(
+        SUPPORTED_CONTRACT_VERSION,
+      );
     });
   });
 

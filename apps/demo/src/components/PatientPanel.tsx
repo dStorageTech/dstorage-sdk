@@ -282,6 +282,14 @@ export function PatientPanel({
                       >
                         lace.io
                       </a>
+                      . Need test NIGHT tokens?{" "}
+                      <a
+                        href="https://faucet.preprod.midnight.network/"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Midnight Preprod Faucet
+                      </a>
                     </li>
                   )}
                 </ul>

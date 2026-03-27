@@ -79,15 +79,6 @@ export type DeployedDataRegistryContract = FoundContract<DataRegistryContract>;
 export type DataRegistryDerivedState = {
   readonly references: Map<string, ReferenceEntry & { isOurs: boolean }>;
   readonly refCounter: bigint;
-  readonly owner: string;
-
-  /**
-   * A readonly flag that determines if the current message was posted by the current user.
-   *
-   * @remarks
-   * The `owner` property of the public (or ledger) state is the public key of the message owner, while
-   * the `secretKey` property of {@link DataRegistryPrivateState} is the secret key of the current user. If
-   * `owner` corresponds to the public key derived from `secretKey`, then `isOwner` is `true`.
-   */
-  readonly isOwner: boolean;
+  /** Schema version of the deployed contract. Used by the SDK to verify compatibility. */
+  readonly contractVersion: bigint;
 };

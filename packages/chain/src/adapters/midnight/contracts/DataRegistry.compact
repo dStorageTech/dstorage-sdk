@@ -52,18 +52,25 @@ export ledger references: Map<Bytes<32>, ReferenceEntry>;
 // Monotonic counter used to derive unique refIds without randomness.
 export ledger refCounter: Counter;
 
-// Contract schema version. Initialized to 0.
-// Bumped with future breaking schema changes.
+// A version tag that identifies the schema. The dStorage SDK reads 
+// this value at connect time to know how to interpret the data 
+// stored by this contract as well as supporting backward-compatibility.
+//
+// Rules:
+//   - The constructor sets it to the compile-time constant below (currently 0).
+//   - It NEVER changes at runtime — there is no upgrade circuit.
+//   - When a future version of the contract introduces a breaking change to the
+//     ledger schema (e.g. new mandatory fields, renamed maps), the constant is
+//     bumped by 1 and the contract is redeployed at a new address.
+//   - The SDK rejects any contract address whose contractVersion it does not
+//     recognise, preventing silent data corruption.
+//
 export ledger contractVersion: Uint<16>;
-
-// Reserved for future access-control extensions.
-// Current contract logic does not read or enforce this field.
-export ledger owner: Bytes<32>;
 
 constructor() {
   // Start at 1 so the first stored entry uses a non-zero counter value.
   refCounter.increment(1);
-  // Schema version 0 (initial deployment).
+  // Current version: 0.
   contractVersion = 0;
 }
 
