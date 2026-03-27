@@ -52,6 +52,12 @@ export interface ChainReference {
   dataLabel?: string;
   /** Timestamp of when the reference was written on-chain */
   writtenAt: number;
+  /**
+   * Whether this reference was created by the currently connected wallet.
+   * Computed by comparing the stored ownerCommitment against the wallet's
+   * derived commitment.
+   */
+  isOurs: boolean;
 }
 
 /** Result of writing a reference to chain */

@@ -166,6 +166,7 @@ export class MetaTx {
         storageProvider: uploadResult.provider,
         dataLabel: file.name,
         writtenAt: Date.now(),
+        isOurs: true,
       });
 
       // If the chain adapter handled payment internally (e.g. Midnight managed

@@ -408,7 +408,9 @@ async function main(): Promise<void> {
             console.log(
               `      storageId        = ${ref.storageId ?? "(cannot decrypt it)"}`,
             );
-            console.log(`      isOurs           = ${ref.isOurs}`);
+            console.log(
+              `      isOurs           = ${ref.isOurs ? "Yes" : "No"}`,
+            );
           }
           console.log("");
         } catch (err) {
@@ -500,6 +502,7 @@ async function main(): Promise<void> {
           console.log(
             `  storageId:       ${ref.storageId ?? "(cannot decrypt)"}`,
           );
+          console.log(`      isOurs           = ${ref.isOurs ? "Yes" : "No"}`);
           console.log(
             `  writtenAt:       ${new Date(ref.writtenAt).toISOString()}\n`,
           );

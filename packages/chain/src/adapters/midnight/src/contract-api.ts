@@ -145,7 +145,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
           );
           const entry = {
             ...refEntry,
-            isOurs: refEntry.ownerCommitment === myCommitment,
+            isOurs: toHex(refEntry.ownerCommitment) === toHex(myCommitment),
           };
           references.set(refId, entry);
         }

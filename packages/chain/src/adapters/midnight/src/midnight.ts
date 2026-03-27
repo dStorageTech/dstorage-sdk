@@ -716,6 +716,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       storageProvider: refEntry.storageProvider,
       dataLabel: refEntry.dataLabel,
       writtenAt: Number(refEntry.writtenAt),
+      isOurs: refEntry.isOurs,
     };
   }
 

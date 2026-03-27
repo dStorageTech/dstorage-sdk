@@ -214,6 +214,7 @@ export class DStorage implements DStorageContext {
       storageProvider: storageResult.provider,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
+      isOurs: true,
     });
 
     const refId = chainResult.refId;
@@ -637,6 +638,7 @@ export class DStorage implements DStorageContext {
       storageProvider: manifestResult.provider,
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
+      isOurs: true,
     });
 
     const refId = chainResult.refId;
