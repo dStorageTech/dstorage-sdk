@@ -208,6 +208,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       storageProvider: ref.storageProvider,
       encryptionScheme: ref.encryptionScheme ?? null,
       ownerCommitment: "",
+      isOurs: true,
     }));
   }
 

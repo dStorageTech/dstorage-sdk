@@ -376,8 +376,7 @@ async function main(): Promise<void> {
     5. Quit
 `);
       const action =
-        (await rl.question("  Choice [1/2/3/4/5, default: 1]: ")).trim() ||
-        "1";
+        (await rl.question("  Choice [1/2/3/4/5, default: 1]: ")).trim() || "1";
 
       if (
         action === "5" ||
@@ -409,6 +408,7 @@ async function main(): Promise<void> {
             console.log(
               `      storageId        = ${ref.storageId ?? "(cannot decrypt it)"}`,
             );
+            console.log(`      isOurs           = ${ref.isOurs}`);
           }
           console.log("");
         } catch (err) {
@@ -497,7 +497,9 @@ async function main(): Promise<void> {
           console.log(
             `  encryptionScheme: ${ref.encryptionScheme ?? "(public/unencrypted)"}`,
           );
-          console.log(`  storageId:       ${ref.storageId ?? "(cannot decrypt)"}`);
+          console.log(
+            `  storageId:       ${ref.storageId ?? "(cannot decrypt)"}`,
+          );
           console.log(
             `  writtenAt:       ${new Date(ref.writtenAt).toISOString()}\n`,
           );

@@ -94,6 +94,12 @@ export interface DataReferenceSummary {
    * The commitment itself is public, but does not reveal the owner's identity.
    */
   ownerCommitment: string;
+  /**
+   * Whether this reference was created by the currently connected wallet.
+   * Computed by comparing the stored ownerCommitment against the wallet's
+   * derived commitment.
+   */
+  isOurs: boolean;
 }
 
 /**

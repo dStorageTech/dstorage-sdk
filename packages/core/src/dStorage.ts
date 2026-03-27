@@ -398,6 +398,7 @@ export class DStorage implements DStorageContext {
           storageProvider: item.storageProvider,
           encryptionScheme: item.encryptionScheme,
           ownerCommitment: item.ownerCommitment,
+          isOurs: item.isOurs,
         };
       }),
     );
