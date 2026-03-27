@@ -404,6 +404,20 @@ export class DStorage implements DStorageContext {
   }
 
   /**
+   * Remove a reference from the on-chain registry.
+   * Only the owner of the reference can successfully call this — the chain
+   * enforces ownership via ZK proof.
+   */
+  async removeReference(refId: string): Promise<void> {
+    if (typeof this.config.chainAdapter.removeReference !== "function") {
+      throw new Error(
+        "[dStorage] removeReference() is not supported by this chain adapter.",
+      );
+    }
+    await this.config.chainAdapter.removeReference(refId);
+  }
+
+  /**
    * Estimate the storage cost for a given content string before committing.
    * Returns a human-readable cost string.
    */

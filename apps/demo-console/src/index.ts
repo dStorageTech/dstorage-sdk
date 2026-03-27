@@ -125,18 +125,23 @@ async function main(): Promise<void> {
     console.log("\n=== dStorage Midnight Console Demo ===\n");
 
     // ── 1. Network selection ────────────────────────────────────────────────
-    const networkInput =
-      (
-        await rl.question(
-          "Midnight network [preprod / undeployed, default: preprod]: ",
-        )
-      ).trim() || "preprod";
-    if (networkInput !== "preprod" && networkInput !== "undeployed") {
-      throw new Error(
-        `Unknown network "${networkInput}". Choose preprod or undeployed.`,
-      );
-    }
-    const networkName = networkInput as NetworkName;
+    const networkInput = (
+      await rl.question(
+        "Midnight network [1=preprod (default), 2=undeployed]: ",
+      )
+    ).trim();
+    const networkName: NetworkName =
+      networkInput === "2" || networkInput === "undeployed"
+        ? "undeployed"
+        : networkInput === "" ||
+            networkInput === "1" ||
+            networkInput === "preprod"
+          ? "preprod"
+          : (() => {
+              throw new Error(
+                `Unknown network "${networkInput}". Choose 1 (preprod) or 2 (undeployed).`,
+              );
+            })();
     const defaultEndpoints = NETWORKS[networkName];
 
     console.log(`Network: ${networkName}\n`);
@@ -362,15 +367,20 @@ async function main(): Promise<void> {
 
     let done = false;
     while (!done) {
+      console.log(`
+  Actions:
+    1. Upload file  [default]
+    2. List references
+    3. Retrieve by refId
+    4. Remove reference
+    5. Quit
+`);
       const action =
-        (
-          await rl.question(
-            "\nChoose action [1=upload file, 2=list references, 3=retrieve by refId, 4=quit, default: 1]: ",
-          )
-        ).trim() || "1";
+        (await rl.question("  Choice [1/2/3/4/5, default: 1]: ")).trim() ||
+        "1";
 
       if (
-        action === "4" ||
+        action === "5" ||
         action.toLowerCase() === "q" ||
         action.toLowerCase() === "quit"
       ) {
@@ -464,6 +474,58 @@ async function main(): Promise<void> {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`\n  Error during retrieve: ${msg}\n`);
+        }
+        continue;
+      }
+
+      if (action === "4" || action.toLowerCase() === "remove") {
+        const refId = (
+          await rl.question(
+            "  Enter refId to remove (or leave blank to cancel): ",
+          )
+        ).trim();
+        if (!refId) {
+          console.log("  (cancelled)\n");
+          continue;
+        }
+
+        try {
+          console.log(`\n  Looking up reference ${refId}…`);
+          const ref = await chainAdapter.readReference(refId);
+          console.log(`  refId:           ${refId}`);
+          console.log(`  storageProvider: ${ref.storageProvider}`);
+          console.log(
+            `  encryptionScheme: ${ref.encryptionScheme ?? "(public/unencrypted)"}`,
+          );
+          console.log(`  storageId:       ${ref.storageId ?? "(cannot decrypt)"}`);
+          console.log(
+            `  writtenAt:       ${new Date(ref.writtenAt).toISOString()}\n`,
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`\n  Error reading reference: ${msg}\n`);
+          continue;
+        }
+
+        const confirmInput = (
+          await rl.question("  Remove this reference? [y/N]: ")
+        )
+          .trim()
+          .toLowerCase();
+        if (confirmInput !== "y" && confirmInput !== "yes") {
+          console.log("  (cancelled)\n");
+          continue;
+        }
+
+        try {
+          await withTicker(
+            () => "Submitting remove reference transaction…",
+            () => sdk.removeReference(refId),
+          );
+          console.log("\n  ✓ Reference removed.\n");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`\n  Error removing reference: ${msg}\n`);
         }
         continue;
       }
