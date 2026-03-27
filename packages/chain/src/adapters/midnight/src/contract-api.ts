@@ -21,6 +21,7 @@ import {
 import {
   deployContract,
   findDeployedContract,
+  withContractScopedTransaction,
 } from "@midnight-ntwrk/midnight-js-contracts";
 import {
   combineLatest,
@@ -97,7 +98,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   /** @internal */
   private constructor(
     public readonly deployedContract: DeployedDataRegistryContract,
-    providers: DataRegistryProviders,
+    private readonly providers: DataRegistryProviders,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress =
@@ -193,12 +194,19 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       "dStorage/midnight",
       `storing reference: storageId=${storageId}`,
     );
-    const txData = await this.deployedContract.callTx.storeReference(
-      storageId,
-      encryptionScheme,
-      storageProvider,
-      dataLabel,
-      writtenAt,
+    const txData = await withContractScopedTransaction(
+      this.providers,
+      async (txCtx) => {
+        await this.deployedContract.callTx.storeReference(
+          txCtx,
+          storageId,
+          encryptionScheme,
+          storageProvider,
+          dataLabel,
+          writtenAt,
+        );
+      },
+      { scopeName: "storeReference" },
     );
 
     const txHash: string =
@@ -227,7 +235,13 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       "dStorage/midnight",
       `removing reference: ${toHex(refId)}`,
     );
-    const txData = await this.deployedContract.callTx.removeReference(refId);
+    const txData = await withContractScopedTransaction(
+      this.providers,
+      async (txCtx) => {
+        await this.deployedContract.callTx.removeReference(txCtx, refId);
+      },
+      { scopeName: "removeReference" },
+    );
 
     const txHash: string =
       (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
@@ -255,13 +269,20 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       "dStorage/midnight",
       `updating reference: ${toHex(refId)}`,
     );
-    const txData = await this.deployedContract.callTx.updateReference(
-      refId,
-      storageId,
-      encryptionScheme,
-      storageProvider,
-      dataLabel,
-      writtenAt,
+    const txData = await withContractScopedTransaction(
+      this.providers,
+      async (txCtx) => {
+        await this.deployedContract.callTx.updateReference(
+          txCtx,
+          refId,
+          storageId,
+          encryptionScheme,
+          storageProvider,
+          dataLabel,
+          writtenAt,
+        );
+      },
+      { scopeName: "updateReference" },
     );
 
     const txHash: string =

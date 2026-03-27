@@ -494,18 +494,18 @@ async function main(): Promise<void> {
         try {
           console.log(`\n  Looking up reference ${refId}…`);
           const ref = await chainAdapter.readReference(refId);
-          console.log(`  refId:           ${refId}`);
-          console.log(`  storageProvider: ${ref.storageProvider}`);
+          console.log(`     refId:         ${refId}`);
+          console.log(`  storageProvider:  ${ref.storageProvider}`);
           console.log(
             `  encryptionScheme: ${ref.encryptionScheme ?? "(public/unencrypted)"}`,
           );
           console.log(
-            `  storageId:       ${ref.storageId ?? "(cannot decrypt)"}`,
+            `  storageId:        ${ref.storageId ?? "(cannot decrypt)"}`,
           );
-          console.log(`      isOurs           = ${ref.isOurs ? "Yes" : "No"}`);
           console.log(
-            `  writtenAt:       ${new Date(ref.writtenAt).toISOString()}\n`,
+            `  writtenAt:        ${new Date(ref.writtenAt).toISOString()}\n`,
           );
+          console.log(`     isOurs:        ${ref.isOurs ? "Yes" : "No"}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`\n  Error reading reference: ${msg}\n`);
