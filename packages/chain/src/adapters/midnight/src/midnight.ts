@@ -498,6 +498,34 @@ export class MidnightChainAdapter implements ChainAdapter {
     const indexerWs = this.connectorIndexerWs ?? this.config.indexerWS ?? "";
     const proofServer = this.connectorProofServer ?? this.config.proofServer;
 
+    // All three endpoints are required. An empty string here means either
+    // getConfiguration() failed/returned partial data AND no fallback was
+    // supplied in the adapter config — every provider call would silently use
+    // "" as the URL, producing fetch errors with no useful diagnosis.
+    if (!indexerHttp) {
+      throw new Error(
+        "[dStorage/midnight] Indexer HTTP endpoint is not set. " +
+          "getConfiguration() did not return indexerUri and no indexerEndpoint " +
+          "was supplied in the adapter config. " +
+          "Check that your Lace wallet is configured against the target network.",
+      );
+    }
+    if (!indexerWs) {
+      throw new Error(
+        "[dStorage/midnight] Indexer WebSocket endpoint is not set. " +
+          "getConfiguration() did not return indexerWsUri and no indexerWsEndpoint " +
+          "was supplied in the adapter config. " +
+          "Check that your Lace wallet is configured against the target network.",
+      );
+    }
+    if (!proofServer) {
+      throw new Error(
+        "[dStorage/midnight] Proof server endpoint is not set. " +
+          "getConfiguration() did not return proverServerUri and no proofServerEndpoint " +
+          "was supplied in the adapter config.",
+      );
+    }
+
     const walletProvider = {
       getCoinPublicKey: () => coinPublicKey,
       getEncryptionPublicKey: () => encPublicKey,
@@ -958,7 +986,9 @@ export class MidnightChainAdapter implements ChainAdapter {
     } catch (err) {
       this.logger?.warn(
         "dStorage/midnight",
-        `Failed to retrieve wallet configuration: ${err instanceof Error ? err.message : String(err)}`,
+        `getConfiguration() failed — falling back to adapter config endpoints ` +
+          `(indexer: "${this.config.indexer}", proofServer: "${this.config.proofServer}"): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
