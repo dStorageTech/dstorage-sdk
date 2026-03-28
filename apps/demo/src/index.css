@@ -91,6 +91,44 @@ code {
   overflow: hidden;
 }
 
+.hv-error-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 680px;
+  width: calc(100% - 32px);
+  background: var(--c-red-bg);
+  border: 1px solid var(--c-red);
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.hv-error-banner-msg {
+  flex: 1;
+  font-size: 13px;
+  color: var(--c-red);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.hv-error-banner-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--c-red);
+  padding: 0;
+  line-height: 1;
+}
+.hv-error-banner-close:hover {
+  opacity: 0.7;
+}
+
 .hv-contract-modal-backdrop {
   position: fixed;
   inset: 0;

@@ -29,6 +29,12 @@ export default function App() {
     return saved === "dark" ? "dark" : "light";
   });
   const [dstorage, setDStorage] = useState<DStorage | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const showError = (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[HealthVault]", err);
+    setErrorMessage(msg);
+  };
   const [step, setStep] = useState<AppStep>("connect");
   const [record, setRecord] = useState<StoredRecord | null>(null);
   const [proof, setProof] = useState<ZkProofResult | null>(null);
@@ -125,10 +131,7 @@ export default function App() {
         setExistingReferences(filtered);
         return filtered;
       } catch (err) {
-        console.error(
-          "[HealthVault] Failed to refresh references:",
-          err instanceof Error ? err.message : err,
-        );
+        showError(err);
         setExistingReferences([]);
         return [];
       }
@@ -146,9 +149,7 @@ export default function App() {
       await refreshExistingReferences(sdk);
       setStep("upload");
     } catch (err) {
-      console.error("Connection failed:", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      alert(`Connection failed:\n${msg}`);
+      showError(err);
     }
   };
 
@@ -161,7 +162,7 @@ export default function App() {
           : await refreshExistingReferences(sdk);
       const selected = refs.find((r) => r.refId === refId);
       if (!selected) {
-        alert("Reference not found on chain.");
+        showError(new Error("Reference not found on chain."));
         return;
       }
 
@@ -198,9 +199,7 @@ export default function App() {
       setVerified(null);
       setVerifying(false);
     } catch (err) {
-      console.error("Failed to load references:", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      alert(`Failed to load references:\n${msg}`);
+      showError(err);
     }
   };
 
@@ -228,9 +227,7 @@ export default function App() {
       const sdk = await ensureSdkReady();
       await refreshExistingReferences(sdk);
     } catch (err) {
-      console.error("Failed to load references:", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      alert(`Failed to load references:\n${msg}`);
+      showError(err);
     }
   };
 
@@ -336,7 +333,7 @@ export default function App() {
   const handleUseExistingContract = () => {
     const nextAddress = contractAddressInput.trim();
     if (!nextAddress) {
-      alert("Please enter a contract address.");
+      showError(new Error("Please enter a contract address."));
       return;
     }
     setDeployNewContractSelected(false);
@@ -369,6 +366,18 @@ export default function App() {
 
   return (
     <div className="hv-root" data-theme={theme}>
+      {errorMessage && (
+        <div className="hv-error-banner" role="alert">
+          <span className="hv-error-banner-msg">{errorMessage}</span>
+          <button
+            className="hv-error-banner-close"
+            onClick={() => setErrorMessage(null)}
+            aria-label="Dismiss error"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <header className="hv-header">
         <div className="hv-header-top">
           <div className="hv-logo">
