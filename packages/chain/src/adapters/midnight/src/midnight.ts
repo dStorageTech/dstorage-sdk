@@ -492,8 +492,27 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     const connectorAPI = this.connectorAPI;
     const logger = this.logger;
-    const coinPublicKey = this.connectorCoinPublicKey ?? "";
-    const encPublicKey = this.connectorEncPublicKey ?? "";
+    const coinPublicKey = this.connectorCoinPublicKey;
+    const encPublicKey = this.connectorEncPublicKey;
+
+    // Both keys are required. An empty or missing coin public key causes
+    // computeOwnerCommitment() to receive an empty Uint8Array, making every
+    // reference appear as isOurs:false with no error — ownership-gated
+    // operations silently misbehave rather than failing loudly.
+    if (!coinPublicKey) {
+      throw new Error(
+        "[dStorage/midnight] Coin public key not available from wallet. " +
+          "getShieldedAddresses() did not return shieldedCoinPublicKey. " +
+          "Check that your Lace wallet is unlocked and connected to the target network.",
+      );
+    }
+    if (!encPublicKey) {
+      throw new Error(
+        "[dStorage/midnight] Encryption public key not available from wallet. " +
+          "getShieldedAddresses() did not return shieldedEncryptionPublicKey. " +
+          "Check that your Lace wallet is unlocked and connected to the target network.",
+      );
+    }
     const indexerHttp = this.connectorIndexerHttp ?? this.config.indexer;
     const indexerWs = this.connectorIndexerWs ?? this.config.indexerWS ?? "";
     const proofServer = this.connectorProofServer ?? this.config.proofServer;

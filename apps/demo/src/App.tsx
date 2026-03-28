@@ -124,7 +124,11 @@ export default function App() {
         );
         setExistingReferences(filtered);
         return filtered;
-      } catch {
+      } catch (err) {
+        console.error(
+          "[HealthVault] Failed to refresh references:",
+          err instanceof Error ? err.message : err,
+        );
         setExistingReferences([]);
         return [];
       }
