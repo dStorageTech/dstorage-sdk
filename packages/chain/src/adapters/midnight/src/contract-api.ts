@@ -214,11 +214,17 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     const blockHeight: number = Number(
       (txData as any).public?.blockHeight ?? 0,
     );
-    // Try to extract the circuit-computed refId (Bytes<32> return value from storeReference).
-    // Falls back to an empty 32-byte array if the runtime doesn't expose private results.
     const circuitResult = (txData as any).private?.result;
-    const refId: Uint8Array =
-      circuitResult instanceof Uint8Array ? circuitResult : new Uint8Array(32);
+    if (!(circuitResult instanceof Uint8Array)) {
+      throw new Error(
+        `[dStorage/midnight] storeReference succeeded on-chain (txHash=${txHash}) ` +
+          `but the runtime did not return the circuit refId at txData.private.result ` +
+          `(got ${typeof circuitResult}). ` +
+          `This is likely a compact-runtime version mismatch. ` +
+          `Upgrade @midnight-ntwrk/compact-runtime or report this as a bug.`,
+      );
+    }
+    const refId: Uint8Array = circuitResult;
 
     this.logger?.debug?.(
       "dStorage/midnight",
