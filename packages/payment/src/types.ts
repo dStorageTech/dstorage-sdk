@@ -46,7 +46,11 @@ export const TOKENS: Record<TokenSymbol, Token> = {
 // ── Provider name ─────────────────────────────────────────────────────────────
 
 /** Identifies which network the payment provider works for. */
-export type PaymentNetworkName = "mock" | "arweave" | "midnight";
+export type PaymentNetworkName =
+  | "mock"
+  | "arweave"
+  | "midnight"
+  | "arweave_turbo";
 
 // ── PaymentQuote ──────────────────────────────────────────────────────────────
 

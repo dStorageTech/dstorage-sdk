@@ -121,14 +121,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 125 char 1',
+                                     'DataRegistry.compact line 132 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 5 (argument 6 as invoked from Typescript)',
-                                     'DataRegistry.compact line 125 char 1',
+                                     'DataRegistry.compact line 132 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
@@ -161,14 +161,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 162 char 1',
+                                     'DataRegistry.compact line 169 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 162 char 1',
+                                     'DataRegistry.compact line 169 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
@@ -202,21 +202,21 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 185 char 1',
+                                     'DataRegistry.compact line 192 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 185 char 1',
+                                     'DataRegistry.compact line 192 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 6 (argument 7 as invoked from Typescript)',
-                                     'DataRegistry.compact line 185 char 1',
+                                     'DataRegistry.compact line 192 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
@@ -272,7 +272,6 @@ export class Contract {
     stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
     stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
     stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
-    stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
     state_0.data = new __compactRuntime.ChargedState(stateValue_0);
     state_0.setOperation('storeReference', new __compactRuntime.ContractOperation());
     state_0.setOperation('removeReference', new __compactRuntime.ContractOperation());
@@ -314,16 +313,6 @@ export class Contract {
                                        { push: { storage: true,
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(0n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
-                                       { ins: { cached: false, n: 1 } }]);
-    __compactRuntime.queryLedgerState(context,
-                                      partialProofData,
-                                      [
-                                       { push: { storage: false,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_12.toValue(3n),
-                                                                                              alignment: _descriptor_12.alignment() }).encode() } },
-                                       { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(new Uint8Array(32)),
-                                                                                              alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
     const tmp_0 = 1n;
     __compactRuntime.queryLedgerState(context,
@@ -407,7 +396,7 @@ export class Contract {
                                                                                                                                                                    alignment: _descriptor_12.alignment() } }] } },
                                                                                                                                         { popeq: { cached: true,
                                                                                                                                                    result: undefined } }]).value),
-                                                                             'DataRegistry.compact line 132 char 29'),
+                                                                             'DataRegistry.compact line 139 char 29'),
                                         _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                   partialProofData,
                                                                                                   [
@@ -809,20 +798,6 @@ export function ledger(stateOrChargedState) {
                                                                                                    alignment: _descriptor_12.alignment() } }] } },
                                                                         { popeq: { cached: false,
                                                                                    result: undefined } }]).value);
-    },
-    get owner() {
-      return _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                       partialProofData,
-                                                                       [
-                                                                        { dup: { n: 0 } },
-                                                                        { idx: { cached: false,
-                                                                                 pushPath: false,
-                                                                                 path: [
-                                                                                        { tag: 'value',
-                                                                                          value: { value: _descriptor_12.toValue(3n),
-                                                                                                   alignment: _descriptor_12.alignment() } }] } },
-                                                                        { popeq: { cached: false,
-                                                                                   result: undefined } }]).value);
     }
   };
 }
@@ -841,21 +816,21 @@ export const pureCircuits = {
     if (!(typeof(pk_0) === 'object' && pk_0.bytes.buffer instanceof ArrayBuffer && pk_0.bytes.BYTES_PER_ELEMENT === 1 && pk_0.bytes.length === 32)) {
       __compactRuntime.typeError('computeOwnerCommitment',
                                  'argument 1',
-                                 'DataRegistry.compact line 87 char 1',
+                                 'DataRegistry.compact line 94 char 1',
                                  'struct ZswapCoinPublicKey<bytes: Bytes<32>>',
                                  pk_0)
     }
     if (!(nonce_0.buffer instanceof ArrayBuffer && nonce_0.BYTES_PER_ELEMENT === 1 && nonce_0.length === 32)) {
       __compactRuntime.typeError('computeOwnerCommitment',
                                  'argument 2',
-                                 'DataRegistry.compact line 87 char 1',
+                                 'DataRegistry.compact line 94 char 1',
                                  'Bytes<32>',
                                  nonce_0)
     }
     if (!(instanceSalt_0.buffer instanceof ArrayBuffer && instanceSalt_0.BYTES_PER_ELEMENT === 1 && instanceSalt_0.length === 32)) {
       __compactRuntime.typeError('computeOwnerCommitment',
                                  'argument 3',
-                                 'DataRegistry.compact line 87 char 1',
+                                 'DataRegistry.compact line 94 char 1',
                                  'Bytes<32>',
                                  instanceSalt_0)
     }
@@ -872,14 +847,14 @@ export const pureCircuits = {
     if (!(refCounter_0.buffer instanceof ArrayBuffer && refCounter_0.BYTES_PER_ELEMENT === 1 && refCounter_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 1',
-                                 'DataRegistry.compact line 106 char 1',
+                                 'DataRegistry.compact line 113 char 1',
                                  'Bytes<32>',
                                  refCounter_0)
     }
     if (!(instanceSalt_0.buffer instanceof ArrayBuffer && instanceSalt_0.BYTES_PER_ELEMENT === 1 && instanceSalt_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 2',
-                                 'DataRegistry.compact line 106 char 1',
+                                 'DataRegistry.compact line 113 char 1',
                                  'Bytes<32>',
                                  instanceSalt_0)
     }

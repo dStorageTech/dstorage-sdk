@@ -19,7 +19,11 @@ export interface Logger {
 }
 
 /** Identifies which storage network an adapter represents. */
-export type StorageProviderName = "mock" | "arweave" | "autonomi";
+export type StorageProviderName =
+  | "mock"
+  | "arweave"
+  | "autonomi"
+  | "arweave_turbo";
 
 /** Metadata returned after a successful upload. */
 export interface UploadResult {

@@ -8,6 +8,7 @@ export * from "./metaTx/index.js";
 export {
   MockStorageAdapter,
   ArweaveStorageAdapter,
+  ArweaveTurboStorageAdapter,
   AutonomiStorageAdapter,
   // Local / testnet
   ArweaveLocalStorageAdapter,
@@ -19,6 +20,7 @@ export {
 } from "@dstorage/storage";
 
 export type {
+  ArweaveTurboAdapterConfig,
   ArweaveLocalAdapterConfig,
   ArweaveLocalHelperConfig,
   ArweaveLocalInfo,

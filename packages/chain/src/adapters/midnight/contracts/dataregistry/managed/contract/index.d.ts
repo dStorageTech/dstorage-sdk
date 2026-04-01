@@ -89,7 +89,6 @@ export type Ledger = {
   };
   readonly refCounter: bigint;
   readonly contractVersion: bigint;
-  readonly owner: Uint8Array;
 }
 
 export type ContractReferenceLocations = any;

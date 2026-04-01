@@ -55,7 +55,6 @@ import type {
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
-import { MidnightPaymentAdapter } from "./midnight.js";
 
 // Shared API endpoint for all network payment flows on the dStorage signing server.
 const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
@@ -100,20 +99,10 @@ interface SignTxResponse {
   signature: string;
   /** Wallet public key used as the transaction owner (base64url-encoded RSA `n`). */
   publicKey: string;
-  /**
-   * Total transaction amount/cost as a string (server-defined units, typically AR).
-   * Used by this adapter as the returned `arCost` display value.
-   */
+  /** Total transaction amount/cost as a string (server-defined units). */
   txAmount: string;
   /** Indicates whether the signing service successfully produced a signature. */
   success: boolean;
-  /** Address of the server-side wallet that signed/broadcasts the transaction. */
-  walletAddress: string;
-  /**
-   * Optional Arweave fee estimate returned by the server (string, units server-defined).
-   * Informational only; the adapter does not currently use this value.
-   */
-  arFeeEstimate: string;
 }
 
 // ── Adapter ───────────────────────────────────────────────────────────────────
@@ -127,7 +116,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   private readonly authToken?: string;
 
   constructor(config: ManagedPaymentAdapterConfig) {
-    // walletKey intentionally omitted — signing is remote
     super({
       ...(config.gateway !== undefined ? { gateway: config.gateway } : {}),
       ...(config.quoteValidityMs !== undefined
@@ -217,7 +205,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       return await super.estimateCost(dataSizeBytes);
     }
 
-    // TODO: query a service to obtain estimation
+    // FIXME: query a service to obtain estimation
     const amount = "0.0012345";
     this.logger?.log(
       "dStorage/managed-payment",
@@ -251,6 +239,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       return this._payMidnight(quote, onStatus);
     } else if (quote.network === "arweave") {
       return this._payArweave(quote, onStatus);
+    } else if (quote.network === "arweave_turbo") {
+      return this._payArweaveTurbo(quote, onStatus);
     }
 
     throw Error(`Unsupported network: ${quote.network}`);
@@ -308,12 +298,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const {
       txId,
       signature,
-      publicKey: signedPublicKey,
+      publicKey,
       txAmount: arCost,
     } = await this._sendSignTxRequest(txJson, quote.network, onStatus);
 
     onStatus?.("Applying remote signature…");
-    tx.setSignature({ id: txId, signature, owner: signedPublicKey });
+    tx.setSignature({ id: txId, signature, owner: publicKey });
 
     // Restore raw data so the chunked uploader can post it to the gateway.
     tx.data = rawData;
@@ -369,6 +359,38 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       txHash: txId,
       token: "DUST",
       amount: dustCost,
+      type: quote.type,
+      signedTx: signature,
+      paidAt: Date.now(),
+    };
+  }
+
+  /**
+   * Arweave Turbo
+   */
+  private async _payArweaveTurbo(
+    quote: PaymentQuote,
+    onStatus?: (message: string) => void,
+  ): Promise<PaymentReceipt> {
+    const {
+      txId,
+      signature,
+      txAmount: arCost,
+    } = await this._sendSignTxRequest(
+      quote.txData ?? null,
+      quote.network,
+      onStatus,
+    );
+
+    this.logger?.log(
+      "dStorage/managed-payment",
+      `Arweave Turbo Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token}`,
+    );
+
+    return {
+      txHash: txId,
+      token: "AR",
+      amount: arCost,
       type: quote.type,
       signedTx: signature,
       paidAt: Date.now(),
