@@ -17,6 +17,7 @@ import type {
   Logger,
   WalletBalances,
   DataReferenceSummary,
+  ChainQuote,
 } from "../types.js";
 import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
 import type { CryptoScheme } from "@dstorage/crypto";
@@ -72,6 +73,15 @@ export class MockChainAdapter implements ChainAdapter {
       for (const [k, v] of Object.entries(savedRefs)) refs.set(k, v);
     }
     this.contractAddress = `mock_contract_${Date.now()}`;
+  }
+
+  async estimateCost(): Promise<ChainQuote> {
+    return {
+      token: "MOCK",
+      amount: "0.1000",
+      network: this.name,
+      expiresAt: Date.now() + 120_000,
+    };
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {

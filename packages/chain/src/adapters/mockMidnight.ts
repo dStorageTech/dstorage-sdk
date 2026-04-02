@@ -25,6 +25,7 @@ import type {
   ChainWriteResult,
   DataReferenceSummary,
   Logger,
+  ChainQuote,
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
 import { ManagedPaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
@@ -129,6 +130,15 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     if (savedRefs) {
       for (const [k, v] of Object.entries(savedRefs)) refs.set(k, v);
     }
+  }
+
+  async estimateCost(): Promise<ChainQuote> {
+    return {
+      token: "DUST",
+      amount: "0.1000",
+      network: this.name,
+      expiresAt: Date.now() + 120_000,
+    };
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {

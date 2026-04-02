@@ -59,13 +59,6 @@ import type { ArweavePaymentAdapterConfig } from "./arweave.js";
 // Shared API endpoint for all network payment flows on the dStorage signing server.
 const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
 
-// ── Midnight tx encoding helpers (browser-safe, no Buffer) ────────────────────
-
-/** Convert a Uint8Array to a lowercase hex string. */
-function uint8ArrayToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export interface ManagedPaymentAdapterConfig extends Omit<
@@ -128,71 +121,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     this.network = config.network;
     this.token = config.token;
     this.type = config.type;
-  }
-
-  // ── Midnight wallet provider wrapping ────────────────────────────────────────
-
-  /**
-   * For Midnight network: wraps the wallet provider's balanceTx() to route
-   * transaction balancing through the managed signing server instead of the
-   * local wallet. The server receives the hex-serialized UnboundTransaction,
-   * balances and signs it, and returns the FinalizedTransaction in the receipt.
-   *
-   * For other networks: returns the provider unchanged (no wrapping needed).
-   */
-  wrapWalletProvider(
-    walletProvider: unknown,
-    onReceipt: (receipt: PaymentReceipt) => void,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    deserializeTx?: (signedTx: string) => Promise<any>,
-  ): unknown {
-    if (this.network !== "midnight") return walletProvider;
-
-    const paymentAdapter = this;
-    const logger = this.logger;
-    const provider = walletProvider as {
-      getCoinPublicKey: () => string;
-      getEncryptionPublicKey: () => string;
-    };
-
-    return {
-      getCoinPublicKey: () => provider.getCoinPublicKey(),
-      getEncryptionPublicKey: () => provider.getEncryptionPublicKey(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      balanceTx: async (tx: any, _ttl?: Date): Promise<any> => {
-        const txData: string = uint8ArrayToHex(
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-          (tx as { serialize: () => Uint8Array }).serialize(),
-        );
-        const receipt = await paymentAdapter.pay({
-          token: "DUST",
-          amount: "0",
-          type: "chain",
-          network: "midnight",
-          txData,
-          dataSizeBytes: txData.length,
-          expiresAt: Date.now() + 60_000,
-        });
-        onReceipt(receipt);
-
-        if (!receipt.signedTx) {
-          throw new Error(
-            "[dStorage/managed-payment] Managed payment server did not return a balanced transaction.",
-          );
-        }
-        logger?.log(
-          "dStorage/managed-payment",
-          `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx.length})`,
-        );
-
-        if (!deserializeTx) {
-          throw new Error(
-            "[dStorage/managed-payment] deserializeTx callback is required to finalize the balanced transaction.",
-          );
-        }
-        return deserializeTx(receipt.signedTx);
-      },
-    };
   }
 
   // ── PaymentAdapter: estimateCost ─────────────────────────────────────────────

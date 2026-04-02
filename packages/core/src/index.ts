@@ -42,10 +42,6 @@ export type {
   MidnightChainAdapterConfig,
 } from "@dstorage/chain";
 
-export {
-  MockPaymentAdapter,
-  ArweavePaymentAdapter,
-  MidnightPaymentAdapter,
-} from "@dstorage/payment";
+export { MockPaymentAdapter, ArweavePaymentAdapter } from "@dstorage/payment";
 
 export type { PaymentAdapter, PaymentQuote } from "@dstorage/payment";

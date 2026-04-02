@@ -5,8 +5,7 @@
  * More chains can be supported in the future
  */
 
-import type { PaymentReceipt } from "@dstorage/payment";
-import type { PaymentAdapter } from "@dstorage/payment";
+import type { PaymentReceipt, TokenSymbol } from "@dstorage/payment";
 import type { CryptoScheme, EncryptionScheme } from "@dstorage/crypto";
 
 export type { EncryptionScheme, CryptoScheme } from "@dstorage/crypto";
@@ -121,12 +120,27 @@ export interface ChainReferenceUpdate {
   writtenAt: number;
 }
 
+/**
+ * A cost quote returned by ChainAdapter.estimateCost().
+ *
+ * Quotes have a limited validity window. Real adapters may tighten
+ * this window based on network fee volatility.
+ */
+export interface ChainQuote {
+  /** Token this quote is denominated in */
+  token: TokenSymbol;
+  /** Amount in the native token (string to preserve precision) */
+  amount: string;
+  /** The network this quote is for. */
+  network: string;
+  /** Timestamp after which this quote should be refreshed */
+  expiresAt: number;
+}
+
 /** Every chain adapter must implement this interface */
 export interface ChainAdapter {
   readonly name: ChainProviderName;
   readonly providerName: string;
-  /** Payment adapter responsible for paying chain network fees for this adapter. */
-  readonly paymentAdapter: PaymentAdapter;
 
   /** Initialize the wallet: derive keys, wait for sync.
    *  Must be called before any read/write operations. */
@@ -164,6 +178,11 @@ export interface ChainAdapter {
 
   /** Get the contract address. **/
   getContractAddress(): string;
+
+  /**
+   * Get a cost estimate for a payload of the given size.
+   */
+  estimateCost(): Promise<ChainQuote>;
 
   /**
    * Receive the active CryptoScheme instance from the SDK.

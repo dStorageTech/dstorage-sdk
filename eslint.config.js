@@ -11,7 +11,12 @@ export default [
     ],
   },
   {
-    files: ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "apps/*/src/**/*.ts", "apps/*/src/**/*.tsx"],
+    files: [
+      "packages/*/src/**/*.ts",
+      "packages/*/src/**/*.tsx",
+      "apps/*/src/**/*.ts",
+      "apps/*/src/**/*.tsx",
+    ],
     languageOptions: {
       parser: tsParser,
       ecmaVersion: 2020,

@@ -20,6 +20,7 @@ export type {
 } from "@dstorage/payment";
 export { TOKENS } from "@dstorage/payment";
 
+import type { ChainQuote } from "@dstorage/chain";
 import type { PaymentQuote, TokenSymbol } from "@dstorage/payment";
 
 // ── CostEstimate ──────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ export interface CostEstimate {
  */
 export function buildCostEstimate(
   storageQuote: PaymentQuote,
-  chainQuote: PaymentQuote,
+  chainQuote: ChainQuote,
   fileSizeBytes: number,
 ): CostEstimate {
   return {

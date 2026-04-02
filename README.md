@@ -238,12 +238,6 @@ console.log(receipt.chainRefId); // On-chain reference ID
 
 Tokens are selected automatically based on your chosen adapters.
 
-### Pricing model (current adapters)
-
-- **MockPaymentAdapter**: simulated values, no real transfers
-- **ArweavePaymentAdapter**: preview pricing + simulated payment flow
-- **MidnightPaymentAdapter**: preview pricing + simulated payment flow
-
 ---
 
 ## Architecture
@@ -518,7 +512,5 @@ Encryption keys are derived deterministically from the wallet seed or shielded a
 
 ## Known Limitations
 
-- **Large file uploads are capped at 10 MB.** The current implementation holds the entire payload in memory — plaintext, ciphertext, and base64-encoded form — which can peak at roughly 4× the file size. Streaming encryption and chunked/multipart uploads are planned for a future release.
-- `ArweavePaymentAdapter` and `MidnightPaymentAdapter` currently run preview/simulated payment flows.
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
 - Autonomi adapter is currently a stub path.

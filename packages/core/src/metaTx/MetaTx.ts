@@ -65,7 +65,7 @@ export class MetaTx {
       // Fetch quotes from both payment adapters in parallel — they are independent.
       const [storageQuote, chainQuote] = await Promise.all([
         this.sdk.storageAdapter.paymentAdapter.estimateCost(file.size),
-        this.sdk.chainAdapter.paymentAdapter.estimateCost(file.size),
+        this.sdk.chainAdapter.estimateCost(),
       ]);
 
       const estimate = buildCostEstimate(storageQuote, chainQuote, file.size);
@@ -86,10 +86,10 @@ export class MetaTx {
         (await this.sdk.encryptPayload(fileBytes)) ?? fileBytes;
 
       // Let's create a human-readable file size, e.g. "1.2 MB" or "340.0 KB"
-      const fileSizeMB = estimate.fileSizeBytes / (1024 * 1024);
+      const fileSizeMB = file.size / (1024 * 1024);
       const fileSizeDisplay =
         fileSizeMB < 1.1
-          ? `${(estimate.fileSizeBytes / 1024).toFixed(2)} KB`
+          ? `${(file.size / 1024).toFixed(2)} KB`
           : `${fileSizeMB.toFixed(2)} MB`;
       this.completeStep(
         "encrypt",
@@ -175,7 +175,7 @@ export class MetaTx {
         amount: "<unknown>",
         token: chainQuote.token,
         txHash: "",
-        type: chainQuote.type,
+        type: "chain",
         paidAt: 0,
       };
 
