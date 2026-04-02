@@ -9,7 +9,6 @@
  * and resilience without relying on any centralised storage backend.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const createInMemoryPrivateStateProvider = <
   PSI extends string = string,
   PS = unknown,

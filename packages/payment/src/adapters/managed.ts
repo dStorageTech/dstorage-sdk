@@ -211,7 +211,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     // Compute the Merkle tree (data_root) locally so the server can sign based
     // on the data_root without ever receiving the raw file content.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     await tx.prepareChunks(tx.data);
 
     // Strip the raw bytes before sending — only metadata + data_root travel
@@ -220,7 +219,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const rawData: any = tx.data;
     tx.data = new Uint8Array(0);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     const txJson = tx.toJSON();
 
     const {

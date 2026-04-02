@@ -2,6 +2,7 @@
   "name": "dstorage-monorepo",
   "private": true,
   "version": "0.0.1",
+  "type": "module",
   "description": "dStorage SDK — Privacy-first data layer for dApps",
   "workspaces": [
     "packages/*",

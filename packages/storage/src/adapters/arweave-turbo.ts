@@ -144,7 +144,6 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     const { createData } = await import("@irys/bundles");
 
     // The signer only sends the 48-byte deep_hash to the server; data stays local.
@@ -164,12 +163,9 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     // createData allocates the data item structure.
     // dataItem.sign() computes the deep_hash and calls signer.sign(hash) — which
     // sends only those 48 hash bytes to the signing server.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any
     const dataItem: any = createData(data, signer as any, { tags });
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     await dataItem.sign(signer);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     const raw: Uint8Array = dataItem.getRaw();
     // Normalize to a plain ArrayBuffer for Blob construction (avoids Uint8Array<ArrayBufferLike>
     // vs Uint8Array<ArrayBuffer> type mismatch in TypeScript 5.x strict lib types).
@@ -230,7 +226,6 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       signatureTypeLength: 2,
       sign: (message: Uint8Array): Promise<Uint8Array> =>
         this._signHash(message, dataSizeBytes),
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       verify: async (
         _pk: Uint8Array,
         _msg: Uint8Array,

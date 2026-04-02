@@ -342,7 +342,6 @@ export class MidnightChainAdapter implements ChainAdapter {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       balanceTx: async (tx: any, _ttl?: Date): Promise<any> => {
         const txData: string = uint8ArrayToHex(
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
           (tx as { serialize: () => Uint8Array }).serialize(),
         );
         const receipt = await this.managedPaymentAdapter!.pay({

@@ -4,7 +4,7 @@
  * Helpers used internally by MetaTx and one exported utility.
  */
 
-import type { MetaTxStepState, MetaTxStepId } from "./types.js";
+import type { MetaTxStepState } from "./types.js";
 import type { TokenSymbol } from "./payment.js";
 
 // ── Token selector ────────────────────────────────────────────────────────────

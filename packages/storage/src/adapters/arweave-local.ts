@@ -322,9 +322,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   ): Promise<void> {
     try {
       const { default: Arweave } = await import("arweave");
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
       const arweave = Arweave.init(gateway);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       const address: string = await arweave.wallets.jwkToAddress(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         walletKey as any,
@@ -384,7 +382,6 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const arweave = arweaveModule.init(gateway) as {
       wallets: {
         generate: () => Promise<Record<string, string>>;
