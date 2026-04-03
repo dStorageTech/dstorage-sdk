@@ -47,6 +47,11 @@ export default defineConfig({
       "fs/promises": resolve(__dirname, "src/polyfills/empty.js"),
       fs: resolve(__dirname, "src/polyfills/empty.js"),
       path: resolve(__dirname, "src/polyfills/empty.js"),
+      // turbo-sdk has no "browser" export condition — alias to its web entry explicitly.
+      "@ardrive/turbo-sdk": resolve(
+        __dirname,
+        "../../node_modules/@ardrive/turbo-sdk/lib/esm/web/index.js",
+      ),
     },
   },
   build: {

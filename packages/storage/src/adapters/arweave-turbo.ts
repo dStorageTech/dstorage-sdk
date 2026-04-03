@@ -44,7 +44,6 @@ import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { Signer } from "@irys/bundles";
 
-const TURBO_UPLOAD_URL = "https://upload.ardrive.io/v1/tx";
 const ARWEAVE_GATEWAY_URL =
   "https://kvvtpcgsher5z5knp5r3n4qglewgfxkyyrb63ax64hcpiwtlzk6q.turbo-gateway.com";
 
@@ -61,12 +60,6 @@ export interface ArweaveTurboAdapterConfig {
    * When omitted, requests are sent without an Authorization header.
    */
   authToken?: string;
-  /**
-   * Override the Turbo bundler upload URL.
-   * Defaults to TURBO_UPLOAD_URL (Turbo mainnet).
-   * Use https://turbo.ardrive.io/v1/tx for the ArDrive Turbo production endpoint.
-   */
-  turboUploadUrl?: string;
   /**
    * Arweave gateway URL used for data retrieval.
    * Defaults to ARWEAVE_GATEWAY_URL
@@ -102,7 +95,6 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
 
   private readonly signingServerUrl: string | null;
   private readonly authToken: string | undefined;
-  private readonly turboUploadUrl: string;
   private readonly gateway: string;
   protected readonly logger: Logger | undefined;
 
@@ -114,7 +106,6 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       ? config.signingServerUrl.replace(/\/$/, "")
       : null;
     this.authToken = config.authToken;
-    this.turboUploadUrl = config.turboUploadUrl ?? TURBO_UPLOAD_URL;
     this.gateway = config.gateway ?? ARWEAVE_GATEWAY_URL;
     this.logger = config.logger;
 
@@ -168,14 +159,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     await dataItem.sign(signer);
 
     const raw: Uint8Array = dataItem.getRaw();
-    // Normalize to a plain ArrayBuffer for Blob construction (avoids Uint8Array<ArrayBufferLike>
-    // vs Uint8Array<ArrayBuffer> type mismatch in TypeScript 5.x strict lib types).
-    const dataItemBuffer: ArrayBuffer = raw.buffer.slice(
-      raw.byteOffset,
-      raw.byteOffset + raw.byteLength,
-    ) as ArrayBuffer;
-
-    const txId = await this._uploadToTurbo(dataItemBuffer);
+    const txId = await this._uploadToTurbo(raw);
 
     const url = `${this.gateway}/${txId}`;
     this.logger?.log(
@@ -308,36 +292,30 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
    * POST the complete signed ANS-104 data item bytes directly to the Turbo bundler.
    * Server Turbo Credits are consumed based on the signing key — no client wallet needed.
    */
-  private async _uploadToTurbo(dataItemBuffer: ArrayBuffer): Promise<string> {
+  private async _uploadToTurbo(dataItemBuffer: Uint8Array): Promise<string> {
     this.logger?.log(
       "dStorage/arweave-turbo",
       `Uploading ${dataItemBuffer.byteLength}-byte signed data item to Turbo…`,
     );
 
-    let resp: Response;
+    const { TurboFactory } = await import("@ardrive/turbo-sdk");
+    const turbo = TurboFactory.unauthenticated();
+    let result: { id?: string };
     try {
-      resp = await fetch(this.turboUploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: new Blob([dataItemBuffer]),
+      result = await turbo.uploadSignedDataItem({
+        dataItemStreamFactory: () => Buffer.from(dataItemBuffer),
+        dataItemSizeFactory: () => dataItemBuffer.byteLength,
+        signal: AbortSignal.timeout(10_000),
       });
     } catch (err) {
       throw new Error(
-        `[dStorage/arweave-turbo] Upload to Turbo failed: ${err}`,
+        `[dStorage/arweave-turbo] Upload to Arweave Turbo failed: ${err}`,
       );
     }
 
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
-      throw new Error(
-        `[dStorage/arweave-turbo] Turbo upload rejected: HTTP ${resp.status}${body ? ` — ${body}` : ""}`,
-      );
-    }
-
-    const result = (await resp.json()) as { id?: string };
     if (!result.id) {
       throw new Error(
-        "[dStorage/arweave-turbo] Turbo did not return a transaction id.",
+        "[dStorage/arweave-turbo] Arweave Turbo did not return a transaction id.",
       );
     }
     return result.id;
