@@ -42,6 +42,7 @@ import type {
 } from "../types.js";
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
+import type { Signer } from "@irys/bundles";
 
 const TURBO_UPLOAD_URL = "https://upload.ardrive.io/v1/tx";
 const ARWEAVE_GATEWAY_URL =
@@ -163,7 +164,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     // createData allocates the data item structure.
     // dataItem.sign() computes the deep_hash and calls signer.sign(hash) — which
     // sends only those 48 hash bytes to the signing server.
-    const dataItem: any = createData(data, signer as any, { tags });
+    const dataItem = createData(data, signer, { tags });
     await dataItem.sign(signer);
 
     const raw: Uint8Array = dataItem.getRaw();
@@ -209,28 +210,20 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
    * The payment adapter responds with the RSA-PSS signature over that hash (512 bytes, ANS-104 type 1).
    * Raw file bytes never leave the client.
    */
-  private async _buildSigner(dataSizeBytes: number) {
+  private async _buildSigner(dataSizeBytes: number): Promise<Signer> {
     // Fetch the server's RSA modulus (needed as ANS-104 data item `owner` field).
     const ownerBase64PublicKey = await this._getArweaveTurboPublicKey();
     const ownerBytes = _base64urlToBytes(ownerBase64PublicKey);
 
     return {
       /** RSA-4096 public key modulus (512 bytes) — used as the ANS-104 data item `owner` field. */
-      publicKey: ownerBytes,
-      /** Base64url string of the public key — required by @irys/bundles v0.0.5 which calls owner.replace(). */
-      owner: ownerBase64PublicKey,
+      publicKey: Buffer.from(ownerBytes),
       /** Arweave RSA-4096 signature type (ANS-104 type 1). */
       signatureType: 1,
       ownerLength: 512,
       signatureLength: 512,
-      signatureTypeLength: 2,
       sign: (message: Uint8Array): Promise<Uint8Array> =>
         this._signHash(message, dataSizeBytes),
-      verify: async (
-        _pk: Uint8Array,
-        _msg: Uint8Array,
-        _sig: Uint8Array,
-      ): Promise<boolean> => true,
     };
   }
 
