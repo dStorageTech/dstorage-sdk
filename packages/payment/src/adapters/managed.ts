@@ -219,14 +219,17 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const rawData: any = tx.data;
     tx.data = new Uint8Array(0);
 
-    const txJson = tx.toJSON();
+    const body = JSON.stringify({
+      txData: tx.toJSON(),
+      network: quote.network,
+    });
 
     const {
       txId,
       signature,
       publicKey,
       txAmount: arCost,
-    } = await this._sendSignTxRequest(txJson, quote.network, onStatus);
+    } = await this._sendSignTxRequest(body, quote.network, onStatus);
 
     onStatus?.("Applying remote signature…");
     tx.setSignature({ id: txId, signature, owner: publicKey });
@@ -266,15 +269,16 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
+    const body = JSON.stringify({
+      txData: quote.txData ?? null,
+      network: quote.network,
+    });
+
     const {
       txId,
       signature,
       txAmount: dustCost,
-    } = await this._sendSignTxRequest(
-      quote.txData ?? null,
-      quote.network,
-      onStatus,
-    );
+    } = await this._sendSignTxRequest(body, quote.network, onStatus);
 
     this.logger?.log(
       "dStorage/managed-payment",
@@ -298,15 +302,16 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
+    const body = JSON.stringify({
+      txData: quote.txData ?? null,
+      network: quote.network,
+    });
+
     const {
       txId,
       signature,
       txAmount: arCost,
-    } = await this._sendSignTxRequest(
-      quote.txData ?? null,
-      quote.network,
-      onStatus,
-    );
+    } = await this._sendSignTxRequest(body, quote.network, onStatus);
 
     this.logger?.log(
       "dStorage/managed-payment",
@@ -336,14 +341,13 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * Throws on network errors or non-2xx HTTP responses.
    */
   private async _sendSignTxRequest(
-    txJson: any,
+    body: string,
     network: string,
     onStatus?: (message: string) => void,
   ): Promise<SignTxResponse> {
     onStatus?.(`Sending ${network} transaction to signing server…`);
     let signResp: Response;
     try {
-      const body = JSON.stringify({ txData: txJson, network });
       this.logger?.log(
         "dStorage/managed-payment",
         `${network}: delegating to managed payment service (serialized req length=${body.length})`,

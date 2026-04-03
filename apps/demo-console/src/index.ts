@@ -521,9 +521,9 @@ async function main(): Promise<void> {
             `  storageId:        ${ref.storageId ?? "(cannot decrypt)"}`,
           );
           console.log(
-            `  writtenAt:        ${new Date(ref.writtenAt).toISOString()}\n`,
+            `  writtenAt:        ${new Date(ref.writtenAt).toISOString()}`,
           );
-          console.log(`     isOurs:        ${ref.isOurs ? "Yes" : "No"}`);
+          console.log(`     isOurs:        ${ref.isOurs ? "Yes" : "No"}\n`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`\n  Error reading reference: ${msg}\n`);
