@@ -677,7 +677,9 @@ export class DStorage implements DStorageContext {
     if (isPublic) {
       onChainManifestId = manifestResult.id;
     } else {
-      onChainManifestId = await uploadScheme!.encryptStorageId(manifestResult.id);
+      onChainManifestId = await uploadScheme!.encryptStorageId(
+        manifestResult.id,
+      );
     }
 
     const dataLabel = metadata["label"];

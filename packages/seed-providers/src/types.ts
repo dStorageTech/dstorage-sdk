@@ -13,9 +13,8 @@
  * Provides raw seed bytes for dStorage encryption key derivation.
  *
  * Implementations:
- *   MidnightConnectorSeedProvider   — signData() via Midnight Lace browser extension
- *   MnemonicSeedProvider            — BIP-39 mnemonic or hex seed (temporary, facade mode only)
- *   DemoSeedProvider                — fixed deterministic seed for testing/demos
+ *   MnemonicSeedProvider   — BIP-39 mnemonic or hex seed (temporary, facade mode only)
+ *   DemoSeedProvider       — fixed deterministic seed for testing/demos
  */
 export interface EncryptionSeedProvider {
   getSeed(): Promise<Uint8Array>;

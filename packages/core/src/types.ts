@@ -41,9 +41,8 @@ export interface DStorageConfig {
    * When set, sdk.init() calls provider.getSeed() and sets up crypto automatically.
    *
    * Choose the provider that matches the wallet available in your environment:
-   *   MidnightConnectorSeedProvider   — Midnight Lace browser extension (v4+ signData)
-   *   MnemonicSeedProvider            — BIP-39 mnemonic or hex seed (temporary, facade/Node.js only)
-   *   DemoSeedProvider                — fixed deterministic seed for testing
+   *   MnemonicSeedProvider   — BIP-39 mnemonic or hex seed (temporary, facade/Node.js only)
+   *   DemoSeedProvider       — fixed deterministic seed for testing
    *
    * When omitted, no encryption key is available and all uploaded data will be
    * stored as plaintext (public).

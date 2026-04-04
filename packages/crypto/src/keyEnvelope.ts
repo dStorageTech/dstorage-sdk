@@ -30,10 +30,7 @@
  * base64url-encoded → 96 chars — identical to the on-chain storageId layout.
  */
 
-import {
-  encryptStorageIdXChaCha,
-  decryptStorageIdXChaCha,
-} from "./xchacha.js";
+import { encryptStorageIdXChaCha, decryptStorageIdXChaCha } from "./xchacha.js";
 import { bytesToBase64url, base64urlToBytes } from "./types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────

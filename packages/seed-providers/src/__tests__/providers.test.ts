@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { DemoSeedProvider } from "../DemoSeedProvider.js";
 import { MnemonicSeedProvider } from "../MnemonicSeedProvider.js";
-import { MidnightConnectorSeedProvider } from "../MidnightConnectorSeedProvider.js";
 
 // ---------------------------------------------------------------------------
 // DemoSeedProvider
@@ -56,74 +55,5 @@ describe("MnemonicSeedProvider", () => {
     const a = await new MnemonicSeedProvider({ mnemonic: MNEMONIC }).getSeed();
     const b = await new MnemonicSeedProvider({ mnemonic: MNEMONIC2 }).getSeed();
     expect(a).not.toEqual(b);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// MidnightConnectorSeedProvider
-// ---------------------------------------------------------------------------
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-describe("MidnightConnectorSeedProvider", () => {
-  const VERIFYING_KEY_HEX = "0xdeadbeefcafe0102030405060708090a";
-
-  function mockMidnight(verifyingKeyHex: string) {
-    const api = {
-      signData: vi.fn().mockResolvedValue({ verifyingKey: verifyingKeyHex }),
-    };
-    const wallet = {
-      connect: vi.fn().mockResolvedValue(api),
-    };
-    vi.stubGlobal("window", {
-      midnight: { mnLace: wallet },
-    });
-    return { wallet, api };
-  }
-
-  beforeEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("same verifyingKey → same seed (determinism)", async () => {
-    mockMidnight(VERIFYING_KEY_HEX);
-    const a = await new MidnightConnectorSeedProvider().getSeed();
-
-    mockMidnight(VERIFYING_KEY_HEX);
-    const b = await new MidnightConnectorSeedProvider().getSeed();
-
-    expect(bytesToHex(a)).toBe(bytesToHex(b));
-  });
-
-  it("throws if window.midnight is undefined", async () => {
-    vi.stubGlobal("window", {});
-    await expect(new MidnightConnectorSeedProvider().getSeed()).rejects.toThrow(
-      "Midnight wallet not detected",
-    );
-  });
-
-  it("throws if no compatible wallets found", async () => {
-    vi.stubGlobal("window", { midnight: {} });
-    await expect(new MidnightConnectorSeedProvider().getSeed()).rejects.toThrow(
-      "No compatible Midnight wallets found",
-    );
-  });
-
-  it("error from signData() propagates", async () => {
-    const api = {
-      signData: vi.fn().mockRejectedValue(new Error("user rejected")),
-    };
-    vi.stubGlobal("window", {
-      midnight: {
-        mnLace: { connect: vi.fn().mockResolvedValue(api) },
-      },
-    });
-    await expect(new MidnightConnectorSeedProvider().getSeed()).rejects.toThrow(
-      "user rejected",
-    );
   });
 });
