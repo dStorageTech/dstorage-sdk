@@ -5,6 +5,7 @@ export type ReferenceEntry = { storageId: string;
                                storageProvider: string;
                                dataLabel: string;
                                writtenAt: bigint;
+                               keyEnvelope: string;
                                ownerCommitment: Uint8Array
                              };
 
@@ -17,7 +18,8 @@ export type ImpureCircuits<PS> = {
                  encryptionScheme_0: string,
                  storageProvider_0: string,
                  dataLabel_0: string,
-                 writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
+                 writtenAt_0: bigint,
+                 keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   updateReference(context: __compactRuntime.CircuitContext<PS>,
@@ -26,7 +28,8 @@ export type ImpureCircuits<PS> = {
                   encryptionScheme_0: string,
                   storageProvider_0: string,
                   dataLabel_0: string,
-                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+                  writtenAt_0: bigint,
+                  keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type ProvableCircuits<PS> = {
@@ -35,7 +38,8 @@ export type ProvableCircuits<PS> = {
                  encryptionScheme_0: string,
                  storageProvider_0: string,
                  dataLabel_0: string,
-                 writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
+                 writtenAt_0: bigint,
+                 keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   updateReference(context: __compactRuntime.CircuitContext<PS>,
@@ -44,7 +48,8 @@ export type ProvableCircuits<PS> = {
                   encryptionScheme_0: string,
                   storageProvider_0: string,
                   dataLabel_0: string,
-                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+                  writtenAt_0: bigint,
+                  keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type PureCircuits = {
@@ -67,7 +72,8 @@ export type Circuits<PS> = {
                  encryptionScheme_0: string,
                  storageProvider_0: string,
                  dataLabel_0: string,
-                 writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
+                 writtenAt_0: bigint,
+                 keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   updateReference(context: __compactRuntime.CircuitContext<PS>,
@@ -76,7 +82,8 @@ export type Circuits<PS> = {
                   encryptionScheme_0: string,
                   storageProvider_0: string,
                   dataLabel_0: string,
-                  writtenAt_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+                  writtenAt_0: bigint,
+                  keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type Ledger = {

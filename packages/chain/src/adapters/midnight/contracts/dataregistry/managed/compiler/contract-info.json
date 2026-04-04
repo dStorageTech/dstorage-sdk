@@ -108,6 +108,13 @@
             "type-name": "Uint",
             "maxval": 18446744073709551615
           }
+        },
+        {
+          "name": "keyEnvelope",
+          "type": {
+            "type-name": "Opaque",
+            "tsType": "string"
+          }
         }
       ],
       "result-type": {
@@ -179,6 +186,13 @@
           "type": {
             "type-name": "Uint",
             "maxval": 18446744073709551615
+          }
+        },
+        {
+          "name": "keyEnvelope",
+          "type": {
+            "type-name": "Opaque",
+            "tsType": "string"
           }
         }
       ],
