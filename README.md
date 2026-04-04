@@ -514,3 +514,7 @@ Encryption keys are derived deterministically from the wallet seed or shielded a
 
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
 - Autonomi adapter is currently a stub path.
+- **Browser seed providers do not yet produce cryptographically secure encryption keys.** Both `MidnightConnectorSeedProvider` and `MetaMaskSeedProvider` derive keys from wallet-produced values, but neither currently guarantees a truly secret, deterministic seed:
+  - `MidnightConnectorSeedProvider` uses the wallet's public verifying key (sr25519 signatures are non-deterministic, so the signature itself cannot be used). The derived key is therefore not secret — anyone who knows the wallet's public key can reproduce it.
+  - `MetaMaskSeedProvider` uses a secp256k1 `personal_sign` signature, which is deterministic but potentially reconstructible from the public key in certain attack scenarios.
+  - The correct long-term fix is for wallets to expose a dedicated, deterministic key-derivation API that signs with a scheme whose output is both private and reproducible. Until such an API is available, the alternative would be to generate a random encryption key and persist it in `localStorage` — which trades the wallet-binding guarantee for actual secrecy. Further research is needed to find the right balance between security and usability without requiring local storage.
