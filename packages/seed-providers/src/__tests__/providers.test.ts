@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DemoSeedProvider } from "../DemoSeedProvider.js";
 import { MnemonicSeedProvider } from "../MnemonicSeedProvider.js";
-import { MetaMaskSeedProvider } from "../MetaMaskSeedProvider.js";
 import { MidnightConnectorSeedProvider } from "../MidnightConnectorSeedProvider.js";
 
 // ---------------------------------------------------------------------------
@@ -61,126 +60,14 @@ describe("MnemonicSeedProvider", () => {
 });
 
 // ---------------------------------------------------------------------------
-// MetaMaskSeedProvider
+// MidnightConnectorSeedProvider
 // ---------------------------------------------------------------------------
-
-// secp256k1 curve order
-const SECP256K1_N = BigInt(
-  "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
-);
-
-/** Build a 65-byte signature: r(32) || s(32) || v(1) */
-function buildSig(r: bigint, s: bigint, v: number): string {
-  const buf = new Uint8Array(65);
-  // write r (bytes 0–31, big-endian)
-  let tmp = r;
-  for (let i = 31; i >= 0; i--) {
-    buf[i] = Number(tmp & 0xffn);
-    tmp >>= 8n;
-  }
-  // write s (bytes 32–63, big-endian)
-  tmp = s;
-  for (let i = 63; i >= 32; i--) {
-    buf[i] = Number(tmp & 0xffn);
-    tmp >>= 8n;
-  }
-  buf[64] = v;
-  return (
-    "0x" +
-    Array.from(buf)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
-
-describe("MetaMaskSeedProvider", () => {
-  // Arbitrary r and v values for test signatures
-  const R = BigInt(
-    "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-  );
-  const V = 27;
-
-  // A low-s value (s ≤ n/2)
-  const S_LOW = BigInt(
-    "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0",
-  ); // = (n-1)/2, definitely ≤ n/2
-  // The corresponding high-s value
-  const S_HIGH = SECP256K1_N - S_LOW;
-
-  const LOW_SIG_HEX = buildSig(R, S_LOW, V);
-  const HIGH_SIG_HEX = buildSig(R, S_HIGH, V);
-
-  function mockEthereum(signatureHex: string) {
-    const ethereum = {
-      request: vi.fn().mockImplementation(({ method }: { method: string }) => {
-        if (method === "eth_requestAccounts") return Promise.resolve(["0xAbc"]);
-        if (method === "personal_sign") return Promise.resolve(signatureHex);
-        return Promise.reject(new Error(`Unknown method: ${method}`));
-      }),
-    };
-    vi.stubGlobal("window", { ethereum });
-    return ethereum;
-  }
-
-  beforeEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("high-s signature produces the same seed as the low-s signature", async () => {
-    mockEthereum(LOW_SIG_HEX);
-    const seedLow = await new MetaMaskSeedProvider().getSeed();
-
-    mockEthereum(HIGH_SIG_HEX);
-    const seedHigh = await new MetaMaskSeedProvider().getSeed();
-
-    expect(bytesToHex(seedLow)).toBe(bytesToHex(seedHigh));
-  });
-
-  it("already-canonical (low-s) signature passes through unchanged", async () => {
-    mockEthereum(LOW_SIG_HEX);
-    const seed = await new MetaMaskSeedProvider().getSeed();
-
-    // The s bytes in the output should equal S_LOW
-    let s = 0n;
-    for (let i = 32; i < 64; i++) {
-      s = (s << 8n) | BigInt(seed[i]!);
-    }
-    expect(s).toBe(S_LOW);
-  });
-
-  it("throws if window.ethereum is undefined", async () => {
-    vi.stubGlobal("window", {});
-    await expect(new MetaMaskSeedProvider().getSeed()).rejects.toThrow(
-      "MetaMask not detected",
-    );
-  });
-
-  it("throws if no accounts are returned", async () => {
-    vi.stubGlobal("window", {
-      ethereum: {
-        request: vi
-          .fn()
-          .mockImplementation(({ method }: { method: string }) => {
-            if (method === "eth_requestAccounts") return Promise.resolve([]);
-            return Promise.resolve("0xdeadbeef");
-          }),
-      },
-    });
-    await expect(new MetaMaskSeedProvider().getSeed()).rejects.toThrow(
-      "No accounts returned",
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// MidnightConnectorSeedProvider
-// ---------------------------------------------------------------------------
 
 describe("MidnightConnectorSeedProvider", () => {
   const VERIFYING_KEY_HEX = "0xdeadbeefcafe0102030405060708090a";

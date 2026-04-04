@@ -13,7 +13,6 @@
  * Provides raw seed bytes for dStorage encryption key derivation.
  *
  * Implementations:
- *   MetaMaskSeedProvider            — personal_sign via MetaMask / any EIP-1193 wallet
  *   MidnightConnectorSeedProvider   — signData() via Midnight Lace browser extension
  *   MnemonicSeedProvider            — BIP-39 mnemonic or hex seed (temporary, facade mode only)
  *   DemoSeedProvider                — fixed deterministic seed for testing/demos

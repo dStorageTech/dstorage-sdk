@@ -41,7 +41,6 @@ export interface DStorageConfig {
    * When set, sdk.init() calls provider.getSeed() and sets up crypto automatically.
    *
    * Choose the provider that matches the wallet available in your environment:
-   *   MetaMaskSeedProvider            — MetaMask / any EIP-1193 browser wallet
    *   MidnightConnectorSeedProvider   — Midnight Lace browser extension (v4+ signData)
    *   MnemonicSeedProvider            — BIP-39 mnemonic or hex seed (temporary, facade/Node.js only)
    *   DemoSeedProvider                — fixed deterministic seed for testing
