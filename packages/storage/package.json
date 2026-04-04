@@ -21,13 +21,12 @@
   "devDependencies": {
     "typescript": "^5.4.5",
     "arweave": "^1.15.0",
-    "@ardrive/turbo-sdk": "^1.41.0",
-    "@irys/bundles": ">=0.0.3"
+    "@ardrive/turbo-sdk": "^1.41.0"
   },
   "peerDependencies": {
     "arweave": "^1.15.0",
     "@ardrive/turbo-sdk": "^1.41.0",
-    "@irys/bundles": ">=0.0.3"
+    "@dha-team/arbundles": "^1.0.0"
   },
   "peerDependenciesMeta": {
     "arweave": {
@@ -36,7 +35,7 @@
     "@ardrive/turbo-sdk": {
       "optional": true
     },
-    "@irys/bundles": {
+    "@dha-team/arbundles": {
       "optional": true
     }
   }

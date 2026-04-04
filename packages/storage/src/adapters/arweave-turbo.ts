@@ -20,7 +20,7 @@
  *   Standard Arweave gateway fetch (identical to ArweaveStorageAdapter.retrieve).
  *
  * ── Peer dependency ───────────────────────────────────────────────────────────
- *   npm install @irys/bundles
+ *   No extra install needed — @dha-team/arbundles ships as a dependency of @ardrive/turbo-sdk.
  *
  * ── Server requirements ───────────────────────────────────────────────────────
  *   The dStorage API server must expose (both auth-protected via Bearer token):
@@ -42,7 +42,7 @@ import type {
 } from "../types.js";
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
-import type { Signer } from "@irys/bundles";
+import type { Signer } from "@dha-team/arbundles";
 
 const ARWEAVE_GATEWAY_URL =
   "https://kvvtpcgsher5z5knp5r3n4qglewgfxkyyrb63ax64hcpiwtlzk6q.turbo-gateway.com";
@@ -136,7 +136,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<UploadResult> {
-    const { createData } = await import("@irys/bundles");
+    const { createData } = await import("@dha-team/arbundles");
 
     // The signer only sends the 48-byte deep_hash to the server; data stays local.
     const dataSizeBytes = data.byteLength;
@@ -187,7 +187,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   // ── Private helpers ────────────────────────────────────────────────────────────
 
   /**
-   * Build a minimal signer object compatible with the @irys/bundles DataItem API.
+   * Build a minimal signer object compatible with the @dha-team/arbundles DataItem API.
    *
    * The only non-trivial method is sign(): it sends the deep_hash produced by
    * the DataItem's internal ANS-104 signing procedure to the selected payment adapter.
