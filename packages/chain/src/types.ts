@@ -52,6 +52,11 @@ export interface ChainReference {
   /** Timestamp of when the reference was written on-chain */
   writtenAt: number;
   /**
+   * JSON-encoded KeyEnvelope containing the wrapped DEK.
+   * Required for private (encrypted) references; empty string or absent for public ones.
+   */
+  keyEnvelope?: string;
+  /**
    * Whether this reference was created by the currently connected wallet.
    * Computed by comparing the stored ownerCommitment against the wallet's
    * derived commitment.
@@ -94,6 +99,8 @@ export interface DataReferenceSummary {
   storageProvider: string;
   /** Encryption scheme recorded on-chain. null/"" = public/unencrypted; "aes-gcm-v1" = encrypted. */
   encryptionScheme: EncryptionScheme | null;
+  /** JSON-encoded KeyEnvelope for private references; "" or absent for public ones. */
+  keyEnvelope?: string;
   /**
    * Hex-encoded owner commitment stored on-chain.
    * The commitment itself is public, but does not reveal the owner's identity.
@@ -118,6 +125,8 @@ export interface ChainReferenceUpdate {
   storageProvider: string;
   dataLabel?: string;
   writtenAt: number;
+  /** JSON-encoded KeyEnvelope. Required for private references; "" for public. */
+  keyEnvelope?: string;
 }
 
 /**

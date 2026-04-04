@@ -27,8 +27,8 @@ export struct ReferenceEntry {
   // In this case encryptionScheme is empty ("").
   //
   // Supported schemes and their byte layouts (before base64url encoding):
-  //   "aes-gcm-v1"                      : 60 bytes   [ ciphertext(32) | IV(12) | auth-tag(16) ]
-  //   "xchacha20poly1305-v1"  : 1160 bytes [ encapKey(1088) | nonce(24) | ciphertext(32) | auth-tag(16) ]
+  //   "aes-gcm-v1"             : 60 bytes  [ ciphertext(32) | IV(12) | auth-tag(16) ]
+  //   "xchacha20poly1305-v1"   : 72 bytes  [ nonce(24) | ciphertext(32) | auth-tag(16) ]
   storageId: Opaque<"string">;
   // Identifies the encryption algorithm used for both the storageId and the
   // file/data stored off-chain. Enables the dStorage SDK to dispatch the
@@ -41,6 +41,13 @@ export struct ReferenceEntry {
   dataLabel: Opaque<"string">;
   // Caller-supplied write timestamp.
   writtenAt: Uint<64>;
+  // JSON-encoded key envelope containing one or more wrapped copies of the
+  // per-upload Data Encryption Key (DEK). Each wrapper entry identifies its
+  // wrapping key by name (e.g. "password") and records the DEK encrypted under
+  // a Key Encryption Key derived from the holder's wallet seed.
+  // Empty string ("") for public (unencrypted) uploads.
+  // See KeyEnvelope type in @dstorage/crypto for the schema.
+  keyEnvelope: Opaque<"string">;
   // Hidden owner commitment: persistentHash of the caller's public key.
   // Only the holder of the matching secret key can prove ownership and remove this entry.
   ownerCommitment: Bytes<32>;
@@ -134,7 +141,8 @@ export circuit storeReference(
                  encryptionScheme: Opaque<"string">,
                  storageProvider: Opaque<"string">,
                  dataLabel: Opaque<"string">,
-                 writtenAt: Uint<64>
+                 writtenAt: Uint<64>,
+                 keyEnvelope: Opaque<"string">
                  ): Bytes<32> {
   const refId = deriveRefId(refCounter as Bytes<32>, kernel.self().bytes);
   assert(!references.member(disclose(refId)), "Reference already stored");
@@ -148,6 +156,7 @@ export circuit storeReference(
                                  storageProvider,
                                  dataLabel,
                                  writtenAt,
+                                 keyEnvelope,
                                  ownerCommitment };
   references.insert(disclose(refId), disclose(entry));
 
@@ -195,7 +204,8 @@ export circuit updateReference(
                  encryptionScheme: Opaque<"string">,
                  storageProvider: Opaque<"string">,
                  dataLabel: Opaque<"string">,
-                 writtenAt: Uint<64>
+                 writtenAt: Uint<64>,
+                 keyEnvelope: Opaque<"string">
                  ): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
@@ -207,6 +217,7 @@ export circuit updateReference(
                            storageProvider,
                            dataLabel,
                            writtenAt,
+                           keyEnvelope,
                            ownerCommitment: entry.ownerCommitment };
   references.insert(disclose(refId), disclose(updatedEntry));
 }

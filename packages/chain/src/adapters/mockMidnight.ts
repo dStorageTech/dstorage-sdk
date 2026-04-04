@@ -147,6 +147,14 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       "writeReference → calling proof server…",
     );
 
+    // Validate: private references must carry a keyEnvelope
+    const isPrivate = !!ref.encryptionScheme;
+    if (isPrivate && !ref.keyEnvelope) {
+      throw new Error(
+        "[dStorage] keyEnvelope is required for private references",
+      );
+    }
+
     // Step 1: Generate ZK proof via mock proof server
     await this.proofServer.generateProof("storeReference");
 
@@ -217,6 +225,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       storageId: ref.storageId,
       storageProvider: ref.storageProvider,
       encryptionScheme: ref.encryptionScheme ?? null,
+      ...(ref.keyEnvelope ? { keyEnvelope: ref.keyEnvelope } : {}),
       ownerCommitment: "",
       isOurs: true,
     }));

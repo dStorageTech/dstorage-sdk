@@ -278,6 +278,16 @@ export class XChaChaScheme implements CryptoScheme {
     return new XChaChaScheme(key);
   }
 
+  /**
+   * Create a scheme instance from a pre-generated key (e.g. a random DEK).
+   * Bypasses HKDF derivation — use when the key is already available.
+   *
+   * @param key  32-byte symmetric key
+   */
+  static fromKey(key: Uint8Array): XChaChaScheme {
+    return new XChaChaScheme(key);
+  }
+
   async encryptPayload(bytes: Uint8Array): Promise<Uint8Array> {
     const payload = await encryptXChaCha(this.key, bytes);
     return new TextEncoder().encode(serializeXChaChaPayload(payload));

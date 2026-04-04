@@ -74,6 +74,7 @@ export interface DeployedDataRegistryAPI {
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
+    keyEnvelope: string,
   ) => Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }>;
 
   removeReference: (
@@ -87,6 +88,7 @@ export interface DeployedDataRegistryAPI {
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
+    keyEnvelope: string,
   ) => Promise<{ txHash: string; blockHeight: number }>;
 }
 
@@ -189,6 +191,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
+    keyEnvelope: string,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
     this.logger?.log(
       "dStorage/midnight",
@@ -204,6 +207,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
           storageProvider,
           dataLabel,
           writtenAt,
+          keyEnvelope,
         );
       },
       { scopeName: "storeReference" },
@@ -270,6 +274,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
+    keyEnvelope: string,
   ): Promise<{ txHash: string; blockHeight: number }> {
     this.logger?.log(
       "dStorage/midnight",
@@ -286,6 +291,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
           storageProvider,
           dataLabel,
           writtenAt,
+          keyEnvelope,
         );
       },
       { scopeName: "updateReference" },

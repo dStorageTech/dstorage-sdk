@@ -814,6 +814,12 @@ export class MidnightChainAdapter implements ChainAdapter {
         "dStorage/midnight",
         `Storing reference for storageId: ${ref.storageId}`,
       );
+      const isPrivate = !!ref.encryptionScheme;
+      if (isPrivate && !ref.keyEnvelope) {
+        throw new Error(
+          "[dStorage] keyEnvelope is required for private references",
+        );
+      }
       const { refId, blockHeight } = await api.storeReference(
         ref.storageId,
         ref.encryptionScheme !== undefined
@@ -822,6 +828,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         ref.storageProvider,
         ref.dataLabel ?? "",
         BigInt(ref.writtenAt),
+        ref.keyEnvelope ?? "",
       );
       const refIdHex = uint8ArrayToHex(refId);
 
@@ -881,6 +888,12 @@ export class MidnightChainAdapter implements ChainAdapter {
     try {
       const api = await this._getAPI();
       const refIdBytes = hexToUint8Array(refId);
+      const isPrivate = !!update.encryptionScheme;
+      if (isPrivate && !update.keyEnvelope) {
+        throw new Error(
+          "[dStorage] keyEnvelope is required for private references",
+        );
+      }
       await api.updateReference(
         refIdBytes,
         update.storageId,
@@ -888,6 +901,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         update.storageProvider,
         update.dataLabel ?? "",
         BigInt(update.writtenAt),
+        update.keyEnvelope ?? "",
       );
       this.logger?.log(
         "dStorage/midnight",

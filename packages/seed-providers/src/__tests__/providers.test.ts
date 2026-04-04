@@ -183,11 +183,11 @@ describe("MetaMaskSeedProvider", () => {
 // ---------------------------------------------------------------------------
 
 describe("MidnightConnectorSeedProvider", () => {
-  const SIGNATURE_HEX = "0xdeadbeefcafe0102030405060708090a";
+  const VERIFYING_KEY_HEX = "0xdeadbeefcafe0102030405060708090a";
 
-  function mockMidnight(signatureHex: string) {
+  function mockMidnight(verifyingKeyHex: string) {
     const api = {
-      signData: vi.fn().mockResolvedValue({ verifyingKey: signatureHex }),
+      signData: vi.fn().mockResolvedValue({ verifyingKey: verifyingKeyHex }),
     };
     const wallet = {
       connect: vi.fn().mockResolvedValue(api),
@@ -202,11 +202,11 @@ describe("MidnightConnectorSeedProvider", () => {
     vi.unstubAllGlobals();
   });
 
-  it("same signature → same seed (determinism)", async () => {
-    mockMidnight(SIGNATURE_HEX);
+  it("same verifyingKey → same seed (determinism)", async () => {
+    mockMidnight(VERIFYING_KEY_HEX);
     const a = await new MidnightConnectorSeedProvider().getSeed();
 
-    mockMidnight(SIGNATURE_HEX);
+    mockMidnight(VERIFYING_KEY_HEX);
     const b = await new MidnightConnectorSeedProvider().getSeed();
 
     expect(bytesToHex(a)).toBe(bytesToHex(b));
@@ -226,12 +226,7 @@ describe("MidnightConnectorSeedProvider", () => {
     );
   });
 
-  // TODO: re-enable once signData() is implemented by the wallet and the
-  // temporary address-based fallback in MidnightConnectorSeedProvider is removed.
-  // The fallback now catches signData() errors instead of propagating them, so
-  // this test would need getUnshieldedAddress() stubbed to pass cleanly — but
-  // the real fix is to remove the fallback entirely.
-  it.skip("error from signData() propagates", async () => {
+  it("error from signData() propagates", async () => {
     const api = {
       signData: vi.fn().mockRejectedValue(new Error("user rejected")),
     };
