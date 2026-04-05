@@ -13,7 +13,6 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Quick Start](#quick-start)
 - [Testing](#testing)
 - [Reality Check (Current Support)](#reality-check-current-support)
-- [Documentation](#documentation)
 - [SDK Usage](#sdk-usage)
 - [Payments](#payments)
 - [Architecture](#architecture)
@@ -30,7 +29,7 @@ Deliver a **privacy-first, developer-friendly data layer** combining **Midnight 
 
 Instead of dApps collecting and storing user data on centralised servers, dStorage shifts data ownership to the user:
 
-- **Encrypts** data client-side using wallet-derived keys
+- **Encrypts** data client-side using keys derived from a pluggable seed provider (password, wallet signature, mnemonic, or custom)
 - **Pays** storage and chain networks using adapter-defined tokens (MOCK, AR, DUST)
 - **Stores** encrypted blobs on decentralised storage (Arweave, Arweave Local, Mock, Autonomi)
 - **Writes** cryptographic references on-chain (Mock, Midnight)
@@ -40,9 +39,9 @@ Privacy becomes an **architectural guarantee**, not a compliance promise.
 
 Most applications store user data on servers they control. That means users have to trust that the service provider won't read, sell, or lose their data — and history shows that trust is often misplaced. dStorage takes a different approach: data is encrypted on the user's device before it ever leaves, stored on a decentralised network where no single party has control, and a tamper-proof on-chain record ties the data back to its owner. The service provider never sees the plaintext. Neither does anyone else.
 
-The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from their wallet — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob/s, decrypt them locally. At no point does any server hold an unencrypted copy.
+The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from a seed provider — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob/s, decrypt them locally. At no point does any server hold an unencrypted copy.
 
-For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, connect a wallet, and call `upload` and `retrieve` (or `retrieveByRefId`). You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready. If you are building on Midnight, the SDK supports wallet lifecycle management, contract deployment/joining, reference listing/lookups, and fee handling in adapter flows.
+For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, call `init()`, and use `upload` and `retrieveByRefId`. You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready. If you are building on Midnight, the SDK supports wallet lifecycle management, contract deployment/joining, reference listing/lookups, and fee handling in adapter flows.
 
 ---
 
@@ -231,38 +230,41 @@ npm run test:integration -- -t "uploads and retrieves private data"
 
 ---
 
-## Documentation
-
-- **[Getting Started Guide](docs/getting-started.md)** — Adapters explained, supported flows, and code examples for every use case
-
 ---
 
 ## SDK Usage
 
 ```typescript
 import { DStorage, MockStorageAdapter, MockChainAdapter } from "@dstorage/core";
-import { DemoSeedProvider } from "@dstorage/seed-providers";
+import { PasswordSeedProvider } from "@dstorage/seed-providers";
 
 // 1. Configure the SDK with your chosen adapters and an encryption seed provider
 const sdk = new DStorage({
-  storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter or ArweaveLocalStorageAdapter
-  chainAdapter: new MockChainAdapter(), // swap for MidnightChainAdapter
-  encryptionSeedProvider: new DemoSeedProvider(), // swap for MnemonicSeedProvider, MetaMaskSeedProvider, etc.
+  storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter, ArweaveLocalStorageAdapter, etc.
+  chainAdapter: new MockChainAdapter(),     // swap for MidnightChainAdapter
+  encryptionSeedProvider: new PasswordSeedProvider({
+    password: "correct-horse-battery-staple",
+    salt: "myapp:v1:alice@example.com", // app + user identifier — store this alongside your data
+  }),
+  // or: new MnemonicSeedProvider({ mnemonic: "..." })
+  // or: new DemoSeedProvider() for testing
 });
 
 // 2. Init — derives the encryption key and prepares the chain contract
 await sdk.init();
 
 // 3. Encrypt, store, and write an on-chain reference in one call
-const { chainRefId, storageId } = await sdk.upload("Hello, private world!");
+const { chainRefId, storageId } = await sdk.upload(
+  new TextEncoder().encode("Hello, private world!"),
+);
 
 // 4. Retrieve and decrypt by on-chain reference ID
-const { content } = await sdk.retrieveByRefId(chainRefId);
-console.log(content); // "Hello, private world!"
+const { bytes } = await sdk.retrieveByRefId(chainRefId);
+console.log(new TextDecoder().decode(bytes)); // "Hello, private world!"
 
 // 5. Or retrieve directly by storage ID
-const { content: direct } = await sdk.retrieveByStorageId(storageId);
-console.log(direct); // "Hello, private world!"
+const { bytes: direct } = await sdk.retrieveByStorageId(storageId);
+console.log(new TextDecoder().decode(direct)); // "Hello, private world!"
 ```
 
 ---
@@ -308,10 +310,10 @@ Tokens are selected automatically based on your chosen adapters.
 ```
 @dstorage/core              ← Developer-facing API (this is what you import)
     ├── @dstorage/crypto        ← XChaCha20-Poly1305 / AES-GCM encryption, key derivation
-    ├── @dstorage/seed-providers← Seed providers: DemoSeedProvider | MnemonicSeedProvider | MetaMaskSeedProvider | MidnightConnectorSeedProvider
-    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | Arweave Local | Autonomi(stub)
+    ├── @dstorage/seed-providers← Seed providers: PasswordSeedProvider | MnemonicSeedProvider | DemoSeedProvider
+    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveTurbo | Arweave Local | Autonomi(stub)
     ├── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight
-    └── @dstorage/payment       ← Payment adapters: Mock | Arweave(preview) | Midnight(preview)
+    └── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed
 ```
 
 ### Data Flow
@@ -320,7 +322,7 @@ Tokens are selected automatically based on your chosen adapters.
 User input
     │
     ▼
-[encrypt]      ← AES-GCM key derived from wallet signature
+[encrypt]      ← key derived from seed provider (password, wallet, mnemonic…)
     │              (key never leaves the device)
     ▼
 [pay storage]  → adapter-defined token (commonly AR / MOCK)
@@ -385,100 +387,39 @@ The default (`isPublic` omitted or `false`) always encrypts both layers. Omittin
 
 **Key reuse across layers is safe** because both schemes generate a fresh random nonce per encryption call. Under XChaCha20-Poly1305 and AES-256-GCM, security only requires that the same (key, nonce) pair is never reused — the key itself may be reused across independent messages with distinct nonces. The data payload and the storageId are encrypted in separate calls with independently generated nonces, so there is no cross-layer nonce collision risk.
 
-### Key derivation by mode
+### Key derivation
 
-#### Facade mode (Node.js — BIP-39 mnemonic or hex seed)
-
-The raw seed bytes serve as HKDF / PBKDF2 input key material:
+The raw seed bytes returned by the `EncryptionSeedProvider` feed directly into the per-scheme derivation functions:
 
 | Scheme      | Primitive      | Salt (fixed)            | Info / extra parameter            |
 | ----------- | -------------- | ----------------------- | --------------------------------- |
 | XChaCha20   | HKDF-SHA-256   | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1"` |
 | AES-256-GCM | PBKDF2-SHA-256 | `"dstorage-aes-v1"`     | 100 000 iterations                |
 
-#### Connector mode (browser — Lace wallet)
-
-The wallet's shielded address is first converted to a 32-byte seed via HKDF, then the per-scheme key is derived from that seed:
-
-**Step 1 — address → seed:**
-
-```
-HKDF-SHA-256(
-  IKM  = shielded_address bytes,
-  salt = "dstorage-midnight-key-derivation-v1",
-  info = "dstorage:seed-derivation:v1"
-) → 32-byte seed
-```
-
-**Step 2 — seed → encryption key:**
-
-| Scheme      | Primitive      | Salt (fixed)                           | Info                                                 |
-| ----------- | -------------- | -------------------------------------- | ---------------------------------------------------- |
-| XChaCha20   | HKDF-SHA-256   | `"dstorage-xchacha-v1"`                | `"dstorage:xchacha20poly1305:v1:{shielded_address}"` |
-| AES-256-GCM | PBKDF2-SHA-256 | `"dstorage-aes-v1:{shielded_address}"` | 100 000 iterations                                   |
-
 ### Why HKDF for XChaCha, PBKDF2 for AES-GCM
 
 Per RFC 5869, HKDF is designed for high-entropy inputs and uses a fixed `salt` as a global extraction key and a per-context `info` label for domain separation. PBKDF2's iteration work factor is only useful against low-entropy passwords.
 
-- **XChaCha20-Poly1305** uses HKDF because inputs (BIP-39 seed, shielded address) are always high-entropy. The address is bound into `info` rather than `salt` to follow RFC 5869's role separation.
-- **AES-256-GCM** retains PBKDF2 to preserve future password-based derivation compatibility. If the SDK ever accepts a user password as input, PBKDF2 is the correct primitive; switching to HKDF would be a security regression for that case.
-
-### Why HKDF (not PBKDF2) for connector-mode address → seed
-
-A Midnight shielded address has ~250 bits of entropy — far above the password threat model. PBKDF2's 100 000 iterations add ~100 ms of wasted CPU per `sdk.connect()` call with zero security benefit. HKDF is the correct primitive for high-entropy inputs.
-
-Password-based derivation, if ever supported, would go through the facade `KeyDeriver` path (BIP-39 mnemonic input), not through the connector path.
+- **XChaCha20-Poly1305** uses HKDF because the seed input is always high-entropy (32 bytes from scrypt, HKDF, or a BIP-39 derivation). The fixed info label provides domain separation.
+- **AES-256-GCM** retains PBKDF2 for backward compatibility with existing encrypted records. For new writes, `PasswordSeedProvider` already applies scrypt before the seed reaches this layer, making the PBKDF2 step redundant but harmless.
 
 ### Seed providers
 
-The `@dstorage/seed-providers` package is responsible for producing the raw seed bytes that feed the key-derivation functions above. Each provider has a different source of entropy, a different canonicalization requirement, and different portability guarantees when a user switches devices or wallets.
+The `@dstorage/seed-providers` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
 
-| Provider                        | Seed source                                                    | Canonicalization                      | Cross-device / cross-wallet portability                               |
-| ------------------------------- | -------------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------- |
-| `MetaMaskSeedProvider`          | `personal_sign` over a fixed message via any EIP-1193 provider | **Low-s ECDSA normalization applied** | ✅ Same seed from any EIP-1193 wallet holding the same private key    |
-| `MidnightConnectorSeedProvider` | `signData()` via Midnight Lace DApp Connector                  | None needed                           | ✅ Same seed from any compatible Midnight wallet holding the same key |
-| `MnemonicSeedProvider`          | BIP-39 mnemonic phrase or 64-byte hex seed                     | None needed                           | ✅ Same seed wherever the same mnemonic/hex is imported               |
-| `DemoSeedProvider`              | SHA-256 of a fixed address string                              | None needed                           | ⚠️ Deterministic but predictable — development and testing only       |
+| Provider               | Seed source                                 | Cross-device portability                                              |
+| ---------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
+| `PasswordSeedProvider` | scrypt(password, caller-supplied salt)      | ✅ Same seed on any device — depends only on password + salt          |
+| `MnemonicSeedProvider` | BIP-39 mnemonic phrase or 64-byte hex seed  | ✅ Same seed wherever the same mnemonic/hex is imported               |
+| `DemoSeedProvider`     | SHA-256 of a fixed address string           | ⚠️ Deterministic but predictable — development and testing only       |
 
-#### ECDSA signature canonicalization (`MetaMaskSeedProvider`)
+#### Cross-device portability
 
-`personal_sign` returns a 65-byte Ethereum signature:
-
-```
-[ r: 32 bytes | s: 32 bytes | v: 1 byte (recovery param) ]
-```
-
-secp256k1 ECDSA has a **malleability** property: for any valid signature `(r, s)`, the pair `(r, n − s)` is also a valid signature over the same message, where `n` is the secp256k1 curve order. This means two mathematically equivalent signatures can exist for the same key and message. Different EIP-1193-compatible wallets (MetaMask, Ledger via WalletConnect, older custom signers) may return either form.
-
-If the raw signature bytes are used as seed material without normalization, a user whose wallet happens to return the high-s variant will derive a different encryption key than a user whose wallet returns the low-s variant for the same Ethereum private key — even though both signatures are cryptographically valid. This would lock the user out of their own encrypted data when switching wallets.
-
-The fix — mandated by EIP-2 for transaction signatures and by BIP-62 for Bitcoin — is to normalize to **low-s canonical form** before any use of the bytes:
-
-```
-if s > n / 2:
-    s = n − s          (v is preserved unchanged — not used for recovery here)
-```
-
-After normalization, every conforming EIP-1193 provider that holds the same Ethereum private key produces the same canonical 65-byte seed, regardless of whether it internally generates the high-s or low-s variant. RFC 6979 already guarantees that `(r, s_low)` is deterministic for a given key and message; the normalization step adds the invariant that `(r, s_high)` maps to the same canonical output.
-
-#### Which providers do not need canonicalization and why
-
-- **`MidnightConnectorSeedProvider`** — Midnight uses a different curve and signing scheme. The `signData()` API is deterministic by design and does not exhibit secp256k1 malleability. No normalization is needed.
-- **`MnemonicSeedProvider`** — the seed comes from BIP-39 entropy or a raw hex value, not from any ECDSA signing operation. The derivation is a direct function of the mnemonic bytes; there is no signature to canonicalize.
-- **`DemoSeedProvider`** — the seed is SHA-256 of a fixed address string, which is fully deterministic with no signing step involved.
-
-#### Cross-device and cross-wallet portability
-
-| Scenario                                                                          | Expected outcome                                                                                                                                                                            |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Same MetaMask account, different browser or device                                | ✅ Same seed — MetaMask uses RFC 6979 (deterministic `k`) and EIP-2 (low-s). Canonicalization ensures the same result even if a future device returns high-s.                               |
-| MetaMask → Ledger via MetaMask (hardware signer, same Ethereum key)               | ✅ Same seed — Ledger exports the same private key and signs the same message; low-s normalization absorbs any variant differences.                                                         |
-| MetaMask → WalletConnect-bridged wallet (same Ethereum key)                       | ✅ Same seed — canonicalization ensures the invariant holds regardless of the bridge implementation's s-value convention.                                                                   |
-| MetaMask account A → MetaMask account B (different keys)                          | ❌ Different seed — the Ethereum address and private key differ, so `personal_sign` produces an unrelated signature. This is intentional: each account has its own isolated encryption key. |
-| Midnight Lace on device A → Midnight Lace on device B (same key, restored wallet) | ✅ Same seed — `signData()` is deterministic for a given key and message.                                                                                                                   |
-| Midnight Lace → different Midnight wallet implementation (same key)               | ✅ Same seed — no malleability concern; the output is scheme-deterministic.                                                                                                                 |
-| BIP-39 mnemonic imported on a different machine (`MnemonicSeedProvider`)          | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                                                                                                          |
+| Scenario                                                              | Expected outcome                                                                                         |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Same password + same salt on a different device (`PasswordSeedProvider`) | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required.      |
+| BIP-39 mnemonic imported on a different machine (`MnemonicSeedProvider`) | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                    |
+| Different password, same salt (`PasswordSeedProvider`)                | ❌ Different seed — intentional; each password produces an independent key.                             |
 
 ---
 
@@ -545,10 +486,12 @@ All storage IDs are 43-character base64url strings — 32 random bytes encoded w
 
 ### Key loss and data recovery
 
-Encryption keys are derived deterministically from the wallet seed or shielded address — no key material is stored by the SDK. This means:
+Encryption keys are derived deterministically from the seed provider's inputs — no key material is stored by the SDK. This means:
 
-- The **same wallet always produces the same key**: reconnecting after a session gap decrypts existing data transparently.
-- **Losing the seed phrase or mnemonic means permanent data loss.** There is no key escrow, no recovery mechanism, and no way to decrypt data without the original key material. Users relying on facade mode (BIP-39 mnemonic) should follow standard seed-phrase backup practices.
+- **The same inputs always produce the same key**: reconnecting with the same provider and credentials decrypts existing data transparently.
+- **Losing your credentials means permanent data loss.** There is no key escrow, no recovery mechanism, and no way to decrypt data without the original inputs:
+  - `PasswordSeedProvider` — forgetting the password or losing the salt string makes data unrecoverable.
+  - `MnemonicSeedProvider` / wallet providers — losing the seed phrase or private key has the same effect. Follow standard seed-phrase backup practices.
 
 ---
 
@@ -577,7 +520,4 @@ Encryption keys are derived deterministically from the wallet seed or shielded a
 
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
 - Autonomi adapter is currently a stub path.
-- **Browser seed providers do not yet produce cryptographically secure encryption keys.** Both `MidnightConnectorSeedProvider` and `MetaMaskSeedProvider` derive keys from wallet-produced values, but neither currently guarantees a truly secret, deterministic seed:
-  - `MidnightConnectorSeedProvider` uses the wallet's public verifying key (sr25519 signatures are non-deterministic, so the signature itself cannot be used). The derived key is therefore not secret — anyone who knows the wallet's public key can reproduce it.
-  - `MetaMaskSeedProvider` uses a secp256k1 `personal_sign` signature, which is deterministic but potentially reconstructible from the public key in certain attack scenarios.
-  - The correct long-term fix is for wallets to expose a dedicated, deterministic key-derivation API that signs with a scheme whose output is both private and reproducible. Until such an API is available, the alternative would be to generate a random encryption key and persist it in `localStorage` — which trades the wallet-binding guarantee for actual secrecy. Further research is needed to find the right balance between security and usability without requiring local storage.
+- `MnemonicSeedProvider` is a temporary scaffold for Node.js environments. It accepts raw credentials directly — something the SDK ideally should not do. It will be replaced once a proper headless wallet-signing interface is available.

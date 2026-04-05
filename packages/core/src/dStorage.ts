@@ -2,18 +2,18 @@
  * @dstorage/core — dStorage.ts
  *
  * The main SDK class. Orchestrates:
- *   1. Wallet-derived key generation  (@dstorage/crypto)
+ *   1. Seed-provider key generation   (@dstorage/seed-providers + @dstorage/crypto)
  *   2. Client-side encryption         (@dstorage/crypto)
  *   3. Decentralised storage          (@dstorage/storage)
  *   4. On-chain reference writing     (@dstorage/chain)
  *
  * Developer API:
  *   const ds = new DStorage(config);
- *   await ds.connect(walletInfo);
- *   const { dataId } = await ds.upload(new TextEncoder().encode("hello, private world"));
- *   const { content } = await ds.retrieve(dataId);
- *   await ds.grant(dataId, "0xRecipientAddress");
- *   await ds.revoke(dataId, "0xRecipientAddress");
+ *   await ds.init();
+ *   const { chainRefId, storageId } = await ds.upload(new TextEncoder().encode("hello"));
+ *   const { bytes } = await ds.retrieveByRefId(chainRefId);
+ *   await ds.listReferences();
+ *   await ds.removeReference(chainRefId);
  */
 
 import { CryptoSchemeRegistry, XChaChaScheme } from "@dstorage/crypto";
@@ -55,7 +55,7 @@ export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
   private _cryptoSchemes: CryptoSchemeRegistry | null = null; // null until connect() or init()
-  /** Key Encryption Key derived from the wallet seed — used to wrap/unwrap per-upload DEKs. */
+  /** Key Encryption Key derived from the seed provider — used to wrap/unwrap per-upload DEKs. */
   private _kek: Uint8Array | null = null;
   /** Scheme used for all new writes. Part of DStorageContext — consumed by MetaTransaction. */
   readonly defaultEncryptionScheme: EncryptionScheme = "xchacha20poly1305-v1";
