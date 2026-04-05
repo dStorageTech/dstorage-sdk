@@ -87,8 +87,8 @@ const NETWORKS = {
     proofServer: "http://127.0.0.1:6300",
   },
   undeployed: {
-    node: "https://127.0.0.1:9944",
-    nodeWs: "wss://127.0.0.1:9944",
+    node: "http://127.0.0.1:9944",
+    nodeWs: "ws://127.0.0.1:9944",
     indexerHttp: "http://127.0.0.1:8088/api/v3/graphql",
     indexerWs: "ws://127.0.0.1:8088/api/v3/graphql/ws",
     proofServer: "http://127.0.0.1:6300",

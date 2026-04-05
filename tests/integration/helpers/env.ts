@@ -27,8 +27,8 @@ export function readEnv(): IntegrationEnv {
   const defaultEndpoints =
     network === "undeployed"
       ? {
-          node: "https://127.0.0.1:9944",
-          nodeWs: "wss://127.0.0.1:9944",
+          node: "http://127.0.0.1:9944",
+          nodeWs: "ws://127.0.0.1:9944",
           indexer: "http://127.0.0.1:8088/api/v3/graphql",
           indexerWs: "ws://127.0.0.1:8088/api/v3/graphql/ws",
         }
