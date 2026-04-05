@@ -593,6 +593,169 @@ describe("DataRegistry contract", () => {
     });
   });
 
+  describe("keyEnvelope", () => {
+    it("stores and retrieves a non-empty keyEnvelope", () => {
+      const entry = randomEntry();
+      const envelope = '{"kdf":"scrypt","N":131072,"r":8,"p":1,"wrappedDek":"abc123"}';
+      const refId = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+        envelope,
+      );
+
+      const stored = simulator.getLedger().references.lookup(refId);
+      expect(stored.keyEnvelope).toBe(envelope);
+    });
+
+    it("stores empty keyEnvelope for public (unencrypted) uploads", () => {
+      const refId = simulator.storeReference(
+        "arweave-tx-id-abc123",
+        "",
+        "arweave",
+        "public-doc",
+        randomTimestamp(),
+        "",
+      );
+
+      const stored = simulator.getLedger().references.lookup(refId);
+      expect(stored.keyEnvelope).toBe("");
+    });
+
+    it("defaults keyEnvelope to empty string when not supplied", () => {
+      const entry = randomEntry();
+      const refId = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+      );
+
+      const stored = simulator.getLedger().references.lookup(refId);
+      expect(stored.keyEnvelope).toBe("");
+    });
+
+    it("updateReference replaces keyEnvelope with a new value", () => {
+      const entry = randomEntry();
+      const originalEnvelope = '{"kdf":"scrypt","wrappedDek":"original"}';
+      const refId = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+        originalEnvelope,
+      );
+
+      const newEnvelope = '{"kdf":"scrypt","wrappedDek":"rotated"}';
+      simulator.updateReference(
+        refId,
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+        newEnvelope,
+      );
+
+      const updated = simulator.getLedger().references.lookup(refId);
+      expect(updated.keyEnvelope).toBe(newEnvelope);
+    });
+
+    it("updateReference can clear keyEnvelope by setting it to empty string", () => {
+      const entry = randomEntry();
+      const refId = simulator.storeReference(
+        entry.storageId,
+        entry.encryptionScheme,
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+        '{"kdf":"scrypt","wrappedDek":"abc"}',
+      );
+
+      simulator.updateReference(
+        refId,
+        entry.storageId,
+        "",
+        entry.storageProvider,
+        entry.dataLabel,
+        entry.writtenAt,
+        "",
+      );
+
+      const updated = simulator.getLedger().references.lookup(refId);
+      expect(updated.keyEnvelope).toBe("");
+    });
+
+    it("two references store independent keyEnvelopes", () => {
+      const envelope1 = '{"kdf":"scrypt","wrappedDek":"first"}';
+      const envelope2 = '{"kdf":"scrypt","wrappedDek":"second"}';
+
+      const entry1 = randomEntry();
+      const entry2 = randomEntry();
+
+      const refId1 = simulator.storeReference(
+        entry1.storageId,
+        entry1.encryptionScheme,
+        entry1.storageProvider,
+        entry1.dataLabel,
+        entry1.writtenAt,
+        envelope1,
+      );
+      const refId2 = simulator.storeReference(
+        entry2.storageId,
+        entry2.encryptionScheme,
+        entry2.storageProvider,
+        entry2.dataLabel,
+        entry2.writtenAt,
+        envelope2,
+      );
+
+      expect(simulator.getLedger().references.lookup(refId1).keyEnvelope).toBe(envelope1);
+      expect(simulator.getLedger().references.lookup(refId2).keyEnvelope).toBe(envelope2);
+    });
+
+    it("updating one reference's keyEnvelope does not affect another's", () => {
+      const envelope1 = '{"kdf":"scrypt","wrappedDek":"first"}';
+      const envelope2 = '{"kdf":"scrypt","wrappedDek":"second"}';
+
+      const entry1 = randomEntry();
+      const entry2 = randomEntry();
+
+      const refId1 = simulator.storeReference(
+        entry1.storageId,
+        entry1.encryptionScheme,
+        entry1.storageProvider,
+        entry1.dataLabel,
+        entry1.writtenAt,
+        envelope1,
+      );
+      const refId2 = simulator.storeReference(
+        entry2.storageId,
+        entry2.encryptionScheme,
+        entry2.storageProvider,
+        entry2.dataLabel,
+        entry2.writtenAt,
+        envelope2,
+      );
+
+      simulator.updateReference(
+        refId1,
+        entry1.storageId,
+        entry1.encryptionScheme,
+        entry1.storageProvider,
+        entry1.dataLabel,
+        entry1.writtenAt,
+        '{"kdf":"scrypt","wrappedDek":"rotated"}',
+      );
+
+      expect(simulator.getLedger().references.lookup(refId2).keyEnvelope).toBe(envelope2);
+    });
+  });
+
   describe("ownership enforcement across circuits", () => {
     it("owner can remove then store again (refId changes)", () => {
       const entry = randomEntry();
