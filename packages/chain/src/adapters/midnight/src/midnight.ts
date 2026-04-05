@@ -755,6 +755,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           null) as EncryptionScheme | null,
         ownerCommitment: uint8ArrayToHex(entry.ownerCommitment),
         isOurs: entry.isOurs,
+        ...(entry.keyEnvelope ? { keyEnvelope: entry.keyEnvelope } : {}),
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
   }
@@ -784,6 +785,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       dataLabel: refEntry.dataLabel,
       writtenAt: Number(refEntry.writtenAt),
       isOurs: refEntry.isOurs,
+      ...(refEntry.keyEnvelope ? { keyEnvelope: refEntry.keyEnvelope } : {}),
     };
   }
 
