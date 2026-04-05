@@ -153,9 +153,7 @@ export class MidnightWalletProvider
     const unshieldedSeed = deriveRoleSeed(masterSeedHex, Roles.NightExternal);
     const dustSeed = deriveRoleSeed(masterSeedHex, Roles.Dust);
 
-    // Fee overhead: undeployed networks need a much larger overhead.
-    const additionalFeeOverhead =
-      env.walletNetworkId === "undeployed" ? 500_000_000_000_000_000n : 1_000n;
+    const additionalFeeOverhead = 1_000n;
 
     const walletConfig = {
       networkId: env.walletNetworkId,
