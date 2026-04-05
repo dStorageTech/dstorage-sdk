@@ -16,7 +16,8 @@
     "build": "tsup src/index.ts --format esm,cjs --dts --tsconfig tsconfig.build.json"
   },
   "dependencies": {
-    "@dstorage/crypto": "*"
+    "@dstorage/crypto": "*",
+    "@noble/hashes": "^1.4.0"
   },
   "peerDependencies": {
     "@midnight-ntwrk/dapp-connector-api": "^4.0.1"

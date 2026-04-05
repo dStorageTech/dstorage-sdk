@@ -1,0 +1,401 @@
+import { describe, it, expect, vi } from "vitest";
+import {
+  PasswordSeedProvider,
+  KDF_PRESETS,
+  type KdfPreset,
+} from "../PasswordSeedProvider.js";
+
+// Use the "v1-lite" preset params for all functional tests.
+// N=65536 (64 MB) matches a real-world preset and exercises the full scrypt
+// code path while keeping test runtime in the 200–400ms range per call.
+const FAST_PARAMS = { N: 65536, r: 8, p: 1 };
+
+const GOOD_PASSWORD = "Tr0ub4dor&3!XyZ8"; // 16 chars, mixed charset
+const GOOD_SALT = "myapp:v1:alice@example.com";
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// ---------------------------------------------------------------------------
+// Determinism
+// ---------------------------------------------------------------------------
+
+describe("determinism", () => {
+  it("same password + same string salt → identical seed", async () => {
+    const a = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    const b = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(bytesToHex(a)).toBe(bytesToHex(b));
+  });
+
+  it("same password + same Uint8Array salt → identical seed", async () => {
+    const salt = new TextEncoder().encode("raw-bytes-salt");
+    const a = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt,
+      params: FAST_PARAMS,
+    }).getSeed();
+    const b = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt,
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(bytesToHex(a)).toBe(bytesToHex(b));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sensitivity
+// ---------------------------------------------------------------------------
+
+describe("sensitivity", () => {
+  it("same password + different string salt → different seed", async () => {
+    const a = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: "myapp:alice",
+      params: FAST_PARAMS,
+    }).getSeed();
+    const b = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: "myapp:bob",
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(bytesToHex(a)).not.toBe(bytesToHex(b));
+  });
+
+  it("different password + same salt → different seed", async () => {
+    const a = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    const b = await new PasswordSeedProvider({
+      password: "An0ther$ecureP@ss!",
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(bytesToHex(a)).not.toBe(bytesToHex(b));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Output format
+// ---------------------------------------------------------------------------
+
+describe("output format", () => {
+  it("getSeed() returns a 32-byte Uint8Array", async () => {
+    const seed = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(seed).toBeInstanceOf(Uint8Array);
+    expect(seed.byteLength).toBe(32);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Salt validation
+// ---------------------------------------------------------------------------
+
+describe("salt validation", () => {
+  it("empty string salt → throws at construction", () => {
+    expect(
+      () =>
+        new PasswordSeedProvider({
+          password: GOOD_PASSWORD,
+          salt: "",
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("salt must not be empty");
+  });
+
+  it("empty Uint8Array salt → throws at construction", () => {
+    expect(
+      () =>
+        new PasswordSeedProvider({
+          password: GOOD_PASSWORD,
+          salt: new Uint8Array(0),
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("salt must not be empty");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Password validation
+// ---------------------------------------------------------------------------
+
+describe("password validation", () => {
+  it("password shorter than minPasswordLength → throws", () => {
+    expect(
+      () =>
+        new PasswordSeedProvider({
+          password: "Sh0rt!",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("too short");
+  });
+
+  it("all-same-character password → throws regardless of length", () => {
+    expect(
+      () =>
+        new PasswordSeedProvider({
+          password: "aaaaaaaaaaaaaaa",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("all characters are identical");
+  });
+
+  it("low entropy password (digits only, 12 chars) → throws", () => {
+    // charset = digits (pool 10), 12 chars → ~39.9 bits < 60
+    expect(
+      () =>
+        new PasswordSeedProvider({
+          password: "123456789012",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("entropy too low");
+  });
+
+  it("custom minPasswordLength: 8 → accepts 8-char password", async () => {
+    // "Pa$1Word" — 8 chars, mixed charset → should pass with minPasswordLength:8
+    const seed = await new PasswordSeedProvider({
+      password: "Pa$1Word",
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+      minPasswordLength: 8,
+      minEntropyBits: 30, // lower bar too so it doesn't fail entropy
+    }).getSeed();
+    expect(seed.byteLength).toBe(32);
+  });
+
+  it("custom minEntropyBits: 30 → accepts low-entropy password", async () => {
+    // digits only, 12 chars → ~39.9 bits, accepted when threshold is 30
+    const seed = await new PasswordSeedProvider({
+      password: "123456789012",
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+      minEntropyBits: 30,
+    }).getSeed();
+    expect(seed.byteLength).toBe(32);
+  });
+
+  it("high-entropy mixed password passes validation", async () => {
+    const seed = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(seed.byteLength).toBe(32);
+  });
+
+  it("additionalValidators: called and can throw", () => {
+    const validator = vi.fn().mockImplementation((pw: string) => {
+      if (pw.toLowerCase().includes("password")) {
+        throw new Error("Common word detected.");
+      }
+    });
+    expect(
+      () =>
+        new PasswordSeedProvider({
+          password: "MyPassword!12345",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+          additionalValidators: [validator],
+        }),
+    ).toThrow("Common word detected.");
+    expect(validator).toHaveBeenCalledWith("MyPassword!12345");
+  });
+
+  it("additionalValidators: called on passing password", async () => {
+    const validator = vi.fn();
+    await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+      additionalValidators: [validator],
+    }).getSeed();
+    expect(validator).toHaveBeenCalledWith(GOOD_PASSWORD);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// KDF presets and params
+// ---------------------------------------------------------------------------
+
+describe("KDF presets", () => {
+  it("preset 'v1' and 'v1-lite' have distinct N values", () => {
+    expect(KDF_PRESETS["v1"].N).toBe(131072);
+    expect(KDF_PRESETS["v1-lite"].N).toBe(65536);
+  });
+
+  it("preset 'v1-lite' → same password + same salt produces a 32-byte seed", async () => {
+    const seed = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      preset: "v1-lite",
+    }).getSeed();
+    expect(seed).toBeInstanceOf(Uint8Array);
+    expect(seed.byteLength).toBe(32);
+  });
+
+  it("custom params override preset N/r/p → deterministic output", async () => {
+    const a = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: { N: 2048, r: 4, p: 1 },
+    }).getSeed();
+    const b = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: { N: 2048, r: 4, p: 1 },
+    }).getSeed();
+    expect(bytesToHex(a)).toBe(bytesToHex(b));
+  });
+
+  it("same password + same salt + different custom N → different seed", async () => {
+    const a = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: { N: 1024, r: 8, p: 1 },
+    }).getSeed();
+    const b = await new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: { N: 2048, r: 8, p: 1 },
+    }).getSeed();
+    expect(bytesToHex(a)).not.toBe(bytesToHex(b));
+  });
+
+  it("unknown preset string → throws at construction", () => {
+    expect(
+      () =>
+        new PasswordSeedProvider({
+          password: GOOD_PASSWORD,
+          salt: GOOD_SALT,
+          preset: "v99" as KdfPreset,
+        }),
+    ).toThrow('unknown preset "v99"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getKdfParams — storable, language-agnostic metadata
+// ---------------------------------------------------------------------------
+
+describe("getKdfParams", () => {
+  it("returns kdf: 'scrypt' with resolved N/r/p for default preset", () => {
+    const provider = new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    });
+    expect(provider.getKdfParams()).toEqual({
+      kdf: "scrypt",
+      N: FAST_PARAMS.N,
+      r: FAST_PARAMS.r,
+      p: FAST_PARAMS.p,
+    });
+  });
+
+  it("reflects the resolved preset values, not the preset name", () => {
+    const provider = new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      preset: "v1-lite",
+    });
+    const params = provider.getKdfParams();
+    expect(params.kdf).toBe("scrypt");
+    expect(params.N).toBe(KDF_PRESETS["v1-lite"].N);
+    expect(params.r).toBe(KDF_PRESETS["v1-lite"].r);
+    expect(params.p).toBe(KDF_PRESETS["v1-lite"].p);
+  });
+
+  it("returned object does not contain preset name", () => {
+    const provider = new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      preset: "v1-lite",
+    });
+    expect(provider.getKdfParams()).not.toHaveProperty("preset");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromKdfParams — reconstruct from stored metadata
+// ---------------------------------------------------------------------------
+
+describe("fromKdfParams", () => {
+  it("produces the same seed as the original provider", async () => {
+    const original = new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    });
+    const storedParams = original.getKdfParams();
+
+    const reconstructed = PasswordSeedProvider.fromKdfParams({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      ...storedParams,
+    });
+
+    const seedA = await original.getSeed();
+    const seedB = await reconstructed.getSeed();
+    expect(bytesToHex(seedA)).toBe(bytesToHex(seedB));
+  });
+
+  it("getKdfParams() round-trips through fromKdfParams", () => {
+    const original = new PasswordSeedProvider({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    });
+    const reconstructed = PasswordSeedProvider.fromKdfParams({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      ...original.getKdfParams(),
+    });
+    expect(reconstructed.getKdfParams()).toEqual(original.getKdfParams());
+  });
+
+  it("unsupported kdf value → throws", () => {
+    expect(() =>
+      PasswordSeedProvider.fromKdfParams({
+        password: GOOD_PASSWORD,
+        salt: GOOD_SALT,
+        kdf: "argon2id" as "scrypt",
+        N: 65536,
+        r: 8,
+        p: 1,
+      }),
+    ).toThrow('unsupported kdf "argon2id"');
+  });
+
+  it("still validates password entropy", () => {
+    expect(() =>
+      PasswordSeedProvider.fromKdfParams({
+        password: "weak",
+        salt: GOOD_SALT,
+        kdf: "scrypt",
+        N: 65536,
+        r: 8,
+        p: 1,
+      }),
+    ).toThrow("too short");
+  });
+});
