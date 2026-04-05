@@ -170,6 +170,7 @@ npm test
 ### Integration tests
 
 Integration tests exercise real network adapters end-to-end:
+
 - **arlocal-only suite** — `ArweaveLocalStorageAdapter` against a local arlocal node with `MockMidnightChainAdapter`
 - **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node)
 
@@ -203,6 +204,18 @@ npm run test:integration
 ```
 
 If a service is not running, its suite is **skipped** rather than failed — safe to run in CI environments where the services are unavailable. To reuse an already-deployed contract and skip the (slow) deployment step on subsequent runs, set `INTEGRATION_CONTRACT_ADDRESS` in `.env.integration` to the address printed on the first run.
+
+#### Run a single test or suite
+
+Use `-t` to filter by name (matches the `describe` label, the `it` label, or any prefix of the full name):
+
+```sh
+# Run only the arlocal-only suite
+npm run test:integration -- -t "arlocal only"
+
+# Run a single test by name
+npm run test:integration -- -t "uploads and retrieves private data"
+```
 
 ---
 

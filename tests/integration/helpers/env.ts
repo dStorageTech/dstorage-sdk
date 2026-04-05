@@ -36,13 +36,11 @@ export function readEnv(): IntegrationEnv {
           node: "https://rpc.preprod.midnight.network",
           nodeWs: "wss://rpc.preprod.midnight.network",
           indexer: "https://indexer.preprod.midnight.network/api/v3/graphql",
-          indexerWs:
-            "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
+          indexerWs: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
         };
 
   return {
-    arlocalUrl:
-      process.env.INTEGRATION_ARLOCAL_URL ?? "http://localhost:1984",
+    arlocalUrl: process.env.INTEGRATION_ARLOCAL_URL ?? "http://localhost:1984",
     proofServer:
       process.env.INTEGRATION_PROOF_SERVER ?? "http://localhost:6300",
     midnight: {
@@ -57,8 +55,7 @@ export function readEnv(): IntegrationEnv {
         process.env.INTEGRATION_INDEXER_WS_ENDPOINT ??
         defaultEndpoints.indexerWs,
       seed: process.env.INTEGRATION_SEED || undefined,
-      contractAddress:
-        process.env.INTEGRATION_CONTRACT_ADDRESS || undefined,
+      contractAddress: process.env.INTEGRATION_CONTRACT_ADDRESS || undefined,
     },
   };
 }

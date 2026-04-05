@@ -30,7 +30,6 @@ export async function createStorageAdapter(url?: string): Promise<{
   return { adapter, address };
 }
 
-
 // ── Internal helpers ───────────────────────────────────────────────────────────
 
 function parseGateway(url: string): {
@@ -41,7 +40,9 @@ function parseGateway(url: string): {
   const parsed = new URL(url);
   return {
     host: parsed.hostname,
-    port: parseInt(parsed.port || (parsed.protocol === "https:" ? "443" : "80")),
+    port: parseInt(
+      parsed.port || (parsed.protocol === "https:" ? "443" : "80"),
+    ),
     protocol: parsed.protocol.replace(":", ""),
   };
 }

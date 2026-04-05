@@ -24,10 +24,13 @@ import WebSocket from "ws";
 // @ts-expect-error — ws types don't perfectly match DOM WebSocket
 globalThis.WebSocket = WebSocket;
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { DStorage } from "@dstorage/core";
 import { MockMidnightChainAdapter } from "@dstorage/chain";
-import { MnemonicSeedProvider, DemoSeedProvider } from "@dstorage/seed-providers";
+import {
+  MnemonicSeedProvider,
+  DemoSeedProvider,
+} from "@dstorage/seed-providers";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
 import { isMidnightAvailable, createChainAdapter } from "./helpers/midnight.js";
@@ -37,7 +40,7 @@ const CONTENT = new TextEncoder().encode("hello from integration tests");
 
 // Availability checks run once at module load (top-level await in ESM).
 const arlocalOk = await checkArlocal(env.arlocalUrl);
-const midnightOk = arlocalOk && await isMidnightAvailable(env);
+const midnightOk = arlocalOk && (await isMidnightAvailable(env));
 
 // ── Suite 1: arlocal only (no Midnight) ────────────────────────────────────────
 //
@@ -94,8 +97,7 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
 
   const ALICE_SEED =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-  const BOB_SEED =
-    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+  const BOB_SEED = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
 
   beforeAll(async () => {
     const [{ adapter }, chain] = await Promise.all([
@@ -104,25 +106,30 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     ]);
     chainAdapter = chain;
 
+    // Both Alice and Bob share the same chain adapter and storage adapter.
+    // Isolation under test is purely cryptographic — different encryptionSeedProvider
+    // means different keys and therefore different ability to decrypt each other's data.
     sdk = new DStorage({
       storageAdapter: adapter,
       chainAdapter,
-      encryptionSeedProvider: new MnemonicSeedProvider({ mnemonic: ALICE_SEED }),
+      encryptionSeedProvider: new MnemonicSeedProvider({
+        mnemonic: ALICE_SEED,
+      }),
     });
     await sdk.init();
 
-    // Bob uses a separate DStorage instance against the same contract.
-    const { adapter: adapterBob } = await createStorageAdapter(env.arlocalUrl);
-    const chainBob = await createChainAdapter(env);
     sdkBob = new DStorage({
-      storageAdapter: adapterBob,
-      chainAdapter: chainBob,
+      storageAdapter: adapter,
+      chainAdapter,
       encryptionSeedProvider: new MnemonicSeedProvider({ mnemonic: BOB_SEED }),
-      ...(env.midnight.contractAddress
-        ? { dataRegistryAddress: env.midnight.contractAddress }
-        : {}),
     });
+    // chainAdapter.init() is a no-op on the second call (cached API); only sets up Bob's crypto.
     await sdkBob.init();
+  });
+
+  afterEach(async () => {
+    // Allow the wallet time to sync DUST regeneration between transactions.
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
   });
 
   afterAll(async () => {
