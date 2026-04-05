@@ -20,7 +20,6 @@ import type {
   ChainQuote,
 } from "../types.js";
 import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
-import type { CryptoScheme } from "@dstorage/crypto";
 
 // ── Storage helpers ──
 const refs = new Map<string, ChainReference>();
@@ -174,7 +173,4 @@ export class MockChainAdapter implements ChainAdapter {
     return addr;
   }
 
-  setScheme(_scheme: CryptoScheme): void {
-    // Mock adapter performs no crypto internally — scheme is used by the SDK layer.
-  }
 }

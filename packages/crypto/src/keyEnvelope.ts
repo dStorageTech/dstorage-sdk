@@ -66,7 +66,7 @@ export function generateDek(): Uint8Array {
 // ── KEK derivation ────────────────────────────────────────────────────────────
 
 /**
- * Derive a 32-byte Key Encryption Key from wallet seed bytes using HKDF-SHA-256.
+ * Derive a 32-byte Key Encryption Key from seed bytes using HKDF-SHA-256.
  *
  * Uses the same salt as the data encryption key ("dstorage-xchacha-v1") but a
  * distinct info string ("dstorage:xchacha20poly1305:kek:v1") to domain-separate

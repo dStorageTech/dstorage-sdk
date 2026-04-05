@@ -310,7 +310,4 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     return addr;
   }
 
-  setScheme(_scheme: unknown): void {
-    // Mock adapter performs no crypto internally — scheme is used by the SDK layer.
-  }
 }

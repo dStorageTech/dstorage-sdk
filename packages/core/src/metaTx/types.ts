@@ -6,7 +6,7 @@
 
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
-import type { EncryptionScheme } from "@dstorage/crypto";
+import type { CryptoScheme, EncryptionScheme } from "@dstorage/crypto";
 import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
 
 // ── Step definitions ──────────────────────────────────────────────────────────
@@ -91,6 +91,21 @@ export interface MetaTxConfig {
   contractName?: string;
 }
 
+// ── Upload crypto materials ───────────────────────────────────────────────────
+
+/**
+ * Crypto materials for a single upload: a fresh random DEK wrapped in a
+ * key envelope, ready to encrypt payload and storageId.
+ */
+export interface UploadCrypto {
+  /** XChaChaScheme instance built from a fresh random DEK. null for public uploads. */
+  uploadScheme: CryptoScheme | null;
+  /** JSON-encoded KeyEnvelope wrapping the DEK under the KEK. undefined for public uploads. */
+  keyEnvelope: string | undefined;
+  /** Encryption scheme identifier to record on-chain. "" for public uploads. */
+  encryptionScheme: EncryptionScheme;
+}
+
 // ── SDK context interface ─────────────────────────────────────────────────────
 
 /**
@@ -104,23 +119,11 @@ export interface DStorageContext {
   /** Wallet address of the connected user, or null if using init() / facade mode. */
   readonly connectedAddress: string | null;
   /**
-   * Encrypt raw payload bytes with the active client-side key and serialize them
-   * into the SDK wire format expected by storage adapters.
-   * Returns null when no encryption key is available.
+   * Generate a fresh random DEK, wrap it under the KEK, and return the
+   * upload crypto materials needed to encrypt payload and storageId.
+   * @param isPublic  Pass true to skip encryption (returns null scheme + no envelope).
    */
-  encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null>;
-  /**
-   * Encrypts a plain storageId (43-char base64url) for on-chain storage.
-   * Returns the encrypted form when a key is available, null otherwise.
-   */
-  encryptStorageIdForChain(storageId: string): Promise<string | null>;
-  /**
-   * The encryption scheme used for new writes (e.g. "xchacha20poly1305-v1").
-   * Must be recorded on-chain alongside the encrypted storageId so the SDK
-   * can dispatch the correct decryption scheme on read.
-   * Empty string "" when no encryption is active.
-   */
-  readonly defaultEncryptionScheme: EncryptionScheme;
+  prepareUploadCrypto(isPublic?: boolean): Promise<UploadCrypto>;
 }
 
 // ── File validation result ────────────────────────────────────────────────────

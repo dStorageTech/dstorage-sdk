@@ -4,49 +4,10 @@ import { MetaTx, validateFile } from "../metaTx/index.js";
 import type { DStorageContext } from "../metaTx/index.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
-import type { PaymentAdapter, PaymentQuote } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
 import type { MetaTxProgress, MetaTxStepId } from "../metaTx/index.js";
 
 afterEach(() => vi.useRealTimers());
-
-// ── Instant payment adapter (no delays) ───────────────────────────────────────
-
-class InstantPaymentAdapter implements PaymentAdapter {
-  readonly name = "mock";
-  readonly token = "MOCK" as const;
-  readonly type: "storage" | "chain";
-
-  constructor(type: "storage" | "chain" = "storage") {
-    this.type = type;
-  }
-
-  async estimateCost(dataSizeBytes: number): Promise<PaymentQuote> {
-    return {
-      token: "MOCK",
-      amount: "0.001",
-      network: "mock",
-      type: this.type,
-      dataSizeBytes,
-      expiresAt: Date.now() + 600_000,
-    };
-  }
-
-  async pay(
-    quote: PaymentQuote,
-    onStatus?: (msg: string) => void,
-  ): Promise<PaymentReceipt> {
-    onStatus?.("Processing instant payment…");
-    onStatus?.("Confirmed.");
-    return {
-      txHash: `0x${"a".repeat(64)}`,
-      token: "MOCK",
-      amount: quote.amount,
-      type: quote.type,
-      paidAt: Date.now(),
-    };
-  }
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -65,18 +26,14 @@ function makeEmptyFile(name = "empty.txt", type = "text/plain"): File {
 /** Build a minimal DStorageContext for tests. */
 function makeSdkContext(
   address = "0xTestOwner",
-  chainPayment?: PaymentAdapter,
 ): DStorageContext {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
-    chainPaymentAdapter: chainPayment ?? new InstantPaymentAdapter("chain"),
     connectedAddress: address,
-    async encryptPayload(bytes: Uint8Array) {
-      return bytes; // no encryption in unit tests
-    },
-    async encryptStorageIdForChain(id: string) {
-      return id; // no storageIdKey in unit tests
+    async prepareUploadCrypto() {
+      // No encryption in unit tests — return identity (public) crypto.
+      return { uploadScheme: null, keyEnvelope: undefined, encryptionScheme: "" };
     },
   };
 }

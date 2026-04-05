@@ -17,7 +17,6 @@
  *   const receipt = await metaTx.execute(file);
  */
 
-import type { EncryptionScheme } from "@dstorage/crypto";
 import { buildCostEstimate } from "./payment.js";
 import type {
   DStorageContext,
@@ -79,11 +78,13 @@ export class MetaTx {
       // ── Step 1: Encrypt ─────────────────────────────────────────────────
       this.startStep("encrypt", "Reading file bytes…");
       const fileBytes = await readFileAsBytes(file);
-      this.updateStepDetail("encrypt", "Encrypting with AES-GCM 256…");
+      this.updateStepDetail("encrypt", "Encrypting with XChaCha20-Poly1305…");
 
-      // Encrypt the payload if key is available; otherwise store raw bytes
-      const uploadData =
-        (await this.sdk.encryptPayload(fileBytes)) ?? fileBytes;
+      // Generate a fresh DEK for this upload (or no-op for public).
+      const uploadCrypto = await this.sdk.prepareUploadCrypto();
+      const uploadData = uploadCrypto.uploadScheme
+        ? await uploadCrypto.uploadScheme.encryptPayload(fileBytes)
+        : fileBytes;
 
       // Let's create a human-readable file size, e.g. "1.2 MB" or "340.0 KB"
       const fileSizeMB = file.size / (1024 * 1024);
@@ -152,21 +153,20 @@ export class MetaTx {
         `Fee payment and writing reference to ${this.sdk.chainAdapter.name}…`,
       );
 
-      const encryptedStorageId = await this.sdk.encryptStorageIdForChain(
-        uploadResult.id,
-      );
-      const onChainStorageId = encryptedStorageId ?? uploadResult.id;
-      const encryptionScheme: EncryptionScheme = encryptedStorageId
-        ? this.sdk.defaultEncryptionScheme
-        : "";
+      const onChainStorageId = uploadCrypto.uploadScheme
+        ? await uploadCrypto.uploadScheme.encryptStorageId(uploadResult.id)
+        : uploadResult.id;
 
       const chainResult = await this.sdk.chainAdapter.writeReference({
         storageId: onChainStorageId,
-        encryptionScheme,
+        encryptionScheme: uploadCrypto.encryptionScheme,
         storageProvider: uploadResult.provider,
         dataLabel: file.name,
         writtenAt: Date.now(),
         isOurs: true,
+        ...(uploadCrypto.keyEnvelope !== undefined
+          ? { keyEnvelope: uploadCrypto.keyEnvelope }
+          : {}),
       });
 
       // If the chain adapter handled payment internally (e.g. Midnight managed

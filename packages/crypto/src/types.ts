@@ -15,20 +15,18 @@
  * the correct decryption function at read time.
  *
  * Values:
- *   "xchacha20poly1305-v1" — XChaCha20-Poly1305 (HKDF-SHA-256-derived key); default
- *   "aes-gcm-v1"           — AES-256-GCM (PBKDF2-derived key); supported for backward compat reads
+ *   "xchacha20poly1305-v1" — XChaCha20-Poly1305 (per-upload random DEK, wrapped in keyEnvelope); default
  *   ""                     — No encryption; storageId and content are stored as plaintext (public data)
  */
-export type EncryptionScheme = "xchacha20poly1305-v1" | "aes-gcm-v1" | "";
+export type EncryptionScheme = "xchacha20poly1305-v1" | "";
 
 // ── CryptoScheme interface ────────────────────────────────────────────────────
 
 /**
  * Interface for a symmetric encryption scheme.
  *
- * Each implementation is instantiated from raw seed bytes via a static factory
- * (e.g. XChaChaScheme.create(seed, context)) and derives its own key internally.
- * The SDK holds a CryptoSchemeRegistry containing one instance per supported scheme.
+ * Implementations are instantiated from a random DEK via a static factory
+ * (e.g. XChaChaScheme.fromKey(dek)) for per-upload encryption.
  */
 export interface CryptoScheme {
   /** Scheme identifier recorded on-chain. */

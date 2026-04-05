@@ -6,9 +6,9 @@
  */
 
 import type { PaymentReceipt, TokenSymbol } from "@dstorage/payment";
-import type { CryptoScheme, EncryptionScheme } from "@dstorage/crypto";
+import type { EncryptionScheme } from "@dstorage/crypto";
 
-export type { EncryptionScheme, CryptoScheme } from "@dstorage/crypto";
+export type { EncryptionScheme } from "@dstorage/crypto";
 
 /**
  * The on-chain schema version reflected by this SDK build.
@@ -41,7 +41,7 @@ export interface ChainReference {
   storageId: string;
   /**
    * Identifies the algorithm used to encrypt storageId and content.
-   * "aes-gcm-v1" — encrypted with AES-256-GCM (PBKDF2-derived key).
+   * "xchacha20poly1305-v1" — encrypted with XChaCha20-Poly1305 (per-upload random DEK).
    * "" or undefined — unencrypted; storageId and content are stored as plaintext (public data).
    */
   encryptionScheme?: EncryptionScheme;
@@ -97,7 +97,7 @@ export interface DataReferenceSummary {
   storageId: string | null;
   /** Storage backend/provider where the encrypted payload is stored. */
   storageProvider: string;
-  /** Encryption scheme recorded on-chain. null/"" = public/unencrypted; "aes-gcm-v1" = encrypted. */
+  /** Encryption scheme recorded on-chain. null/"" = public/unencrypted; "xchacha20poly1305-v1" = encrypted. */
   encryptionScheme: EncryptionScheme | null;
   /** JSON-encoded KeyEnvelope for private references; "" or absent for public ones. */
   keyEnvelope?: string;
@@ -192,14 +192,6 @@ export interface ChainAdapter {
    * Get a cost estimate for a payload of the given size.
    */
   estimateCost(): Promise<ChainQuote>;
-
-  /**
-   * Receive the active CryptoScheme instance from the SDK.
-   * Called after the registry is built so the adapter can use the same scheme
-   * for any internal crypto operations without re-deriving keys.
-   * Optional — adapters that perform no crypto internally can omit this.
-   */
-  setScheme?(scheme: CryptoScheme): void;
 
   /**
    * Remove a reference from the on-chain registry.

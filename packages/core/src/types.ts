@@ -93,7 +93,7 @@ export interface UploadResult {
   uploadedAt: number;
   /**
    * Encryption algorithm used for the stored data and on-chain storageId.
-   * "aes-gcm-v1" for private (encrypted) uploads.
+   * "xchacha20poly1305-v1" for private (encrypted) uploads.
    * Empty string ("") for public (unencrypted) uploads.
    */
   encryptionScheme: string;

@@ -824,9 +824,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       }
       const { refId, blockHeight } = await api.storeReference(
         ref.storageId,
-        ref.encryptionScheme !== undefined
-          ? ref.encryptionScheme
-          : "aes-gcm-v1",
+        ref.encryptionScheme ?? "",
         ref.storageProvider,
         ref.dataLabel ?? "",
         BigInt(ref.writtenAt),
@@ -919,10 +917,6 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   // ── DataRegistry deployment ────────────────────────────────────────────────
-
-  setScheme(_scheme: unknown): void {
-    // Midnight adapter performs no crypto internally — scheme is used by the SDK layer.
-  }
 
   // ── Wallet lifecycle ───────────────────────────────────────────────────────
 

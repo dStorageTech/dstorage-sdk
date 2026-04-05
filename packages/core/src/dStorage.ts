@@ -16,7 +16,7 @@
  *   await ds.removeReference(chainRefId);
  */
 
-import { CryptoSchemeRegistry, XChaChaScheme } from "@dstorage/crypto";
+import { XChaChaScheme } from "@dstorage/crypto";
 import {
   generateDek,
   deriveKek,
@@ -27,7 +27,8 @@ import {
   parseKeyEnvelope,
   findWrapper,
 } from "@dstorage/crypto";
-import type { CryptoScheme, EncryptionScheme } from "@dstorage/crypto";
+import type { CryptoScheme } from "@dstorage/crypto";
+import type { UploadCrypto } from "./metaTx/index.js";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import corePackageJson from "../package.json";
@@ -54,11 +55,8 @@ import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
-  private _cryptoSchemes: CryptoSchemeRegistry | null = null; // null until connect() or init()
   /** Key Encryption Key derived from the seed provider — used to wrap/unwrap per-upload DEKs. */
   private _kek: Uint8Array | null = null;
-  /** Scheme used for all new writes. Part of DStorageContext — consumed by MetaTransaction. */
-  readonly defaultEncryptionScheme: EncryptionScheme = "xchacha20poly1305-v1";
   private _initialized = false;
   private readonly logger: Logger | undefined;
 
@@ -94,12 +92,10 @@ export class DStorage implements DStorageContext {
       await this.config.chainAdapter.init();
     }
 
-    // 2. Resolve encryption seed, derive KEK, and set up crypto scheme registry.
+    // 2. Resolve encryption seed and derive KEK for wrapping per-upload DEKs.
     if (this.config.encryptionSeedProvider) {
       const seed = await this.config.encryptionSeedProvider.getSeed();
-      this._cryptoSchemes = await CryptoSchemeRegistry.create(seed);
       this._kek = await deriveKek(seed);
-      this.config.chainAdapter.setScheme?.(this._cryptoSchemes.getDefault());
     }
 
     this._initialized = true;
@@ -109,7 +105,6 @@ export class DStorage implements DStorageContext {
   /** Disconnect and clear the in-memory encryption keys. */
   disconnect(): void {
     this.wallet = null;
-    this._cryptoSchemes = null;
     this._kek = null;
     this._initialized = false;
     this.logger?.log(
@@ -119,10 +114,7 @@ export class DStorage implements DStorageContext {
   }
 
   get isConnected(): boolean {
-    return (
-      (this.wallet !== null && this._cryptoSchemes !== null) ||
-      this._initialized
-    );
+    return this._initialized || this.wallet !== null;
   }
 
   get connectedAddress(): string | null {
@@ -267,16 +259,13 @@ export class DStorage implements DStorageContext {
    *
    * @param storageId  The storageId returned from upload()
    */
-  async retrieveByStorageId(
-    storageId: string,
-    encryptionScheme?: EncryptionScheme,
-  ): Promise<RetrieveResult> {
+  async retrieveByStorageId(storageId: string): Promise<RetrieveResult> {
     this.assertConnected();
 
     // 1. Fetch blob from storage
     const rawBytes = await this.config.storageAdapter.retrieve(storageId);
 
-    return this._decryptAndReassemble(rawBytes, storageId, encryptionScheme);
+    return this._decryptAndReassemble(rawBytes, storageId);
   }
 
   /**
@@ -306,23 +295,14 @@ export class DStorage implements DStorageContext {
     return XChaChaScheme.fromKey(dek);
   }
 
-  // Accepts a pre-built CryptoScheme (from a key envelope) or an encryptionScheme
-  // name to look up from the registry. Throws if private and no scheme is available.
+  // Accepts an optional pre-built CryptoScheme (unwrapped from a key envelope).
+  // If no dekScheme is provided, content is treated as public (no decryption).
   private async _decryptAndReassemble(
     rawBytes: Uint8Array,
     storageId: string,
-    encryptionScheme?: EncryptionScheme,
     dekScheme?: CryptoScheme,
   ): Promise<RetrieveResult> {
-    let scheme: CryptoScheme | null = dekScheme ?? null;
-    if (!scheme && encryptionScheme) {
-      scheme = this._cryptoSchemes?.get(encryptionScheme) ?? null;
-      if (scheme === null) {
-        throw new Error(
-          `[dStorage] Cannot decrypt: scheme '${encryptionScheme}' is not available in the registry.`,
-        );
-      }
-    }
+    const scheme: CryptoScheme | null = dekScheme ?? null;
 
     // 2. Decrypt if content is private; return raw bytes if public.
     let decryptedBytes = rawBytes;
@@ -407,12 +387,7 @@ export class DStorage implements DStorageContext {
     }
 
     const rawBytes = await this.config.storageAdapter.retrieve(storageId);
-    return this._decryptAndReassemble(
-      rawBytes,
-      storageId,
-      ref.encryptionScheme,
-      dekScheme,
-    );
+    return this._decryptAndReassemble(rawBytes, storageId, dekScheme);
   }
 
   /**
@@ -496,7 +471,7 @@ export class DStorage implements DStorageContext {
   ): Promise<MetaTxReceipt> {
     this.assertConnected();
 
-    if (!this._cryptoSchemes) {
+    if (!this._kek) {
       throw new Error(
         "[dStorage] executeMetaTransaction() requires an encryption key.",
       );
@@ -508,32 +483,25 @@ export class DStorage implements DStorageContext {
   }
 
   /**
-   * Encrypt raw payload bytes with the active client-side key and serialize them
-   * into the SDK wire format expected by storage adapters.
-   * Returns null when no encryption key is available.
+   * Generate a fresh random DEK, wrap it under the KEK, and return the upload
+   * crypto materials needed by MetaTx to encrypt payload and storageId.
+   *
+   * For public uploads (isPublic=true), returns a no-op result (null scheme, no envelope).
    */
-  async encryptPayload(bytes: Uint8Array): Promise<Uint8Array | null> {
-    if (!this._cryptoSchemes) return null;
-    this.logger?.log("dStorage", "Encrypting content...");
-    return this._cryptoSchemes.getDefault().encryptPayload(bytes);
-  }
-
-  /**
-   * Encrypt a storageId string before writing it to the chain using XChaCha20-Poly1305.
-   *
-   * The storageId must be a 43-char base64url string (32 bytes decoded) —
-   * this is the format used by Arweave txIds and MockStorageAdapter IDs.
-   * Encryption produces a 72-byte output:
-   *   [ nonce(24) | ciphertext(32) | auth-tag(16) ],
-   * which is base64url-encoded to a 96-char string stored as Opaque<"string"> in the contract.
-   *
-   * If no key is available (e.g. unauthenticated state), it returns null.
-   *
-   * @internal — part of DStorageContext; used by MetaTransaction.
-   */
-  async encryptStorageIdForChain(storageId: string): Promise<string | null> {
-    if (!this._cryptoSchemes) return null;
-    return this._cryptoSchemes.getDefault().encryptStorageId(storageId);
+  async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
+    if (isPublic) {
+      return { uploadScheme: null, keyEnvelope: undefined, encryptionScheme: "" };
+    }
+    if (!this._kek) {
+      throw new Error(
+        "[dStorage] Cannot prepare upload crypto: KEK not available. Call init() first.",
+      );
+    }
+    const dek = generateDek();
+    const uploadScheme = XChaChaScheme.fromKey(dek);
+    const wrappedDek = await wrapKey(dek, this._kek);
+    const keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrappedDek));
+    return { uploadScheme, keyEnvelope, encryptionScheme: "xchacha20poly1305-v1" };
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
@@ -760,40 +728,6 @@ export class DStorage implements DStorageContext {
       bytes: result,
       metadata: {},
     };
-  }
-
-  /**
-   * Decrypt a storageId retrieved from the chain back to the original storage network ID.
-   *
-   * Returns null if no schemeName is provided or the scheme is not found in the registry.
-   */
-  private async _decryptStorageId(
-    encryptedId: string,
-    schemeName?: EncryptionScheme,
-  ): Promise<string | null> {
-    if (!schemeName) return null;
-    const scheme = this._cryptoSchemes?.get(schemeName) ?? null;
-    if (!scheme) return null;
-    try {
-      return await scheme.decryptStorageId(encryptedId);
-    } catch {
-      throw new Error(
-        "[dStorage] Failed to decrypt storageId — the record may have been encrypted with a different key.",
-      );
-    }
-  }
-
-  /**
-   * Convert a hex string (with or without 0x prefix) to a Uint8Array.
-   * Used to derive the seed bytes from the wallet signature hex.
-   */
-  private _hexToBytes(hex: string): Uint8Array {
-    const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
-    const bytes = new Uint8Array(clean.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-    }
-    return bytes;
   }
 
   private assertConnected(): void {
