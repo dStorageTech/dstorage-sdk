@@ -11,6 +11,7 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Vision](#vision)
 - [What it does](#what-it-does)
 - [Quick Start](#quick-start)
+- [Testing](#testing)
 - [Reality Check (Current Support)](#reality-check-current-support)
 - [Documentation](#documentation)
 - [SDK Usage](#sdk-usage)
@@ -153,6 +154,55 @@ It will start a CLI that:
 - uses Midnight Preprod network and Arweave Local storage
 - asks for network + wallet seed/mnemonic and initializes `MidnightChainAdapter`
 - provides actions to upload files, list on-chain references, and retrieve content by `refId`
+
+---
+
+## Testing
+
+### Unit tests
+
+The unit test suite uses fully in-memory mocks (no network, no Docker). Run it with:
+
+```sh
+npm test
+```
+
+### Integration tests
+
+Integration tests exercise real network adapters end-to-end:
+- **arlocal-only suite** — `ArweaveLocalStorageAdapter` against a local arlocal node with `MockMidnightChainAdapter`
+- **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node)
+
+#### Prerequisites
+
+Start the required services:
+
+```sh
+# Arweave Local (required for both suites)
+docker run -d --rm -p 1984:1984 textury/arlocal
+
+# Midnight Proof Server (required for the full-stack suite)
+docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v
+```
+
+#### Configuration
+
+Copy the example env file and fill in your values:
+
+```sh
+cp tests/integration/env.example .env.integration
+```
+
+The only required variable for the full-stack suite is `INTEGRATION_SEED` — a BIP-39 mnemonic or 64-char hex seed for a Midnight Preprod wallet funded with NIGHT and DUST tokens (see [Prerequisites](#prerequisites) for faucet links). All other variables have defaults that match the Docker commands above.
+
+#### Run
+
+```sh
+set -a; source .env.integration; set +a
+npm run test:integration
+```
+
+If a service is not running, its suite is **skipped** rather than failed — safe to run in CI environments where the services are unavailable. To reuse an already-deployed contract and skip the (slow) deployment step on subsequent runs, set `INTEGRATION_CONTRACT_ADDRESS` in `.env.integration` to the address printed on the first run.
 
 ---
 
