@@ -187,7 +187,7 @@ describe("MidnightConnectorSeedProvider", () => {
 
   function mockMidnight(signatureHex: string) {
     const api = {
-      signData: vi.fn().mockResolvedValue({ signature: signatureHex }),
+      signData: vi.fn().mockResolvedValue({ verifyingKey: signatureHex }),
     };
     const wallet = {
       connect: vi.fn().mockResolvedValue(api),
