@@ -68,6 +68,7 @@ export class DataRegistrySimulator {
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
+    keyEnvelope: string = "",
   ): Uint8Array {
     const res = this.contract.impureCircuits.storeReference(
       this.circuitContext,
@@ -76,6 +77,7 @@ export class DataRegistrySimulator {
       storageProvider,
       dataLabel,
       writtenAt,
+      keyEnvelope,
     );
     this.circuitContext = res.context;
     return res.result;
@@ -97,6 +99,7 @@ export class DataRegistrySimulator {
     storageProvider: string,
     dataLabel: string,
     writtenAt: bigint,
+    keyEnvelope: string = "",
   ): [] {
     const res = this.contract.impureCircuits.updateReference(
       this.circuitContext,
@@ -106,6 +109,7 @@ export class DataRegistrySimulator {
       storageProvider,
       dataLabel,
       writtenAt,
+      keyEnvelope,
     );
     this.circuitContext = res.context;
     return res.result;
