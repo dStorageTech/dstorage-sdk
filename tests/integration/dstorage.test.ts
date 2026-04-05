@@ -116,7 +116,29 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
         mnemonic: ALICE_SEED,
       }),
     });
-    await sdk.init();
+    const dataRegistryAddress = await sdk.init();
+
+    // If no contract address was pre-configured, a new contract was deployed.
+    // Print it prominently so the user can persist it in .env.integration.
+    if (!env.midnight.contractAddress && dataRegistryAddress) {
+      const title = `  NEW CONTRACT DEPLOYED — add to .env.integration to reuse it:`;
+      const addrLine = `  INTEGRATION_CONTRACT_ADDRESS=${dataRegistryAddress}`;
+      const cmdLine = `  Remember to run the following command before running the tests again:`;
+      const cmdLine2 = `     set -a; source .env.integration; set +a`;
+      const innerWidth =
+        Math.max(title.length, addrLine.length, cmdLine.length) + 2;
+      const border = "═".repeat(innerWidth);
+      const pad = (s: string) => `║${s.padEnd(innerWidth)}║`;
+      console.log(`\n\x1b[33m╔${border}╗`);
+      console.log(pad(title));
+      console.log(pad(""));
+      console.log(pad(addrLine));
+      console.log(pad(""));
+      console.log(pad(cmdLine));
+      console.log(pad(cmdLine2));
+      console.log(pad(""));
+      console.log(`╚${border}╝\x1b[0m\n`);
+    }
 
     sdkBob = new DStorage({
       storageAdapter: adapter,
