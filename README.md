@@ -241,7 +241,7 @@ import { PasswordSeedProvider } from "@dstorage/seed-providers";
 // 1. Configure the SDK with your chosen adapters and an encryption seed provider
 const sdk = new DStorage({
   storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter, ArweaveLocalStorageAdapter, etc.
-  chainAdapter: new MockChainAdapter(),     // swap for MidnightChainAdapter
+  chainAdapter: new MockChainAdapter(), // swap for MidnightChainAdapter
   encryptionSeedProvider: new PasswordSeedProvider({
     password: "correct-horse-battery-staple",
     salt: "myapp:v1:alice@example.com", // app + user identifier — store this alongside your data
@@ -407,19 +407,19 @@ Per RFC 5869, HKDF is designed for high-entropy inputs and uses a fixed `salt` a
 
 The `@dstorage/seed-providers` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
 
-| Provider               | Seed source                                 | Cross-device portability                                              |
-| ---------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
-| `PasswordSeedProvider` | scrypt(password, caller-supplied salt)      | ✅ Same seed on any device — depends only on password + salt          |
-| `MnemonicSeedProvider` | BIP-39 mnemonic phrase or 64-byte hex seed  | ✅ Same seed wherever the same mnemonic/hex is imported               |
-| `DemoSeedProvider`     | SHA-256 of a fixed address string           | ⚠️ Deterministic but predictable — development and testing only       |
+| Provider               | Seed source                                | Cross-device portability                                        |
+| ---------------------- | ------------------------------------------ | --------------------------------------------------------------- |
+| `PasswordSeedProvider` | scrypt(password, caller-supplied salt)     | ✅ Same seed on any device — depends only on password + salt    |
+| `MnemonicSeedProvider` | BIP-39 mnemonic phrase or 64-byte hex seed | ✅ Same seed wherever the same mnemonic/hex is imported         |
+| `DemoSeedProvider`     | SHA-256 of a fixed address string          | ⚠️ Deterministic but predictable — development and testing only |
 
 #### Cross-device portability
 
-| Scenario                                                              | Expected outcome                                                                                         |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Same password + same salt on a different device (`PasswordSeedProvider`) | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required.      |
-| BIP-39 mnemonic imported on a different machine (`MnemonicSeedProvider`) | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                    |
-| Different password, same salt (`PasswordSeedProvider`)                | ❌ Different seed — intentional; each password produces an independent key.                             |
+| Scenario                                                                 | Expected outcome                                                                                 |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Same password + same salt on a different device (`PasswordSeedProvider`) | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required. |
+| BIP-39 mnemonic imported on a different machine (`MnemonicSeedProvider`) | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.               |
+| Different password, same salt (`PasswordSeedProvider`)                   | ❌ Different seed — intentional; each password produces an independent key.                      |
 
 ---
 
@@ -520,4 +520,3 @@ Encryption keys are derived deterministically from the seed provider's inputs �
 
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
 - Autonomi adapter is currently a stub path.
-- `MnemonicSeedProvider` is a temporary scaffold for Node.js environments. It accepts raw credentials directly — something the SDK ideally should not do. It will be replaced once a proper headless wallet-signing interface is available.

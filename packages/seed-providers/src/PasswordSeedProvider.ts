@@ -85,7 +85,7 @@ import type { EncryptionSeedProvider } from "./types.js";
  * "v1-lite" — 64 MB,  ~200–400ms — for constrained environments (mobile, low-RAM)
  */
 export const KDF_PRESETS = {
-  "v1": { N: 131072, r: 8, p: 1 },
+  v1: { N: 131072, r: 8, p: 1 },
   "v1-lite": { N: 65536, r: 8, p: 1 },
 } as const satisfies Record<string, ScryptParams>;
 
@@ -246,9 +246,15 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
       password: config.password,
       salt: config.salt,
       params: { N: config.N, r: config.r, p: config.p },
-      ...(config.minPasswordLength !== undefined && { minPasswordLength: config.minPasswordLength }),
-      ...(config.minEntropyBits !== undefined && { minEntropyBits: config.minEntropyBits }),
-      ...(config.additionalValidators !== undefined && { additionalValidators: config.additionalValidators }),
+      ...(config.minPasswordLength !== undefined && {
+        minPasswordLength: config.minPasswordLength,
+      }),
+      ...(config.minEntropyBits !== undefined && {
+        minEntropyBits: config.minEntropyBits,
+      }),
+      ...(config.additionalValidators !== undefined && {
+        additionalValidators: config.additionalValidators,
+      }),
     });
   }
 

@@ -44,7 +44,8 @@ export struct ReferenceEntry {
   // JSON-encoded key envelope containing one or more wrapped copies of the
   // per-upload Data Encryption Key (DEK). Each wrapper entry identifies its
   // wrapping key by name (e.g. "password") and records the DEK encrypted under
-  // a Key Encryption Key derived from the holder's wallet seed.
+  // a Key Encryption Key derived from a caller-supplied secret (e.g. a password
+  // via PasswordSeedProvider, a wallet signature, or a mnemonic phrase).
   // Empty string ("") for public (unencrypted) uploads.
   // See KeyEnvelope type in @dstorage/crypto for the schema.
   keyEnvelope: Opaque<"string">;
