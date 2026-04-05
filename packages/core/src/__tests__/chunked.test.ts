@@ -2,7 +2,7 @@
  * @dstorage/core — chunked upload / retrieve tests
  *
  * CHUNK_SIZE is mocked to 512 bytes so round-trip tests run fast without
- * hitting real AES-GCM on tens of megabytes. The logic under test is
+ * hitting real encryption on tens of megabytes. The logic under test is
  * identical regardless of the chunk size value.
  */
 

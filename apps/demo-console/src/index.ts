@@ -340,7 +340,7 @@ async function main(): Promise<void> {
     });
 
     // sdk.init() deploys or joins the DataRegistry contract and derives the
-    // AES-GCM encryption key from the seed. Wallet is already synced at this point.
+    // encryption key from the seed. Wallet is already synced at this point.
     console.log("\nPreparing contract...");
     const dataRegistryAddress = await withTicker(
       () => "Initialising dStorage SDK...",

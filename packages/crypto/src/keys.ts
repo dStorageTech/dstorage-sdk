@@ -53,7 +53,6 @@ export class KeyDeriver {
     const buf = await bip39.mnemonicToSeed(this.input.mnemonic!);
     return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   }
-
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────

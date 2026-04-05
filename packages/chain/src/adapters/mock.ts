@@ -172,5 +172,4 @@ export class MockChainAdapter implements ChainAdapter {
     this.contractAddress = addr;
     return addr;
   }
-
 }

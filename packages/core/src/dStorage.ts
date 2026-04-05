@@ -490,7 +490,11 @@ export class DStorage implements DStorageContext {
    */
   async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
     if (isPublic) {
-      return { uploadScheme: null, keyEnvelope: undefined, encryptionScheme: "" };
+      return {
+        uploadScheme: null,
+        keyEnvelope: undefined,
+        encryptionScheme: "",
+      };
     }
     if (!this._kek) {
       throw new Error(
@@ -501,7 +505,11 @@ export class DStorage implements DStorageContext {
     const uploadScheme = XChaChaScheme.fromKey(dek);
     const wrappedDek = await wrapKey(dek, this._kek);
     const keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrappedDek));
-    return { uploadScheme, keyEnvelope, encryptionScheme: "xchacha20poly1305-v1" };
+    return {
+      uploadScheme,
+      keyEnvelope,
+      encryptionScheme: "xchacha20poly1305-v1",
+    };
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

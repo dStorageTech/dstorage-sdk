@@ -309,5 +309,4 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     );
     return addr;
   }
-
 }

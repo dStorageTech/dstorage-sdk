@@ -24,16 +24,18 @@ function makeEmptyFile(name = "empty.txt", type = "text/plain"): File {
 }
 
 /** Build a minimal DStorageContext for tests. */
-function makeSdkContext(
-  address = "0xTestOwner",
-): DStorageContext {
+function makeSdkContext(address = "0xTestOwner"): DStorageContext {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
     connectedAddress: address,
     async prepareUploadCrypto() {
       // No encryption in unit tests — return identity (public) crypto.
-      return { uploadScheme: null, keyEnvelope: undefined, encryptionScheme: "" };
+      return {
+        uploadScheme: null,
+        keyEnvelope: undefined,
+        encryptionScheme: "",
+      };
     },
   };
 }

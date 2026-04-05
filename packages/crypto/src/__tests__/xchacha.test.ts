@@ -142,7 +142,7 @@ describe("encryptStorageIdXChaCha / decryptStorageIdXChaCha", () => {
 
   it("decryptStorageIdXChaCha throws on wrong length", async () => {
     const key = await deriveSymmetricKeyFromSeed(new Uint8Array(32).fill(0x13));
-    const bad = new Uint8Array(60); // old 60-byte AES-GCM format
+    const bad = new Uint8Array(60); // wrong size (not 72 bytes)
     await expect(decryptStorageIdXChaCha(key, bad)).rejects.toThrow(/72/);
   });
 

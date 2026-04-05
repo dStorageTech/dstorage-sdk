@@ -35,7 +35,7 @@
  *     finality. An IrysStorageAdapter can be added alongside this one.
  *
  *   • storageId (txId) is PUBLIC on Arweave. Data security relies entirely on
- *     the AES-GCM encryption applied by @dstorage/crypto before reaching here.
+ *     the XChaCha20-Poly1305 encryption applied by @dstorage/crypto before reaching here.
  */
 
 import type {

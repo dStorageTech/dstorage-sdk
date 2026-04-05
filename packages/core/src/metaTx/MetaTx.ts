@@ -5,7 +5,7 @@
  *
  * Presents a single conceptual action to the user while internally executing:
  *   [0] Estimate   → compute storage + chain costs
- *   [1] Encrypt    → AES-GCM encrypt the file client-side
+ *   [1] Encrypt    → XChaCha20-Poly1305 encrypt the file client-side
  *   [2] PayStorage → simulate storage payment (AR / ANT / MOCK)
  *   [3] Upload     → upload encrypted blob to decentralised storage
  *   [4] Reference  → pay chain fee + write CID + metadata reference on-chain

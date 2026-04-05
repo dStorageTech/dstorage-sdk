@@ -309,7 +309,7 @@ Tokens are selected automatically based on your chosen adapters.
 
 ```
 @dstorage/core              ← Developer-facing API (this is what you import)
-    ├── @dstorage/crypto        ← XChaCha20-Poly1305 / AES-GCM encryption, key derivation
+    ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation
     ├── @dstorage/seed-providers← Seed providers: PasswordSeedProvider | MnemonicSeedProvider | DemoSeedProvider
     ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveTurbo | Arweave Local | Autonomi(stub)
     ├── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight
@@ -344,16 +344,15 @@ User input
 
 ## Encryption Design
 
-### Encryption schemes
+### Encryption scheme
 
-The SDK supports two symmetric AEAD encryption schemes:
+The SDK uses **XChaCha20-Poly1305** as its single symmetric AEAD encryption scheme:
 
-| Scheme                 | Status               | Nonce | Tag  | Birthday bound     | Notes                                                           |
-| ---------------------- | -------------------- | ----- | ---- | ------------------ | --------------------------------------------------------------- |
-| **XChaCha20-Poly1305** | Default (new writes) | 24 B  | 16 B | 2⁸⁰ (negligible)   | 192-bit nonce; safe for random generation indefinitely          |
-| **AES-256-GCM**        | Legacy (reads only)  | 12 B  | 16 B | ~2³² (≈ 4 billion) | Retired for writes; retained for backward-compatible decryption |
+| Scheme                 | Nonce | Tag  | Birthday bound   | Notes                                                  |
+| ---------------------- | ----- | ---- | ---------------- | ------------------------------------------------------ |
+| **XChaCha20-Poly1305** | 24 B  | 16 B | 2⁸⁰ (negligible) | 192-bit nonce; safe for random generation indefinitely |
 
-XChaCha20-Poly1305 is preferred for new writes: its 192-bit nonce pushes the birthday bound to 2⁸⁰, making random nonce collision a non-issue in practice. AES-256-GCM's 96-bit nonce has a birthday bound of ~2³² random nonces before collision probability becomes material — acceptable for bounded use but a maintenance risk at scale. Since AES-GCM is now read-only, no new nonces are generated under it.
+XChaCha20-Poly1305's 192-bit nonce pushes the birthday bound to 2⁸⁰, making random nonce collision a non-issue in practice.
 
 ### Two-layer encryption
 
@@ -385,23 +384,18 @@ In public mode **neither layer is encrypted**:
 
 The default (`isPublic` omitted or `false`) always encrypts both layers. Omitting the flag is safe — accidental public uploads require an explicit opt-in.
 
-**Key reuse across layers is safe** because both schemes generate a fresh random nonce per encryption call. Under XChaCha20-Poly1305 and AES-256-GCM, security only requires that the same (key, nonce) pair is never reused — the key itself may be reused across independent messages with distinct nonces. The data payload and the storageId are encrypted in separate calls with independently generated nonces, so there is no cross-layer nonce collision risk.
+**Key reuse across layers is safe** because XChaCha20-Poly1305 generates a fresh random nonce per encryption call. Security only requires that the same (key, nonce) pair is never reused — the key itself may be reused across independent messages with distinct nonces. The data payload and the storageId are encrypted in separate calls with independently generated nonces, so there is no cross-layer nonce collision risk.
 
 ### Key derivation
 
-The raw seed bytes returned by the `EncryptionSeedProvider` feed directly into the per-scheme derivation functions:
+The raw seed bytes returned by the `EncryptionSeedProvider` are used to derive a Key Encryption Key (KEK) via HKDF-SHA-256. A fresh random Data Encryption Key (DEK) is generated per upload, encrypted under the KEK, and stored alongside the on-chain reference in the `keyEnvelope` field.
 
-| Scheme      | Primitive      | Salt (fixed)            | Info / extra parameter            |
-| ----------- | -------------- | ----------------------- | --------------------------------- |
-| XChaCha20   | HKDF-SHA-256   | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1"` |
-| AES-256-GCM | PBKDF2-SHA-256 | `"dstorage-aes-v1"`     | 100 000 iterations                |
+| Layer | Primitive    | Salt (fixed)            | Info label                             |
+| ----- | ------------ | ----------------------- | -------------------------------------- |
+| KEK   | HKDF-SHA-256 | `"dstorage-xchacha-v1"` | `"dstorage:xchacha20poly1305:v1"`      |
+| DEK   | random       | —                       | 32 bytes from `crypto.getRandomValues` |
 
-### Why HKDF for XChaCha, PBKDF2 for AES-GCM
-
-Per RFC 5869, HKDF is designed for high-entropy inputs and uses a fixed `salt` as a global extraction key and a per-context `info` label for domain separation. PBKDF2's iteration work factor is only useful against low-entropy passwords.
-
-- **XChaCha20-Poly1305** uses HKDF because the seed input is always high-entropy (32 bytes from scrypt, HKDF, or a BIP-39 derivation). The fixed info label provides domain separation.
-- **AES-256-GCM** retains PBKDF2 for backward compatibility with existing encrypted records. For new writes, `PasswordSeedProvider` already applies scrypt before the seed reaches this layer, making the PBKDF2 step redundant but harmless.
+HKDF is appropriate here because the seed input is always high-entropy (32 bytes from scrypt, a BIP-39 derivation, or similar). The fixed info label provides domain separation between the KEK and any other keys derived from the same seed.
 
 ### Seed providers
 
@@ -439,29 +433,12 @@ The encrypted data payload is stored as a JSON object alongside the content. The
 }
 ```
 
-**AES-256-GCM** (JSON):
-
-```json
-{
-  "ciphertext": "<base64 — AES-GCM ciphertext>",
-  "iv": "<base64 — 12-byte IV>"
-}
-```
-
-The AES-GCM 16-byte auth tag is appended to the ciphertext by the WebCrypto API and stored as part of the `ciphertext` field.
-
-#### On-chain storageId encryption layouts
+#### On-chain storageId encryption layout
 
 **XChaCha20-Poly1305** (72 bytes, base64url-encoded → 96 chars):
 
 ```
 [ nonce: 24 bytes | ciphertext: 32 bytes | Poly1305 tag: 16 bytes ]
-```
-
-**AES-256-GCM** (60 bytes, base64url-encoded → 80 chars):
-
-```
-[ ciphertext: 32 bytes | IV: 12 bytes | GCM tag: 16 bytes ]
 ```
 
 ### Scheme detection on read
@@ -470,15 +447,14 @@ The encryption scheme used for a record is stored in the `encryptionScheme` fiel
 
 | `encryptionScheme` value | Behaviour                                                                         |
 | ------------------------ | --------------------------------------------------------------------------------- |
-| `"xchacha20poly1305-v1"` | Decrypt with XChaCha20-Poly1305                                                   |
-| `"aes-gcm-v1"`           | Decrypt with AES-256-GCM (legacy)                                                 |
+| `"xchacha20poly1305-v1"` | Unwrap DEK from `keyEnvelope`, decrypt with XChaCha20-Poly1305                    |
 | `""` or absent           | No decryption — content is public (see [Public mode](#public-mode-ispublic-true)) |
 
-Records written before encryption support was added have an empty `encryptionScheme` and are returned as plain bytes. Encrypted records always carry the scheme name that was active when they were written, so the SDK selects the correct cipher automatically without any action from the caller.
+The `encryptionScheme` field is stored on-chain alongside the reference. On read, the SDK checks this field and dispatches accordingly — no action required from the caller.
 
 ### Tamper detection
 
-Both schemes are **Authenticated Encryption with Associated Data (AEAD)**. The Poly1305 tag (XChaCha) or GCM tag (AES) covers the ciphertext. Any bit-flip in the on-chain encrypted pointer causes decryption to throw before the SDK ever attempts to fetch from storage.
+**Authenticated Encryption with Associated Data (AEAD)**. The Poly1305 tag (XChaCha) covers the ciphertext. Any bit-flip in the on-chain encrypted pointer causes decryption to throw before the SDK ever attempts to fetch from storage.
 
 ### Storage ID format
 

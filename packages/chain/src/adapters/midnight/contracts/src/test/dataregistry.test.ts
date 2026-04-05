@@ -35,7 +35,7 @@ const randomUser = (): TestUser => ({
 
 const randomEntry = () => ({
   storageId: randomString(32),
-  encryptionScheme: "aes-gcm-v1",
+  encryptionScheme: "xchacha20poly1305-v1",
   storageProvider: "arweave",
   dataLabel: "document",
   writtenAt: randomTimestamp(),
@@ -596,7 +596,8 @@ describe("DataRegistry contract", () => {
   describe("keyEnvelope", () => {
     it("stores and retrieves a non-empty keyEnvelope", () => {
       const entry = randomEntry();
-      const envelope = '{"kdf":"scrypt","N":131072,"r":8,"p":1,"wrappedDek":"abc123"}';
+      const envelope =
+        '{"kdf":"scrypt","N":131072,"r":8,"p":1,"wrappedDek":"abc123"}';
       const refId = simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
@@ -714,8 +715,12 @@ describe("DataRegistry contract", () => {
         envelope2,
       );
 
-      expect(simulator.getLedger().references.lookup(refId1).keyEnvelope).toBe(envelope1);
-      expect(simulator.getLedger().references.lookup(refId2).keyEnvelope).toBe(envelope2);
+      expect(simulator.getLedger().references.lookup(refId1).keyEnvelope).toBe(
+        envelope1,
+      );
+      expect(simulator.getLedger().references.lookup(refId2).keyEnvelope).toBe(
+        envelope2,
+      );
     });
 
     it("updating one reference's keyEnvelope does not affect another's", () => {
@@ -752,7 +757,9 @@ describe("DataRegistry contract", () => {
         '{"kdf":"scrypt","wrappedDek":"rotated"}',
       );
 
-      expect(simulator.getLedger().references.lookup(refId2).keyEnvelope).toBe(envelope2);
+      expect(simulator.getLedger().references.lookup(refId2).keyEnvelope).toBe(
+        envelope2,
+      );
     });
   });
 
@@ -791,7 +798,7 @@ describe("DataRegistry contract", () => {
 
       const refId1 = simulator.storeReference(
         storageId,
-        "aes-gcm-v1",
+        "xchacha20poly1305-v1",
         "arweave",
         "doc",
         ts,
@@ -800,7 +807,7 @@ describe("DataRegistry contract", () => {
       simulator.switchUser(other.pk);
       const refId2 = simulator.storeReference(
         storageId,
-        "aes-gcm-v1",
+        "xchacha20poly1305-v1",
         "arweave",
         "doc",
         ts,

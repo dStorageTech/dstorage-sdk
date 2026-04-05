@@ -3,13 +3,14 @@
  * Symmetric authenticated encryption using XChaCha20-Poly1305.
  *
  * Key derivation:
- *   wallet seed (BIP-39 mnemonic, hex seed, or wallet signature bytes)
+ *   seed bytes (from EncryptionSeedProvider)
  *     → HKDF-SHA-256 (domain-separated, optionally address-bound)
- *     → 32-byte symmetric key
+ *     → 32-byte symmetric key (KEK)
+ *     → per-upload random DEK wrapped under KEK
  *
- * Why XChaCha20-Poly1305 over AES-256-GCM:
- *   - 192-bit nonce (vs 96-bit) eliminates birthday-bound collision risk —
- *     safe to generate random nonces indefinitely without birthday concerns
+ * Why XChaCha20-Poly1305:
+ *   - 192-bit nonce eliminates birthday-bound collision risk —
+ *     safe to generate random nonces indefinitely
  *   - Pure bytes in / bytes out — no WebCrypto CryptoKey ceremony
  *   - Better performance on hardware without AES acceleration (mobile, ARM, IoT)
  *
