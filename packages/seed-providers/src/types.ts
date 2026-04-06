@@ -17,5 +17,7 @@
  *   MnemonicSeedProvider  — BIP-39 mnemonic or hex seed
  */
 export interface EncryptionSeedProvider {
+  /** Stable identifier for this provider type, used as the wrapper name in key envelopes. */
+  readonly name: string;
   getSeed(): Promise<Uint8Array>;
 }

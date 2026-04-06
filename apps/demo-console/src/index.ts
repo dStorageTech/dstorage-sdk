@@ -332,7 +332,7 @@ async function main(): Promise<void> {
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter,
-      encryptionSeedProvider: new MnemonicSeedProvider(credentials),
+      encryptionSeedProviders: [new MnemonicSeedProvider(credentials)],
       logger,
       ...(contractAddressInput
         ? { dataRegistryAddress: contractAddressInput }

@@ -55,11 +55,13 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     sdk = new DStorage({
       storageAdapter: adapter,
       chainAdapter: new MockMidnightChainAdapter({ logger: console }),
-      encryptionSeedProvider: new PasswordSeedProvider({
-        password: "dstorage-integration-test-v1!",
-        salt: "dstorage:integration-test:arlocal",
-        params: { N: 1024, r: 8, p: 1 },
-      }),
+      encryptionSeedProviders: [
+        new PasswordSeedProvider({
+          password: "dstorage-integration-test-v1!",
+          salt: "dstorage:integration-test:arlocal",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
     });
     await sdk.init();
   });
@@ -116,9 +118,11 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     sdk = new DStorage({
       storageAdapter: adapter,
       chainAdapter,
-      encryptionSeedProvider: new MnemonicSeedProvider({
-        mnemonic: ALICE_SEED,
-      }),
+      encryptionSeedProviders: [
+        new MnemonicSeedProvider({
+          mnemonic: ALICE_SEED,
+        }),
+      ],
     });
     const dataRegistryAddress = await sdk.init();
 
@@ -147,7 +151,9 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     sdkBob = new DStorage({
       storageAdapter: adapter,
       chainAdapter,
-      encryptionSeedProvider: new MnemonicSeedProvider({ mnemonic: BOB_SEED }),
+      encryptionSeedProviders: [
+        new MnemonicSeedProvider({ mnemonic: BOB_SEED }),
+      ],
     });
     // chainAdapter.init() is a no-op on the second call (cached API); only sets up Bob's crypto.
     await sdkBob.init();

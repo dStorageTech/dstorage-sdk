@@ -31,7 +31,7 @@ function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
-    encryptionSeedProvider: testSeedProvider(address),
+    encryptionSeedProviders: [testSeedProvider(address)],
   };
 }
 
@@ -101,12 +101,12 @@ describe("wallet isolation", () => {
     const alice = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: new MockChainAdapter(),
-      encryptionSeedProvider: testSeedProvider("0xAlice_iso1"),
+      encryptionSeedProviders: [testSeedProvider("0xAlice_iso1")],
     });
     const bob = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: new MockChainAdapter(),
-      encryptionSeedProvider: testSeedProvider("0xBob_iso1"),
+      encryptionSeedProviders: [testSeedProvider("0xBob_iso1")],
     });
     await alice.init();
     await bob.init();
@@ -126,12 +126,12 @@ describe("wallet isolation", () => {
     const ds1 = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: new MockChainAdapter(),
-      encryptionSeedProvider: testSeedProvider("0xAlice_iso2"),
+      encryptionSeedProviders: [testSeedProvider("0xAlice_iso2")],
     });
     const ds2 = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: new MockChainAdapter(),
-      encryptionSeedProvider: testSeedProvider("0xAlice_iso2"), // same salt → same key
+      encryptionSeedProviders: [testSeedProvider("0xAlice_iso2")], // same salt → same key
     });
     await ds1.init();
     await ds2.init();
@@ -178,7 +178,7 @@ describe("disconnect and reconnect", () => {
       new DStorage({
         storageAdapter: sharedStorage,
         chainAdapter: new MockChainAdapter(),
-        encryptionSeedProvider: testSeedProvider("0xAlice_drr1"),
+        encryptionSeedProviders: [testSeedProvider("0xAlice_drr1")],
       });
 
     const ds = makeDs();

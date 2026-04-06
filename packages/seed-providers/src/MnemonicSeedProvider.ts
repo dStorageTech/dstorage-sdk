@@ -8,6 +8,7 @@ import { KeyDeriver } from "@dstorage/crypto";
 import type { EncryptionSeedProvider } from "./types.js";
 
 export class MnemonicSeedProvider implements EncryptionSeedProvider {
+  readonly name = "mnemonic";
   private readonly deriver: KeyDeriver;
 
   constructor(input: { mnemonic?: string; seedHex?: string }) {

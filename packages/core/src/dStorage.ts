@@ -25,7 +25,6 @@ import {
   buildKeyEnvelope,
   serializeKeyEnvelope,
   parseKeyEnvelope,
-  findWrapper,
 } from "@dstorage/crypto";
 import type { CryptoScheme } from "@dstorage/crypto";
 import type { UploadCrypto } from "./metaTx/index.js";
@@ -55,8 +54,10 @@ import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
-  /** Key Encryption Key derived from the seed provider — used to wrap/unwrap per-upload DEKs. */
-  private _kek: Uint8Array | null = null;
+  /** Key Encryption Keys derived from the seed providers — used to wrap/unwrap per-upload DEKs. */
+  private _keks: Uint8Array[] = [];
+  /** Provider names, parallel to _keks, used as wrapKeyName in key envelopes. */
+  private _kekNames: string[] = [];
   private _initialized = false;
   private readonly logger: Logger | undefined;
 
@@ -92,11 +93,13 @@ export class DStorage implements DStorageContext {
       await this.config.chainAdapter.init();
     }
 
-    // 2. Resolve encryption seed and derive KEK for wrapping per-upload DEKs.
-    if (this.config.encryptionSeedProvider) {
-      const seed = await this.config.encryptionSeedProvider.getSeed();
-      this._kek = await deriveKek(seed);
-    }
+    // 2. Resolve encryption seeds and derive a KEK per provider for wrapping per-upload DEKs.
+    const providers = this.config.encryptionSeedProviders ?? [];
+    this._keks = await Promise.all(
+      providers.map(async (p) => deriveKek(await p.getSeed())),
+    );
+    // Keep provider names alongside KEKs for use as wrapKeyName in envelopes.
+    this._kekNames = providers.map((p) => p.name);
 
     this._initialized = true;
     return this.config.chainAdapter.getContractAddress();
@@ -105,7 +108,8 @@ export class DStorage implements DStorageContext {
   /** Disconnect and clear the in-memory encryption keys. */
   disconnect(): void {
     this.wallet = null;
-    this._kek = null;
+    this._keks = [];
+    this._kekNames = [];
     this._initialized = false;
     this.logger?.log(
       "dStorage",
@@ -181,7 +185,7 @@ export class DStorage implements DStorageContext {
       uploadData = bytes;
     } else {
       // 1b. Private: generate a random DEK, encrypt content with it.
-      if (!this._kek) {
+      if (this._keks.length === 0) {
         throw new Error(
           "[dStorage] Encryption key not available. Call init() before uploading private data.",
         );
@@ -194,9 +198,14 @@ export class DStorage implements DStorageContext {
       );
       uploadData = await uploadScheme.encryptPayload(bytes);
 
-      // Wrap the DEK under the KEK and build the key envelope.
-      const wrappedDek = await wrapKey(dek, this._kek);
-      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrappedDek));
+      // Wrap the DEK under every KEK and build a multi-wrapper key envelope.
+      const wrapperEntries = await Promise.all(
+        this._keks.map(async (kek, i) => ({
+          wrappedDek: await wrapKey(dek, kek),
+          wrapKeyName: this._kekNames[i]!,
+        })),
+      );
+      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
     }
 
     // 2. Upload to chosen storage network
@@ -273,7 +282,7 @@ export class DStorage implements DStorageContext {
    * Throws if the KEK is not available or the envelope cannot be parsed.
    */
   private async _getDekScheme(keyEnvelope: string): Promise<CryptoScheme> {
-    if (!this._kek) {
+    if (this._keks.length === 0) {
       throw new Error(
         "[dStorage] Cannot decrypt: KEK not available. Call init() before retrieving private data.",
       );
@@ -284,15 +293,21 @@ export class DStorage implements DStorageContext {
         "[dStorage] Cannot decrypt: key envelope is missing or malformed.",
       );
     }
-    // Use the first wrapper — in v1 there is always exactly one.
-    const wrapper = findWrapper(envelope, envelope.wrappers[0].wrapKeyName);
-    if (!wrapper) {
-      throw new Error(
-        `[dStorage] Cannot decrypt: wrapper '${envelope.wrappers[0].wrapKeyName}' not found in envelope.`,
-      );
+    // Try every (wrapper, KEK) combination — the first that successfully
+    // unwraps returns the DEK. This supports both single-key and multi-key envelopes.
+    for (const wrapper of envelope.wrappers) {
+      for (const kek of this._keks) {
+        try {
+          const dek = await unwrapKey(wrapper.wrappedDek, kek);
+          return XChaChaScheme.fromKey(dek);
+        } catch {
+          // This wrapper/KEK pair didn't match — try the next combination.
+        }
+      }
     }
-    const dek = await unwrapKey(wrapper.wrappedDek, this._kek);
-    return XChaChaScheme.fromKey(dek);
+    throw new Error(
+      "[dStorage] Cannot decrypt: none of the key envelope wrappers matched the available KEKs.",
+    );
   }
 
   // Accepts an optional pre-built CryptoScheme (unwrapped from a key envelope).
@@ -471,7 +486,7 @@ export class DStorage implements DStorageContext {
   ): Promise<MetaTxReceipt> {
     this.assertConnected();
 
-    if (!this._kek) {
+    if (this._keks.length === 0) {
       throw new Error(
         "[dStorage] executeMetaTransaction() requires an encryption key.",
       );
@@ -496,15 +511,20 @@ export class DStorage implements DStorageContext {
         encryptionScheme: "",
       };
     }
-    if (!this._kek) {
+    if (this._keks.length === 0) {
       throw new Error(
         "[dStorage] Cannot prepare upload crypto: KEK not available. Call init() first.",
       );
     }
     const dek = generateDek();
     const uploadScheme = XChaChaScheme.fromKey(dek);
-    const wrappedDek = await wrapKey(dek, this._kek);
-    const keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrappedDek));
+    const wrapperEntries = await Promise.all(
+      this._keks.map(async (kek, i) => ({
+        wrappedDek: await wrapKey(dek, kek),
+        wrapKeyName: this._kekNames[i]!,
+      })),
+    );
+    const keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
     return {
       uploadScheme,
       keyEnvelope,
@@ -525,7 +545,7 @@ export class DStorage implements DStorageContext {
     onProgress?: (p: UploadProgress) => void,
     isPublic = false,
   ): Promise<UploadResult> {
-    if (!isPublic && !this._kek) {
+    if (!isPublic && this._keks.length === 0) {
       throw new Error(
         "[dStorage] Encryption key not available. Call init() before uploading private data.",
       );
@@ -548,8 +568,13 @@ export class DStorage implements DStorageContext {
     if (!isPublic) {
       const dek = generateDek();
       uploadScheme = XChaChaScheme.fromKey(dek);
-      const wrappedDek = await wrapKey(dek, this._kek!);
-      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrappedDek));
+      const wrapperEntries = await Promise.all(
+        this._keks.map(async (kek, i) => ({
+          wrappedDek: await wrapKey(dek, kek),
+          wrapKeyName: this._kekNames[i]!,
+        })),
+      );
+      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
     }
 
     const chunkEntries: ChunkManifest["chunks"] = [];

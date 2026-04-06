@@ -141,25 +141,34 @@ export async function unwrapKey(
 // ── Envelope helpers ──────────────────────────────────────────────────────────
 
 /**
- * Build a v1 key envelope containing a single seed-derived wrapper.
+ * Build a v1 key envelope from one or more wrapped DEKs.
  *
- * @param wrappedDek   base64url-encoded wrapped DEK from wrapKey()
- * @param wrapKeyName  Identifier for this wrapper. Defaults to "password".
+ * Each entry wraps the same random DEK under a different KEK (one per seed
+ * provider), allowing any of the corresponding recipients to independently
+ * decrypt the same content without re-encryption.
+ *
+ * @param wrappers  Non-empty array of `{ wrappedDek, wrapKeyName }` pairs.
+ *                  `wrappedDek` is the base64url-encoded output of wrapKey().
+ *                  `wrapKeyName` is a caller-chosen label (e.g. "provider-0").
+ *
+ * @throws if `wrappers` is empty.
  */
 export function buildKeyEnvelope(
-  wrappedDek: string,
-  wrapKeyName = "password",
+  wrappers: Array<{ wrappedDek: string; wrapKeyName: string }>,
 ): KeyEnvelope {
+  if (wrappers.length === 0) {
+    throw new Error(
+      "[dStorage/crypto] buildKeyEnvelope: at least one wrapper is required.",
+    );
+  }
   return {
     v: 1,
-    wrappers: [
-      {
-        wrapKeyName,
-        algorithm: "xchacha20poly1305-v1",
-        kekDerivation: "hkdf-sha256-v1",
-        wrappedDek,
-      },
-    ],
+    wrappers: wrappers.map(({ wrappedDek, wrapKeyName }) => ({
+      wrapKeyName,
+      algorithm: "xchacha20poly1305-v1" as const,
+      kekDerivation: "hkdf-sha256-v1" as const,
+      wrappedDek,
+    })) as [KeyWrapper, ...KeyWrapper[]],
   };
 }
 
@@ -201,32 +210,4 @@ export function findWrapper(
   wrapKeyName: string,
 ): KeyWrapper | null {
   return envelope.wrappers.find((w) => w.wrapKeyName === wrapKeyName) ?? null;
-}
-
-/**
- * Return a new envelope with an additional wrapper appended.
- * Use this to add a second (or Nth) recipient KEK to an existing envelope
- * without re-encrypting the stored data.
- *
- * @param envelope    Existing KeyEnvelope to extend
- * @param wrappedDek  base64url-encoded wrapped DEK from wrapKey() for the new recipient
- * @param wrapKeyName Identifier for this wrapper (e.g. "mnemonic", "additional-0")
- */
-export function addWrapper(
-  envelope: KeyEnvelope,
-  wrappedDek: string,
-  wrapKeyName: string,
-): KeyEnvelope {
-  return {
-    ...envelope,
-    wrappers: [
-      ...envelope.wrappers,
-      {
-        wrapKeyName,
-        algorithm: "xchacha20poly1305-v1",
-        kekDerivation: "hkdf-sha256-v1",
-        wrappedDek,
-      },
-    ],
-  };
 }

@@ -37,17 +37,29 @@ export interface DStorageConfig {
   /** Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...) */
   chainAdapter: ChainAdapter;
   /**
-   * Seed provider that supplies the raw bytes used to derive encryption keys.
-   * When set, sdk.init() calls provider.getSeed() and sets up crypto automatically.
+   * Seed providers that supply the raw bytes used to derive encryption keys.
+   * Each provider produces an independent Key Encryption Key (KEK); all KEKs
+   * wrap the same per-upload DEK, so any of them can independently decrypt.
    *
-   * Choose the provider preferred by the user:
-   *   PasswordSeedProvider   — scrypt-derived from a user password + salt (single-user, no wallet)
+   * Choose the provider(s) preferred by the user:
+   *   PasswordSeedProvider   — scrypt-derived from a user password + salt
    *   MnemonicSeedProvider   — BIP-39 mnemonic or hex seed (Node.js / facade mode)
    *
-   * When omitted, no encryption key is available and all uploaded data will be
-   * stored as plaintext (public).
+   * When omitted or empty, no encryption key is available and all uploaded data
+   * will be stored as plaintext (public).
+   *
+   * @example
+   * // Single provider (most common)
+   * encryptionSeedProviders: [new PasswordSeedProvider({ password, salt })]
+   *
+   * @example
+   * // Two providers — data accessible by either password or mnemonic
+   * encryptionSeedProviders: [
+   *   new PasswordSeedProvider({ password, salt }),
+   *   new MnemonicSeedProvider({ mnemonic }),
+   * ]
    */
-  encryptionSeedProvider?: EncryptionSeedProvider;
+  encryptionSeedProviders?: EncryptionSeedProvider[];
   /**
    * On-chain address of an already-deployed DataRegistry contract.
    * If omitted, sdk.init() will deploy a new contract and return its address.

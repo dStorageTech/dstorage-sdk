@@ -29,11 +29,13 @@ function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
-    encryptionSeedProvider: new PasswordSeedProvider({
-      password: "dstorage-test-passphrase-v1!",
-      salt: address,
-      params: { N: 1024, r: 8, p: 1 },
-    }),
+    encryptionSeedProviders: [
+      new PasswordSeedProvider({
+        password: "dstorage-test-passphrase-v1!",
+        salt: address,
+        params: { N: 1024, r: 8, p: 1 },
+      }),
+    ],
   };
 }
 

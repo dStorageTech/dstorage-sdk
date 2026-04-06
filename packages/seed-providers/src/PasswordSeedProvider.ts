@@ -197,6 +197,7 @@ export interface FromKdfParamsConfig extends StoredKdfParams {
 // ---------------------------------------------------------------------------
 
 export class PasswordSeedProvider implements EncryptionSeedProvider {
+  readonly name = "password";
   private readonly password: string;
   private readonly salt: Uint8Array;
   private readonly N: number;
