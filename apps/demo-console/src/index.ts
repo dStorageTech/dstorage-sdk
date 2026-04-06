@@ -50,7 +50,10 @@ import {
   derivePrivateStatePassword,
   initWallet,
 } from "./wallet/index.js";
-import { MnemonicSeedProvider } from "@dstorage/seed-providers";
+import {
+  MnemonicSeedProvider,
+  PasswordSeedProvider,
+} from "@dstorage/seed-providers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -329,10 +332,25 @@ async function main(): Promise<void> {
     });
 
     // ── 9. Initialise the DStorage SDK ──────────────────────────────────────
+    // Two seed providers are registered here, which means every uploaded file
+    // will be encrypted with a random DEK that is wrapped under *both* KEKs —
+    // one derived from the user's mnemonic/seed and one from the demo password.
+    // Either provider can independently decrypt the data: recovering the mnemonic
+    // is enough to regain access, and so is knowing the password. This mirrors a
+    // real-world "backup recovery key" pattern without any re-encryption of the
+    // stored content.
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter,
-      encryptionSeedProviders: [new MnemonicSeedProvider(credentials)],
+      encryptionSeedProviders: [
+        new MnemonicSeedProvider(credentials),
+        // TODO: In a real app derive the password from user input.
+        new PasswordSeedProvider({
+          password: "dstorage-demo-password-2026!",
+          salt: "dstorage:demo:v1",
+          preset: "v1-lite",
+        }),
+      ],
       logger,
       ...(contractAddressInput
         ? { dataRegistryAddress: contractAddressInput }
