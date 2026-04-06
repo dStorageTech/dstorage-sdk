@@ -171,7 +171,8 @@ npm test
 Integration tests exercise real network adapters end-to-end:
 
 - **arlocal-only suite** — `ArweaveLocalStorageAdapter` against a local arlocal node with `MockMidnightChainAdapter`
-- **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node)
+- **multi-key wrapping suite** — uploads encrypted with two seed providers verified against real arlocal storage; each provider independently decrypts and an unrelated provider is rejected
+- **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node); includes wallet-isolation test verifying that a different seed provider cannot decrypt another user's private references
 
 #### Prerequisites
 
@@ -211,6 +212,12 @@ Use `-t` to filter by name (matches the `describe` label, the `it` label, or any
 ```sh
 # Run only the arlocal-only suite
 npm run test:integration -- -t "arlocal only"
+
+# Run only the multi-key wrapping suite
+npm run test:integration -- -t "multi-key wrapping"
+
+# Run only the full-stack Midnight suite
+npm run test:integration -- -t "full stack"
 
 # Run a single test by name
 npm run test:integration -- -t "uploads and retrieves private data"
@@ -298,7 +305,6 @@ console.log(receipt.chainRefId); // On-chain reference ID
 | `AR`                    | Arweave        | Storage payment adapter (preview/simulated mode) |
 | `DUST`                  | Midnight       | Chain payment adapter (preview/simulated mode)   |
 | `MOCK`                  | Mock           | Development & testing (simulated)                |
-| `ANT` / `ETH` / `MATIC` | Token registry | Defined token metadata for future/override use   |
 
 Tokens are selected automatically based on your chosen adapters.
 
@@ -477,7 +483,7 @@ Encryption keys are derived deterministically from the seed provider's inputs �
 | -------------------------- | ---------- | --------------------------------------------- |
 | Mock (localStorage/memory) | ✅ Live    | Perfect for development & demos               |
 | Arweave Local              | ✅ Live    | Local arlocal integration testing             |
-| Arweave                    | 🟡 Preview | Requires `arweave` package + ArConnect wallet |
+| Arweave                    | ✅ Live    | Requires `arweave` package + Wander wallet |
 | Autonomi                   | 🔵 Stub    | Awaiting Autonomi JS SDK stability            |
 
 ### Blockchain
