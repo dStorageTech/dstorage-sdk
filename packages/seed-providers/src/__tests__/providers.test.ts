@@ -1,31 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DemoSeedProvider } from "../DemoSeedProvider.js";
 import { MnemonicSeedProvider } from "../MnemonicSeedProvider.js";
-
-// ---------------------------------------------------------------------------
-// DemoSeedProvider
-// ---------------------------------------------------------------------------
-
-describe("DemoSeedProvider", () => {
-  it("same address → same seed (determinism)", async () => {
-    const p = new DemoSeedProvider("0xTestAddress");
-    const a = await p.getSeed();
-    const b = await p.getSeed();
-    expect(a).toEqual(b);
-  });
-
-  it("different address → different seed", async () => {
-    const a = await new DemoSeedProvider("0xAddress1").getSeed();
-    const b = await new DemoSeedProvider("0xAddress2").getSeed();
-    expect(a).not.toEqual(b);
-  });
-
-  it("default address → produces a 32-byte Uint8Array", async () => {
-    const seed = await new DemoSeedProvider().getSeed();
-    expect(seed).toBeInstanceOf(Uint8Array);
-    expect(seed.byteLength).toBe(32);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // MnemonicSeedProvider

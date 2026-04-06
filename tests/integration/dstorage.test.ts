@@ -29,7 +29,7 @@ import { DStorage } from "@dstorage/core";
 import { MockMidnightChainAdapter } from "@dstorage/chain";
 import {
   MnemonicSeedProvider,
-  DemoSeedProvider,
+  PasswordSeedProvider,
 } from "@dstorage/seed-providers";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
@@ -55,7 +55,11 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     sdk = new DStorage({
       storageAdapter: adapter,
       chainAdapter: new MockMidnightChainAdapter({ logger: console }),
-      encryptionSeedProvider: new DemoSeedProvider(),
+      encryptionSeedProvider: new PasswordSeedProvider({
+        password: "dstorage-integration-test-v1!",
+        salt: "dstorage:integration-test:arlocal",
+        params: { N: 1024, r: 8, p: 1 },
+      }),
     });
     await sdk.init();
   });

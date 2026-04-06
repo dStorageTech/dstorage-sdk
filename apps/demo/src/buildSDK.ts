@@ -6,7 +6,7 @@ import {
   MockMidnightChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage/core";
-import { DemoSeedProvider } from "@dstorage/seed-providers";
+import { PasswordSeedProvider } from "@dstorage/seed-providers";
 import { PROOF_SERVER_ENDPOINT } from "./adapterConfigs";
 import type {
   StorageAdapterKey,
@@ -79,7 +79,12 @@ export async function buildSDK(
     });
   }
 
-  const encryptionSeedProvider = new DemoSeedProvider();
+  // NOTE: In a real app derive the password from user input or a wallet signature.
+  const encryptionSeedProvider = new PasswordSeedProvider({
+    password: "dstorage-demo-password-2024!",
+    salt: "dstorage:demo:v1",
+    preset: "v1-lite",
+  });
 
   return new DStorage({
     storageAdapter,

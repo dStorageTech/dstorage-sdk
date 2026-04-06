@@ -247,7 +247,6 @@ const sdk = new DStorage({
     salt: "myapp:v1:alice@example.com", // app + user identifier — store this alongside your data
   }),
   // or: new MnemonicSeedProvider({ mnemonic: "..." })
-  // or: new DemoSeedProvider() for testing
 });
 
 // 2. Init — derives the encryption key and prepares the chain contract
@@ -310,7 +309,7 @@ Tokens are selected automatically based on your chosen adapters.
 ```
 @dstorage/core              ← Developer-facing API (this is what you import)
     ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation
-    ├── @dstorage/seed-providers← Seed providers: PasswordSeedProvider | MnemonicSeedProvider | DemoSeedProvider
+    ├── @dstorage/seed-providers← Seed providers: PasswordSeedProvider | MnemonicSeedProvider
     ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveTurbo | Arweave Local | Autonomi(stub)
     ├── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight
     └── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed
@@ -401,11 +400,10 @@ HKDF is appropriate here because the seed input is always high-entropy (32 bytes
 
 The `@dstorage/seed-providers` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
 
-| Provider               | Seed source                                | Cross-device portability                                        |
-| ---------------------- | ------------------------------------------ | --------------------------------------------------------------- |
-| `PasswordSeedProvider` | scrypt(password, caller-supplied salt)     | ✅ Same seed on any device — depends only on password + salt    |
-| `MnemonicSeedProvider` | BIP-39 mnemonic phrase or 64-byte hex seed | ✅ Same seed wherever the same mnemonic/hex is imported         |
-| `DemoSeedProvider`     | SHA-256 of a fixed address string          | ⚠️ Deterministic but predictable — development and testing only |
+| Provider               | Seed source                                | Cross-device portability                                     |
+| ---------------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| `PasswordSeedProvider` | scrypt(password, caller-supplied salt)     | ✅ Same seed on any device — depends only on password + salt |
+| `MnemonicSeedProvider` | BIP-39 mnemonic phrase or 64-byte hex seed | ✅ Same seed wherever the same mnemonic/hex is imported      |
 
 #### Cross-device portability
 

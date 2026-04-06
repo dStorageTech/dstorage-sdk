@@ -40,9 +40,9 @@ export interface DStorageConfig {
    * Seed provider that supplies the raw bytes used to derive encryption keys.
    * When set, sdk.init() calls provider.getSeed() and sets up crypto automatically.
    *
-   * Choose the provider that matches the wallet available in your environment:
-   *   MnemonicSeedProvider   — BIP-39 mnemonic or hex seed (temporary, facade/Node.js only)
-   *   DemoSeedProvider       — fixed deterministic seed for testing
+   * Choose the provider preferred by the user:
+   *   PasswordSeedProvider   — scrypt-derived from a user password + salt (single-user, no wallet)
+   *   MnemonicSeedProvider   — BIP-39 mnemonic or hex seed (Node.js / facade mode)
    *
    * When omitted, no encryption key is available and all uploaded data will be
    * stored as plaintext (public).

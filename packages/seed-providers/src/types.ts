@@ -15,7 +15,6 @@
  * Implementations:
  *   PasswordSeedProvider  — scrypt-derived from a user password + caller-supplied salt
  *   MnemonicSeedProvider  — BIP-39 mnemonic or hex seed
- *   DemoSeedProvider      — fixed deterministic seed for testing/demos
  */
 export interface EncryptionSeedProvider {
   getSeed(): Promise<Uint8Array>;

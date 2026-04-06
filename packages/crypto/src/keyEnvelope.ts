@@ -202,3 +202,31 @@ export function findWrapper(
 ): KeyWrapper | null {
   return envelope.wrappers.find((w) => w.wrapKeyName === wrapKeyName) ?? null;
 }
+
+/**
+ * Return a new envelope with an additional wrapper appended.
+ * Use this to add a second (or Nth) recipient KEK to an existing envelope
+ * without re-encrypting the stored data.
+ *
+ * @param envelope    Existing KeyEnvelope to extend
+ * @param wrappedDek  base64url-encoded wrapped DEK from wrapKey() for the new recipient
+ * @param wrapKeyName Identifier for this wrapper (e.g. "mnemonic", "additional-0")
+ */
+export function addWrapper(
+  envelope: KeyEnvelope,
+  wrappedDek: string,
+  wrapKeyName: string,
+): KeyEnvelope {
+  return {
+    ...envelope,
+    wrappers: [
+      ...envelope.wrappers,
+      {
+        wrapKeyName,
+        algorithm: "xchacha20poly1305-v1",
+        kekDerivation: "hkdf-sha256-v1",
+        wrappedDek,
+      },
+    ],
+  };
+}
