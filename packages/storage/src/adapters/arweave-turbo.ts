@@ -44,8 +44,7 @@ import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { Signer } from "@dha-team/arbundles";
 
-const ARWEAVE_GATEWAY_URL =
-  "https://kvvtpcgsher5z5knp5r3n4qglewgfxkyyrb63ax64hcpiwtlzk6q.turbo-gateway.com";
+const ARWEAVE_GATEWAY_URL = "https://turbo-gateway.com";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -159,9 +158,11 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     await dataItem.sign(signer);
 
     const raw: Uint8Array = dataItem.getRaw();
-    const txId = await this._uploadToTurbo(raw);
+    const { txId, dataCaches } = await this._uploadToTurbo(raw);
 
-    const url = `${this.gateway}/${txId}`;
+    const url = dataCaches[0]
+      ? `https://${dataCaches[0]}/${txId}`
+      : `${this.gateway}/${txId}`;
     this.logger?.log(
       "dStorage/arweave-turbo",
       `Uploaded via Turbo → txId: ${txId}`,
@@ -292,7 +293,9 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
    * POST the complete signed ANS-104 data item bytes directly to the Turbo bundler.
    * Server Turbo Credits are consumed based on the signing key — no client wallet needed.
    */
-  private async _uploadToTurbo(dataItemBuffer: Uint8Array): Promise<string> {
+  private async _uploadToTurbo(
+    dataItemBuffer: Uint8Array,
+  ): Promise<{ txId: string; dataCaches: string[] }> {
     this.logger?.log(
       "dStorage/arweave-turbo",
       `Uploading ${dataItemBuffer.byteLength}-byte signed data item to Turbo…`,
@@ -300,25 +303,24 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
 
     const { TurboFactory } = await import("@ardrive/turbo-sdk");
     const turbo = TurboFactory.unauthenticated();
-    let result: { id?: string };
     try {
-      result = await turbo.uploadSignedDataItem({
+      const result = await turbo.uploadSignedDataItem({
         dataItemStreamFactory: () => Buffer.from(dataItemBuffer),
         dataItemSizeFactory: () => dataItemBuffer.byteLength,
         signal: AbortSignal.timeout(10_000),
       });
+      if (!result.id) {
+        throw new Error(
+          "[dStorage/arweave-turbo] Arweave Turbo did not return a transaction id.",
+        );
+      }
+
+      return { txId: result.id, dataCaches: result.dataCaches };
     } catch (err) {
       throw new Error(
         `[dStorage/arweave-turbo] Upload to Arweave Turbo failed: ${err}`,
       );
     }
-
-    if (!result.id) {
-      throw new Error(
-        "[dStorage/arweave-turbo] Arweave Turbo did not return a transaction id.",
-      );
-    }
-    return result.id;
   }
 }
 
