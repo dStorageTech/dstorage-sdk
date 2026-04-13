@@ -12,7 +12,7 @@
  * key-protecting mechanism (wallet-bound), enabling future multi-recipient
  * access without re-encrypting stored data — just add another wrapper entry.
  *
- * Envelope schema:
+ * Envelope schema (private uploads only — public uploads have no envelope):
  *   {
  *     "v": 1,
  *     "wrappers": [
@@ -24,6 +24,10 @@
  *       }
  *     ]
  *   }
+ *
+ * The ownerSecret for private uploads is derived deterministically from the wrapped DEK:
+ *   ownerSecret = HKDF-SHA256(ikm=DEK, salt=rawStorageId, info="dstorage:owner-secret:v1")
+ * Any holder of a valid KEK can unwrap the DEK and re-derive the ownerSecret.
  *
  * `wrappedDek` binary layout (72 bytes):
  *   [ nonce(24) | ciphertext(32) | auth-tag(16) ]
@@ -48,7 +52,13 @@ export interface KeyWrapper {
 
 export interface KeyEnvelope {
   v: 1;
-  /** At least one wrapper must be present. */
+  /**
+   * Wrappers for the data DEK (content encryption key). Always present in a valid envelope.
+   * The ownerSecret for ownership proofs is derived from the same DEK:
+   *   ownerSecret = HKDF-SHA256(DEK, rawStorageId, "dstorage:owner-secret:v1")
+   * Any holder of a valid KEK can unwrap the DEK and re-derive the ownerSecret.
+   * Public uploads have no envelope (keyEnvelope = "").
+   */
   wrappers: [KeyWrapper, ...KeyWrapper[]];
 }
 
@@ -138,14 +148,63 @@ export async function unwrapKey(
   return decryptStorageIdXChaCha(kek, wrapped);
 }
 
+// ── Owner secret derivation ───────────────────────────────────────────────────
+
+/** Domain separator for owner secret derivation. Must never be reused for any other key. */
+const OWNER_SECRET_DOMAIN = "dstorage:owner-secret:v1";
+
+/**
+ * Derive a 32-byte owner secret from the data DEK and the raw storage ID.
+ *
+ * Derivation: HKDF-SHA-256(ikm=dek, salt=rawStorageId, info=OWNER_SECRET_DOMAIN)
+ *
+ * Security properties:
+ *   - Post-quantum resistant: HKDF-SHA-256 is purely symmetric (no elliptic-curve math).
+ *   - One-way: the DEK cannot be recovered from the ownerSecret (HKDF preimage resistance).
+ *   - Key-separated: the ownerSecret cannot be used for data encryption.
+ *   - Per-upload unique: different DEK + storageId per upload → different ownerSecret.
+ *   - Derivable: any holder of a valid KEK can unwrap the DEK and re-derive the ownerSecret.
+ *
+ * @param dek           32-byte data DEK (from the key envelope wrappers)
+ * @param rawStorageId  Raw storage network ID bytes (e.g. Arweave txId encoded as UTF-8)
+ */
+export async function deriveOwnerSecret(
+  dek: Uint8Array,
+  rawStorageId: Uint8Array,
+): Promise<Uint8Array> {
+  // Uint8Array.from() produces Uint8Array<ArrayBuffer> which is required by WebCrypto.
+  const keyMaterial = await globalThis.crypto.subtle.importKey(
+    "raw",
+    Uint8Array.from(dek),
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await globalThis.crypto.subtle.deriveBits(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: Uint8Array.from(rawStorageId),
+      info: new TextEncoder().encode(OWNER_SECRET_DOMAIN),
+    },
+    keyMaterial,
+    256,
+  );
+  return new Uint8Array(bits);
+}
+
 // ── Envelope helpers ──────────────────────────────────────────────────────────
 
 /**
- * Build a v1 key envelope from one or more wrapped DEKs.
+ * Build a v1 key envelope wrapping the data DEK under one or more KEKs.
  *
  * Each entry wraps the same random DEK under a different KEK (one per seed
  * provider), allowing any of the corresponding recipients to independently
  * decrypt the same content without re-encryption.
+ *
+ * The ownerSecret for ownership proofs is derived from the same DEK:
+ *   ownerSecret = HKDF-SHA256(DEK, rawStorageId, "dstorage:owner-secret:v1")
+ * No separate ownership key is needed.
  *
  * @param wrappers  Non-empty array of `{ wrappedDek, wrapKeyName }` pairs.
  *                  `wrappedDek` is the base64url-encoded output of wrapKey().

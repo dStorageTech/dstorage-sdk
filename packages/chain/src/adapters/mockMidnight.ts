@@ -231,7 +231,10 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     }));
   }
 
-  async removeReference(refId: string): Promise<void> {
+  async removeReference(
+    refId: string,
+    _ownerSecret?: Uint8Array,
+  ): Promise<void> {
     this.logger?.log(
       "dStorage/mock-midnight",
       "removeReference → calling proof server…",
@@ -261,6 +264,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   async updateReference(
     refId: string,
     update: ChainReferenceUpdate,
+    _ownerSecret?: Uint8Array,
   ): Promise<void> {
     this.logger?.log(
       "dStorage/mock-midnight",

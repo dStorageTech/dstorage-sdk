@@ -32,7 +32,7 @@ import {
   shareReplay,
   type Observable,
 } from "rxjs";
-import { fromHex, toHex } from "@midnight-ntwrk/midnight-js-utils";
+import { toHex } from "@midnight-ntwrk/midnight-js-utils";
 
 /** @internal */
 
@@ -75,10 +75,12 @@ export interface DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    ownerSecret: Uint8Array,
   ) => Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }>;
 
   removeReference: (
     refId: Uint8Array,
+    ownerSecret: Uint8Array,
   ) => Promise<{ txHash: string; blockHeight: number }>;
 
   updateReference: (
@@ -89,6 +91,7 @@ export interface DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    ownerSecret: Uint8Array,
   ) => Promise<{ txHash: string; blockHeight: number }>;
 }
 
@@ -132,26 +135,14 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         ),
       ],
       // ...and combine them to produce the required derived state.
+      // isOurs is set to false here — ownership is determined by the core SDK
+      // (dStorage.ts) by attempting to unwrap the DEK from the keyEnvelope using
+      // the available KEKs. This avoids coupling the chain layer to key material.
       (ledgerState, _privateState) => {
-        const pk = providers.walletProvider.getCoinPublicKey();
-        const zswapPk = { bytes: fromHex(pk) };
-        const contractAddr = encodeContractAddress(
-          this.deployedContractAddress,
-        );
-
         const references = new Map<string, ReferenceEntry>();
         for (const [id, refEntry] of ledgerState.references) {
           const refId = toHex(id);
-          const myCommitment = DataRegistry.pureCircuits.computeOwnerCommitment(
-            zswapPk,
-            id,
-            contractAddr,
-          );
-          const entry = {
-            ...refEntry,
-            isOurs: toHex(refEntry.ownerCommitment) === toHex(myCommitment),
-          };
-          references.set(refId, entry);
+          references.set(refId, refEntry);
         }
 
         return {
@@ -192,26 +183,38 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    ownerSecret: Uint8Array,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
     this.logger?.log(
       "dStorage/midnight",
       `storing reference: storageId=${storageId}`,
     );
-    const txData = await withContractScopedTransaction(
-      this.providers,
-      async (txCtx) => {
-        await this.deployedContract.callTx.storeReference(
-          txCtx,
-          storageId,
-          encryptionScheme,
-          storageProvider,
-          dataLabel,
-          writtenAt,
-          keyEnvelope,
-        );
-      },
-      { scopeName: "storeReference" },
-    );
+    await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
+      ownerSecret,
+    });
+    let txData;
+    try {
+      txData = await withContractScopedTransaction(
+        this.providers,
+        async (txCtx) => {
+          await this.deployedContract.callTx.storeReference(
+            txCtx,
+            storageId,
+            encryptionScheme,
+            storageProvider,
+            dataLabel,
+            writtenAt,
+            keyEnvelope,
+          );
+        },
+        { scopeName: "storeReference" },
+      );
+    } finally {
+      await this.providers.privateStateProvider.set(
+        dataRegistryPrivateStateKey,
+        {},
+      );
+    }
 
     const txHash: string =
       (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
@@ -240,18 +243,30 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
 
   async removeReference(
     refId: Uint8Array,
+    ownerSecret: Uint8Array,
   ): Promise<{ txHash: string; blockHeight: number }> {
     this.logger?.log(
       "dStorage/midnight",
       `removing reference: ${toHex(refId)}`,
     );
-    const txData = await withContractScopedTransaction(
-      this.providers,
-      async (txCtx) => {
-        await this.deployedContract.callTx.removeReference(txCtx, refId);
-      },
-      { scopeName: "removeReference" },
-    );
+    await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
+      ownerSecret,
+    });
+    let txData;
+    try {
+      txData = await withContractScopedTransaction(
+        this.providers,
+        async (txCtx) => {
+          await this.deployedContract.callTx.removeReference(txCtx, refId);
+        },
+        { scopeName: "removeReference" },
+      );
+    } finally {
+      await this.providers.privateStateProvider.set(
+        dataRegistryPrivateStateKey,
+        {},
+      );
+    }
 
     const txHash: string =
       (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
@@ -275,27 +290,39 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     dataLabel: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    ownerSecret: Uint8Array,
   ): Promise<{ txHash: string; blockHeight: number }> {
     this.logger?.log(
       "dStorage/midnight",
       `updating reference: ${toHex(refId)}`,
     );
-    const txData = await withContractScopedTransaction(
-      this.providers,
-      async (txCtx) => {
-        await this.deployedContract.callTx.updateReference(
-          txCtx,
-          refId,
-          storageId,
-          encryptionScheme,
-          storageProvider,
-          dataLabel,
-          writtenAt,
-          keyEnvelope,
-        );
-      },
-      { scopeName: "updateReference" },
-    );
+    await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
+      ownerSecret,
+    });
+    let txData;
+    try {
+      txData = await withContractScopedTransaction(
+        this.providers,
+        async (txCtx) => {
+          await this.deployedContract.callTx.updateReference(
+            txCtx,
+            refId,
+            storageId,
+            encryptionScheme,
+            storageProvider,
+            dataLabel,
+            writtenAt,
+            keyEnvelope,
+          );
+        },
+        { scopeName: "updateReference" },
+      );
+    } finally {
+      await this.providers.privateStateProvider.set(
+        dataRegistryPrivateStateKey,
+        {},
+      );
+    }
 
     const txHash: string =
       (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";

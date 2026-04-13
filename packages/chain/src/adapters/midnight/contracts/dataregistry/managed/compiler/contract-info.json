@@ -9,19 +9,10 @@
       "proof": false,
       "arguments": [
         {
-          "name": "pk",
+          "name": "secret",
           "type": {
-            "type-name": "Struct",
-            "name": "ZswapCoinPublicKey",
-            "elements": [
-              {
-                "name": "bytes",
-                "type": {
-                  "type-name": "Bytes",
-                  "length": 32
-                }
-              }
-            ]
+            "type-name": "Bytes",
+            "length": 32
           }
         },
         {
@@ -204,6 +195,15 @@
     }
   ],
   "witnesses": [
+    {
+      "name": "ownerSecret",
+      "arguments": [
+      ],
+      "result type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    }
   ],
   "contracts": [
   ]

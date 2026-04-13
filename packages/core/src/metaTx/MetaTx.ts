@@ -157,6 +157,17 @@ export class MetaTx {
         ? await uploadCrypto.uploadScheme.encryptStorageId(uploadResult.id)
         : uploadResult.id;
 
+      let ownerSecret: Uint8Array;
+      if (uploadCrypto.dek) {
+        const { deriveOwnerSecret } = await import("@dstorage/crypto");
+        ownerSecret = await deriveOwnerSecret(
+          uploadCrypto.dek,
+          new TextEncoder().encode(uploadResult.id),
+        );
+      } else {
+        ownerSecret = new Uint8Array(32);
+      }
+
       const chainResult = await this.sdk.chainAdapter.writeReference({
         storageId: onChainStorageId,
         encryptionScheme: uploadCrypto.encryptionScheme,
@@ -164,9 +175,8 @@ export class MetaTx {
         dataLabel: file.name,
         writtenAt: Date.now(),
         isOurs: true,
-        ...(uploadCrypto.keyEnvelope !== undefined
-          ? { keyEnvelope: uploadCrypto.keyEnvelope }
-          : {}),
+        keyEnvelope: uploadCrypto.keyEnvelope,
+        ownerSecret,
       });
 
       // If the chain adapter handled payment internally (e.g. Midnight managed

@@ -81,7 +81,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     expect(dec(byMnemonic.bytes)).toBe(content);
   });
 
-  it("key envelope contains two wrappers — one per provider", async () => {
+  it("key envelope contains two wrappers per key set — one per provider", async () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
@@ -95,9 +95,12 @@ describe("multi-key wrapping — upload with two providers", () => {
     expect(ref).not.toBeNull();
     const envelope = JSON.parse(ref!.keyEnvelope!);
     expect(envelope.v).toBe(1);
+    // wrappers: one per provider (data DEK wrapped under each KEK)
     expect(envelope.wrappers).toHaveLength(2);
     expect(envelope.wrappers[0].wrapKeyName).toBe("password");
     expect(envelope.wrappers[1].wrapKeyName).toBe("mnemonic");
+    // ownerWrappers no longer exists — ownerSecret is derived from the DEK
+    expect(envelope.ownerWrappers).toBeUndefined();
   });
 
   it("a third SDK with an unrelated key cannot decrypt the content", async () => {
@@ -205,5 +208,58 @@ describe("multi-key wrapping — upload with two providers", () => {
 
     // Each upload has its own key envelope — the wrapped DEKs differ.
     expect(r1!.keyEnvelope).not.toBe(r2!.keyEnvelope);
+  });
+});
+
+// ── removeReference via any KEK ───────────────────────────────────────────────
+
+describe("removeReference via any available KEK", () => {
+  it("password-only SDK can removeReference an upload made with two providers", async () => {
+    // _computeOwnerSecret unwraps the DEK — any matching KEK suffices.
+    const adapters = sharedAdapters();
+    const uploader = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+    });
+    await uploader.init();
+
+    const { chainRefId } = await uploader.upload(enc("removable by password"));
+
+    const passwordSdk = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider()],
+    });
+    await passwordSdk.init();
+
+    // Should succeed: password KEK can unwrap the DEK → derive ownerSecret
+    await expect(
+      passwordSdk.removeReference(chainRefId),
+    ).resolves.toBeUndefined();
+
+    // Ref is gone
+    const refs = await passwordSdk.listReferences();
+    expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
+  });
+
+  it("mnemonic-only SDK can removeReference an upload made with two providers", async () => {
+    const adapters = sharedAdapters();
+    const uploader = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+    });
+    await uploader.init();
+
+    const { chainRefId } = await uploader.upload(enc("removable by mnemonic"));
+
+    const mnemonicSdk = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [mnemonicProvider()],
+    });
+    await mnemonicSdk.init();
+
+    // Should succeed: mnemonic KEK can unwrap the DEK → derive ownerSecret
+    await expect(
+      mnemonicSdk.removeReference(chainRefId),
+    ).resolves.toBeUndefined();
   });
 });

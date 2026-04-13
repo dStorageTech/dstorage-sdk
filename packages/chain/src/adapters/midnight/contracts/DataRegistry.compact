@@ -8,12 +8,22 @@
 // Encryption/decryption is handled by the dStorage SDK client-side before/after storage access.
 //
 // Circuits:
-//   deriveRefId     — deterministic helper to derive a refId from counter + instance salt
-//   storeReference  — record a new storage reference, returns a unique refId
+//   deriveRefId          — deterministic helper to derive a refId from counter + instance salt
+//   computeOwnerCommitment — pure helper: hash ownerSecret into a shielded commitment
+//   storeReference       — record a new storage reference, returns a unique refId
+//   removeReference      — delete a reference; caller must prove ownership via ownerSecret witness
+//   updateReference      — update mutable fields; caller must prove ownership via ownerSecret witness
 //
 pragma language_version >= 0.20;
 
 import CompactStandardLibrary;
+
+// Witness: the prover supplies this value at proof-generation time.
+// It is never disclosed on-chain — only its hash (ownerCommitment) is stored.
+// The TypeScript SDK derives ownerSecret = HKDF-SHA256(dek, rawStorageId)
+// before calling any impure circuit, then stores it in the private state so
+// this function can read it during ZK proof generation.
+witness ownerSecret(): Bytes<32>;
 
 // A single storage reference entry stored on-chain.
 export struct ReferenceEntry {
@@ -48,8 +58,9 @@ export struct ReferenceEntry {
   // Empty string ("") for public (unencrypted) uploads.
   // See KeyEnvelope type in @dstorage/crypto for the schema.
   keyEnvelope: Opaque<"string">;
-  // Hidden owner commitment: persistentHash of the caller's public key.
-  // Only the holder of the matching secret key can prove ownership and remove this entry.
+  // Hidden owner commitment: persistentHash of the caller's witness-supplied ownerSecret.
+  // ownerSecret = HKDF-SHA256(dek, rawStorageId) — never disclosed on-chain.
+  // Any holder of the DEK (unwrapped from keyEnvelope) can re-derive the ownerSecret.
   ownerCommitment: Bytes<32>;
 }
 
@@ -83,28 +94,36 @@ constructor() {
 
 // ── Circuits ──────────────────────────────────────────────────────────────────
 
-// Create a shielded user ID.
+// Compute a shielded owner commitment from a private secret.
 //
 // Purpose:
-// - Produces a deterministic, obfuscated identifier derived from the user's public key,
-//   a nonce, and an `instanceSalt` to scope IDs to this contract instance,
-//   so the client can determine which entries belong to the current user.
+// - Produces a deterministic, obfuscated 32-byte commitment derived from the
+//   caller's private ownerSecret (a witness), a nonce, and an `instanceSalt`
+//   to scope commitments to this contract instance.
+// - The ownerSecret is never disclosed on-chain; only its hash is stored.
+// - The TypeScript SDK derives ownerSecret = HKDF-SHA256(dek, rawStorageId),
+//   where dek is the per-upload Data Encryption Key. This makes commitments:
+//     - Post-quantum resistant (HMAC-SHA-256, no elliptic-curve math)
+//     - One-way: DEK cannot be recovered from the commitment
+//     - Per-upload unique: different DEK+storageId → different ownerSecret
 //
 // Parameters:
-// - `pk`: user's public key for the identity being committed.
-// - `nonce`: to avoid linkability.
+// - `secret`: caller-supplied private secret (Bytes<32>). In impure circuits this
+//   is provided by the ownerSecret() witness. Exposed as a pure circuit parameter
+//   so client code can verify ownership by supplying the derived secret.
+// - `nonce`: to avoid linkability across different entries.
 // - `instanceSalt`: contract instance-specific salt (e.g. `kernel.self().bytes`)
 //   to avoid cross-contract collisions.
 //
-// Returns: computed user ID (Bytes<32>), disclosed to allow ledger usage as a map key.
+// Returns: computed commitment (Bytes<32>), disclosed for ledger storage.
 //
 export circuit computeOwnerCommitment(
-                 pk: ZswapCoinPublicKey,
+                 secret: Bytes<32>,
                  nonce: Bytes<32>,
                  instanceSalt: Bytes<32>,
                  ): Bytes<32> {
   return disclose(persistentHash<Vector<4, Bytes<32>>>(
-                    [pad(32, "dstorage:owner:"), pk.bytes, nonce, instanceSalt]
+                    [pad(32, "dstorage:owner:"), secret, nonce, instanceSalt]
                     ));
 }
 
@@ -147,9 +166,10 @@ export circuit storeReference(
   const refId = deriveRefId(refCounter as Bytes<32>, kernel.self().bytes);
   assert(!references.member(disclose(refId)), "Reference already stored");
 
-  // Derive owner commitment from the caller's public key.
-  // TODO: do not use ownPublicKey() for auth: https://github.com/LFDT-Minokawa/compact/issues/283
-  const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
+  // Derive owner commitment from the private witness secret.
+  // The SDK sets ownerSecret = HKDF-SHA256(dek, rawStorageId) in private state
+  // before proof generation. This secret is never transmitted on-chain.
+  const ownerCommitment = computeOwnerCommitment(ownerSecret(), refId, kernel.self().bytes);
 
   // Persist the reference entry.
   const entry = ReferenceEntry { storageId,
@@ -179,8 +199,7 @@ export circuit storeReference(
 export circuit removeReference(refId: Bytes<32>): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
-  // TODO: do not use ownPublicKey() for auth: https://github.com/LFDT-Minokawa/compact/issues/283
-  const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
+  const ownerCommitment = computeOwnerCommitment(ownerSecret(), refId, kernel.self().bytes);
   assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
   references.remove(disclose(refId));
 }
@@ -211,8 +230,7 @@ export circuit updateReference(
                  ): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
-  // TODO: do not use ownPublicKey() for auth: https://github.com/LFDT-Minokawa/compact/issues/283
-  const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
+  const ownerCommitment = computeOwnerCommitment(ownerSecret(), refId, kernel.self().bytes);
   assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
   const updatedEntry =
           ReferenceEntry { storageId,

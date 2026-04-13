@@ -69,7 +69,9 @@ export class DataRegistrySimulator {
     dataLabel: string,
     writtenAt: bigint,
     keyEnvelope: string = "",
+    ownerSecret: Uint8Array = new Uint8Array(32),
   ): Uint8Array {
+    this.circuitContext.currentPrivateState = { ownerSecret };
     const res = this.contract.impureCircuits.storeReference(
       this.circuitContext,
       storageId,
@@ -79,16 +81,20 @@ export class DataRegistrySimulator {
       writtenAt,
       keyEnvelope,
     );
-    this.circuitContext = res.context;
+    this.circuitContext = { ...res.context, currentPrivateState: {} };
     return res.result;
   }
 
-  public removeReference(refId: Uint8Array): [] {
+  public removeReference(
+    refId: Uint8Array,
+    ownerSecret: Uint8Array = new Uint8Array(32),
+  ): [] {
+    this.circuitContext.currentPrivateState = { ownerSecret };
     const res = this.contract.impureCircuits.removeReference(
       this.circuitContext,
       refId,
     );
-    this.circuitContext = res.context;
+    this.circuitContext = { ...res.context, currentPrivateState: {} };
     return res.result;
   }
 
@@ -100,7 +106,9 @@ export class DataRegistrySimulator {
     dataLabel: string,
     writtenAt: bigint,
     keyEnvelope: string = "",
+    ownerSecret: Uint8Array = new Uint8Array(32),
   ): [] {
+    this.circuitContext.currentPrivateState = { ownerSecret };
     const res = this.contract.impureCircuits.updateReference(
       this.circuitContext,
       refId,
@@ -111,7 +119,7 @@ export class DataRegistrySimulator {
       writtenAt,
       keyEnvelope,
     );
-    this.circuitContext = res.context;
+    this.circuitContext = { ...res.context, currentPrivateState: {} };
     return res.result;
   }
 }

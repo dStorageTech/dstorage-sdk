@@ -169,6 +169,50 @@ describe("multi-record scenarios", () => {
   });
 });
 
+// ── Upload → list → remove lifecycle ─────────────────────────────────────────
+
+describe("upload → list → remove lifecycle", () => {
+  it("uploaded ref appears in listReferences then disappears after removeReference", async () => {
+    const alice = await makeUser("0xAlice_lifecycle1");
+    const { chainRefId } = await alice.upload(enc("to be removed"));
+
+    const before = await alice.listReferences();
+    expect(before.some((r) => r.refId === chainRefId)).toBe(true);
+
+    await alice.removeReference(chainRefId);
+
+    const after = await alice.listReferences();
+    expect(after.find((r) => r.refId === chainRefId)).toBeUndefined();
+  });
+
+  it("Alice's private ref shows isOurs=true for Alice, isOurs=false for Bob", async () => {
+    const sharedStorage = new MockStorageAdapter();
+    const sharedChain = new MockChainAdapter();
+    const alice = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: sharedChain,
+      encryptionSeedProviders: [testSeedProvider("0xAlice_iso2")],
+    });
+    const bob = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: sharedChain,
+      encryptionSeedProviders: [testSeedProvider("0xBob_iso2")],
+    });
+    await alice.init();
+    await bob.init();
+
+    const { chainRefId } = await alice.upload(enc("Alice only"));
+
+    const aliceRefs = await alice.listReferences();
+    const aliceEntry = aliceRefs.find((r) => r.refId === chainRefId);
+    expect(aliceEntry?.isOurs).toBe(true);
+
+    const bobRefs = await bob.listReferences();
+    const bobEntry = bobRefs.find((r) => r.refId === chainRefId);
+    expect(bobEntry?.isOurs).toBe(false);
+  });
+});
+
 // ── Disconnect / re-init ──────────────────────────────────────────────────────
 
 describe("disconnect and reconnect", () => {

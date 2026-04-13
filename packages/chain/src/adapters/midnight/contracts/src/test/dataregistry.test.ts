@@ -5,7 +5,6 @@ import {
 } from "@midnight-ntwrk/midnight-js-network-id";
 import {
   encodeContractAddress,
-  encodeCoinPublicKey,
   convertFieldToBytes,
 } from "@midnight-ntwrk/compact-runtime";
 import { pureCircuits } from "../../dataregistry/managed/contract/index.js";
@@ -280,18 +279,23 @@ describe("DataRegistry contract", () => {
 
     it("throws when a non-owner tries to remove another user's reference", () => {
       const entry = randomEntry();
+      // Owner stores with their secret
       const refId = simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
         entry.dataLabel,
         entry.writtenAt,
+        "",
+        owner.secretKey,
       );
 
-      // Switch to a different user
+      // Switch to a different user and try to remove with a different secret
       simulator.switchUser(other.pk);
 
-      expect(() => simulator.removeReference(refId)).toThrow("Not the owner");
+      expect(() => simulator.removeReference(refId, other.secretKey)).toThrow(
+        "Not the owner",
+      );
     });
 
     it("removes only the targeted reference, leaving others intact", () => {
@@ -403,12 +407,15 @@ describe("DataRegistry contract", () => {
 
     it("throws when a non-owner tries to update another user's reference", () => {
       const entry = randomEntry();
+      // Owner stores with their secret
       const refId = simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
         entry.dataLabel,
         entry.writtenAt,
+        "",
+        owner.secretKey,
       );
 
       simulator.switchUser(other.pk);
@@ -421,6 +428,8 @@ describe("DataRegistry contract", () => {
           "ipfs",
           "hijacked",
           randomTimestamp(),
+          "",
+          other.secretKey,
         ),
       ).toThrow("Not the owner");
     });
@@ -515,9 +524,9 @@ describe("DataRegistry contract", () => {
       }
     });
 
-    it("stored ownerCommitment matches computeOwnerCommitment(pk, refId, contractAddress)", () => {
+    it("stored ownerCommitment matches computeOwnerCommitment(ownerSecret, refId, contractAddress)", () => {
       const instanceSalt = encodeContractAddress(simulator.contractAddress);
-      const pkBytes = encodeCoinPublicKey(owner.pk);
+      const ownerSecret = owner.secretKey; // 32-byte witness secret
 
       const entry = randomEntry();
       const refId = simulator.storeReference(
@@ -526,11 +535,13 @@ describe("DataRegistry contract", () => {
         entry.storageProvider,
         entry.dataLabel,
         entry.writtenAt,
+        "",
+        ownerSecret,
       );
 
       // The contract uses refId as the nonce in computeOwnerCommitment
       const expectedCommitment = pureCircuits.computeOwnerCommitment(
-        { bytes: pkBytes },
+        ownerSecret,
         refId,
         instanceSalt,
       );
@@ -544,20 +555,24 @@ describe("DataRegistry contract", () => {
       );
     });
 
-    it("ownerCommitment changes when a different user stores (different pk)", () => {
+    it("ownerCommitment changes when a different ownerSecret is used", () => {
       const instanceSalt = encodeContractAddress(simulator.contractAddress);
       const entry = randomEntry();
 
-      // Owner stores
+      // Owner stores with their secret
+      const ownerSecret = owner.secretKey;
       const refId1 = simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
         entry.dataLabel,
         entry.writtenAt,
+        "",
+        ownerSecret,
       );
 
-      // Other user stores
+      // Other user stores with a different secret
+      const otherSecret = other.secretKey;
       simulator.switchUser(other.pk);
       const refId2 = simulator.storeReference(
         entry.storageId,
@@ -565,16 +580,18 @@ describe("DataRegistry contract", () => {
         entry.storageProvider,
         entry.dataLabel,
         entry.writtenAt,
+        "",
+        otherSecret,
       );
 
-      // Verify both commitments match what computeOwnerCommitment produces for each pk
+      // Verify both commitments match what computeOwnerCommitment produces for each secret
       const ownerCommitment = pureCircuits.computeOwnerCommitment(
-        { bytes: encodeCoinPublicKey(owner.pk) },
+        ownerSecret,
         refId1,
         instanceSalt,
       );
       const otherCommitment = pureCircuits.computeOwnerCommitment(
-        { bytes: encodeCoinPublicKey(other.pk) },
+        otherSecret,
         refId2,
         instanceSalt,
       );

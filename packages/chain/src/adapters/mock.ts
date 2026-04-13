@@ -111,15 +111,21 @@ export class MockChainAdapter implements ChainAdapter {
   async listReferences(): Promise<DataReferenceSummary[]> {
     return [...refs.entries()].map(([refId, ref]) => ({
       refId,
-      storageId: ref.storageId,
-      storageProvider: ref.storageProvider,
+      storageId: ref.storageId ?? null,
+      storageProvider: ref.storageProvider ?? "",
       encryptionScheme: ref.encryptionScheme ?? null,
       ownerCommitment: "",
-      isOurs: true,
+      ...(ref.keyEnvelope !== undefined
+        ? { keyEnvelope: ref.keyEnvelope }
+        : {}),
+      isOurs: false,
     }));
   }
 
-  async removeReference(refId: string): Promise<void> {
+  async removeReference(
+    refId: string,
+    _ownerSecret?: Uint8Array,
+  ): Promise<void> {
     if (!refs.has(refId)) {
       throw new Error(
         `[dStorage/mock-chain] No reference found for refId: ${refId}`,
@@ -136,6 +142,7 @@ export class MockChainAdapter implements ChainAdapter {
   async updateReference(
     refId: string,
     update: ChainReferenceUpdate,
+    _ownerSecret?: Uint8Array,
   ): Promise<void> {
     const existing = refs.get(refId);
     if (!existing) {

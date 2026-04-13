@@ -11,7 +11,6 @@
  *   INTEGRATION_SEED=<mnemonic or hex seed with NIGHT + DUST on preprod>
  *
  * See tests/integration/env.example for all available env vars.
- * Load before running: set -a; source .env.integration; set +a
  *
  * ── Run ────────────────────────────────────────────────────────────────────────
  *   npm run test:integration
@@ -131,19 +130,13 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     if (!env.midnight.contractAddress && dataRegistryAddress) {
       const title = `  NEW CONTRACT DEPLOYED — add to .env.integration to reuse it:`;
       const addrLine = `  INTEGRATION_CONTRACT_ADDRESS=${dataRegistryAddress}`;
-      const cmdLine = `  Remember to run the following command before running the tests again:`;
-      const cmdLine2 = `     set -a; source .env.integration; set +a`;
-      const innerWidth =
-        Math.max(title.length, addrLine.length, cmdLine.length) + 2;
+      const innerWidth = Math.max(title.length, addrLine.length) + 2;
       const border = "═".repeat(innerWidth);
       const pad = (s: string) => `║${s.padEnd(innerWidth)}║`;
       console.log(`\n\x1b[33m╔${border}╗`);
       console.log(pad(title));
       console.log(pad(""));
       console.log(pad(addrLine));
-      console.log(pad(""));
-      console.log(pad(cmdLine));
-      console.log(pad(cmdLine2));
       console.log(pad(""));
       console.log(`╚${border}╝\x1b[0m\n`);
     }

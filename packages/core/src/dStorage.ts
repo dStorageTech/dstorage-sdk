@@ -25,6 +25,7 @@ import {
   buildKeyEnvelope,
   serializeKeyEnvelope,
   parseKeyEnvelope,
+  deriveOwnerSecret,
 } from "@dstorage/crypto";
 import type { CryptoScheme } from "@dstorage/crypto";
 import type { UploadCrypto } from "./metaTx/index.js";
@@ -175,22 +176,25 @@ export class DStorage implements DStorageContext {
       ? ("" as const)
       : ("xchacha20poly1305-v1" as const);
 
-    let keyEnvelope: string | undefined;
     // Per-upload scheme: for private uploads this holds an XChaChaScheme
     // built from a fresh random DEK (not the seed-derived key).
     let uploadScheme: CryptoScheme | null = null;
+    let keyEnvelope: string = "";
+    let dek: Uint8Array | null = null;
+    let ownerSecret: Uint8Array;
 
     if (isPublic) {
       // 1a. Public: store raw bytes, write storageId as plaintext on-chain.
       uploadData = bytes;
     } else {
-      // 1b. Private: generate a random DEK, encrypt content with it.
+      // 1b. Private: requires KEK to wrap the DEK.
       if (this._keks.length === 0) {
         throw new Error(
-          "[dStorage] Encryption key not available. Call init() before uploading private data.",
+          "[dStorage] Encryption key not available. Call init() before uploading.",
         );
       }
-      const dek = generateDek();
+      // Generate a fresh random DEK for this upload.
+      dek = generateDek();
       uploadScheme = XChaChaScheme.fromKey(dek);
       this.logger?.log(
         "dStorage",
@@ -198,17 +202,17 @@ export class DStorage implements DStorageContext {
       );
       uploadData = await uploadScheme.encryptPayload(bytes);
 
-      // Wrap the DEK under every KEK and build a multi-wrapper key envelope.
+      // Wrap DEK under every KEK (enables content decryption and ownerSecret re-derivation).
       const wrapperEntries = await Promise.all(
         this._keks.map(async (kek, i) => ({
-          wrappedDek: await wrapKey(dek, kek),
+          wrappedDek: await wrapKey(dek!, kek),
           wrapKeyName: this._kekNames[i]!,
         })),
       );
       keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
     }
 
-    // 2. Upload to chosen storage network
+    // 2. Upload first so we have the storageId for ownerSecret derivation (if needed).
     const sdkVersion = corePackageJson.version ?? "unknown";
     const storageResult = await this.config.storageAdapter.upload(uploadData, {
       ...metadata,
@@ -217,11 +221,20 @@ export class DStorage implements DStorageContext {
     });
 
     if (isPublic) {
-      // 3a. Public: write storageId as-is on-chain.
+      // 3a. Public: no DEK or keyEnvelope needed. ownerSecret is all-zeros for now.
+      ownerSecret = new Uint8Array(32);
+      // Write storageId as-is on-chain.
       onChainStorageId = storageResult.id;
     } else {
       // 3b. Private: encrypt the storageId with the same per-upload DEK scheme.
       onChainStorageId = await uploadScheme!.encryptStorageId(storageResult.id);
+
+      // Derive ownerSecret = HKDF-SHA256(dek, rawStorageId).
+      // Deterministic: any KEK holder can unwrap the DEK and re-derive this.
+      ownerSecret = await deriveOwnerSecret(
+        dek!,
+        new TextEncoder().encode(storageResult.id),
+      );
     }
 
     // 4. Write on-chain reference — only the storage pointer, never the data
@@ -233,7 +246,8 @@ export class DStorage implements DStorageContext {
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
       isOurs: true,
-      ...(keyEnvelope !== undefined ? { keyEnvelope } : {}),
+      keyEnvelope,
+      ownerSecret,
     });
 
     const refId = chainResult.refId;
@@ -278,8 +292,9 @@ export class DStorage implements DStorageContext {
   }
 
   /**
-   * Unwrap the DEK from a key envelope and return an XChaChaScheme built from it.
+   * Unwrap the data DEK from a key envelope and return an XChaChaScheme built from it.
    * Throws if the KEK is not available or the envelope cannot be parsed.
+   * Only valid for private uploads (envelope.wrappers must be present).
    */
   private async _getDekScheme(keyEnvelope: string): Promise<CryptoScheme> {
     if (this._keks.length === 0) {
@@ -306,8 +321,66 @@ export class DStorage implements DStorageContext {
       }
     }
     throw new Error(
-      "[dStorage] Cannot decrypt: none of the key envelope wrappers matched the available KEKs.",
+      "[dStorage] Cannot decrypt: none of the DEK wrappers matched the available KEKs.",
     );
+  }
+
+  /**
+   * Unwrap the raw DEK bytes from a key envelope using the available KEKs.
+   * The ownerSecret for the reference can be re-derived as HKDF(dek, rawStorageId).
+   * Throws if no wrapper matches any available KEK.
+   */
+  private async _unwrapDek(keyEnvelope: string): Promise<Uint8Array> {
+    if (this._keks.length === 0) {
+      throw new Error(
+        "[dStorage] Cannot unwrap DEK: KEK not available. Call init() first.",
+      );
+    }
+    const envelope = parseKeyEnvelope(keyEnvelope);
+    if (!envelope) {
+      throw new Error(
+        "[dStorage] Cannot unwrap DEK: key envelope is missing or malformed.",
+      );
+    }
+    for (const wrapper of envelope.wrappers) {
+      for (const kek of this._keks) {
+        try {
+          return await unwrapKey(wrapper.wrappedDek, kek);
+        } catch {
+          // This wrapper/KEK pair didn't match — try the next combination.
+        }
+      }
+    }
+    throw new Error(
+      "[dStorage] Cannot unwrap DEK: none of the wrappers matched the available KEKs.",
+    );
+  }
+
+  /**
+   * Compute the ownerSecret for an existing on-chain reference.
+   * Used by removeReference/updateReference to derive the ZK witness secret.
+   *
+   * Flow:
+   *   1. Read the reference from chain to get keyEnvelope + storageId
+   *   2. Unwrap the DEK from keyEnvelope using available KEKs
+   *   3. Recover raw storageId (decrypt with DEK if private, plaintext if public)
+   *   4. Return HKDF-SHA256(dek, rawStorageId) — or zeros for public uploads
+   */
+  private async _computeOwnerSecret(refId: string): Promise<Uint8Array> {
+    const ref = await this.config.chainAdapter.readReference(refId);
+    const isPublic = !ref.encryptionScheme;
+
+    if (isPublic || !ref.keyEnvelope) {
+      // Public uploads use all-zeros ownerSecret for now.
+      return new Uint8Array(32);
+    }
+
+    // Private: unwrap DEK, decrypt storageId, derive ownerSecret from DEK.
+    // Deterministic: any KEK holder can reproduce this.
+    const dek = await this._unwrapDek(ref.keyEnvelope);
+    const dekScheme = XChaChaScheme.fromKey(dek);
+    const rawStorageId = await dekScheme.decryptStorageId(ref.storageId);
+    return deriveOwnerSecret(dek, new TextEncoder().encode(rawStorageId));
   }
 
   // Accepts an optional pre-built CryptoScheme (unwrapped from a key envelope).
@@ -419,6 +492,10 @@ export class DStorage implements DStorageContext {
     return Promise.all(
       refs.map(async (item) => {
         let storageId: string | null = null;
+        // isOurs: determined by whether we can unwrap the DEK from the keyEnvelope
+        // using our KEKs. The chain layer sets isOurs=false for all entries; the core SDK
+        // overrides with the correct value here.
+        let isOurs = false;
         if (item.storageId) {
           const isPublic = !item.encryptionScheme;
           if (isPublic) {
@@ -432,13 +509,23 @@ export class DStorage implements DStorageContext {
             }
           }
         }
+        if (item.keyEnvelope) {
+          try {
+            // isOurs: private entries — check if we can unwrap the DEK.
+            // Public entries (no keyEnvelope) remain isOurs = false for now.
+            await this._unwrapDek(item.keyEnvelope);
+            isOurs = true;
+          } catch {
+            isOurs = false;
+          }
+        }
         return {
           refId: item.refId,
           storageId,
           storageProvider: item.storageProvider,
           encryptionScheme: item.encryptionScheme,
           ownerCommitment: item.ownerCommitment,
-          isOurs: item.isOurs,
+          isOurs,
         };
       }),
     );
@@ -447,7 +534,7 @@ export class DStorage implements DStorageContext {
   /**
    * Remove a reference from the on-chain registry.
    * Only the owner of the reference can successfully call this — the chain
-   * enforces ownership via ZK proof.
+   * enforces ownership via ZK proof using the witness-derived ownerSecret.
    */
   async removeReference(refId: string): Promise<void> {
     if (typeof this.config.chainAdapter.removeReference !== "function") {
@@ -455,7 +542,8 @@ export class DStorage implements DStorageContext {
         "[dStorage] removeReference() is not supported by this chain adapter.",
       );
     }
-    await this.config.chainAdapter.removeReference(refId);
+    const ownerSecret = await this._computeOwnerSecret(refId);
+    await this.config.chainAdapter.removeReference(refId, ownerSecret);
   }
 
   /**
@@ -498,24 +586,25 @@ export class DStorage implements DStorageContext {
   }
 
   /**
-   * Generate a fresh random DEK, wrap it under the KEK, and return the upload
+   * Generate a fresh random DEK, wrap it under the KEK(s), and return the upload
    * crypto materials needed by MetaTx to encrypt payload and storageId.
    *
-   * For public uploads (isPublic=true), returns a no-op result (null scheme, no envelope).
+   * For private uploads: the DEK is wrapped under every available KEK. The ownerSecret
+   * can later be re-derived as HKDF(dek, rawStorageId) by any KEK holder.
+   * For public uploads: no DEK, no keyEnvelope, ownerSecret will be all-zeros.
    */
   async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
-    if (isPublic) {
-      return {
-        uploadScheme: null,
-        keyEnvelope: undefined,
-        encryptionScheme: "",
-      };
-    }
-    if (this._keks.length === 0) {
+    if (!isPublic && this._keks.length === 0) {
       throw new Error(
         "[dStorage] Cannot prepare upload crypto: KEK not available. Call init() first.",
       );
     }
+
+    if (isPublic) {
+      return { uploadScheme: null, keyEnvelope: "", encryptionScheme: "" };
+    }
+
+    // Private: generate a fresh DEK for this upload.
     const dek = generateDek();
     const uploadScheme = XChaChaScheme.fromKey(dek);
     const wrapperEntries = await Promise.all(
@@ -529,6 +618,7 @@ export class DStorage implements DStorageContext {
       uploadScheme,
       keyEnvelope,
       encryptionScheme: "xchacha20poly1305-v1",
+      dek,
     };
   }
 
@@ -547,7 +637,7 @@ export class DStorage implements DStorageContext {
   ): Promise<UploadResult> {
     if (!isPublic && this._keks.length === 0) {
       throw new Error(
-        "[dStorage] Encryption key not available. Call init() before uploading private data.",
+        "[dStorage] Encryption key not available. Call init() before uploading.",
       );
     }
 
@@ -562,19 +652,24 @@ export class DStorage implements DStorageContext {
       `Chunked upload: ${bytes.length} bytes → ${totalChunks} chunks${isPublic ? "" : `, encryption scheme: ${encryptionScheme}`}`,
     );
 
-    // Generate one DEK for all chunks + manifest of this upload.
+    // For private uploads: generate a fresh DEK, wrap it under all KEKs.
+    // For public uploads: no DEK or keyEnvelope needed.
     let uploadScheme: CryptoScheme | null = null;
-    let keyEnvelope: string | undefined;
+    let keyEnvelope: string;
+    let chunkDek: Uint8Array | undefined;
+
     if (!isPublic) {
-      const dek = generateDek();
-      uploadScheme = XChaChaScheme.fromKey(dek);
+      chunkDek = generateDek();
+      uploadScheme = XChaChaScheme.fromKey(chunkDek);
       const wrapperEntries = await Promise.all(
         this._keks.map(async (kek, i) => ({
-          wrappedDek: await wrapKey(dek, kek),
+          wrappedDek: await wrapKey(chunkDek!, kek),
           wrapKeyName: this._kekNames[i]!,
         })),
       );
       keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
+    } else {
+      keyEnvelope = "";
     }
 
     const chunkEntries: ChunkManifest["chunks"] = [];
@@ -683,6 +778,14 @@ export class DStorage implements DStorageContext {
       );
     }
 
+    // Derive ownerSecret from DEK + raw manifest storageId (private) or use zeros (public).
+    const ownerSecret = chunkDek
+      ? await deriveOwnerSecret(
+          chunkDek,
+          new TextEncoder().encode(manifestResult.id),
+        )
+      : new Uint8Array(32);
+
     const dataLabel = metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
       storageId: onChainManifestId,
@@ -691,7 +794,8 @@ export class DStorage implements DStorageContext {
       ...(dataLabel !== undefined ? { dataLabel } : {}),
       writtenAt: Date.now(),
       isOurs: true,
-      ...(keyEnvelope !== undefined ? { keyEnvelope } : {}),
+      keyEnvelope,
+      ownerSecret,
     });
 
     const refId = chainResult.refId;

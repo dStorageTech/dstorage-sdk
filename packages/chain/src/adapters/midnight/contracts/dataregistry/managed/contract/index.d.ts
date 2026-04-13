@@ -10,6 +10,7 @@ export type ReferenceEntry = { storageId: string;
                              };
 
 export type Witnesses<PS> = {
+  ownerSecret(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, Uint8Array];
 }
 
 export type ImpureCircuits<PS> = {
@@ -53,7 +54,7 @@ export type ProvableCircuits<PS> = {
 }
 
 export type PureCircuits = {
-  computeOwnerCommitment(pk_0: { bytes: Uint8Array },
+  computeOwnerCommitment(secret_0: Uint8Array,
                          nonce_0: Uint8Array,
                          instanceSalt_0: Uint8Array): Uint8Array;
   deriveRefId(refCounter_0: Uint8Array, instanceSalt_0: Uint8Array): Uint8Array;
@@ -61,7 +62,7 @@ export type PureCircuits = {
 
 export type Circuits<PS> = {
   computeOwnerCommitment(context: __compactRuntime.CircuitContext<PS>,
-                         pk_0: { bytes: Uint8Array },
+                         secret_0: Uint8Array,
                          nonce_0: Uint8Array,
                          instanceSalt_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
   deriveRefId(context: __compactRuntime.CircuitContext<PS>,

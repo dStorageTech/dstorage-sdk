@@ -754,7 +754,9 @@ export class MidnightChainAdapter implements ChainAdapter {
         encryptionScheme: (entry.encryptionScheme ||
           null) as EncryptionScheme | null,
         ownerCommitment: uint8ArrayToHex(entry.ownerCommitment),
-        isOurs: entry.isOurs,
+        // isOurs is always false here — the core SDK (dStorage.ts) overrides this
+        // by attempting to unwrap the DEK from keyEnvelope using the available KEKs.
+        isOurs: false,
         ...(entry.keyEnvelope ? { keyEnvelope: entry.keyEnvelope } : {}),
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
@@ -784,7 +786,9 @@ export class MidnightChainAdapter implements ChainAdapter {
       storageProvider: refEntry.storageProvider,
       dataLabel: refEntry.dataLabel,
       writtenAt: Number(refEntry.writtenAt),
-      isOurs: refEntry.isOurs,
+      // isOurs is not meaningful here — readReference is used internally by the
+      // core SDK for decryption/ownerSecret derivation, not for ownership display.
+      isOurs: false,
       ...(refEntry.keyEnvelope ? { keyEnvelope: refEntry.keyEnvelope } : {}),
     };
   }
@@ -822,6 +826,12 @@ export class MidnightChainAdapter implements ChainAdapter {
           "[dStorage] keyEnvelope is required for private references",
         );
       }
+      if (!ref.ownerSecret) {
+        throw new Error(
+          "[dStorage/midnight] ownerSecret is required for writeReference. " +
+            "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling writeReference.",
+        );
+      }
       const { refId, blockHeight } = await api.storeReference(
         ref.storageId,
         ref.encryptionScheme ?? "",
@@ -829,6 +839,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         ref.dataLabel ?? "",
         BigInt(ref.writtenAt),
         ref.keyEnvelope ?? "",
+        ref.ownerSecret,
       );
       const refIdHex = uint8ArrayToHex(refId);
 
@@ -855,15 +866,24 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
   }
 
-  async removeReference(refId: string): Promise<void> {
+  async removeReference(
+    refId: string,
+    ownerSecret?: Uint8Array,
+  ): Promise<void> {
     this.logger?.log(
       "dStorage/midnight",
       `removeReference() called — refId: ${refId}`,
     );
+    if (!ownerSecret) {
+      throw new Error(
+        "[dStorage/midnight] ownerSecret is required for removeReference. " +
+          "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling removeReference.",
+      );
+    }
     try {
       const api = await this._getAPI();
       const refIdBytes = hexToUint8Array(refId);
-      await api.removeReference(refIdBytes);
+      await api.removeReference(refIdBytes, ownerSecret);
       this.logger?.log(
         "dStorage/midnight",
         `Reference removed → refId: ${refId}`,
@@ -880,20 +900,21 @@ export class MidnightChainAdapter implements ChainAdapter {
   async updateReference(
     refId: string,
     update: ChainReferenceUpdate,
+    ownerSecret?: Uint8Array,
   ): Promise<void> {
     this.logger?.log(
       "dStorage/midnight",
       `updateReference() called — refId: ${refId}`,
     );
+    if (!ownerSecret) {
+      throw new Error(
+        "[dStorage/midnight] ownerSecret is required for updateReference. " +
+          "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling updateReference.",
+      );
+    }
     try {
       const api = await this._getAPI();
       const refIdBytes = hexToUint8Array(refId);
-      const isPrivate = !!update.encryptionScheme;
-      if (isPrivate && !update.keyEnvelope) {
-        throw new Error(
-          "[dStorage] keyEnvelope is required for private references",
-        );
-      }
       await api.updateReference(
         refIdBytes,
         update.storageId,
@@ -902,6 +923,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         update.dataLabel ?? "",
         BigInt(update.writtenAt),
         update.keyEnvelope ?? "",
+        ownerSecret,
       );
       this.logger?.log(
         "dStorage/midnight",

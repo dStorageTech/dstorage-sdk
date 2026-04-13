@@ -96,14 +96,26 @@ export interface MetaTxConfig {
 /**
  * Crypto materials for a single upload: a fresh random DEK wrapped in a
  * key envelope, ready to encrypt payload and storageId.
+ *
+ * For private uploads: uploadScheme encrypts content; dek is the per-upload
+ * Data Encryption Key used both to encrypt content AND to derive
+ * ownerSecret = HKDF(dek, rawStorageId). Any KEK holder can re-derive the
+ * ownerSecret by unwrapping the envelope DEK.
+ * For public uploads: all fields are empty/null — ownerSecret is all-zeros.
  */
 export interface UploadCrypto {
-  /** XChaChaScheme instance built from a fresh random DEK. null for public uploads. */
+  /** XChaChaScheme built from a fresh random DEK. null for public uploads. */
   uploadScheme: CryptoScheme | null;
-  /** JSON-encoded KeyEnvelope wrapping the DEK under the KEK. undefined for public uploads. */
-  keyEnvelope: string | undefined;
+  /** JSON-encoded KeyEnvelope wrapping the DEK under every KEK. "" for public uploads. */
+  keyEnvelope: string;
   /** Encryption scheme identifier to record on-chain. "" for public uploads. */
   encryptionScheme: EncryptionScheme;
+  /**
+   * The raw per-upload DEK for private uploads; undefined for public uploads.
+   * Used by MetaTx to derive ownerSecret = HKDF(dek, rawStorageId) after upload.
+   * Not stored anywhere — must not be persisted.
+   */
+  dek?: Uint8Array;
 }
 
 // ── SDK context interface ─────────────────────────────────────────────────────

@@ -199,7 +199,6 @@ The only required variable for the full-stack suite is `INTEGRATION_SEED` — a 
 #### Run
 
 ```sh
-set -a; source .env.integration; set +a
 npm run test:integration
 ```
 

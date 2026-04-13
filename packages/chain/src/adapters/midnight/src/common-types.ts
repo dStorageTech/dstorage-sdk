@@ -77,7 +77,7 @@ export type DeployedDataRegistryContract = FoundContract<DataRegistryContract>;
  * A type that represents the derived combination of public (or ledger), and private state.
  */
 export type DataRegistryDerivedState = {
-  readonly references: Map<string, ReferenceEntry & { isOurs: boolean }>;
+  readonly references: Map<string, ReferenceEntry>;
   readonly refCounter: bigint;
   /** Schema version of the deployed contract. Used by the SDK to verify compatibility. */
   readonly contractVersion: bigint;

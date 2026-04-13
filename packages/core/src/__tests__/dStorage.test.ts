@@ -210,16 +210,19 @@ describe("retrieveByRefId", () => {
 // ── public (isPublic: true) upload / retrieve ─────────────────────────────────
 
 describe("public upload and retrieve", () => {
-  it("uploads public content without encryption keys", async () => {
-    // init() without a seed provider: _cryptoSchemes is null but isPublic skips encryption
+  it("uploads public content without encryption keys — data is not encrypted", async () => {
+    // Public uploads do not require a KEK — ownerSecret is all-zeros for now.
+    // The content itself is stored as plaintext — encryptionScheme is "".
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
       chainAdapter: new MockChainAdapter(),
+      encryptionSeedProviders: [],
     });
     await ds.init();
     const result = await ds.upload(enc("public data"), { isPublic: true });
     expect(result).toHaveProperty("chainRefId");
     expect(result).toHaveProperty("storageId");
+    expect(result.encryptionScheme).toBe("");
   });
 
   it("retrieves the original content via refId for public upload", async () => {
@@ -264,6 +267,100 @@ describe("public upload and retrieve", () => {
     const { chainRefId } = await ds1.upload(enc(content), { isPublic: true });
     const result = await ds2.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(result.bytes)).toBe(content);
+  });
+});
+
+// ── listReferences ────────────────────────────────────────────────────────────
+
+describe("listReferences", () => {
+  it("returns an array containing the ref after a private upload", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("list me"));
+    const refs = await ds.listReferences();
+    expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
+  });
+
+  it("returned entry has a non-null storageId", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("storage id check"));
+    const refs = await ds.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.storageId).not.toBeNull();
+  });
+
+  it("isOurs is true for the uploader's own private upload", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("mine"));
+    const refs = await ds.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.isOurs).toBe(true);
+  });
+
+  it("isOurs is false for a private upload by a different user on the same chain", async () => {
+    const sharedStorage = new MockStorageAdapter();
+    const sharedChain = new MockChainAdapter();
+    const alice = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: sharedChain,
+      encryptionSeedProviders: [
+        new PasswordSeedProvider({
+          password: "alice-passphrase-lr",
+          salt: "0xAlice_lr",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    const bob = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: sharedChain,
+      encryptionSeedProviders: [
+        new PasswordSeedProvider({
+          password: "bob-passphrase-lr",
+          salt: "0xBob_lr",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await alice.init();
+    await bob.init();
+
+    const { chainRefId } = await alice.upload(enc("Alice's secret"));
+    // Bob lists references and should not see Alice's ref as his own
+    const refs = await bob.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.isOurs).toBe(false);
+  });
+
+  it("isOurs is false for a public upload (no DEK to unwrap)", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("public"), { isPublic: true });
+    const refs = await ds.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.isOurs).toBe(false);
+  });
+});
+
+// ── removeReference ───────────────────────────────────────────────────────────
+
+describe("removeReference", () => {
+  it("removed ref no longer appears in listReferences", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("to remove"));
+    await ds.removeReference(chainRefId);
+    const refs = await ds.listReferences();
+    expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
+  });
+
+  it("retrieveByRefId throws after removal", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("to remove 2"));
+    await ds.removeReference(chainRefId);
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow();
+  });
+
+  it("throws when the refId is not found", async () => {
+    const ds = await makeInitedDStorage();
+    await expect(ds.removeReference("ref_nonexistent")).rejects.toThrow();
   });
 });
 

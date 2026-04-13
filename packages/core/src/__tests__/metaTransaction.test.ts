@@ -33,7 +33,7 @@ function makeSdkContext(address = "0xTestOwner"): DStorageContext {
       // No encryption in unit tests — return identity (public) crypto.
       return {
         uploadScheme: null,
-        keyEnvelope: undefined,
+        keyEnvelope: "{}",
         encryptionScheme: "",
       };
     },

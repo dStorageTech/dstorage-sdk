@@ -53,15 +53,23 @@ export interface ChainReference {
   writtenAt: number;
   /**
    * JSON-encoded KeyEnvelope containing the wrapped DEK.
-   * Required for private (encrypted) references; empty string or absent for public ones.
+   * Required for private (encrypted) references. Empty string ("") for public uploads.
+   * Any KEK holder can unwrap the DEK and re-derive ownerSecret = HKDF(DEK, rawStorageId).
    */
   keyEnvelope?: string;
   /**
-   * Whether this reference was created by the currently connected wallet.
-   * Computed by comparing the stored ownerCommitment against the wallet's
-   * derived commitment.
+   * Whether this reference was created by the current user.
+   * Determined by the core SDK: true if the DEK in the keyEnvelope can be
+   * successfully unwrapped using the available KEKs (encryption seed providers).
    */
   isOurs: boolean;
+  /**
+   * Pre-computed owner secret for ZK witness injection.
+   * Derived by the core SDK as: HKDF-SHA256(dek, rawStorageId).
+   * Internal use only — consumed by the chain adapter to set private state before proof generation.
+   * Never stored on-chain.
+   */
+  ownerSecret?: Uint8Array;
 }
 
 /** Result of writing a reference to chain */
@@ -107,9 +115,9 @@ export interface DataReferenceSummary {
    */
   ownerCommitment: string;
   /**
-   * Whether this reference was created by the currently connected wallet.
-   * Computed by comparing the stored ownerCommitment against the wallet's
-   * derived commitment.
+   * Whether this reference was created by the current user.
+   * Determined by the core SDK: true if the DEK in the keyEnvelope can be
+   * successfully unwrapped using the available KEKs (encryption seed providers).
    */
   isOurs: boolean;
 }
@@ -195,18 +203,22 @@ export interface ChainAdapter {
 
   /**
    * Remove a reference from the on-chain registry.
-   * Only the owner (the party whose public key produced the stored ownerCommitment)
-   * can successfully call this — the chain enforces this via ZK proof.
+   * Only the owner can successfully call this — the chain enforces ownership via ZK proof.
+   * ownerSecret: the HKDF-derived witness secret computed by the core SDK.
    * Optional — adapters that do not support removal can omit this method.
    */
-  removeReference?(refId: string): Promise<void>;
+  removeReference?(refId: string, ownerSecret?: Uint8Array): Promise<void>;
 
   /**
    * Update the mutable fields of an existing reference.
-   * Only the owner (the party whose public key produced the stored ownerCommitment)
-   * can successfully call this — the chain enforces this via ZK proof.
+   * Only the owner can successfully call this — the chain enforces ownership via ZK proof.
    * Ownership (ownerCommitment) is preserved and cannot be changed.
+   * ownerSecret: the HKDF-derived witness secret computed by the core SDK.
    * Optional — adapters that do not support updates can omit this method.
    */
-  updateReference?(refId: string, update: ChainReferenceUpdate): Promise<void>;
+  updateReference?(
+    refId: string,
+    update: ChainReferenceUpdate,
+    ownerSecret?: Uint8Array,
+  ): Promise<void>;
 }
