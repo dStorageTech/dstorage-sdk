@@ -148,6 +148,7 @@ export circuit storeReference(
   assert(!references.member(disclose(refId)), "Reference already stored");
 
   // Derive owner commitment from the caller's public key.
+  // TODO: do not use ownPublicKey() for auth: https://github.com/LFDT-Minokawa/compact/issues/283
   const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
 
   // Persist the reference entry.
@@ -178,6 +179,7 @@ export circuit storeReference(
 export circuit removeReference(refId: Bytes<32>): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
+  // TODO: do not use ownPublicKey() for auth: https://github.com/LFDT-Minokawa/compact/issues/283
   const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
   assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
   references.remove(disclose(refId));
@@ -209,6 +211,7 @@ export circuit updateReference(
                  ): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
+  // TODO: do not use ownPublicKey() for auth: https://github.com/LFDT-Minokawa/compact/issues/283
   const ownerCommitment = computeOwnerCommitment(ownPublicKey(), refId, kernel.self().bytes);
   assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
   const updatedEntry =
