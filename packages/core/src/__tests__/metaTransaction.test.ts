@@ -358,4 +358,44 @@ describe("MetaTx.execute", () => {
     expect(receipt.storageToken).toBe("MOCK");
     expect(receipt.chainToken).toBe("MOCK");
   }, 10_000);
+
+  it("public upload passes a non-empty keyEnvelope and non-zero ownerSecret to writeReference", async () => {
+    vi.useFakeTimers();
+
+    // Build a context that returns a real ownerSeed (like prepareUploadCrypto does for public).
+    // The mock's ownerSeed is non-zero so deriveOwnerSecret produces a non-zero ownerSecret.
+    const chainAdapter = new MockChainAdapter();
+    const writeSpy = vi.spyOn(chainAdapter, "writeReference");
+
+    const context: DStorageContext = {
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter,
+      connectedAddress: "0xPublicOwner",
+      async prepareUploadCrypto() {
+        return {
+          uploadScheme: null,
+          keyEnvelope:
+            '{"v":1,"wrappers":[{"wrapKeyName":"password","algorithm":"xchacha20poly1305-v1","kekDerivation":"hkdf-sha256-v1","wrappedDek":"AAAA"}]}',
+          encryptionScheme: "",
+          ownerSeed: new Uint8Array(32).fill(42),
+        };
+      },
+    };
+
+    const tx = new MetaTx(context);
+    const file = makeFile("public content", "pub.txt", "text/plain");
+    const p = tx.execute(file);
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(writeSpy).toHaveBeenCalledOnce();
+    const [ref] = writeSpy.mock.calls[0]!;
+    // keyEnvelope must be the non-empty string returned by prepareUploadCrypto
+    expect(ref.keyEnvelope).toContain("wrappers");
+    // ownerSecret must be non-zero (derived from ownerSeed, not zeros)
+    expect(ref.ownerSecret).toBeDefined();
+    expect(ref.ownerSecret!.some((b) => b !== 0)).toBe(true);
+    // encryptionScheme is empty for public
+    expect(ref.encryptionScheme).toBe("");
+  });
 });

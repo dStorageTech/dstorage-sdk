@@ -163,5 +163,53 @@ describe.skipIf(!arlocalOk)(
 
       await expect(unrelated.retrieveByRefId(chainRefId)).rejects.toThrow();
     });
+
+    it("password-only SDK can removeReference a public upload made with two providers", async () => {
+      const uploader = new DStorage({
+        storageAdapter,
+        chainAdapter,
+        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      });
+      await uploader.init();
+      const { chainRefId } = await uploader.upload(enc("public removable"), {
+        isPublic: true,
+      });
+
+      const passwordSdk = new DStorage({
+        storageAdapter,
+        chainAdapter,
+        encryptionSeedProviders: [passwordProvider()],
+      });
+      await passwordSdk.init();
+
+      await expect(
+        passwordSdk.removeReference(chainRefId),
+      ).resolves.toBeUndefined();
+      const refs = await passwordSdk.listReferences();
+      expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
+    });
+
+    it("mnemonic-only SDK can removeReference a public upload made with two providers", async () => {
+      const uploader = new DStorage({
+        storageAdapter,
+        chainAdapter,
+        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      });
+      await uploader.init();
+      const { chainRefId } = await uploader.upload(enc("public removable 2"), {
+        isPublic: true,
+      });
+
+      const mnemonicSdk = new DStorage({
+        storageAdapter,
+        chainAdapter,
+        encryptionSeedProviders: [mnemonicProvider()],
+      });
+      await mnemonicSdk.init();
+
+      await expect(
+        mnemonicSdk.removeReference(chainRefId),
+      ).resolves.toBeUndefined();
+    });
   },
 );

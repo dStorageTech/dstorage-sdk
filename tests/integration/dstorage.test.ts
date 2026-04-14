@@ -48,12 +48,14 @@ const midnightOk = arlocalOk && (await isMidnightAvailable(env));
 
 describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
   let sdk: DStorage;
+  let mockChain: MockMidnightChainAdapter;
 
   beforeAll(async () => {
     const { adapter } = await createStorageAdapter(env.arlocalUrl);
+    mockChain = new MockMidnightChainAdapter({ logger: console });
     sdk = new DStorage({
       storageAdapter: adapter,
-      chainAdapter: new MockMidnightChainAdapter({ logger: console }),
+      chainAdapter: mockChain,
       encryptionSeedProviders: [
         new PasswordSeedProvider({
           password: "dstorage-integration-test-v1!",
@@ -75,6 +77,16 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
     const result = await sdk.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(CONTENT);
+  });
+
+  it("public upload produces a non-empty keyEnvelope with one wrapper per provider", async () => {
+    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+    const ref = await mockChain.readReference(chainRefId);
+    expect(ref.keyEnvelope).toBeTruthy();
+    const envelope = JSON.parse(ref.keyEnvelope);
+    expect(envelope.v).toBe(1);
+    expect(envelope.wrappers).toHaveLength(1);
+    expect(envelope.wrappers[0].wrapKeyName).toBe("password");
   });
 
   it("two uploads produce different storage IDs", async () => {
@@ -189,5 +201,20 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
   it("wallet isolation: Bob cannot decrypt Alice's private reference", async () => {
     const { chainRefId } = await sdk.upload(CONTENT);
     await expect(sdkBob.retrieveByRefId(chainRefId)).rejects.toThrow();
+  });
+
+  it("public removeReference succeeds when called by the uploader", async () => {
+    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+    await expect(sdk.removeReference(chainRefId)).resolves.toBeUndefined();
+    const refs = await sdk.listReferences();
+    expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
+  });
+
+  it("public removeReference fails when called by a different user (wrong ownerSecret)", async () => {
+    // Alice uploads a public reference — ownerSeed is wrapped under Alice's KEK only.
+    // Bob's KEK cannot unwrap it, so the ownerSecret Bob derives will not match the
+    // ownerCommitment stored on-chain, and the ZK circuit must reject the transaction.
+    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+    await expect(sdkBob.removeReference(chainRefId)).rejects.toThrow();
   });
 });

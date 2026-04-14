@@ -211,6 +211,116 @@ describe("multi-key wrapping — upload with two providers", () => {
   });
 });
 
+// ── public upload — ownerSeed envelope ───────────────────────────────────────
+
+describe("public upload — ownerSeed envelope", () => {
+  it("public upload generates a non-empty keyEnvelope containing wrapped ownerSeed", async () => {
+    const adapters = sharedAdapters();
+    const sdk = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider()],
+    });
+    await sdk.init();
+
+    const { chainRefId } = await sdk.upload(enc("public content"), {
+      isPublic: true,
+    });
+    const ref = await adapters.chainAdapter.readReference(chainRefId);
+
+    expect(ref.keyEnvelope).toBeTruthy();
+    const envelope = JSON.parse(ref.keyEnvelope);
+    expect(envelope.v).toBe(1);
+    expect(Array.isArray(envelope.wrappers)).toBe(true);
+    expect(envelope.wrappers).toHaveLength(1);
+    expect(envelope.wrappers[0].wrapKeyName).toBe("password");
+  });
+
+  it("envelope has one wrapper per provider for a multi-KEK public upload", async () => {
+    const adapters = sharedAdapters();
+    const sdk = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+    });
+    await sdk.init();
+
+    const { chainRefId } = await sdk.upload(enc("multi-kek public"), {
+      isPublic: true,
+    });
+    const ref = await adapters.chainAdapter.readReference(chainRefId);
+
+    const envelope = JSON.parse(ref.keyEnvelope);
+    expect(envelope.wrappers).toHaveLength(2);
+    expect(envelope.wrappers[0].wrapKeyName).toBe("password");
+    expect(envelope.wrappers[1].wrapKeyName).toBe("mnemonic");
+  });
+
+  it("each public upload gets an independent ownerSeed (different envelopes)", async () => {
+    const adapters = sharedAdapters();
+    const sdk = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider()],
+    });
+    await sdk.init();
+
+    const { chainRefId: ref1 } = await sdk.upload(enc("public one"), {
+      isPublic: true,
+    });
+    const { chainRefId: ref2 } = await sdk.upload(enc("public two"), {
+      isPublic: true,
+    });
+
+    const r1 = await adapters.chainAdapter.readReference(ref1);
+    const r2 = await adapters.chainAdapter.readReference(ref2);
+    expect(r1.keyEnvelope).not.toBe(r2.keyEnvelope);
+  });
+
+  it("password-only SDK can removeReference a public upload made with two providers", async () => {
+    const adapters = sharedAdapters();
+    const uploader = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+    });
+    await uploader.init();
+    const { chainRefId } = await uploader.upload(enc("public removable"), {
+      isPublic: true,
+    });
+
+    const passwordSdk = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider()],
+    });
+    await passwordSdk.init();
+
+    await expect(
+      passwordSdk.removeReference(chainRefId),
+    ).resolves.toBeUndefined();
+    const refs = await passwordSdk.listReferences();
+    expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
+  });
+
+  it("mnemonic-only SDK can removeReference a public upload made with two providers", async () => {
+    const adapters = sharedAdapters();
+    const uploader = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+    });
+    await uploader.init();
+    const { chainRefId } = await uploader.upload(enc("public removable 2"), {
+      isPublic: true,
+    });
+
+    const mnemonicSdk = new DStorage({
+      ...adapters,
+      encryptionSeedProviders: [mnemonicProvider()],
+    });
+    await mnemonicSdk.init();
+
+    await expect(
+      mnemonicSdk.removeReference(chainRefId),
+    ).resolves.toBeUndefined();
+  });
+});
+
 // ── removeReference via any KEK ───────────────────────────────────────────────
 
 describe("removeReference via any available KEK", () => {
