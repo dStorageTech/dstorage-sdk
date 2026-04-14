@@ -407,6 +407,12 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     // Ensure the wallet is funded before attempting the upload.
     if (this._initMintPromise) await this._initMintPromise;
 
+    // Mine a block before uploading so that /tx_anchor returns a hash that
+    // arlocal's validation will accept as a valid last_tx. A fresh arlocal
+    // instance (or one that has never had a block mined) may return a genesis
+    // anchor that its own validation rejects with "last_tx is invalid".
+    await this.testnet.mine();
+
     const result = await super.upload(data, metadata);
     this.logger?.log(
       "dStorage/arweave-local",
