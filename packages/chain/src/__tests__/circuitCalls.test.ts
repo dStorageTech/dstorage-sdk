@@ -13,6 +13,8 @@ function makeRef(tag: string) {
     storageProvider: "mock",
     owner: `0xOwner_${tag}`,
     writtenAt: Date.now(),
+    keyEnvelope:
+      '{"v":1,"wrappers":[{"wrapKeyName":"test","algorithm":"xchacha20poly1305-v1","kekDerivation":"hkdf-sha256-v1","wrappedDek":"AAAA"}]}',
   };
 }
 
@@ -127,6 +129,8 @@ describe("MockMidnightChainAdapter.writeReference", () => {
       storageProvider: "arweave",
       owner: "0xAlice",
       writtenAt: Date.now(),
+      keyEnvelope:
+        '{"v":1,"wrappers":[{"wrapKeyName":"test","algorithm":"xchacha20poly1305-v1","kekDerivation":"hkdf-sha256-v1","wrappedDek":"AAAA"}]}',
     });
     await vi.runAllTimersAsync();
     await expect(p).resolves.not.toThrow();

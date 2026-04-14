@@ -219,7 +219,9 @@ describe("public upload and retrieve", () => {
       encryptionSeedProviders: [],
     });
     await ds.init();
-    await expect(ds.upload(enc("public data"), { isPublic: true })).rejects.toThrow(
+    await expect(
+      ds.upload(enc("public data"), { isPublic: true }),
+    ).rejects.toThrow(
       "[dStorage] Cannot upload public data without at least one encryption seed provider.",
     );
   });
@@ -330,12 +332,12 @@ describe("listReferences", () => {
     expect(entry?.isOurs).toBe(false);
   });
 
-  it("isOurs is false for a public upload (no DEK to unwrap)", async () => {
+  it("isOurs is true for a public upload by the same user (ownerSeed envelope unwraps)", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId } = await ds.upload(enc("public"), { isPublic: true });
     const refs = await ds.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
-    expect(entry?.isOurs).toBe(false);
+    expect(entry?.isOurs).toBe(true);
   });
 });
 

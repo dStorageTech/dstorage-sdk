@@ -35,6 +35,7 @@ function makeSdkContext(address = "0xTestOwner"): DStorageContext {
         uploadScheme: null,
         keyEnvelope: "{}",
         encryptionScheme: "",
+        ownerSeed: new Uint8Array(32).fill(1),
       };
     },
   };

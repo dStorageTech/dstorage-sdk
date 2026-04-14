@@ -757,7 +757,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         // isOurs is always false here — the core SDK (dStorage.ts) overrides this
         // by attempting to unwrap the DEK from keyEnvelope using the available KEKs.
         isOurs: false,
-        ...(entry.keyEnvelope ? { keyEnvelope: entry.keyEnvelope } : {}),
+        keyEnvelope: entry.keyEnvelope ?? "",
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
   }
@@ -789,7 +789,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       // isOurs is not meaningful here — readReference is used internally by the
       // core SDK for decryption/ownerSecret derivation, not for ownership display.
       isOurs: false,
-      ...(refEntry.keyEnvelope ? { keyEnvelope: refEntry.keyEnvelope } : {}),
+      keyEnvelope: refEntry.keyEnvelope ?? "",
     };
   }
 
@@ -820,10 +820,9 @@ export class MidnightChainAdapter implements ChainAdapter {
         "dStorage/midnight",
         `Storing reference for storageId: ${ref.storageId}`,
       );
-      const isPrivate = !!ref.encryptionScheme;
-      if (isPrivate && !ref.keyEnvelope) {
+      if (!ref.keyEnvelope) {
         throw new Error(
-          "[dStorage] keyEnvelope is required for private references",
+          "[dStorage] keyEnvelope is required for all references",
         );
       }
       if (!ref.ownerSecret) {

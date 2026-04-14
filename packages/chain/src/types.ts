@@ -52,11 +52,11 @@ export interface ChainReference {
   /** Timestamp of when the reference was written on-chain */
   writtenAt: number;
   /**
-   * JSON-encoded KeyEnvelope containing the wrapped DEK.
-   * Required for private (encrypted) references. Empty string ("") for public uploads.
-   * Any KEK holder can unwrap the DEK and re-derive ownerSecret = HKDF(DEK, rawStorageId).
+   * JSON-encoded KeyEnvelope containing the wrapped DEK (private) or ownerSeed (public).
+   * Always a non-empty JSON string — private refs wrap the DEK, public refs wrap the ownerSeed.
+   * Any KEK holder can unwrap the key and re-derive ownerSecret = HKDF(key, rawStorageId).
    */
-  keyEnvelope?: string;
+  keyEnvelope: string;
   /**
    * Whether this reference was created by the current user.
    * Determined by the core SDK: true if the DEK in the keyEnvelope can be
@@ -107,8 +107,8 @@ export interface DataReferenceSummary {
   storageProvider: string;
   /** Encryption scheme recorded on-chain. null/"" = public/unencrypted; "xchacha20poly1305-v1" = encrypted. */
   encryptionScheme: EncryptionScheme | null;
-  /** JSON-encoded KeyEnvelope for private references; "" or absent for public ones. */
-  keyEnvelope?: string;
+  /** JSON-encoded KeyEnvelope wrapping the DEK (private) or ownerSeed (public). Always a non-empty string. */
+  keyEnvelope: string;
   /**
    * Hex-encoded owner commitment stored on-chain.
    * The commitment itself is public, but does not reveal the owner's identity.
@@ -133,8 +133,8 @@ export interface ChainReferenceUpdate {
   storageProvider: string;
   dataLabel?: string;
   writtenAt: number;
-  /** JSON-encoded KeyEnvelope. Required for private references; "" for public. */
-  keyEnvelope?: string;
+  /** JSON-encoded KeyEnvelope wrapping the DEK (private) or ownerSeed (public). Always a non-empty string. */
+  keyEnvelope: string;
 }
 
 /**

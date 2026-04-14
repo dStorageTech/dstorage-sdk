@@ -157,15 +157,20 @@ export class MetaTx {
         ? await uploadCrypto.uploadScheme.encryptStorageId(uploadResult.id)
         : uploadResult.id;
 
+      const { deriveOwnerSecret } = await import("@dstorage/crypto");
       let ownerSecret: Uint8Array;
       if (uploadCrypto.dek) {
-        const { deriveOwnerSecret } = await import("@dstorage/crypto");
         ownerSecret = await deriveOwnerSecret(
           uploadCrypto.dek,
           new TextEncoder().encode(uploadResult.id),
         );
       } else {
-        ownerSecret = new Uint8Array(32);
+        // Public upload: derive ownerSecret from the ownerSeed wrapped in the envelope.
+        ownerSecret = await deriveOwnerSecret(
+          uploadCrypto.ownerSeed!,
+          new TextEncoder().encode(uploadResult.id),
+          "dstorage:owner-secret:public:v1",
+        );
       }
 
       const chainResult = await this.sdk.chainAdapter.writeReference({

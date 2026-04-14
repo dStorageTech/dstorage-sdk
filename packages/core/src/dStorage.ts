@@ -221,17 +221,25 @@ export class DStorage implements DStorageContext {
     });
 
     if (isPublic) {
-      // 3a. Public: no DEK or keyEnvelope needed.
-      // ownerSecret is derived from kek[0] + storageId so the uploader can prove ownership.
+      // 3a. Public: no content DEK needed, but generate a random ownerSeed so that
+      // any single KEK can independently re-derive the ownerSecret (mirrors private DEK handling).
       if (this._keks.length === 0) {
         throw new Error(
           "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
-            "Without a seed provider there is no deterministic owner secret, so the reference " +
+            "Without a seed provider there is no owner secret, so the reference " +
             "could never be removed or updated.",
         );
       }
+      const ownerSeed = generateDek();
+      const ownerSeedWrappers = await Promise.all(
+        this._keks.map(async (kek, i) => ({
+          wrappedDek: await wrapKey(ownerSeed, kek),
+          wrapKeyName: this._kekNames[i]!,
+        })),
+      );
+      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(ownerSeedWrappers));
       ownerSecret = await deriveOwnerSecret(
-        this._keks[0]!,
+        ownerSeed,
         new TextEncoder().encode(storageResult.id),
         "dstorage:owner-secret:public:v1",
       );
@@ -376,22 +384,17 @@ export class DStorage implements DStorageContext {
    *   1. Read the reference from chain to get keyEnvelope + storageId
    *   2. Unwrap the DEK from keyEnvelope using available KEKs
    *   3. Recover raw storageId (decrypt with DEK if private, plaintext if public)
-   *   4. Return HKDF-SHA256(dek, rawStorageId) for private, or HKDF-SHA256(kek[0], rawStorageId) for public
+   *   4. Return HKDF-SHA256(dek, rawStorageId) for private, or HKDF-SHA256(ownerSeed, rawStorageId) for public
    */
   private async _computeOwnerSecret(refId: string): Promise<Uint8Array> {
     const ref = await this.config.chainAdapter.readReference(refId);
     const isPublic = !ref.encryptionScheme;
 
-    if (isPublic || !ref.keyEnvelope) {
-      // Public uploads derive ownerSecret from kek[0] + plaintext storageId.
-      if (this._keks.length === 0) {
-        throw new Error(
-          "[dStorage] Cannot derive owner secret for a public reference without a seed provider. " +
-            "Ensure the same seed provider used at upload time is configured.",
-        );
-      }
+    if (isPublic) {
+      // Public uploads store a wrapped ownerSeed envelope (any KEK can unwrap it).
+      const ownerSeed = await this._unwrapDek(ref.keyEnvelope);
       return deriveOwnerSecret(
-        this._keks[0]!,
+        ownerSeed,
         new TextEncoder().encode(ref.storageId),
         "dstorage:owner-secret:public:v1",
       );
@@ -522,7 +525,7 @@ export class DStorage implements DStorageContext {
           const isPublic = !item.encryptionScheme;
           if (isPublic) {
             storageId = item.storageId;
-          } else if (item.keyEnvelope) {
+          } else {
             try {
               const dekScheme = await this._getDekScheme(item.keyEnvelope);
               storageId = await dekScheme.decryptStorageId(item.storageId);
@@ -531,21 +534,20 @@ export class DStorage implements DStorageContext {
             }
           }
         }
-        if (item.keyEnvelope) {
-          try {
-            // isOurs: private entries — check if we can unwrap the DEK.
-            // Public entries (no keyEnvelope) remain isOurs = false for now.
-            await this._unwrapDek(item.keyEnvelope);
-            isOurs = true;
-          } catch {
-            isOurs = false;
-          }
+        try {
+          // isOurs: check if we can unwrap the key from the envelope.
+          // Works for both private (DEK) and public (ownerSeed) uploads.
+          await this._unwrapDek(item.keyEnvelope);
+          isOurs = true;
+        } catch {
+          isOurs = false;
         }
         return {
           refId: item.refId,
           storageId,
           storageProvider: item.storageProvider,
           encryptionScheme: item.encryptionScheme,
+          keyEnvelope: item.keyEnvelope,
           ownerCommitment: item.ownerCommitment,
           isOurs,
         };
@@ -613,7 +615,7 @@ export class DStorage implements DStorageContext {
    *
    * For private uploads: the DEK is wrapped under every available KEK. The ownerSecret
    * can later be re-derived as HKDF(dek, rawStorageId) by any KEK holder.
-   * For public uploads: no DEK, no keyEnvelope, ownerSecret will be all-zeros.
+   * For public uploads: a random ownerSeed is generated and wrapped under all KEKs (same pattern).
    */
   async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
     if (!isPublic && this._keks.length === 0) {
@@ -623,7 +625,27 @@ export class DStorage implements DStorageContext {
     }
 
     if (isPublic) {
-      return { uploadScheme: null, keyEnvelope: "", encryptionScheme: "" };
+      if (this._keks.length === 0) {
+        throw new Error(
+          "[dStorage] Cannot prepare public upload crypto: KEK not available. Call init() first.",
+        );
+      }
+      const ownerSeed = generateDek();
+      const ownerSeedWrappers = await Promise.all(
+        this._keks.map(async (kek, i) => ({
+          wrappedDek: await wrapKey(ownerSeed, kek),
+          wrapKeyName: this._kekNames[i]!,
+        })),
+      );
+      const keyEnvelope = serializeKeyEnvelope(
+        buildKeyEnvelope(ownerSeedWrappers),
+      );
+      return {
+        uploadScheme: null,
+        keyEnvelope,
+        encryptionScheme: "",
+        ownerSeed,
+      };
     }
 
     // Private: generate a fresh DEK for this upload.
@@ -657,7 +679,7 @@ export class DStorage implements DStorageContext {
     onProgress?: (p: UploadProgress) => void,
     isPublic = false,
   ): Promise<UploadResult> {
-    if (!isPublic && this._keks.length === 0) {
+    if (this._keks.length === 0) {
       throw new Error(
         "[dStorage] Encryption key not available. Call init() before uploading.",
       );
@@ -675,10 +697,12 @@ export class DStorage implements DStorageContext {
     );
 
     // For private uploads: generate a fresh DEK, wrap it under all KEKs.
-    // For public uploads: no DEK or keyEnvelope needed.
+    // For public uploads: generate a random ownerSeed and wrap it under all KEKs
+    // (mirrors private DEK handling so any single KEK can re-derive the ownerSecret).
     let uploadScheme: CryptoScheme | null = null;
     let keyEnvelope: string;
     let chunkDek: Uint8Array | undefined;
+    let ownerSeed: Uint8Array | undefined;
 
     if (!isPublic) {
       chunkDek = generateDek();
@@ -691,7 +715,14 @@ export class DStorage implements DStorageContext {
       );
       keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
     } else {
-      keyEnvelope = "";
+      ownerSeed = generateDek();
+      const ownerSeedWrappers = await Promise.all(
+        this._keks.map(async (kek, i) => ({
+          wrappedDek: await wrapKey(ownerSeed!, kek),
+          wrapKeyName: this._kekNames[i]!,
+        })),
+      );
+      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(ownerSeedWrappers));
     }
 
     const chunkEntries: ChunkManifest["chunks"] = [];
@@ -800,13 +831,17 @@ export class DStorage implements DStorageContext {
       );
     }
 
-    // Derive ownerSecret from DEK + raw manifest storageId (private) or use zeros (public).
+    // Derive ownerSecret from DEK + raw manifest storageId (private) or ownerSeed + storageId (public).
     const ownerSecret = chunkDek
       ? await deriveOwnerSecret(
           chunkDek,
           new TextEncoder().encode(manifestResult.id),
         )
-      : new Uint8Array(32);
+      : await deriveOwnerSecret(
+          ownerSeed!,
+          new TextEncoder().encode(manifestResult.id),
+          "dstorage:owner-secret:public:v1",
+        );
 
     const dataLabel = metadata["label"];
     const chainResult = await this.config.chainAdapter.writeReference({
