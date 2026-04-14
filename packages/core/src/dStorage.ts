@@ -221,8 +221,20 @@ export class DStorage implements DStorageContext {
     });
 
     if (isPublic) {
-      // 3a. Public: no DEK or keyEnvelope needed. ownerSecret is all-zeros for now.
-      ownerSecret = new Uint8Array(32);
+      // 3a. Public: no DEK or keyEnvelope needed.
+      // ownerSecret is derived from kek[0] + storageId so the uploader can prove ownership.
+      if (this._keks.length === 0) {
+        throw new Error(
+          "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
+            "Without a seed provider there is no deterministic owner secret, so the reference " +
+            "could never be removed or updated.",
+        );
+      }
+      ownerSecret = await deriveOwnerSecret(
+        this._keks[0]!,
+        new TextEncoder().encode(storageResult.id),
+        "dstorage:owner-secret:public:v1",
+      );
       // Write storageId as-is on-chain.
       onChainStorageId = storageResult.id;
     } else {
@@ -364,15 +376,25 @@ export class DStorage implements DStorageContext {
    *   1. Read the reference from chain to get keyEnvelope + storageId
    *   2. Unwrap the DEK from keyEnvelope using available KEKs
    *   3. Recover raw storageId (decrypt with DEK if private, plaintext if public)
-   *   4. Return HKDF-SHA256(dek, rawStorageId) — or zeros for public uploads
+   *   4. Return HKDF-SHA256(dek, rawStorageId) for private, or HKDF-SHA256(kek[0], rawStorageId) for public
    */
   private async _computeOwnerSecret(refId: string): Promise<Uint8Array> {
     const ref = await this.config.chainAdapter.readReference(refId);
     const isPublic = !ref.encryptionScheme;
 
     if (isPublic || !ref.keyEnvelope) {
-      // Public uploads use all-zeros ownerSecret for now.
-      return new Uint8Array(32);
+      // Public uploads derive ownerSecret from kek[0] + plaintext storageId.
+      if (this._keks.length === 0) {
+        throw new Error(
+          "[dStorage] Cannot derive owner secret for a public reference without a seed provider. " +
+            "Ensure the same seed provider used at upload time is configured.",
+        );
+      }
+      return deriveOwnerSecret(
+        this._keks[0]!,
+        new TextEncoder().encode(ref.storageId),
+        "dstorage:owner-secret:public:v1",
+      );
     }
 
     // Private: unwrap DEK, decrypt storageId, derive ownerSecret from DEK.

@@ -210,19 +210,18 @@ describe("retrieveByRefId", () => {
 // ── public (isPublic: true) upload / retrieve ─────────────────────────────────
 
 describe("public upload and retrieve", () => {
-  it("uploads public content without encryption keys — data is not encrypted", async () => {
-    // Public uploads do not require a KEK — ownerSecret is all-zeros for now.
-    // The content itself is stored as plaintext — encryptionScheme is "".
+  it("throws when attempting a public upload without any seed provider", async () => {
+    // Public uploads require at least one seed provider to derive a deterministic
+    // ownerSecret. Without it the reference could never be removed or updated.
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
       chainAdapter: new MockChainAdapter(),
       encryptionSeedProviders: [],
     });
     await ds.init();
-    const result = await ds.upload(enc("public data"), { isPublic: true });
-    expect(result).toHaveProperty("chainRefId");
-    expect(result).toHaveProperty("storageId");
-    expect(result.encryptionScheme).toBe("");
+    await expect(ds.upload(enc("public data"), { isPublic: true })).rejects.toThrow(
+      "[dStorage] Cannot upload public data without at least one encryption seed provider.",
+    );
   });
 
   it("retrieves the original content via refId for public upload", async () => {

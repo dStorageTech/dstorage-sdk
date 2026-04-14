@@ -165,17 +165,19 @@ const OWNER_SECRET_DOMAIN = "dstorage:owner-secret:v1";
  *   - Per-upload unique: different DEK + storageId per upload → different ownerSecret.
  *   - Derivable: any holder of a valid KEK can unwrap the DEK and re-derive the ownerSecret.
  *
- * @param dek           32-byte data DEK (from the key envelope wrappers)
+ * @param ikm           32-byte key material (DEK for private uploads; KEK for public uploads)
  * @param rawStorageId  Raw storage network ID bytes (e.g. Arweave txId encoded as UTF-8)
+ * @param info          HKDF info / domain separator (defaults to private-upload domain)
  */
 export async function deriveOwnerSecret(
-  dek: Uint8Array,
+  ikm: Uint8Array,
   rawStorageId: Uint8Array,
+  info: string = OWNER_SECRET_DOMAIN,
 ): Promise<Uint8Array> {
   // Uint8Array.from() produces Uint8Array<ArrayBuffer> which is required by WebCrypto.
   const keyMaterial = await globalThis.crypto.subtle.importKey(
     "raw",
-    Uint8Array.from(dek),
+    Uint8Array.from(ikm),
     "HKDF",
     false,
     ["deriveBits"],
@@ -185,7 +187,7 @@ export async function deriveOwnerSecret(
       name: "HKDF",
       hash: "SHA-256",
       salt: Uint8Array.from(rawStorageId),
-      info: new TextEncoder().encode(OWNER_SECRET_DOMAIN),
+      info: new TextEncoder().encode(info),
     },
     keyMaterial,
     256,
