@@ -83,7 +83,7 @@ export ledger refCounter: Counter;
 //   - The SDK rejects any contract address whose contractVersion it does not
 //     recognise, preventing silent data corruption.
 //
-export ledger contractVersion: Uint<16>;
+export sealed ledger contractVersion: Uint<16>;
 
 constructor() {
   // Start at 1 so the first stored entry uses a non-zero counter value.
@@ -117,11 +117,11 @@ constructor() {
 //
 // Returns: computed commitment (Bytes<32>), disclosed for ledger storage.
 //
-export circuit computeOwnerCommitment(
-                 secret: Bytes<32>,
-                 nonce: Bytes<32>,
-                 instanceSalt: Bytes<32>,
-                 ): Bytes<32> {
+export pure circuit computeOwnerCommitment(
+                      secret: Bytes<32>,
+                      nonce: Bytes<32>,
+                      instanceSalt: Bytes<32>,
+                      ): Bytes<32> {
   return disclose(persistentHash<Vector<4, Bytes<32>>>(
                     [pad(32, "dstorage:owner:"), secret, nonce, instanceSalt]
                     ));
@@ -136,7 +136,7 @@ export circuit computeOwnerCommitment(
 // have no ZK field element representation and cannot be used in persistentHash.
 // The counter already guarantees uniqueness per contract instance.
 //
-export circuit deriveRefId(refCounter: Bytes<32>, instanceSalt: Bytes<32>): Bytes<32> {
+export pure circuit deriveRefId(refCounter: Bytes<32>, instanceSalt: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dstorage:ref:"), refCounter, instanceSalt]);
 }
 

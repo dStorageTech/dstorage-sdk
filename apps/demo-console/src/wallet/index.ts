@@ -106,6 +106,10 @@ export async function initWallet(
       () => "Syncing wallet...",
       () => syncWallet(walletProvider.wallet, 2_000, 360_000),
     );
+    await ticker(
+      () => "Caching wallet state...",
+      () => walletProvider.saveState(),
+    );
     const { unshieldedToken } = await import("@midnight-ntwrk/ledger-v8");
     const unshieldedState = await ticker(
       () => "Waiting for NIGHT funds...",

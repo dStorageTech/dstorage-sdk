@@ -1,3 +1,5 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import {
   type CoinPublicKey,
   DustSecretKey,
@@ -23,6 +25,37 @@ import {
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
+
+// ── Wallet state cache ─────────────────────────────────────────────────────────
+
+interface WalletStateCache {
+  shielded: string;
+  dust: string;
+  unshielded: string;
+}
+
+function walletCachePath(cacheDir: string, walletId: string): string {
+  return path.join(cacheDir, `wallet-state-${walletId}.json`);
+}
+
+async function loadWalletCache(
+  filePath: string,
+): Promise<WalletStateCache | null> {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    return JSON.parse(raw) as WalletStateCache;
+  } catch {
+    return null;
+  }
+}
+
+async function saveWalletCacheFile(
+  filePath: string,
+  cache: WalletStateCache,
+): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(cache), "utf8");
+}
 
 // ── Local environment config type ─────────────────────────────────────────────
 export interface EnvironmentConfiguration {
@@ -81,7 +114,14 @@ export class MidnightWalletProvider
   readonly wallet: WalletFacade;
   readonly zswapSecretKeys: ZswapSecretKeys;
   readonly dustSecretKey: DustSecretKey;
+  readonly cacheFilePath: string;
   private readonly keystore: UnshieldedKeystore;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _shieldedWallet: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _dustWallet: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _unshieldedWallet: any;
 
   private constructor(
     environmentConfiguration: EnvironmentConfiguration,
@@ -89,12 +129,20 @@ export class MidnightWalletProvider
     zswapSecretKeys: ZswapSecretKeys,
     dustSecretKey: DustSecretKey,
     keystore: UnshieldedKeystore,
+    cacheFilePath: string,
+    shieldedWallet: unknown,
+    dustWallet: unknown,
+    unshieldedWallet: unknown,
   ) {
     this.env = environmentConfiguration;
     this.wallet = wallet;
     this.zswapSecretKeys = zswapSecretKeys;
     this.dustSecretKey = dustSecretKey;
     this.keystore = keystore;
+    this.cacheFilePath = cacheFilePath;
+    this._shieldedWallet = shieldedWallet;
+    this._dustWallet = dustWallet;
+    this._unshieldedWallet = unshieldedWallet;
   }
 
   getCoinPublicKey(): CoinPublicKey {
@@ -137,9 +185,26 @@ export class MidnightWalletProvider
     return this.wallet.stop();
   }
 
+  async saveState(): Promise<void> {
+    if (!this._shieldedWallet || !this._dustWallet || !this._unshieldedWallet)
+      return;
+    const [shielded, dust, unshielded] = await Promise.all([
+      this._shieldedWallet.serializeState(),
+      this._dustWallet.serializeState(),
+      this._unshieldedWallet.serializeState(),
+    ]);
+    await saveWalletCacheFile(this.cacheFilePath, {
+      shielded,
+      dust,
+      unshielded,
+    });
+    console.log(`Wallet state cached to: ${this.cacheFilePath}`);
+  }
+
   static async build(
     env: EnvironmentConfiguration,
     seed?: string,
+    cacheDir = path.join(process.cwd(), "midnight-wallet-cache"),
   ): Promise<MidnightWalletProvider> {
     // Derive per-role seeds from the master hex seed.
     // If no seed is provided, generate a random 32-byte master seed.
@@ -163,7 +228,6 @@ export class MidnightWalletProvider
       },
       relayURL: new URL(env.nodeWS),
       provingServerUrl: new URL(env.proofServer),
-      txHistoryStorage: new InMemoryTransactionHistoryStorage(),
       costParameters: {
         additionalFeeOverhead,
         feeBlocksMargin: 5,
@@ -174,21 +238,65 @@ export class MidnightWalletProvider
     const dustParameters = LedgerParameters.initialParameters().dust;
 
     const keystore = createKeystore(unshieldedSeed, env.walletNetworkId);
-    const shieldedWallet =
-      ShieldedWallet(walletConfig).startWithSeed(shieldedSeed);
-    const unshieldedWallet = UnshieldedWallet(walletConfig).startWithPublicKey(
-      PublicKey.fromKeyStore(keystore),
-    );
-    const dustWallet = DustWallet(walletConfig).startWithSeed(
-      dustSeed,
-      dustParameters,
-    );
+
+    const walletId = masterSeedHex.slice(0, 16);
+    const cacheFilePath = walletCachePath(cacheDir, walletId);
+    const cache = await loadWalletCache(cacheFilePath);
+    if (cache) {
+      console.log("Found wallet state cache, attempting restore...");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let shieldedWallet: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let dustWallet: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let unshieldedWallet: any;
 
     const walletFacade = await WalletFacade.init({
       configuration: walletConfig,
-      shielded: () => shieldedWallet,
-      unshielded: () => unshieldedWallet,
-      dust: () => dustWallet,
+      shielded: (cfg: any) => {
+        if (cache) {
+          try {
+            shieldedWallet = ShieldedWallet(cfg).restore(cache.shielded);
+            return shieldedWallet;
+          } catch (e) {
+            console.warn("Failed to restore shielded wallet from cache:", e);
+          }
+        }
+        shieldedWallet = ShieldedWallet(cfg).startWithSeed(shieldedSeed);
+        return shieldedWallet;
+      },
+      dust: (cfg: any) => {
+        if (cache) {
+          try {
+            dustWallet = DustWallet(cfg).restore(cache.dust);
+            return dustWallet;
+          } catch (e) {
+            console.warn("Failed to restore dust wallet from cache:", e);
+          }
+        }
+        dustWallet = DustWallet(cfg).startWithSeed(dustSeed, dustParameters);
+        return dustWallet;
+      },
+      unshielded: (cfg: any) => {
+        if (cache) {
+          try {
+            unshieldedWallet = UnshieldedWallet({
+              ...cfg,
+              txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+            }).restore(cache.unshielded);
+            return unshieldedWallet;
+          } catch (e) {
+            console.warn("Failed to restore unshielded wallet from cache:", e);
+          }
+        }
+        unshieldedWallet = UnshieldedWallet({
+          ...cfg,
+          txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+        }).startWithPublicKey(PublicKey.fromKeyStore(keystore));
+        return unshieldedWallet;
+      },
     });
 
     return new MidnightWalletProvider(
@@ -197,6 +305,10 @@ export class MidnightWalletProvider
       ZswapSecretKeys.fromSeed(shieldedSeed),
       DustSecretKey.fromSeed(dustSeed),
       keystore,
+      cacheFilePath,
+      shieldedWallet,
+      dustWallet,
+      unshieldedWallet,
     );
   }
 }

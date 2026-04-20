@@ -299,11 +299,11 @@ console.log(receipt.chainRefId); // On-chain reference ID
 
 ### Supported tokens
 
-| Token  | Network  | Used for                                                              |
-| ------ | -------- | --------------------------------------------------------------------- |
-| `AR`   | Arweave  | Storage payment — `ArweavePaymentAdapter` or `ManagedPaymentAdapter`  |
-| `DUST` | Midnight | Chain fees — handled internally by the Midnight wallet                |
-| `MOCK` | Mock     | Development & testing (simulated)                                     |
+| Token  | Network  | Used for                                                             |
+| ------ | -------- | -------------------------------------------------------------------- |
+| `AR`   | Arweave  | Storage payment — `ArweavePaymentAdapter` or `ManagedPaymentAdapter` |
+| `DUST` | Midnight | Chain fees — handled internally by the Midnight wallet               |
+| `MOCK` | Mock     | Development & testing (simulated)                                    |
 
 Tokens are selected automatically based on your chosen adapters.
 
@@ -478,13 +478,13 @@ Encryption keys are derived deterministically from the seed provider's inputs �
 
 ### Storage
 
-| Provider                   | Status    | Notes                                                                            |
-| -------------------------- | --------- | -------------------------------------------------------------------------------- |
-| Mock (localStorage/memory) | ✅ Live   | Perfect for development & demos                                                  |
-| Arweave Local              | ✅ Live   | Local arlocal integration testing                                                |
-| Arweave                    | ✅ Live   | Requires `arweave` package + Wander wallet                                       |
-| Arweave Turbo              | ✅ Live   | Near-instant finality via managed server-signing; no client AR wallet needed     |
-| Autonomi                   | 🔵 Stub   | Awaiting Autonomi JS SDK stability                                               |
+| Provider                   | Status  | Notes                                                                        |
+| -------------------------- | ------- | ---------------------------------------------------------------------------- |
+| Mock (localStorage/memory) | ✅ Live | Perfect for development & demos                                              |
+| Arweave Local              | ✅ Live | Local arlocal integration testing                                            |
+| Arweave                    | ✅ Live | Requires `arweave` package + Wander wallet                                   |
+| Arweave Turbo              | ✅ Live | Near-instant finality via managed server-signing; no client AR wallet needed |
+| Autonomi                   | 🔵 Stub | Awaiting Autonomi JS SDK stability                                           |
 
 ### Blockchain
 
