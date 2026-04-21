@@ -1170,16 +1170,15 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
       }
 
-      const { firstValueFrom } = await import("rxjs");
       const { unshieldedToken } = await import(
         /* @vite-ignore */ "@midnight-ntwrk/ledger-v8"
       );
-      const state = await firstValueFrom((this.facade as any).state() as any);
+      const state = await (this.facade as any).waitForSyncedState();
       const nightToken = unshieldedToken();
 
       return {
         night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
-        dust: (state as any).dust?.walletBalance?.(new Date()) ?? 0n,
+        dust: (state as any).dust?.balance?.(new Date()) ?? 0n,
       };
     } else {
       if (!this.connectorAPI) {

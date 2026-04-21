@@ -104,7 +104,7 @@ export async function initWallet(
   } else {
     await ticker(
       () => "Syncing wallet...",
-      () => syncWallet(walletProvider.wallet, 2_000, 360_000),
+      () => syncWallet(walletProvider.wallet, 2_000, 3_600_000),
     );
     await ticker(
       () => "Caching wallet state...",
