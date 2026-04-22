@@ -51,13 +51,9 @@ export function SdkDrawer({
           )}
         </div>
         <div className="sdk-tab-center">
-          <span className={`as-badge as-badge-${storageAdapter.status}`}>
-            {storageAdapter.label}
-          </span>
+          <span className="as-badge as-badge-live">{storageAdapter.label}</span>
           <span className="sdk-tab-config-sep">·</span>
-          <span className={`as-badge as-badge-${chainAdapter.status}`}>
-            {chainAdapter.label}
-          </span>
+          <span className="as-badge as-badge-live">{chainAdapter.label}</span>
           <span className="sdk-tab-config-sep">·</span>
           <span className={`as-badge as-badge-${paymentAdapter.status}`}>
             {paymentAdapter.label}
@@ -83,7 +79,7 @@ export function SdkDrawer({
               <div className="sdk-idle-title">Active configuration</div>
               <div className="sdk-idle-row">
                 <span className="sdk-idle-label">Storage</span>
-                <span className={`as-badge as-badge-${storageAdapter.status}`}>
+                <span className="as-badge as-badge-live">
                   {storageAdapter.label}
                 </span>
                 <span className="sdk-idle-desc">
@@ -92,7 +88,7 @@ export function SdkDrawer({
               </div>
               <div className="sdk-idle-row">
                 <span className="sdk-idle-label">Chain</span>
-                <span className={`as-badge as-badge-${chainAdapter.status}`}>
+                <span className="as-badge as-badge-live">
                   {chainAdapter.label}
                 </span>
                 <span className="sdk-idle-desc">

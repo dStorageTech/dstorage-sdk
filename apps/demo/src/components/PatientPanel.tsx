@@ -511,9 +511,7 @@ export function PatientPanel({
 
         <div className="as-active-row">
           <span className="as-active-label">Storage</span>
-          <span className={`as-badge as-badge-${activeAdapter.status}`}>
-            {activeAdapter.label}
-          </span>
+          <span className="as-badge as-badge-live">{activeAdapter.label}</span>
           <span className="as-active-desc">{activeAdapter.description}</span>
         </div>
 
@@ -650,33 +648,13 @@ export function PatientPanel({
           <div className="pp-pg-row">
             <span className="pp-pg-icon">📦</span>
             <span>
-              Storage adapter: <strong>{activeAdapter.label}</strong>{" "}
-              <span
-                className={`as-badge as-badge-${activeAdapter.status}`}
-                style={{ fontSize: "10px" }}
-              >
-                {activeAdapter.status === "live"
-                  ? "Live"
-                  : activeAdapter.status === "preview"
-                    ? "Preview"
-                    : "Soon"}
-              </span>
+              Storage adapter: <strong>{activeAdapter.label}</strong>
             </span>
           </div>
           <div className="pp-pg-row">
             <span className="pp-pg-icon">⛓</span>
             <span>
-              Chain adapter: <strong>{activeChainAdapter.label}</strong>{" "}
-              <span
-                className={`as-badge as-badge-${activeChainAdapter.status}`}
-                style={{ fontSize: "10px" }}
-              >
-                {activeChainAdapter.status === "live"
-                  ? "Live"
-                  : activeChainAdapter.status === "preview"
-                    ? "Preview"
-                    : "Soon"}
-              </span>
+              Chain adapter: <strong>{activeChainAdapter.label}</strong>
             </span>
           </div>
         </div>
@@ -779,17 +757,7 @@ export function PatientPanel({
           <span className="pp-pg-icon">📦</span>
           <span>
             Encrypted blob stored via <strong>{activeAdapter.label}</strong>{" "}
-            adapter{" "}
-            <span
-              className={`as-badge as-badge-${activeAdapter.status}`}
-              style={{ fontSize: "10px" }}
-            >
-              {activeAdapter.status === "live"
-                ? "Live"
-                : activeAdapter.status === "preview"
-                  ? "Preview"
-                  : "Soon"}
-            </span>
+            adapter
           </span>
         </div>
         <div className="pp-pg-row">

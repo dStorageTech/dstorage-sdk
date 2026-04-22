@@ -11,7 +11,6 @@ export const ADAPTER_CONFIGS: Record<
   {
     label: string;
     description: string;
-    status: "live" | "preview" | "stub";
     note?: string;
     cmd?: string;
   }
@@ -20,19 +19,16 @@ export const ADAPTER_CONFIGS: Record<
     label: "Mock Storage",
     description:
       "In-memory store, no network. Instant — ideal for development.",
-    status: "live",
   },
   "arweave-local": {
     label: "Arweave Local",
     description: "Local arlocal node — real Arweave flow, no AR tokens needed.",
-    status: "live",
     note: "Requires a local arlocal server running at http://localhost:1984",
     cmd: "docker run -d --rm -p 1984:1984 textury/arlocal",
   },
   arweave: {
     label: "Arweave",
     description: "Pay-once permanent storage on the permaweb.",
-    status: "live",
     note: "Requires the ArConnect browser extension",
   },
 };
@@ -42,7 +38,6 @@ export const CHAIN_ADAPTER_CONFIGS: Record<
   {
     label: string;
     description: string;
-    status: "live" | "preview" | "stub";
     note?: string;
   }
 > = {
@@ -50,12 +45,10 @@ export const CHAIN_ADAPTER_CONFIGS: Record<
     label: "Mock Midnight",
     description:
       "Simulated Midnight chain. Instant transactions — ideal for development.",
-    status: "live",
   },
   "midnight-connector": {
     label: "Midnight Network",
     description: "Real Midnight network via browser wallet extension.",
-    status: "live",
     note: "Requires Lace wallet extension",
   },
 };
