@@ -42,6 +42,7 @@ import {
 } from "@dstorage/storage";
 import {
   MidnightChainAdapter,
+  NETWORKS,
   //MockMidnightChainAdapter,
 } from "@dstorage/chain";
 import {
@@ -80,24 +81,6 @@ const DATA_REGISTRY_ZK_PATH = path.resolve(
 );
 
 // ── Network default endpoints ──────────────────────────────────────────────────
-
-const NETWORKS = {
-  preprod: {
-    node: "https://rpc.preprod.midnight.network",
-    nodeWs: "wss://rpc.preprod.midnight.network",
-    indexerHttp: "https://indexer.preprod.midnight.network/api/v3/graphql",
-    indexerWs: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
-    proofServer: "http://127.0.0.1:6300",
-  },
-  undeployed: {
-    node: "http://127.0.0.1:9944",
-    nodeWs: "ws://127.0.0.1:9944",
-    indexerHttp: "http://127.0.0.1:8088/api/v3/graphql",
-    indexerWs: "ws://127.0.0.1:8088/api/v3/graphql/ws",
-    proofServer: "http://127.0.0.1:6300",
-  },
-} as const;
-
 type NetworkName = keyof typeof NETWORKS;
 
 // ── Progress ticker ────────────────────────────────────────────────────────────
@@ -295,11 +278,10 @@ async function main(): Promise<void> {
     // ── 7. Build the wallet and sync ────────────────────────────────────────
     const seedHex = await resolveSeedHex(credentials);
     const envConfig: EnvironmentConfiguration = {
-      walletNetworkId: networkName,
       networkId: networkName,
       indexer: defaultEndpoints.indexerHttp,
       indexerWS: defaultEndpoints.indexerWs,
-      node: defaultEndpoints.node,
+      node: defaultEndpoints.nodeHttp,
       nodeWS: defaultEndpoints.nodeWs,
       proofServer: proofServerEndpoint,
     };
@@ -321,10 +303,6 @@ async function main(): Promise<void> {
       ...(contractAddressInput
         ? { contractAddress: contractAddressInput }
         : {}),
-      nodeEndpoint: defaultEndpoints.node,
-      nodeWsEndpoint: defaultEndpoints.nodeWs,
-      indexerEndpoint: defaultEndpoints.indexerHttp,
-      indexerWsEndpoint: defaultEndpoints.indexerWs,
       proofServerEndpoint,
       // ZK artifacts for the DataRegistry storeReference circuit
       zkArtifactsPath: DATA_REGISTRY_ZK_PATH,

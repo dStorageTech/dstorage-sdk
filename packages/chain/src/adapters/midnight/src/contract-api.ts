@@ -1,9 +1,6 @@
 import * as DataRegistry from "../contracts/dataregistry/managed/contract/index.js";
 
-import {
-  type ContractAddress,
-  encodeContractAddress,
-} from "@midnight-ntwrk/compact-runtime";
+import { type ContractAddress } from "@midnight-ntwrk/compact-runtime";
 import type { Logger } from "../../../types.js";
 import {
   type DataRegistryDerivedState,

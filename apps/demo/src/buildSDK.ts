@@ -61,10 +61,6 @@ export async function buildSDK(
     >[0] = {
       walletMode: "connector",
       network: "preprod",
-      nodeEndpoint: "",
-      nodeWsEndpoint: "",
-      indexerEndpoint: "",
-      indexerWsEndpoint: "",
       proofServerEndpoint: PROOF_SERVER_ENDPOINT,
       zkConfigBaseUrl: window.location.origin,
       ...managedConfig,

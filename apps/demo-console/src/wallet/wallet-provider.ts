@@ -59,7 +59,6 @@ async function saveWalletCacheFile(
 
 // ── Local environment config type ─────────────────────────────────────────────
 export interface EnvironmentConfiguration {
-  walletNetworkId: string;
   networkId: string;
   indexer: string;
   indexerWS: string;
@@ -221,7 +220,7 @@ export class MidnightWalletProvider
     const additionalFeeOverhead = 1_000n;
 
     const walletConfig = {
-      networkId: env.walletNetworkId,
+      networkId: env.networkId,
       indexerClientConnection: {
         indexerHttpUrl: env.indexer,
         indexerWsUrl: env.indexerWS,
@@ -237,7 +236,7 @@ export class MidnightWalletProvider
     // Dust protocol parameters from the initial ledger state.
     const dustParameters = LedgerParameters.initialParameters().dust;
 
-    const keystore = createKeystore(unshieldedSeed, env.walletNetworkId);
+    const keystore = createKeystore(unshieldedSeed, env.networkId);
 
     const walletId = masterSeedHex.slice(0, 16);
     const cacheFilePath = walletCachePath(cacheDir, walletId);

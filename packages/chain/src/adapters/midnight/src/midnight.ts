@@ -52,9 +52,27 @@ export interface WalletAddresses {
   dust: string;
 }
 
+// ── Network default endpoints ──────────────────────────────────────────────────
+
+export const NETWORKS = {
+  preprod: {
+    nodeHttp: "https://rpc.preprod.midnight.network",
+    nodeWs: "wss://rpc.preprod.midnight.network",
+    indexerHttp: "https://indexer.preprod.midnight.network/api/v3/graphql",
+    indexerWs: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
+  },
+  undeployed: {
+    nodeHttp: "http://127.0.0.1:9944",
+    nodeWs: "ws://127.0.0.1:9944",
+    indexerHttp: "http://127.0.0.1:8088/api/v3/graphql",
+    indexerWs: "ws://127.0.0.1:8088/api/v3/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
+  },
+} as const;
+
 /** Internal environment configuration passed to wallet SDK providers. */
 interface EnvironmentConfiguration {
-  walletNetworkId: string;
   networkId: string;
   indexer: string;
   indexerWS: string;
@@ -69,8 +87,8 @@ interface BaseConfig {
   /**
    * Midnight node RPC endpoint.
    */
-  nodeEndpoint: string;
-  nodeWsEndpoint: string;
+  nodeEndpoint?: string;
+  nodeWsEndpoint?: string;
   /**
    * Optional logger for SDK operational output.
    * Pass `logger: console` to see all output, or inject your own logger.
@@ -80,11 +98,11 @@ interface BaseConfig {
   /**
    * Midnight indexer HTTP (GraphQL) endpoint for state queries.
    */
-  indexerEndpoint: string;
+  indexerEndpoint?: string;
   /**
    * Midnight indexer WebSocket endpoint for real-time subscriptions.
    */
-  indexerWsEndpoint: string;
+  indexerWsEndpoint?: string;
   /**
    * Proof server URL.
    */
@@ -300,13 +318,13 @@ export class MidnightChainAdapter implements ChainAdapter {
         : undefined;
 
     this.config = {
-      walletNetworkId: config.network,
       networkId: config.network,
-      indexer: config.indexerEndpoint,
-      indexerWS: config.indexerWsEndpoint,
-      node: config.nodeEndpoint,
-      nodeWS: config.nodeWsEndpoint,
-      proofServer: config.proofServerEndpoint,
+      indexer: config.indexerEndpoint ?? NETWORKS[config.network].indexerHttp,
+      indexerWS: config.indexerWsEndpoint ?? NETWORKS[config.network].indexerWs,
+      node: config.nodeEndpoint ?? NETWORKS[config.network].nodeHttp,
+      nodeWS: config.nodeWsEndpoint ?? NETWORKS[config.network].nodeWs,
+      proofServer:
+        config.proofServerEndpoint ?? NETWORKS[config.network].proofServer,
     };
 
     if (config.signingServerUrl) {
