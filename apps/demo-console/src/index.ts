@@ -351,20 +351,26 @@ async function main(): Promise<void> {
     console.log(`  Shielded:   ${addresses.shielded}`);
     console.log(`  Dust:       ${addresses.dust}`);
 
-    const balances = await chainAdapter.getBalances();
-    if (balances.night === 0n) {
+    if (useManagedPaymentService) {
       console.log(
-        `\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`,
+        "\nManaged payment mode — wallet sync skipped, balances not shown.",
       );
     } else {
-      console.log(`\nNIGHT balance: ${balances.night}`);
-    }
-    if (balances.dust === 0n) {
-      console.log(
-        "Warning: No DUST found. DUST is required for transaction fees.",
-      );
-    } else {
-      console.log(`DUST balance:  ${balances.dust}`);
+      const balances = await chainAdapter.getBalances();
+      if (balances.night === 0n) {
+        console.log(
+          `\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`,
+        );
+      } else {
+        console.log(`\nNIGHT balance: ${balances.night}`);
+      }
+      if (balances.dust === 0n) {
+        console.log(
+          "Warning: No DUST found. DUST is required for transaction fees.",
+        );
+      } else {
+        console.log(`DUST balance:  ${balances.dust}`);
+      }
     }
 
     // ── 10. Action loop: upload files or list DataRegistry references ──────
