@@ -59,11 +59,6 @@ export interface DStorageConfig {
    */
   encryptionSeedProviders?: EncryptionSeedProvider[];
   /**
-   * On-chain address of an already-deployed DataRegistry contract.
-   * If omitted, sdk.init() will deploy a new contract and return its address.
-   */
-  dataRegistryAddress?: string;
-  /**
    * Optional logger for SDK operational output.
    * Pass `logger: console` to see all output, or inject your own logger.
    * Omit to suppress all SDK log output.

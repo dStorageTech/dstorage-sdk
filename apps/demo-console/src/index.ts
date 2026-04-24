@@ -329,9 +329,6 @@ async function main(): Promise<void> {
         }),
       ],
       logger,
-      ...(contractAddressInput
-        ? { dataRegistryAddress: contractAddressInput }
-        : {}),
     });
 
     // sdk.init() deploys or joins the DataRegistry contract and derives the

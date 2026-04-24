@@ -113,8 +113,8 @@ interface BaseConfig {
    */
   proofServerEndpoint: string;
   /**
-   * On-chain address of the deployed DataRegistry contract.
-   * Optional — if omitted, call deployDataRegistry() (or sdk.init()) to deploy a new contract.
+   * On-chain address of an already-deployed DataRegistry contract.
+   * If omitted, sdk.init() will deploy a new contract and return its address.
    */
   contractAddress?: string;
   /**
