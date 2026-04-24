@@ -14,7 +14,7 @@ import type {
   ChainReference,
   ChainReferenceUpdate,
   ChainWriteResult,
-  Logger,
+  ChainAdapterLogger,
   WalletBalances,
   DataReferenceSummary,
   ChainQuote,
@@ -60,9 +60,9 @@ export class MockChainAdapter implements ChainAdapter {
   });
 
   private contractAddress: string;
-  private readonly logger: Logger | undefined;
+  private readonly logger: ChainAdapterLogger | undefined;
 
-  constructor(logger?: Logger) {
+  constructor(logger?: ChainAdapterLogger) {
     this.logger = logger;
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
     const savedRefs = load<Record<string, ChainReference>>(

@@ -1,47 +1,12 @@
-export * from "./types.js"; // includes Logger
+export * from "./types.js";
 export * from "./dStorage.js";
+export * from "./metaTx/index.js";
 export { CHUNK_SIZE, isManifest } from "./chunked.js";
 export type { ChunkManifest, ChunkEntry } from "./chunked.js";
-export * from "./metaTx/index.js";
 
-// Re-export adapters for convenience — developers only need to import @dstorage/core
-export {
-  MockStorageAdapter,
-  ArweaveStorageAdapter,
-  ArweaveTurboStorageAdapter,
-  AutonomiStorageAdapter,
-  // Local / testnet
-  ArweaveLocalStorageAdapter,
-  ArweaveLocalHelper,
-  ArweaveLocalError,
-  ARWEAVE_MAINNET,
-  ARWEAVE_LOCAL,
-  arlocalGateway,
-} from "@dstorage/storage";
-
-export type {
-  ArweaveTurboAdapterConfig,
-  ArweaveLocalAdapterConfig,
-  ArweaveLocalHelperConfig,
-  ArweaveLocalInfo,
-  ArweaveLocalBalance,
-} from "@dstorage/storage";
-
-export {
-  MockChainAdapter,
-  MockMidnightChainAdapter,
-  MockProofServer,
-  // MidnightChainAdapter connector mode is browser-compatible (Node.js-only facade imports
-  // are dynamic with /* @vite-ignore */ and are never executed in connector mode).
-  MidnightChainAdapter,
-} from "@dstorage/chain";
-
-export type {
-  DataReferenceSummary,
-  ChainReference,
-  MidnightChainAdapterConfig,
-} from "@dstorage/chain";
-
-export { MockPaymentAdapter, ArweavePaymentAdapter } from "@dstorage/payment";
-
-export type { PaymentAdapter, PaymentQuote } from "@dstorage/payment";
+// Re-export adapters for convenience,
+// developers only need to import @dstorage/core
+export * from "@dstorage/storage";
+export * from "@dstorage/chain";
+export * from "@dstorage/payment";
+export * from "@dstorage/seed-providers";

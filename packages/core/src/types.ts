@@ -8,8 +8,6 @@ import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
 import type { EncryptionSeedProvider } from "@dstorage/seed-providers";
 import type { CostEstimate } from "./metaTx/payment.js";
 
-export type { EncryptionSeedProvider };
-
 /**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.

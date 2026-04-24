@@ -11,10 +11,10 @@
  */
 
 import type {
-  Logger,
+  StorageAdapterLogger,
   StorageAdapter,
   StorageProviderName,
-  UploadResult,
+  StorageUploadResult,
 } from "../types.js";
 import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
 
@@ -31,7 +31,7 @@ export interface AutonomiAdapterConfig {
   /**
    * Optional logger for SDK operational output.
    */
-  logger?: Logger;
+  logger?: StorageAdapterLogger;
 }
 
 export class AutonomiStorageAdapter implements StorageAdapter {
@@ -40,7 +40,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   readonly paymentAdapter: PaymentAdapter;
 
   private config: AutonomiAdapterConfig;
-  private readonly logger: Logger | undefined;
+  private readonly logger: StorageAdapterLogger | undefined;
 
   constructor(config: AutonomiAdapterConfig = {}) {
     this.config = config;
@@ -62,7 +62,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   async upload(
     data: Uint8Array,
     _metadata: Record<string, string> = {},
-  ): Promise<UploadResult> {
+  ): Promise<StorageUploadResult> {
     /**
      * TODO: Replace with real Autonomi upload when JS SDK is stable.
      */

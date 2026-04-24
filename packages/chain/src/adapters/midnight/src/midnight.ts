@@ -32,7 +32,7 @@ import type {
   ChainReferenceUpdate,
   ChainWriteResult,
   EncryptionScheme,
-  Logger,
+  ChainAdapterLogger,
   WalletBalances,
   DataReferenceSummary,
   ChainQuote,
@@ -99,7 +99,7 @@ interface BaseConfig {
    * Pass `logger: console` to see all output, or inject your own logger.
    * Omit to suppress all SDK log output.
    */
-  logger?: Logger;
+  logger?: ChainAdapterLogger;
   /**
    * Midnight indexer HTTP (GraphQL) endpoint for state queries.
    */
@@ -241,7 +241,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   private readonly walletMode: "connector" | "provider";
   private readonly connectorName: string | null;
-  private readonly logger: Logger | undefined;
+  private readonly logger: ChainAdapterLogger | undefined;
 
   private _contractAddress: string | undefined;
   private _zkArtifactsPath: string | undefined;

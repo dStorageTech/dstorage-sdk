@@ -11,7 +11,7 @@ import type { PaymentAdapter } from "@dstorage/payment";
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
  * Omit the field entirely to suppress all SDK output.
  */
-export interface Logger {
+export interface StorageAdapterLogger {
   log(component: string, msg: string): void;
   warn(component: string, msg: string): void;
   error(component: string, msg: string): void;
@@ -26,7 +26,7 @@ export type StorageProviderName =
   | "arweave_turbo";
 
 /** Metadata returned after a successful upload. */
-export interface UploadResult {
+export interface StorageUploadResult {
   /** Unique content identifier on the storage network */
   id: string;
   /** Human-readable name of the network used */
@@ -52,12 +52,12 @@ export interface StorageAdapter {
    * must already be encrypted before calling this function. If the caller chose
    * public storage, `data` is expected to be plaintext/unencrypted. The SDK provides
    * the @dstorage/crypto package and public APIs for performing encryption before upload.
-   * @returns UploadResult containing the content ID needed to retrieve later
+   * @returns StorageUploadResult containing the content ID needed to retrieve later
    */
   upload(
     data: Uint8Array,
     metadata?: Record<string, string>,
-  ): Promise<UploadResult>;
+  ): Promise<StorageUploadResult>;
 
   /**
    * Retrieve bytes by the content ID returned from upload().

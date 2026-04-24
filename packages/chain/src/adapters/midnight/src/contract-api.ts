@@ -1,7 +1,7 @@
 import * as DataRegistry from "../contracts/dataregistry/managed/contract/index.js";
 
 import { type ContractAddress } from "@midnight-ntwrk/compact-runtime";
-import type { Logger } from "../../../types.js";
+import type { ChainAdapterLogger } from "../../../types.js";
 import {
   type DataRegistryDerivedState,
   type DataRegistryContract,
@@ -101,7 +101,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   private constructor(
     public readonly deployedContract: DeployedDataRegistryContract,
     private readonly providers: DataRegistryProviders,
-    private readonly logger?: Logger,
+    private readonly logger?: ChainAdapterLogger,
   ) {
     this.deployedContractAddress =
       deployedContract.deployTxData.public.contractAddress;
@@ -345,7 +345,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
    */
   static async deploy(
     providers: DataRegistryProviders,
-    logger?: Logger,
+    logger?: ChainAdapterLogger,
   ): Promise<DataRegistryAPI> {
     logger?.log("dStorage/midnight", "deploying DataRegistry contract...");
 
@@ -372,7 +372,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   static async join(
     providers: DataRegistryProviders,
     contractAddress: ContractAddress,
-    logger?: Logger,
+    logger?: ChainAdapterLogger,
   ): Promise<DataRegistryAPI> {
     logger?.log(
       "dStorage/midnight",

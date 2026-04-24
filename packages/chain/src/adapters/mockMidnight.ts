@@ -24,7 +24,7 @@ import type {
   ChainReferenceUpdate,
   ChainWriteResult,
   DataReferenceSummary,
-  Logger,
+  ChainAdapterLogger,
   ChainQuote,
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
@@ -79,7 +79,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   readonly paymentAdapter: PaymentAdapter;
 
   private readonly proofServer: MockProofServer;
-  private readonly logger: Logger | undefined;
+  private readonly logger: ChainAdapterLogger | undefined;
 
   constructor(
     options: {
@@ -89,7 +89,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       compiledContract?: unknown;
       /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
       contractAddress?: string;
-      logger?: Logger;
+      logger?: ChainAdapterLogger;
     } & Partial<
       Pick<ManagedPaymentAdapterConfig, "signingServerUrl" | "authToken">
     > = {},

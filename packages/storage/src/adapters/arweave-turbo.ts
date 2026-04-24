@@ -37,8 +37,8 @@
 import type {
   StorageAdapter,
   StorageProviderName,
-  UploadResult,
-  Logger,
+  StorageUploadResult,
+  StorageAdapterLogger,
 } from "../types.js";
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
@@ -67,7 +67,7 @@ export interface ArweaveTurboAdapterConfig {
   /**
    * Optional logger for SDK operational output.
    */
-  logger?: Logger;
+  logger?: StorageAdapterLogger;
 }
 
 // ── Adapter ────────────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   private readonly signingServerUrl: string | null;
   private readonly authToken: string | undefined;
   private readonly gateway: string;
-  protected readonly logger: Logger | undefined;
+  protected readonly logger: StorageAdapterLogger | undefined;
 
   /** Cached server RSA modulus (base64url). Fetched once, reused across uploads. */
   private _serverPublicKey: string | undefined;
@@ -134,7 +134,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   async upload(
     data: Uint8Array,
     metadata: Record<string, string> = {},
-  ): Promise<UploadResult> {
+  ): Promise<StorageUploadResult> {
     const { createData } = await import("@dha-team/arbundles");
 
     // The signer only sends the 48-byte deep_hash to the server; data stays local.

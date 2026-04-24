@@ -37,7 +37,7 @@
  */
 
 import type {
-  Logger,
+  PaymentAdapterLogger,
   PaymentAdapter,
   PaymentNetworkName,
   PaymentQuote,
@@ -71,7 +71,7 @@ export interface ArweavePaymentAdapterConfig {
   /**
    * Optional logger for SDK operational output.
    */
-  logger?: Logger;
+  logger?: PaymentAdapterLogger;
 }
 
 /** Internal state stored between provideUploadData() and pay(). */
@@ -98,7 +98,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
   protected readonly gateway: ArweavePaymentAdapterConfig["gateway"];
   private readonly walletKey: Record<string, string> | undefined;
   protected readonly quoteValidityMs: number;
-  protected readonly logger: Logger | undefined;
+  protected readonly logger: PaymentAdapterLogger | undefined;
 
   protected pendingUpload: PendingUpload | null = null;
   protected signedUpload: SignedArweaveUpload | null = null;

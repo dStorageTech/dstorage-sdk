@@ -39,10 +39,10 @@
  */
 
 import type {
-  Logger,
+  StorageAdapterLogger,
   StorageAdapter,
   StorageProviderName,
-  UploadResult,
+  StorageUploadResult,
 } from "../types.js";
 import {
   PaymentAdapter,
@@ -126,7 +126,7 @@ export interface ArweaveAdapterConfig {
    * Pass `logger: console` to see all output, or inject your own logger.
    * Omit to suppress all SDK log output.
    */
-  logger?: Logger;
+  logger?: StorageAdapterLogger;
 }
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   private readonly shouldWaitForConfirm: boolean;
   private readonly confirmationPollMs: number;
   private readonly confirmationTimeoutMs: number;
-  protected readonly logger: Logger | undefined;
+  protected readonly logger: StorageAdapterLogger | undefined;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private arweaveClient: any; // typed as `any` to avoid a hard import at module level
@@ -220,7 +220,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   async upload(
     data: Uint8Array,
     metadata: Record<string, string> = {},
-  ): Promise<UploadResult> {
+  ): Promise<StorageUploadResult> {
     const arweave = await this.getClient();
 
     // ── Sign-then-post flow ────────────────────────────────────────────────────

@@ -12,7 +12,7 @@
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
  * Omit the field entirely to suppress all SDK output.
  */
-export interface Logger {
+export interface PaymentAdapterLogger {
   log(component: string, msg: string): void;
   warn(component: string, msg: string): void;
   error(component: string, msg: string): void;

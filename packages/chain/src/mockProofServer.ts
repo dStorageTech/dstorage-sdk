@@ -10,6 +10,8 @@
  * timing, so developers can observe the full flow without a live network.
  */
 
+import type { ChainAdapterLogger } from "./types.js";
+
 export interface MockProof {
   /** Pedersen commitment to the witness data */
   commitment: string;
@@ -51,20 +53,19 @@ function sleep(ms: number): Promise<void> {
  *   const proof = await server.generateProof('storeReference');
  */
 
-interface Logger {
-  log(...args: unknown[]): void;
-  debug?(...args: unknown[]): void;
-}
-
 export class MockProofServer {
   /** Minimum simulated proving time in ms */
   private readonly minMs: number;
   /** Maximum simulated proving time in ms */
   private readonly maxMs: number;
-  private readonly logger: Logger | undefined;
+  private readonly logger: ChainAdapterLogger | undefined;
 
   constructor(
-    options: { minMs?: number; maxMs?: number; logger?: Logger } = {},
+    options: {
+      minMs?: number;
+      maxMs?: number;
+      logger?: ChainAdapterLogger;
+    } = {},
   ) {
     this.minMs = options.minMs ?? 300;
     this.maxMs = options.maxMs ?? 800;

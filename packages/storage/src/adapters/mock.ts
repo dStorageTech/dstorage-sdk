@@ -8,10 +8,10 @@
  */
 
 import type {
-  Logger,
+  StorageAdapterLogger,
   StorageAdapter,
   StorageProviderName,
-  UploadResult,
+  StorageUploadResult,
 } from "../types.js";
 import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
 
@@ -83,9 +83,9 @@ export class MockStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = "mock";
   readonly providerName: string = "Mock-Storage-Adapter";
   readonly paymentAdapter: PaymentAdapter;
-  private readonly logger: Logger | undefined;
+  private readonly logger: StorageAdapterLogger | undefined;
 
-  constructor(logger?: Logger) {
+  constructor(logger?: StorageAdapterLogger) {
     this.logger = logger;
     this.paymentAdapter = new MockPaymentAdapter({
       token: "MOCK",
@@ -96,7 +96,7 @@ export class MockStorageAdapter implements StorageAdapter {
   async upload(
     data: Uint8Array,
     metadata: Record<string, string> = {},
-  ): Promise<UploadResult> {
+  ): Promise<StorageUploadResult> {
     const id = generateId();
     const cost = await this.estimateCost(data);
 

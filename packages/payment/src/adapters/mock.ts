@@ -16,7 +16,7 @@
  */
 
 import type {
-  Logger,
+  PaymentAdapterLogger,
   PaymentAdapter,
   PaymentNetworkName,
   PaymentQuote,
@@ -44,7 +44,7 @@ export interface MockPaymentAdapterConfig {
   /**
    * Optional logger for SDK operational output.
    */
-  logger?: Logger;
+  logger?: PaymentAdapterLogger;
 }
 
 export class MockPaymentAdapter implements PaymentAdapter {
@@ -53,7 +53,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
   readonly type: "storage" | "chain";
 
   private readonly quoteValidityMs: number;
-  private readonly logger: Logger | undefined;
+  private readonly logger: PaymentAdapterLogger | undefined;
 
   constructor(config: MockPaymentAdapterConfig) {
     this.token = config.token;

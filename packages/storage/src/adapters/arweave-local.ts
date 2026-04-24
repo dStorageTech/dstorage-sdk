@@ -40,7 +40,7 @@
 
 import { ArweaveStorageAdapter } from "./arweave.js";
 import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from "./arweave.js";
-import type { StorageProviderName, UploadResult } from "../types.js";
+import type { StorageProviderName, StorageUploadResult } from "../types.js";
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 
@@ -403,7 +403,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   override async upload(
     data: Uint8Array,
     metadata: Record<string, string> = {},
-  ): Promise<UploadResult> {
+  ): Promise<StorageUploadResult> {
     // Ensure the wallet is funded before attempting the upload.
     if (this._initMintPromise) await this._initMintPromise;
 
