@@ -378,6 +378,13 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       );
     }
 
-    return (await signResp.json()) as SignTxResponse;
+    try {
+      return (await signResp.json()) as SignTxResponse;
+    } catch {
+      throw new Error(
+        `[dStorage/managed-payment] Managed payment service returned a non-JSON response — ` +
+          `check that the service URL is correct and reachable: ${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
+      );
+    }
   }
 }
