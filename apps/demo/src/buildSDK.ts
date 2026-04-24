@@ -80,7 +80,6 @@ export async function buildSDK(
     new PasswordSeedProvider({
       password: "dstorage-demo-password-2026!",
       salt: "dstorage:demo:v1",
-      preset: "v1-lite",
     }),
   ];
 

@@ -279,10 +279,10 @@ async function main(): Promise<void> {
     const seedHex = await resolveSeedHex(credentials);
     const envConfig: EnvironmentConfiguration = {
       networkId: networkName,
-      indexer: defaultEndpoints.indexerHttp,
-      indexerWS: defaultEndpoints.indexerWs,
-      node: defaultEndpoints.nodeHttp,
-      nodeWS: defaultEndpoints.nodeWs,
+      indexerHttp: defaultEndpoints.indexerHttp,
+      indexerWs: defaultEndpoints.indexerWs,
+      nodeHttp: defaultEndpoints.nodeHttp,
+      nodeWs: defaultEndpoints.nodeWs,
       proofServer: proofServerEndpoint,
     };
 
@@ -326,7 +326,6 @@ async function main(): Promise<void> {
         new PasswordSeedProvider({
           password: "dstorage-demo-password-2026!",
           salt: "dstorage:demo:v1",
-          preset: "v1-lite",
         }),
       ],
       logger,

@@ -60,10 +60,10 @@ async function saveWalletCacheFile(
 // ── Local environment config type ─────────────────────────────────────────────
 export interface EnvironmentConfiguration {
   networkId: string;
-  indexer: string;
-  indexerWS: string;
-  node: string;
-  nodeWS: string;
+  indexerHttp: string;
+  indexerWs: string;
+  nodeHttp: string;
+  nodeWs: string;
   proofServer: string;
 }
 
@@ -222,10 +222,10 @@ export class MidnightWalletProvider
     const walletConfig = {
       networkId: env.networkId,
       indexerClientConnection: {
-        indexerHttpUrl: env.indexer,
-        indexerWsUrl: env.indexerWS,
+        indexerHttpUrl: env.indexerHttp,
+        indexerWsUrl: env.indexerWs,
       },
-      relayURL: new URL(env.nodeWS),
+      relayURL: new URL(env.nodeWs),
       provingServerUrl: new URL(env.proofServer),
       costParameters: {
         additionalFeeOverhead,

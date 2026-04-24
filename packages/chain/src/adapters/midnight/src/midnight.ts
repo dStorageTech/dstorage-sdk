@@ -43,6 +43,7 @@ import type { DataRegistryAPI } from "./contract-api.js";
 import type { DataRegistryProviders } from "./common-types.js";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import type { AdapterWalletProvider } from "./common-types.js";
+import { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -53,9 +54,12 @@ export interface WalletAddresses {
 }
 
 // ── Network default endpoints ──────────────────────────────────────────────────
-
-export const NETWORKS = {
+type SUPPORTED_NETWORKS = {
+  [K in "preprod" | "undeployed"]: EnvironmentConfiguration;
+};
+export const NETWORKS: SUPPORTED_NETWORKS = {
   preprod: {
+    networkId: "preprod",
     nodeHttp: "https://rpc.preprod.midnight.network",
     nodeWs: "wss://rpc.preprod.midnight.network",
     indexerHttp: "https://indexer.preprod.midnight.network/api/v3/graphql",
@@ -63,6 +67,7 @@ export const NETWORKS = {
     proofServer: "http://127.0.0.1:6300",
   },
   undeployed: {
+    networkId: "undeployed",
     nodeHttp: "http://127.0.0.1:9944",
     nodeWs: "ws://127.0.0.1:9944",
     indexerHttp: "http://127.0.0.1:8088/api/v3/graphql",
@@ -74,10 +79,10 @@ export const NETWORKS = {
 /** Internal environment configuration passed to wallet SDK providers. */
 interface EnvironmentConfiguration {
   networkId: string;
-  indexer: string;
-  indexerWS: string;
-  node: string;
-  nodeWS: string;
+  nodeHttp: string;
+  nodeWs: string;
+  indexerHttp: string;
+  indexerWs: string;
   proofServer: string;
 }
 
@@ -115,7 +120,7 @@ interface BaseConfig {
   /**
    * Target network. Controls wallet networkId, address format, and fee overhead.
    */
-  network: "preprod" | "undeployed";
+  network: NetworkId;
   /**
    * Base URL of the dStorage managed payment signing server (no trailing slash).
    * When provided, transaction balancing is delegated to the server instead of
@@ -317,14 +322,27 @@ export class MidnightChainAdapter implements ChainAdapter {
           ).zkConfigBaseUrl
         : undefined;
 
+    const networkDefaults = NETWORKS[config.network as keyof typeof NETWORKS];
+    if (
+      !networkDefaults &&
+      (config.indexerEndpoint === undefined ||
+        config.indexerWsEndpoint === undefined ||
+        config.nodeEndpoint === undefined ||
+        config.nodeWsEndpoint === undefined ||
+        config.proofServerEndpoint === undefined)
+    ) {
+      throw new Error(
+        `Unsupported network: "${config.network}". Supported networks: ${Object.keys(NETWORKS).join(", ")}. ` +
+          `For custom networks, provide all endpoint options explicitly.`,
+      );
+    }
     this.config = {
       networkId: config.network,
-      indexer: config.indexerEndpoint ?? NETWORKS[config.network].indexerHttp,
-      indexerWS: config.indexerWsEndpoint ?? NETWORKS[config.network].indexerWs,
-      node: config.nodeEndpoint ?? NETWORKS[config.network].nodeHttp,
-      nodeWS: config.nodeWsEndpoint ?? NETWORKS[config.network].nodeWs,
-      proofServer:
-        config.proofServerEndpoint ?? NETWORKS[config.network].proofServer,
+      indexerHttp: config.indexerEndpoint ?? networkDefaults.indexerHttp,
+      indexerWs: config.indexerWsEndpoint ?? networkDefaults.indexerWs,
+      nodeHttp: config.nodeEndpoint ?? networkDefaults.nodeHttp,
+      nodeWs: config.nodeWsEndpoint ?? networkDefaults.nodeWs,
+      proofServer: config.proofServerEndpoint ?? networkDefaults.proofServer,
     };
 
     if (config.signingServerUrl) {
@@ -551,8 +569,8 @@ export class MidnightChainAdapter implements ChainAdapter {
           "Check that your Lace wallet is unlocked and connected to the target network.",
       );
     }
-    const indexerHttp = this.connectorIndexerHttp ?? this.config.indexer;
-    const indexerWs = this.connectorIndexerWs ?? this.config.indexerWS ?? "";
+    const indexerHttp = this.connectorIndexerHttp ?? this.config.indexerHttp;
+    const indexerWs = this.connectorIndexerWs ?? this.config.indexerWs ?? "";
     const proofServer = this.connectorProofServer ?? this.config.proofServer;
 
     // All three endpoints are required. An empty string here means either
@@ -678,8 +696,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     const providers = await this._assembleDataRegistryProviders({
       privateStateProvider: basePrivateStateProvider,
       zkConfigProvider,
-      indexerHttp: this.config.indexer,
-      indexerWs: this.config.indexerWS,
+      indexerHttp: this.config.indexerHttp,
+      indexerWs: this.config.indexerWs,
       proofServer: this.config.proofServer,
       walletProvider: this._wrapPaymentProvider(walletProvider),
       midnightProvider: walletProvider,
@@ -1080,16 +1098,16 @@ export class MidnightChainAdapter implements ChainAdapter {
         `Wallet configuration: ${JSON.stringify(walletConfig)}`,
       );
       this.connectorIndexerHttp =
-        walletConfig.indexerUri ?? this.config.indexer;
+        walletConfig.indexerUri ?? this.config.indexerHttp;
       this.connectorIndexerWs =
-        walletConfig.indexerWsUri ?? this.config.indexerWS ?? null;
+        walletConfig.indexerWsUri ?? this.config.indexerWs ?? null;
       this.connectorProofServer =
         walletConfig.proverServerUri ?? this.config.proofServer;
     } catch (err) {
       this.logger?.warn(
         "dStorage/midnight",
         `getConfiguration() failed — falling back to adapter config endpoints ` +
-          `(indexer: "${this.config.indexer}", proofServer: "${this.config.proofServer}"): ` +
+          `(indexer: "${this.config.indexerHttp}", proofServer: "${this.config.proofServer}"): ` +
           `${err instanceof Error ? err.message : String(err)}`,
       );
     }
