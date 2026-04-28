@@ -115,6 +115,22 @@ export interface PaymentReceipt {
   signedTx?: string;
 }
 
+// ── Network-specific wallet provider interfaces ───────────────────────────────
+
+/**
+ * Shape-compatible with @midnight-ntwrk/midnight-js-types WalletProvider.
+ * Returned by ManagedPaymentAdapter.createMidnightWalletProvider().
+ *
+ * No Midnight package imports are required here — TypeScript's structural
+ * typing makes this assignable to the chain package's WalletProvider at the
+ * call site without introducing a cross-package dependency.
+ */
+export interface MidnightWalletProvider {
+  getCoinPublicKey(): string;
+  getEncryptionPublicKey(): string;
+  balanceTx(tx: { serialize(): Uint8Array }, ttl?: Date): Promise<unknown>;
+}
+
 // ── PaymentAdapter interface ──────────────────────────────────────────────────
 
 /**

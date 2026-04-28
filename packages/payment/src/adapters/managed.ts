@@ -48,6 +48,7 @@
  */
 
 import type {
+  MidnightWalletProvider,
   PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
@@ -58,6 +59,32 @@ import type { ArweavePaymentAdapterConfig } from "./arweave.js";
 
 // Shared API endpoint for all network payment flows on the dStorage signing server.
 const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
+
+// ── Byte / encoding helpers ───────────────────────────────────────────────────
+
+function uint8ArrayToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToUint8Array(hex: string): Uint8Array {
+  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++)
+    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+/**
+ * Extract raw transaction bytes from either a Midnight tagged string
+ * ("midnight:transaction[v9](...):hexdata") or a plain hex string.
+ */
+function parseSignedTxBytes(signedTx: string): Uint8Array {
+  if (signedTx.startsWith("midnight:")) {
+    const colonIdx = signedTx.lastIndexOf(":");
+    return hexToUint8Array(signedTx.slice(colonIdx + 1));
+  }
+  return hexToUint8Array(signedTx);
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -172,6 +199,64 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     }
 
     throw Error(`Unsupported network: ${quote.network}`);
+  }
+
+  // ── Network-specific wallet provider factories ────────────────────────────────
+
+  /**
+   * Returns a WalletProvider-compatible object for the Midnight chain whose
+   * `balanceTx()` is fulfilled by the managed signing server instead of a
+   * local wallet. The caller supplies the public keys (from whichever source
+   * they have — HD derivation, a server endpoint, etc.); the SDK only handles
+   * the signing-server round-trip.
+   *
+   * The returned object satisfies the @midnight-ntwrk/midnight-js-types
+   * WalletProvider interface via structural typing — no Midnight package
+   * import is required from the caller's side.
+   *
+   * @param coinPublicKey        Midnight coin public key (hex) for the ZK fee circuit.
+   * @param encryptionPublicKey  Midnight encryption public key (hex).
+   * @param onReceipt            Optional callback invoked with the PaymentReceipt
+   *                             after each successful balanceTx call. Used internally
+   *                             by MidnightChainAdapter to capture receipt metadata;
+   *                             external callers can omit it.
+   */
+  createMidnightWalletProvider(
+    coinPublicKey: string,
+    encryptionPublicKey: string,
+    onReceipt?: (receipt: PaymentReceipt) => void,
+  ): MidnightWalletProvider {
+    return {
+      getCoinPublicKey: () => coinPublicKey,
+      getEncryptionPublicKey: () => encryptionPublicKey,
+      balanceTx: async (tx, _ttl?) => {
+        const txData = uint8ArrayToHex(tx.serialize());
+        const receipt = await this.pay({
+          token: "DUST",
+          amount: "0",
+          type: "chain",
+          network: "midnight",
+          txData,
+          dataSizeBytes: txData.length,
+          expiresAt: Date.now() + 60_000,
+        });
+        onReceipt?.(receipt);
+        if (!receipt.signedTx) {
+          throw new Error(
+            "[dStorage/payment] Midnight managed payment server did not return a balanced transaction.",
+          );
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (Transaction as any).deserialize(
+          "signature",
+          "proof",
+          "binding",
+          parseSignedTxBytes(receipt.signedTx),
+        );
+      },
+    };
   }
 
   // ── Network-specific payment handlers ────────────────────────────────────────

@@ -20,10 +20,14 @@
     "typescript": "^5.4.5"
   },
   "peerDependencies": {
-    "arweave": "^1.15.0"
+    "arweave": "^1.15.0",
+    "@midnight-ntwrk/ledger-v8": "8.0.3"
   },
   "peerDependenciesMeta": {
     "arweave": {
+      "optional": true
+    },
+    "@midnight-ntwrk/ledger-v8": {
       "optional": true
     }
   }

@@ -372,45 +372,18 @@ export class MidnightChainAdapter implements ChainAdapter {
   private _wrapPaymentProvider(walletProvider: WalletProvider): WalletProvider {
     if (!this.managedPaymentAdapter) return walletProvider;
 
-    return {
-      getCoinPublicKey: () => walletProvider.getCoinPublicKey(),
-      getEncryptionPublicKey: () => walletProvider.getEncryptionPublicKey(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      balanceTx: async (tx: any, _ttl?: Date): Promise<any> => {
-        const txData: string = uint8ArrayToHex(
-          (tx as { serialize: () => Uint8Array }).serialize(),
-        );
-        const receipt = await this.managedPaymentAdapter!.pay({
-          token: "DUST",
-          amount: "0",
-          type: "chain",
-          network: "midnight",
-          txData,
-          dataSizeBytes: txData.length,
-          expiresAt: Date.now() + 60_000,
-        });
+    const logger = this.logger;
+    return this.managedPaymentAdapter.createMidnightWalletProvider(
+      walletProvider.getCoinPublicKey(),
+      walletProvider.getEncryptionPublicKey(),
+      (receipt) => {
         this._lastPaymentReceipt = receipt;
-
-        if (!receipt.signedTx) {
-          throw new Error(
-            "[dStorage/midnight] Managed payment server did not return a balanced transaction.",
-          );
-        }
-        this.logger?.log(
+        logger?.log(
           "dStorage/midnight",
-          `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx.length})`,
-        );
-
-        const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (Transaction as any).deserialize(
-          "signature",
-          "proof",
-          "binding",
-          parseSignedTxBytes(receipt.signedTx),
+          `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx?.length ?? 0})`,
         );
       },
-    };
+    ) as unknown as WalletProvider;
   }
 
   // ── ZK config provider ─────────────────────────────────────────────────────
