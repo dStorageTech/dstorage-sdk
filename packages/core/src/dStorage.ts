@@ -926,9 +926,7 @@ export class DStorage implements DStorageContext {
 
   private assertConnected(): void {
     if (!this._initialized && this.wallet === null) {
-      throw new Error(
-        "[dStorage] Not connected. Call dStorage.connect(walletInfo) first.",
-      );
+      throw new Error("[dStorage] Not connected. Call dStorage.init() first.");
     }
   }
 }

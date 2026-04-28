@@ -241,18 +241,25 @@ npm run test:integration -- -t "uploads and retrieves private data"
 ## SDK Usage
 
 ```typescript
-import { DStorage, MockStorageAdapter, MockChainAdapter } from "@dstorage/core";
-import { PasswordSeedProvider } from "@dstorage/seed-providers";
+import {
+  DStorage,
+  MockStorageAdapter,
+  MockChainAdapter,
+  PasswordSeedProvider,
+} from "@dstorage/core";
 
-// 1. Configure the SDK with your chosen adapters and an encryption seed provider
+// 1. Configure the SDK with your chosen adapters and encryption seed provider(s)
 const sdk = new DStorage({
   storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter, ArweaveLocalStorageAdapter, etc.
   chainAdapter: new MockChainAdapter(), // swap for MidnightChainAdapter
-  encryptionSeedProvider: new PasswordSeedProvider({
-    password: "correct-horse-battery-staple",
-    salt: "myapp:v1:alice@example.com", // app + user identifier — store this alongside your data
-  }),
-  // or: new MnemonicSeedProvider({ mnemonic: "..." })
+  encryptionSeedProviders: [
+    new PasswordSeedProvider({
+      password: "correct-horse-battery-staple",
+      salt: "myapp:v1:alice@example.com", // app + user identifier — store this alongside your data
+    }),
+    // Multiple providers are supported — any one of them can independently decrypt.
+    // e.g. add a MnemonicSeedProvider({ mnemonic: "..." }) as a backup key.
+  ],
 });
 
 // 2. Init — derives the encryption key and prepares the chain contract
@@ -270,6 +277,18 @@ console.log(new TextDecoder().decode(bytes)); // "Hello, private world!"
 // 5. Or retrieve directly by storage ID
 const { bytes: direct } = await sdk.retrieveByStorageId(storageId);
 console.log(new TextDecoder().decode(direct)); // "Hello, private world!"
+```
+
+`upload()` also accepts an options object as the second argument:
+
+```typescript
+const { chainRefId } = await sdk.upload(bytes, {
+  metadata: { filename: "report.pdf", version: "2" },
+  onProgress: ({ phase, chunksUploaded, totalChunks }) => {
+    console.log(`${phase}: ${chunksUploaded}/${totalChunks} chunks`);
+  },
+  // isPublic: true,  // opt-in: stores and references unencrypted (irreversible — see below)
+});
 ```
 
 ---
@@ -346,6 +365,10 @@ User input
  private state ← owner's on-chain record updated (ZK-shielded, not publicly readable)
 ```
 
+### Large-file chunking
+
+Files larger than **10 MB** are automatically split into independently encrypted 10 MB chunks. Each chunk is uploaded as a separate storage transaction; a small manifest file ties them together and its `storageId` is the single pointer written on-chain. The split/reassembly is entirely transparent to the caller — `upload()`, `retrieveByRefId()`, and `retrieveByStorageId()` behave identically regardless of file size.
+
 ## Encryption Design
 
 ### Encryption scheme
@@ -381,7 +404,7 @@ In public mode **neither layer is encrypted**:
 
 - The data payload is stored as raw bytes on the storage network — anyone with the storageId can read it.
 - The storageId is written to the chain as plaintext — anyone watching the chain can see which storage resource belongs to which on-chain record.
-- `connect()` / `init()` is not required; no wallet or encryption key is needed.
+- `init()` is not required; no wallet or encryption key is needed.
 - The on-chain `encryptionScheme` field is set to `""` (empty string), which the SDK uses on read to skip decryption entirely.
 
 > **Warning**: Public mode is a permanent, irreversible choice per upload. Once data is stored unencrypted on Arweave (or another permanent storage network) it cannot be made private retroactively. Only use `isPublic: true` for data you explicitly intend to be world-readable.
@@ -417,6 +440,19 @@ The `@dstorage/seed-providers` package is responsible for producing the raw seed
 | Same password + same salt on a different device (`PasswordSeedProvider`) | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required. |
 | BIP-39 mnemonic imported on a different machine (`MnemonicSeedProvider`) | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.               |
 | Different password, same salt (`PasswordSeedProvider`)                   | ❌ Different seed — intentional; each password produces an independent key.                      |
+
+#### Multi-key encryption
+
+`encryptionSeedProviders` accepts an **array** of providers. When more than one is supplied, the SDK wraps the same per-upload DEK under every KEK independently. Any single provider can decrypt any upload made while it was in the list — useful for adding a recovery key or sharing access with a second identity:
+
+```typescript
+encryptionSeedProviders: [
+  new PasswordSeedProvider({ password, salt }), // primary key
+  new MnemonicSeedProvider({ mnemonic: backupPhrase }), // recovery key
+];
+```
+
+Both providers can decrypt; neither knows anything about the other's credentials.
 
 ---
 
