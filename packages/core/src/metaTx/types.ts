@@ -7,7 +7,8 @@
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import type { CryptoScheme, EncryptionScheme } from "@dstorage/crypto";
-import type { CostEstimate, PaymentReceipt, TokenSymbol } from "./payment.js";
+import type { PaymentReceipt, TokenSymbol } from "@dstorage/payment";
+import type { CostEstimate } from "../types.js";
 
 // ── Step definitions ──────────────────────────────────────────────────────────
 
@@ -144,6 +145,8 @@ export interface DStorageContext {
    * @param isPublic  Pass true to skip encryption (returns null scheme + no envelope).
    */
   prepareUploadCrypto(isPublic?: boolean): Promise<UploadCrypto>;
+  /** Estimate the full cost (storage + chain) for a given payload size. */
+  estimateCost(sizeBytes: number): Promise<CostEstimate>;
 }
 
 // ── File validation result ────────────────────────────────────────────────────

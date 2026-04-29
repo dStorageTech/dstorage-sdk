@@ -163,7 +163,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("cost contains the AR amount from the fee oracle", async () => {
       const result = await nodeAdapter().upload(enc("data"));
-      expect(result.cost).toBe("0.000001");
+      expect(result.cost).toMatchObject({ token: "AR", amount: "0.000001" });
     });
 
     it("url is constructed from gateway + txId", async () => {
@@ -262,14 +262,19 @@ describe("ArweaveStorageAdapter", () => {
   // ── estimateCost ─────────────────────────────────────────────────────────────
 
   describe("estimateCost", () => {
-    it("returns the raw winstons value from getPrice", async () => {
-      const cost = await nodeAdapter().estimateCost(enc("some data"));
-      expect(cost).toBe("1000000");
+    it("returns a StorageQuote with AR amount converted from winstons", async () => {
+      const data = enc("some data");
+      const quote = await nodeAdapter().estimateCost(data.byteLength);
+      expect(quote).toMatchObject({
+        token: "AR",
+        amount: "0.000001",
+        provider: "arweave",
+      });
     });
 
-    it("calls getPrice with the byte length of the data", async () => {
+    it("calls getPrice with the byte length", async () => {
       const data = enc("hello");
-      await nodeAdapter().estimateCost(data);
+      await nodeAdapter().estimateCost(data.byteLength);
       expect(mockArweave.transactions.getPrice).toHaveBeenCalledWith(
         data.byteLength,
       );

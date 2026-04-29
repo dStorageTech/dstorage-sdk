@@ -5,7 +5,7 @@
  */
 
 import type { MetaTxStepState } from "./types.js";
-import type { TokenSymbol } from "./payment.js";
+import type { TokenSymbol } from "@dstorage/payment";
 
 // ── Token selector ────────────────────────────────────────────────────────────
 

@@ -5,8 +5,8 @@
 
 import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
-import type { EncryptionSeedProvider } from "@dstorage/seed-providers";
-import type { CostEstimate } from "./metaTx/payment.js";
+import type { TokenSymbol } from "@dstorage/payment";
+import type { EncryptionSeedProvider } from "./index.js";
 
 /**
  * Minimal logger interface accepted by every SDK class.
@@ -79,6 +79,23 @@ export interface UploadOptions {
   onProgress?: (progress: UploadProgress) => void;
   /** When true, content is stored unencrypted and the storageId is written on-chain as plaintext. */
   isPublic?: boolean;
+}
+
+/**
+ * Aggregated cost estimate for a complete upload operation.
+ * Built from two quotes — one from the storage adapter and one from the chain adapter.
+ */
+export interface CostEstimate {
+  storageCost: {
+    amount: string;
+    token: TokenSymbol;
+  };
+  chainCost: {
+    amount: string;
+    token: TokenSymbol;
+  };
+  /** File size in bytes */
+  fileSizeBytes: number;
 }
 
 /** Result returned from dStorage.upload() */

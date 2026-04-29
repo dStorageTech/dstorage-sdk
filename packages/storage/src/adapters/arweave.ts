@@ -43,6 +43,7 @@ import type {
   StorageAdapter,
   StorageProviderName,
   StorageUploadResult,
+  StorageQuote,
 } from "../types.js";
 import {
   PaymentAdapter,
@@ -179,7 +180,6 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           ? { authToken: config.authToken }
           : {}),
         network: this.name as PaymentNetworkName,
-        token: "AR",
         type: "storage",
         gateway: this.gateway,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
@@ -232,6 +232,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // wallet, ArConnect, or remote signing server via ManagedPaymentAdapter).
     const arwPayment = this.paymentAdapter as ArweavePaymentAdapter;
 
+    const quote = await this.estimateCost(data.byteLength);
+
     // Consume any pre-signed tx from the MetaTransaction pay() step.
     let signed: SignedArweaveUpload | null = arwPayment.consumeSignedUpload();
 
@@ -242,17 +244,13 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       );
       // Direct upload path — stage data and trigger signing via payment adapter.
       arwPayment.provideUploadData(data, metadata);
-      const winstons = (await arweave.transactions.getPrice(
-        data.byteLength,
-      )) as string;
-      const amount = arweave.ar.winstonToAr(winstons) as string;
       await arwPayment.pay({
-        token: "AR",
-        amount,
+        token: quote.token,
+        amount: quote.amount,
         network: this.name,
         type: "storage",
-        dataSizeBytes: data.byteLength,
-        expiresAt: Date.now() + 600_000,
+        dataSizeBytes: quote.dataSizeBytes,
+        expiresAt: quote.expiresAt,
       });
       signed = arwPayment.consumeSignedUpload();
       if (!signed) {
@@ -288,7 +286,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     return {
       id: txId,
       provider: this.name,
-      cost: arCost,
+      cost: { ...quote, amount: arCost },
       url,
       uploadedAt: Date.now(),
     };
@@ -318,10 +316,16 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   // ── estimateCost ───────────────────────────────────────────────────────────────
 
-  async estimateCost(data: Uint8Array): Promise<string> {
+  async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {
     const arweave = await this.getClient();
-    const winstons = await arweave.transactions.getPrice(data.byteLength);
-    return winstons as string;
+    const winstons = await arweave.transactions.getPrice(dataSizeBytes);
+    return {
+      token: "AR",
+      amount: arweave.ar.winstonToAr(winstons as string) as string,
+      provider: this.name,
+      dataSizeBytes,
+      expiresAt: Date.now() + 5 * 60_000,
+    };
   }
 
   // ── Private: chunked uploader ─────────────────────────────────────────────────

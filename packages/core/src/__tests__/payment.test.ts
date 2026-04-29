@@ -1,30 +1,39 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildCostEstimate,
-  TOKENS,
-  defaultChainToken,
-} from "../metaTx/index.js";
-import type { PaymentQuote } from "../metaTx/index.js";
+import { TOKENS, defaultChainToken } from "../metaTx/index.js";
+import type { CostEstimate } from "../types.js";
+import type { StorageQuote } from "@dstorage/storage";
+import type { ChainQuote } from "@dstorage/chain";
+
+function buildCostEstimate(
+  storageQuote: StorageQuote,
+  chainQuote: ChainQuote,
+  fileSizeBytes: number,
+): CostEstimate {
+  return {
+    storageCost: { amount: storageQuote.amount, token: storageQuote.token },
+    chainCost: { amount: chainQuote.amount, token: chainQuote.token },
+    fileSizeBytes,
+  };
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function makeStorageQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
+function makeStorageQuote(overrides: Partial<StorageQuote> = {}): StorageQuote {
   return {
     token: "AR",
     amount: "0.001234",
-    type: "storage",
+    provider: "mock",
     dataSizeBytes: 1024,
     expiresAt: Date.now() + 600_000,
     ...overrides,
   };
 }
 
-function makeChainQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
+function makeChainQuote(overrides: Partial<ChainQuote> = {}): ChainQuote {
   return {
     token: "DUST",
     amount: "0.000500",
-    type: "chain",
-    dataSizeBytes: 1024,
+    network: "mock",
     expiresAt: Date.now() + 600_000,
     ...overrides,
   };

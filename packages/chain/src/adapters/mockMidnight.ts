@@ -107,7 +107,6 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     if (options.signingServerUrl) {
       this.paymentAdapter = new ManagedPaymentAdapter({
         network: this.name,
-        token: "DUST",
         type: "chain",
         signingServerUrl: options.signingServerUrl,
         ...(options.authToken !== undefined
@@ -117,7 +116,6 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       });
     } else {
       this.paymentAdapter = new MockPaymentAdapter({
-        token: "DUST",
         type: "chain",
         ...(options.logger !== undefined ? { logger: options.logger } : {}),
       });

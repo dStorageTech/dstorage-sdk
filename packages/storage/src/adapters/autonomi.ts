@@ -15,6 +15,7 @@ import type {
   StorageAdapter,
   StorageProviderName,
   StorageUploadResult,
+  StorageQuote,
 } from "../types.js";
 import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
 
@@ -47,7 +48,6 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     this.logger = config.logger;
     // TODO: replace with real AutonomiPaymentAdapter once ANT JS SDK is stable
     this.paymentAdapter = new MockPaymentAdapter({
-      token: "ANT",
       type: "storage",
     });
     this.logger?.warn(
@@ -69,7 +69,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     // Preview: in-memory stub
     const id = `autonomi_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     this.store.set(id, data);
-    const cost = await this.estimateCost(data);
+    const cost = await this.estimateCost(data.byteLength);
 
     this.logger?.log(
       "dStorage/autonomi",
@@ -95,11 +95,14 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     return data;
   }
 
-  async estimateCost(data: Uint8Array): Promise<string> {
-    /**
-     * TODO: Autonomi uses one-time payment model (pay once, store forever).
-     * When JS SDK is available: call client.quotePut(dataSize) → returns ANT cost.
-     */
-    return `${data.byteLength}`; // mock — 1 unit per byte
+  async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {
+    // TODO: When Autonomi JS SDK is stable, call client.quotePut(dataSize) → real ANT cost.
+    return {
+      token: "ANT",
+      amount: `${dataSizeBytes}`,
+      provider: this.name,
+      dataSizeBytes,
+      expiresAt: Date.now() + 5 * 60_000,
+    };
   }
 }

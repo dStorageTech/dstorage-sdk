@@ -437,22 +437,21 @@ describe("removeReference", () => {
 // ── estimateCost ──────────────────────────────────────────────────────────────
 
 describe("estimateCost", () => {
-  it("returns a string (even when not connected)", async () => {
+  it("returns a CostEstimate with storageCost and chainCost", async () => {
     const ds = new DStorage(makeConfig());
-    const result = await ds.estimateCost(enc("some content"));
-    expect(typeof result).toBe("string");
+    const result = await ds.estimateCost(enc("some content").byteLength);
+    expect(result).toMatchObject({
+      storageCost: { amount: expect.any(String), token: expect.any(String) },
+      chainCost: { amount: expect.any(String), token: expect.any(String) },
+      fileSizeBytes: expect.any(Number),
+    });
   });
 
-  it("returns a non-empty string", async () => {
-    const ds = new DStorage(makeConfig());
-    const result = await ds.estimateCost(enc("some content"));
-    expect(result.length).toBeGreaterThan(0);
-  });
-
-  it("returns cost equal to the byte length of the input", async () => {
+  it("storageCost amount reflects input byte length for mock adapter", async () => {
     const ds = new DStorage(makeConfig());
     const data = enc("some content");
-    const result = await ds.estimateCost(data);
-    expect(result).toBe(`${data.byteLength}`);
+    const result = await ds.estimateCost(data.byteLength);
+    expect(result.storageCost.amount).toBe(`${data.byteLength}`);
+    expect(result.fileSizeBytes).toBe(data.byteLength);
   });
 });

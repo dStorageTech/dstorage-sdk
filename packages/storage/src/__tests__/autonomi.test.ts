@@ -78,24 +78,28 @@ describe("AutonomiStorageAdapter", () => {
   // ── estimateCost ──────────────────────────────────────────────────────────
 
   describe("estimateCost", () => {
-    it("returns the byte length of the data as cost", async () => {
+    it("returns a StorageQuote with amount equal to byte length", async () => {
       const adapter = new AutonomiStorageAdapter();
       const data = enc("some data");
-      const cost = await adapter.estimateCost(data);
-      expect(cost).toBe(`${data.byteLength}`);
+      const quote = await adapter.estimateCost(data.byteLength);
+      expect(quote).toMatchObject({
+        token: "ANT",
+        amount: `${data.byteLength}`,
+        provider: "autonomi",
+      });
     });
 
-    it("returns different costs for different data sizes", async () => {
+    it("returns different amounts for different data sizes", async () => {
       const adapter = new AutonomiStorageAdapter();
-      const costSmall = await adapter.estimateCost(enc("x"));
-      const costLarge = await adapter.estimateCost(new Uint8Array(1_000_000));
-      expect(costSmall).not.toBe(costLarge);
+      const small = await adapter.estimateCost(enc("x").byteLength);
+      const large = await adapter.estimateCost(1_000_000);
+      expect(small.amount).not.toBe(large.amount);
     });
 
-    it("returns '0' for empty input", async () => {
+    it("returns '0' amount for empty input", async () => {
       const adapter = new AutonomiStorageAdapter();
-      const cost = await adapter.estimateCost(new Uint8Array(0));
-      expect(cost).toBe("0");
+      const quote = await adapter.estimateCost(0);
+      expect(quote.amount).toBe("0");
     });
   });
 });

@@ -43,6 +43,7 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
+  NetworkType,
 } from "../types.js";
 
 export interface ArweavePaymentAdapterConfig {
@@ -91,7 +92,7 @@ export interface SignedArweaveUpload {
 export class ArweavePaymentAdapter implements PaymentAdapter {
   readonly network: PaymentNetworkName = "arweave";
   readonly token: TokenSymbol = "AR";
-  readonly type: "storage" | "chain" = "storage";
+  readonly type: NetworkType = "storage";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected arweaveClient: any;
@@ -183,7 +184,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
     this.logger?.log(
       "dStorage/arweave-payment",
-      `Estimated: ${amount} AR (${winstons} Winston)`,
+      `Estimated: ${amount} AR (${winstons} Winstons)`,
     );
 
     return {
@@ -217,9 +218,9 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       onStatus?.("AR fee will be deducted as part of the upload transaction.");
       return {
         txHash: "arweave-bundled-with-upload",
-        token: "AR",
+        token: this.token,
         amount: quote.amount,
-        type: "storage",
+        type: this.type,
         paidAt: Date.now(),
       };
     }
@@ -256,9 +257,9 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
     return {
       txHash: tx.id as string,
-      token: "AR",
+      token: this.token,
       amount: quote.amount,
-      type: "storage",
+      type: this.type,
       paidAt: Date.now(),
     };
   }

@@ -22,20 +22,20 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
+  NetworkType,
 } from "../types.js";
 import { TOKENS } from "../types.js";
 
 export interface MockPaymentAdapterConfig {
   /**
-   * Token to simulate payments with.
+   * Token this adapter simulates payments in.
    * Defaults to 'MOCK'.
    */
-  token: TokenSymbol;
+  token?: TokenSymbol;
   /**
    * Payment type this instance simulates.
-   * Defaults to 'storage'.
    */
-  type: "storage" | "chain";
+  type: NetworkType;
   /**
    * How long in ms before a quote expires.
    * Defaults to 600_000 (10 minutes).
@@ -50,13 +50,13 @@ export interface MockPaymentAdapterConfig {
 export class MockPaymentAdapter implements PaymentAdapter {
   readonly network: PaymentNetworkName = "mock";
   readonly token: TokenSymbol;
-  readonly type: "storage" | "chain";
+  readonly type: NetworkType;
 
   private readonly quoteValidityMs: number;
   private readonly logger: PaymentAdapterLogger | undefined;
 
   constructor(config: MockPaymentAdapterConfig) {
-    this.token = config.token;
+    this.token = config.token ?? "MOCK";
     this.type = config.type;
     this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
     this.logger = config.logger;

@@ -34,6 +34,7 @@ import type { ChainAdapter } from "@dstorage/chain";
 import corePackageJson from "../package.json";
 
 import type {
+  CostEstimate,
   DStorageConfig,
   Logger,
   RetrieveResult,
@@ -282,12 +283,12 @@ export class DStorage implements DStorageContext {
       encryptionScheme,
       costEstimate: {
         storageCost: {
-          amount: storageResult.cost ?? "unknown",
-          token: "AR", // FIXME: this.config.storageAdapter.tokenSymbol
+          amount: storageResult.cost?.amount ?? "unknown",
+          token: storageResult.cost?.token ?? "AR",
         },
         chainCost: {
           amount: chainResult.paymentReceipt?.amount ?? "unknown",
-          token: "DUST", // FIXME: this.config.chainAdapter.tokenSymbol
+          token: chainResult.paymentReceipt?.token ?? "DUST",
         },
         fileSizeBytes: uploadData.length,
       },
@@ -571,14 +572,19 @@ export class DStorage implements DStorageContext {
   }
 
   /**
-   * Estimate the storage cost for a given content string before committing.
-   * Returns a human-readable cost string.
+   * Estimate the full cost (storage + chain) for a given payload size before committing.
    */
-  async estimateCost(content: Uint8Array): Promise<string> {
-    if (this.config.storageAdapter.estimateCost) {
-      return this.config.storageAdapter.estimateCost(content);
-    }
-    return "Cost estimation not available for this storage provider.";
+  async estimateCost(sizeBytes: number): Promise<CostEstimate> {
+    const [storageQuote, chainQuote] = await Promise.all([
+      this.config.storageAdapter.estimateCost(sizeBytes),
+      this.config.chainAdapter.estimateCost(),
+    ]);
+
+    return {
+      storageCost: { amount: storageQuote.amount, token: storageQuote.token },
+      chainCost: { amount: chainQuote.amount, token: chainQuote.token },
+      fileSizeBytes: sizeBytes,
+    };
   }
 
   /**
@@ -870,12 +876,12 @@ export class DStorage implements DStorageContext {
       encryptionScheme,
       costEstimate: {
         storageCost: {
-          amount: manifestResult.cost ?? "unknown",
-          token: "AR",
+          amount: manifestResult.cost?.amount ?? "unknown",
+          token: manifestResult.cost?.token ?? "AR",
         },
         chainCost: {
           amount: chainResult.paymentReceipt?.amount ?? "unknown",
-          token: "DUST",
+          token: chainResult.paymentReceipt?.token ?? "DUST",
         },
         fileSizeBytes: bytes.length,
       },

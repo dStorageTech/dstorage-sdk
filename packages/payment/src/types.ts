@@ -19,6 +19,8 @@ export interface PaymentAdapterLogger {
   debug?(component: string, msg: string): void;
 }
 
+export type NetworkType = "storage" | "chain";
+
 // ── Token definitions ─────────────────────────────────────────────────────────
 
 /** All tokens the SDK knows about. MOCK is used for development and testing. */
@@ -67,7 +69,7 @@ export interface PaymentQuote {
   /** Amount in the native token (string to preserve precision) */
   amount: string;
   /** Whether this covers a storage network fee or a chain transaction fee */
-  type: "storage" | "chain";
+  type: NetworkType;
   /**
    * The network this quote is for.
    * Used by multi-network adapters (e.g. ManagedPaymentAdapter) to select the
@@ -104,7 +106,7 @@ export interface PaymentReceipt {
   /** Amount paid in the native token */
   amount: string;
   /** What this payment covered */
-  type: "storage" | "chain";
+  type: NetworkType;
   /** Timestamp of payment confirmation */
   paidAt: number;
   /**
@@ -148,17 +150,11 @@ export interface PaymentAdapter {
   readonly network: PaymentNetworkName;
 
   /**
-   * The token this adapter transacts in.
-   * Determines the token field on every PaymentQuote and PaymentReceipt it produces.
-   */
-  readonly token: TokenSymbol;
-
-  /**
    * What kind of payment this adapter handles.
    * 'storage' — storage network fee (AR for Arweave, ANT for Autonomi).
    * 'chain'   — blockchain transaction fee (DUST for Midnight, ETH for Ethereum).
    */
-  readonly type: "storage" | "chain";
+  readonly type: NetworkType;
 
   /**
    * Get a cost estimate for a payload of the given size.
@@ -167,6 +163,7 @@ export interface PaymentAdapter {
    * The returned quote is valid until quote.expiresAt — pass it to pay()
    * before that window closes to avoid repricing.
    *
+   * @param token          The token to denominate the quote in (e.g. "AR", "DUST").
    * @param dataSizeBytes  Size of the encrypted payload in bytes
    */
   estimateCost(dataSizeBytes: number): Promise<PaymentQuote>;

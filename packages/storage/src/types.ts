@@ -4,7 +4,7 @@
  * This is the plugin contract.
  */
 
-import type { PaymentAdapter } from "@dstorage/payment";
+import type { PaymentAdapter, TokenSymbol } from "@dstorage/payment";
 
 /**
  * Minimal logger interface accepted by every SDK class.
@@ -25,14 +25,33 @@ export type StorageProviderName =
   | "autonomi"
   | "arweave_turbo";
 
+/**
+ * A cost quote returned by StorageAdapter.estimateCost().
+ *
+ * Quotes have a limited validity window. Real adapters may tighten
+ * this window based on network fee volatility.
+ */
+export interface StorageQuote {
+  /** Token this quote is denominated in */
+  token: TokenSymbol;
+  /** Amount in the provider's native token units (string to preserve precision) */
+  amount: string;
+  /** The storage provider this quote is for */
+  provider: StorageProviderName;
+  /** File size used to derive this quote */
+  dataSizeBytes: number;
+  /** Timestamp after which this quote should be refreshed */
+  expiresAt: number;
+}
+
 /** Metadata returned after a successful upload. */
 export interface StorageUploadResult {
   /** Unique content identifier on the storage network */
   id: string;
   /** Human-readable name of the network used */
   provider: StorageProviderName;
-  /** Approximate cost in the provider's native token (informational) */
-  cost?: string;
+  /** Approximate cost for this upload (informational) */
+  cost?: StorageQuote;
   /** URL to view the stored content directly (if available) */
   url?: string;
   /** Timestamp of the upload */
@@ -70,8 +89,8 @@ export interface StorageAdapter {
   retrieve(id: string): Promise<Uint8Array>;
 
   /**
-   * Estimate the cost of storing the given data (optional — adapters can throw).
-   * @returns Approximate cost in the provider's native token units
+   * Estimate the cost of storing the given data.
+   * @returns A StorageQuote containing the cost in the provider's native token
    */
-  estimateCost?(data: Uint8Array): Promise<string>;
+  estimateCost(dataSizeBytes: number): Promise<StorageQuote>;
 }

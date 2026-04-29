@@ -12,6 +12,7 @@ import type {
   StorageAdapter,
   StorageProviderName,
   StorageUploadResult,
+  StorageQuote,
 } from "../types.js";
 import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
 
@@ -88,7 +89,6 @@ export class MockStorageAdapter implements StorageAdapter {
   constructor(logger?: StorageAdapterLogger) {
     this.logger = logger;
     this.paymentAdapter = new MockPaymentAdapter({
-      token: "MOCK",
       type: "storage",
     });
   }
@@ -98,7 +98,7 @@ export class MockStorageAdapter implements StorageAdapter {
     metadata: Record<string, string> = {},
   ): Promise<StorageUploadResult> {
     const id = generateId();
-    const cost = await this.estimateCost(data);
+    const cost = await this.estimateCost(data.byteLength);
 
     const entry = JSON.stringify({
       data: uint8ArrayToBase64(data),
@@ -134,8 +134,14 @@ export class MockStorageAdapter implements StorageAdapter {
     return base64ToUint8Array(entry.data);
   }
 
-  async estimateCost(data: Uint8Array): Promise<string> {
-    return `${data.byteLength}`; // mock — 1 unit per byte
+  async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {
+    return {
+      token: "MOCK",
+      amount: `${dataSizeBytes}`,
+      provider: this.name,
+      dataSizeBytes,
+      expiresAt: Date.now() + 5 * 60_000,
+    };
   }
 
   /** List all stored IDs (useful for debugging) */

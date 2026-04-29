@@ -25,9 +25,11 @@ function makeEmptyFile(name = "empty.txt", type = "text/plain"): File {
 
 /** Build a minimal DStorageContext for tests. */
 function makeSdkContext(address = "0xTestOwner"): DStorageContext {
+  const storageAdapter = new MockStorageAdapter();
+  const chainAdapter = new MockChainAdapter();
   return {
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockChainAdapter(),
+    storageAdapter,
+    chainAdapter,
     connectedAddress: address,
     async prepareUploadCrypto() {
       // No encryption in unit tests — return identity (public) crypto.
@@ -36,6 +38,17 @@ function makeSdkContext(address = "0xTestOwner"): DStorageContext {
         keyEnvelope: "{}",
         encryptionScheme: "",
         ownerSeed: new Uint8Array(32).fill(1),
+      };
+    },
+    async estimateCost(sizeBytes: number) {
+      const [storageQuote, chainQuote] = await Promise.all([
+        storageAdapter.estimateCost(sizeBytes),
+        chainAdapter.estimateCost(),
+      ]);
+      return {
+        storageCost: { amount: storageQuote.amount, token: storageQuote.token },
+        chainCost: { amount: chainQuote.amount, token: chainQuote.token },
+        fileSizeBytes: sizeBytes,
       };
     },
   };
@@ -367,8 +380,9 @@ describe("MetaTx.execute", () => {
     const chainAdapter = new MockChainAdapter();
     const writeSpy = vi.spyOn(chainAdapter, "writeReference");
 
+    const storageAdapter = new MockStorageAdapter();
     const context: DStorageContext = {
-      storageAdapter: new MockStorageAdapter(),
+      storageAdapter,
       chainAdapter,
       connectedAddress: "0xPublicOwner",
       async prepareUploadCrypto() {
@@ -378,6 +392,17 @@ describe("MetaTx.execute", () => {
             '{"v":1,"wrappers":[{"wrapKeyName":"password","algorithm":"xchacha20poly1305-v1","kekDerivation":"hkdf-sha256-v1","wrappedDek":"AAAA"}]}',
           encryptionScheme: "",
           ownerSeed: new Uint8Array(32).fill(42),
+        };
+      },
+      async estimateCost(sizeBytes: number) {
+        const [sq, cq] = await Promise.all([
+          storageAdapter.estimateCost(sizeBytes),
+          chainAdapter.estimateCost(),
+        ]);
+        return {
+          storageCost: { amount: sq.amount, token: sq.token },
+          chainCost: { amount: cq.amount, token: cq.token },
+          fileSizeBytes: sizeBytes,
         };
       },
     };

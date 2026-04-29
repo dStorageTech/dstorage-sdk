@@ -39,6 +39,7 @@ import type {
   StorageProviderName,
   StorageUploadResult,
   StorageAdapterLogger,
+  StorageQuote,
 } from "../types.js";
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
@@ -118,7 +119,6 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
           ? { authToken: config.authToken }
           : {}),
         network: this.name as PaymentNetworkName,
-        token: "AR",
         type: "storage",
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
@@ -183,6 +183,34 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     }
     this.logger?.log("dStorage/arweave-turbo", `Retrieved txId: ${id}`);
     return new Uint8Array(await resp.arrayBuffer());
+  }
+
+  // ── estimateCost ───────────────────────────────────────────────────────────────
+
+  async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {
+    const { TurboFactory } = await import("@ardrive/turbo-sdk");
+    const turbo = TurboFactory.unauthenticated();
+    let costs: Awaited<ReturnType<typeof turbo.getUploadCosts>>;
+    try {
+      costs = await turbo.getUploadCosts({ bytes: [dataSizeBytes] });
+    } catch (err) {
+      throw new Error(
+        `[dStorage/arweave-turbo] Failed to fetch upload cost estimate from Turbo: ${err}`,
+      );
+    }
+    const cost = costs[0];
+    if (!cost) {
+      throw new Error(
+        "[dStorage/arweave-turbo] Turbo returned no cost estimate for the given data size.",
+      );
+    }
+    return {
+      token: "AR",
+      amount: cost.winc,
+      provider: this.name,
+      dataSizeBytes,
+      expiresAt: Date.now() + 5 * 60_000,
+    };
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────────

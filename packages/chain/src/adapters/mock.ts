@@ -55,7 +55,6 @@ export class MockChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = "mock";
   readonly providerName: string = "Mock-Chain-Adapter";
   readonly paymentAdapter: PaymentAdapter = new MockPaymentAdapter({
-    token: "MOCK",
     type: "chain",
   });
 

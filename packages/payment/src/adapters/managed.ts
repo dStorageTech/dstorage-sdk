@@ -53,6 +53,7 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   TokenSymbol,
+  NetworkType,
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
@@ -94,10 +95,8 @@ export interface ManagedPaymentAdapterConfig extends Omit<
 > {
   /** Which network this adapter is used for */
   network: PaymentNetworkName;
-  /** Token this quote is denominated in */
-  token: TokenSymbol;
   /** Whether this covers a storage network fee or a chain transaction fee */
-  type: "storage" | "chain";
+  type: NetworkType;
   /**
    * Base URL of the remote signing server (no trailing slash).
    * Example: "https://api.my-server.com"
@@ -129,8 +128,7 @@ interface SignTxResponse {
 
 export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   override readonly network: PaymentNetworkName;
-  override readonly token: TokenSymbol;
-  override readonly type: "storage" | "chain";
+  override readonly type: NetworkType;
 
   private readonly signingServerUrl: string;
   private readonly authToken?: string;
@@ -146,7 +144,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     this.signingServerUrl = config.signingServerUrl.replace(/\/$/, "");
     if (config.authToken !== undefined) this.authToken = config.authToken;
     this.network = config.network;
-    this.token = config.token;
     this.type = config.type;
   }
 
@@ -168,7 +165,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     );
 
     return {
-      token: this.token,
+      token: this.token, // FIXME: should be probably obtained from the signing service
       amount,
       network: this.network,
       type: this.type,

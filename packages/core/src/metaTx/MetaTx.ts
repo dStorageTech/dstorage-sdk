@@ -17,7 +17,6 @@
  *   const receipt = await metaTx.execute(file);
  */
 
-import { buildCostEstimate } from "./payment.js";
 import type {
   DStorageContext,
   MetaTxConfig,
@@ -26,12 +25,7 @@ import type {
   MetaTxStepId,
   MetaTxStepState,
 } from "./types.js";
-import {
-  buildInitialSteps,
-  readFileAsBytes,
-  sleep,
-  truncateId,
-} from "./utils.js";
+import { buildInitialSteps, readFileAsBytes, truncateId } from "./utils.js";
 
 export class MetaTx {
   private sdk: DStorageContext;
@@ -61,14 +55,7 @@ export class MetaTx {
       // ── Step 0: Estimate ────────────────────────────────────────────────
       this.startStep("estimate", "Analysing file and fetching price feeds…");
 
-      // Fetch quotes from both payment adapters in parallel — they are independent.
-      const [storageQuote, chainQuote] = await Promise.all([
-        this.sdk.storageAdapter.paymentAdapter.estimateCost(file.size),
-        this.sdk.chainAdapter.estimateCost(),
-      ]);
-
-      const estimate = buildCostEstimate(storageQuote, chainQuote, file.size);
-      await sleep(400); // Realistic pause
+      const estimate = await this.sdk.estimateCost(file.size);
       this.completeStep(
         "estimate",
         `${estimate.storageCost.amount} ${estimate.storageCost.token} + ${estimate.chainCost.amount} ${estimate.chainCost.token}`,
@@ -118,11 +105,18 @@ export class MetaTx {
       // ── Step 2: Storage payment ─────────────────────────────────────────
       this.startStep(
         "payment_storage",
-        `Preparing ${storageQuote.amount} ${storageQuote.token} payment…`,
+        `Preparing ${estimate.storageCost.amount} ${estimate.storageCost.token} payment…`,
       );
 
       const storageReceipt = await this.sdk.storageAdapter.paymentAdapter.pay(
-        storageQuote,
+        {
+          token: estimate.storageCost.token,
+          amount: estimate.storageCost.amount,
+          type: "storage",
+          network: this.sdk.storageAdapter.name,
+          dataSizeBytes: uploadData.byteLength,
+          expiresAt: Date.now() + 600_000,
+        },
         (msg) => this.updateStepDetail("payment_storage", msg),
       );
 
@@ -188,7 +182,7 @@ export class MetaTx {
       // payment embedded in the transaction), use that receipt instead.
       const finalChainReceipt = chainResult.paymentReceipt ?? {
         amount: "<unknown>",
-        token: chainQuote.token,
+        token: estimate.chainCost.token,
         txHash: "",
         type: "chain",
         paidAt: 0,

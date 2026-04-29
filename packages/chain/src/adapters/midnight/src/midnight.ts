@@ -206,18 +206,6 @@ function hexToUint8Array(hex: string): Uint8Array {
   return out;
 }
 
-/**
- * Extract raw transaction bytes from either a Midnight tagged string
- * ("midnight:transaction[v9](...):hexdata") or a plain hex string.
- */
-function parseSignedTxBytes(signedTx: string): Uint8Array {
-  if (signedTx.startsWith("midnight:")) {
-    const colonIdx = signedTx.lastIndexOf(":");
-    return hexToUint8Array(signedTx.slice(colonIdx + 1));
-  }
-  return hexToUint8Array(signedTx);
-}
-
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MidnightChainAdapter implements ChainAdapter {
@@ -348,7 +336,6 @@ export class MidnightChainAdapter implements ChainAdapter {
     if (config.signingServerUrl) {
       this.managedPaymentAdapter = new ManagedPaymentAdapter({
         network: this.name,
-        token: "DUST",
         type: "chain",
         signingServerUrl: config.signingServerUrl,
         ...(config.authToken !== undefined
@@ -579,7 +566,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       getEncryptionPublicKey: () => encPublicKey,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       balanceTx: async (tx: any, _ttl?: Date): Promise<any> => {
-        const serializedTx = uint8ArrayToHex((tx as any).serialize());
+        const serializedTx = uint8ArrayToHex(tx.serialize());
         logger?.log(
           "dStorage/midnight",
           `balanceTx: serialized tx length=${serializedTx.length}`,
@@ -592,7 +579,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           `balanceTx: received balanced tx length=${balancedHex?.length}`,
         );
         // Transaction.deserialize takes (sigType, proofType, bindingType, bytes) — see ledger-v8 API.
-        return (Transaction as any).deserialize(
+        return Transaction.deserialize(
           "signature",
           "proof",
           "binding",
