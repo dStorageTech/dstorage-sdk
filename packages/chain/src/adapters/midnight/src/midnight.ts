@@ -1154,11 +1154,11 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   /**
    * Read NIGHT and DUST balances.
-   * - Provider mode: reads from synced wallet state
-   * TODO:
-   * - Connector mode: returns 0n (known limitation)
    */
   async getBalances(): Promise<WalletBalances> {
+    const { unshieldedToken } = await import(
+      /* @vite-ignore */ "@midnight-ntwrk/ledger-v8"
+    );
     if (this.walletMode === "provider") {
       if (!this.facade) {
         throw new Error(
@@ -1166,9 +1166,6 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
       }
 
-      const { unshieldedToken } = await import(
-        /* @vite-ignore */ "@midnight-ntwrk/ledger-v8"
-      );
       const state = await (this.facade as any).waitForSyncedState();
       const nightToken = unshieldedToken();
 
@@ -1182,7 +1179,13 @@ export class MidnightChainAdapter implements ChainAdapter {
           "[dStorage/midnight] getBalances() called before init().",
         );
       }
-      return { night: 0n, dust: 0n };
+      const unshieldedBalances =
+        await this.connectorAPI.getUnshieldedBalances();
+      const dustBalance = await this.connectorAPI.getDustBalance();
+      return {
+        night: unshieldedBalances[unshieldedToken().raw] ?? 0n,
+        dust: dustBalance.balance,
+      };
     }
   }
 }

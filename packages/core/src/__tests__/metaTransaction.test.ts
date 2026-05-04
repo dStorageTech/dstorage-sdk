@@ -4,7 +4,6 @@ import { MetaTx, validateFile } from "../metaTx/index.js";
 import type { DStorageContext } from "../metaTx/index.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
-import type { PaymentReceipt } from "@dstorage/payment";
 import type { MetaTxProgress, MetaTxStepId } from "../metaTx/index.js";
 
 afterEach(() => vi.useRealTimers());

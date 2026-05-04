@@ -52,7 +52,6 @@ import type {
   PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
-  TokenSymbol,
   NetworkType,
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
@@ -243,7 +242,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
             "[dStorage/payment] Midnight managed payment server did not return a balanced transaction.",
           );
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (Transaction as any).deserialize(
