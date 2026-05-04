@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint packages/*/src apps/*/src --ext .ts,.tsx",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "clean": "find . -type d \\( -name node_modules -o -name dist \\) -prune -exec rm -rf {} +"
   },
   "overrides": {
     "bn.js": "5.2.3"

@@ -14,7 +14,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/dstorage/dstorage-sdk"
+    "url": "git+https://github.com/dstoragetech/dstorage-sdk.git"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
