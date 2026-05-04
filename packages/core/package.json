@@ -1,7 +1,21 @@
 {
-  "name": "@dstorage/core",
+  "name": "@dstorage-tech/dstorage",
   "version": "0.1.0",
-  "description": "dStorage SDK — Privacy-first data layer for dApps",
+  "description": "Privacy-first decentralized storage SDK with pluggable adapters",
+  "license": "MIT",
+  "keywords": [
+    "dstorage",
+    "privacy",
+    "encryption",
+    "decentralized",
+    "storage",
+    "dapp",
+    "web3"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dstorage/dstorage-sdk"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -12,15 +26,24 @@
       "require": "./dist/index.js"
     }
   },
-  "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --tsconfig tsconfig.build.json"
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
-  "dependencies": {
-    "@dstorage/crypto": "*",
-    "@dstorage/seed-providers": "*",
-    "@dstorage/storage": "*",
-    "@dstorage/chain": "*",
-    "@dstorage/payment": "*"
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@dstorage/chain": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@dstorage/chain": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "^5.4.5"

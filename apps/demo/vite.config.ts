@@ -38,7 +38,10 @@ export default defineConfig({
         __dirname,
         "../../packages/payment/src/index.ts",
       ),
-      "@dstorage/core": resolve(__dirname, "../../packages/core/src/index.ts"),
+      "@dstorage-tech/dstorage": resolve(
+        __dirname,
+        "../../packages/core/src/index.ts",
+      ),
       // Node.js built-ins — polyfill with empty stubs.
       // More-specific entries MUST come before less-specific ones (first-match wins).
       "node:fs/promises": resolve(__dirname, "src/polyfills/empty.js"),

@@ -13,6 +13,7 @@ packages/*/build/
 apps/*/dist/
 apps/*/build/
 midnight-wallet-cache
+*wallet-key.json
 
 # Logs
 logs/

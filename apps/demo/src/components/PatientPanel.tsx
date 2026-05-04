@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { validateFile } from "@dstorage/core";
+import { validateFile } from "@dstorage-tech/dstorage";
 import { INSURANCE_CLAIMS } from "../zkProof.js";
-import type { DataReferenceSummary } from "@dstorage/core";
+import type { DataReferenceSummary } from "@dstorage-tech/dstorage";
 import type {
   AppStep,
   StoredRecord,

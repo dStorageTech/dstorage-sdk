@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@dstorage/chain": "*",
-    "@dstorage/core": "*",
+    "@dstorage-tech/dstorage": "*",
     "@dstorage/seed-providers": "*",
     "@dstorage/storage": "*",
     "@midnight-ntwrk/compact-runtime": "^0.15.0",

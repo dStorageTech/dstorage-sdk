@@ -8,7 +8,7 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 
 ## Table of Contents
 
-- [Vision](#vision)
+- [Mission](#mission)
 - [What it does](#what-it-does)
 - [Quick Start](#quick-start)
 - [Testing](#testing)
@@ -21,7 +21,7 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Known Limitations](#known-limitations)
 - [High-Level Product Roadmap](#high-level-product-roadmap)
 
-## Vision
+## Mission
 
 Deliver a **privacy-first, developer-friendly data layer** combining **Midnight privacy infrastructure** with **permanent decentralized storage**, enabling applications to handle sensitive user data securely **without centralized custody**.
 
@@ -240,13 +240,17 @@ npm run test:integration -- -t "uploads and retrieves private data"
 
 ## SDK Usage
 
+```sh
+npm install @dstorage-tech/dstorage
+```
+
 ```typescript
 import {
   DStorage,
   MockStorageAdapter,
   MockChainAdapter,
   PasswordSeedProvider,
-} from "@dstorage/core";
+} from "@dstorage-tech/dstorage";
 
 // 1. Configure the SDK with your chosen adapters and encryption seed provider(s)
 const sdk = new DStorage({
@@ -267,16 +271,16 @@ await sdk.init();
 
 // 3. Encrypt, store, and write an on-chain reference in one call
 const { chainRefId, storageId } = await sdk.upload(
-  new TextEncoder().encode("Hello, private world!"),
+  new TextEncoder().encode("Hello dStorage!"),
 );
 
 // 4. Retrieve and decrypt by on-chain reference ID
 const { bytes } = await sdk.retrieveByRefId(chainRefId);
-console.log(new TextDecoder().decode(bytes)); // "Hello, private world!"
+console.log(new TextDecoder().decode(bytes)); // "Hello dStorage!"
 
 // 5. Or retrieve directly by storage ID
 const { bytes: direct } = await sdk.retrieveByStorageId(storageId);
-console.log(new TextDecoder().decode(direct)); // "Hello, private world!"
+console.log(new TextDecoder().decode(direct)); // "Hello dStorage!"
 ```
 
 `upload()` also accepts an options object as the second argument:
@@ -301,10 +305,9 @@ Every upload involves two costs — paying storage and chain operations. The SDK
 
 ```typescript
 // Estimate costs before committing
-const estimate = await sdk.estimateCost(
-  new TextEncoder().encode("example payload"),
-);
-// -> returns a human-readable estimate string for the configured storage adapter
+const bytes = new TextEncoder().encode("Hello dStorage!");
+const estimate = await sdk.estimateCost(bytes.byteLength);
+// -> { storageCost: { amount, token }, chainCost: { amount, token }, fileSizeBytes }
 
 // Execute the full meta-transaction (estimate → encrypt → pay storage → upload → write reference)
 const receipt = await sdk.executeMetaTransaction(file, (progress) => {
@@ -331,12 +334,12 @@ Tokens are selected automatically based on your chosen adapters.
 ## Architecture
 
 ```
-@dstorage/core              ← Developer-facing API (this is what you import)
-    ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation
-    ├── @dstorage/seed-providers← Seed providers: PasswordSeedProvider | MnemonicSeedProvider
-    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveTurbo | Arweave Local | Autonomi(stub)
-    ├── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight
-    └── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed
+@dstorage-tech/dstorage     ← Developer-facing API (npm install @dstorage-tech/dstorage)
+    ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation       [bundled]
+    ├── @dstorage/seed-providers← Seed providers: PasswordSeedProvider | MnemonicSeedProvider [bundled]
+    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveTurbo | Arweave Local | Autonomi(stub) [bundled: Mock only]
+    ├── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed           [bundled: Mock only]
+    └── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight     [bundled: Mock only]
 ```
 
 ### Data Flow

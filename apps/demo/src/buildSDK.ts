@@ -5,7 +5,7 @@ import {
   ArweaveLocalStorageAdapter,
   MockMidnightChainAdapter,
   MidnightChainAdapter,
-} from "@dstorage/core";
+} from "@dstorage-tech/dstorage";
 import { PasswordSeedProvider } from "@dstorage/seed-providers";
 import { PROOF_SERVER_ENDPOINT } from "./adapterConfigs";
 import type {

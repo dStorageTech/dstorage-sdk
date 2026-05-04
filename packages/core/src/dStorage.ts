@@ -50,7 +50,7 @@ import type {
   MetaTxProgress,
   MetaTxReceipt,
 } from "./metaTx/index.js";
-import { DataReferenceSummary } from "@dstorage/chain";
+import type { DataReferenceSummary } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
 export class DStorage implements DStorageContext {

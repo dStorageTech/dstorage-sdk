@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@dstorage/chain": "*",
-    "@dstorage/core": "*",
+    "@dstorage-tech/dstorage": "*",
     "@dstorage/crypto": "*",
     "@dstorage/seed-providers": "*",
     "@dstorage/storage": "*",

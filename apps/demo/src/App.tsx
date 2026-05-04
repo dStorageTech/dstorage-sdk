@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect } from "react";
-import { DStorage } from "@dstorage/core";
+import { DStorage } from "@dstorage-tech/dstorage";
 import { INSURANCE_CLAIMS, simulateZkProof } from "./zkProof.js";
-import type { DataReferenceSummary, MetaTxProgress } from "@dstorage/core";
+import type {
+  DataReferenceSummary,
+  MetaTxProgress,
+} from "@dstorage-tech/dstorage";
 import type { ZkProofResult, ZkProofProgress } from "./zkProof.js";
 import type {
   AppStep,

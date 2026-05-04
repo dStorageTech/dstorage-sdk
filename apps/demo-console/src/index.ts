@@ -34,7 +34,10 @@ import path from "node:path";
 import fs from "fs";
 import { config as loadEnv } from "dotenv";
 
-import { DStorage, type Logger as DStorageLogger } from "@dstorage/core";
+import {
+  DStorage,
+  type Logger as DStorageLogger,
+} from "@dstorage-tech/dstorage";
 import {
   ArweaveLocalStorageAdapter,
   //ArweaveStorageAdapter,
