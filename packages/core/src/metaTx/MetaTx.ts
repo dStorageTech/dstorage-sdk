@@ -186,6 +186,7 @@ export class MetaTx {
         txHash: "",
         type: "chain",
         paidAt: 0,
+        serviceFee: "0",
       };
 
       this.completeStep(

@@ -115,6 +115,8 @@ export interface PaymentReceipt {
    * deserializes this and passes it directly to submitTx().
    */
   signedTx?: string;
+  /** Service fee amount (server-defined units). */
+  serviceFee: string;
 }
 
 // ── Network-specific wallet provider interfaces ───────────────────────────────

@@ -222,6 +222,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
         amount: quote.amount,
         type: this.type,
         paidAt: Date.now(),
+        serviceFee: "0", // No fee
       };
     }
 
@@ -261,6 +262,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       amount: quote.amount,
       type: this.type,
       paidAt: Date.now(),
+      serviceFee: "0", // No fee
     };
   }
 

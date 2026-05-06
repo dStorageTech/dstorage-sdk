@@ -113,6 +113,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
       amount: quote.amount,
       type: quote.type,
       paidAt: Date.now(),
+      serviceFee: "0", // No real fee, but could simulate if desired
     };
   }
 }

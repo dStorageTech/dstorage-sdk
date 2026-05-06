@@ -111,16 +111,18 @@ export interface ManagedPaymentAdapterConfig extends Omit<
 // ── Server response shapes ────────────────────────────────────────────────────
 
 interface SignTxResponse {
+  /** Indicates whether the signing service successfully produced a signature. */
+  success: boolean;
   /** Arweave transaction id (base64url-encoded). */
   txId: string;
   /** RSA-PSS signature over the Arweave signature data (base64url-encoded). */
   signature: string;
-  /** Wallet public key used as the transaction owner (base64url-encoded RSA `n`). */
-  publicKey: string;
   /** Total transaction amount/cost as a string (server-defined units). */
   txAmount: string;
-  /** Indicates whether the signing service successfully produced a signature. */
-  success: boolean;
+  /** Wallet public key used as the transaction owner (base64url-encoded RSA `n`). */
+  publicKey: string;
+  /** Service fee amount (server-defined units). */
+  serviceFee: string;
 }
 
 // ── Adapter ───────────────────────────────────────────────────────────────────
@@ -309,6 +311,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       signature,
       publicKey,
       txAmount: arCost,
+      serviceFee,
     } = await this._sendSignTxRequest(body, quote.network, onStatus);
 
     onStatus?.("Applying remote signature…");
@@ -321,7 +324,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token}`,
+      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token} (service fee: ${serviceFee})`,
     );
 
     return {
@@ -330,6 +333,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       amount: arCost,
       type: quote.type,
       paidAt: Date.now(),
+      serviceFee,
     };
   }
 
@@ -358,11 +362,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       txId,
       signature,
       txAmount: dustCost,
+      serviceFee,
     } = await this._sendSignTxRequest(body, quote.network, onStatus);
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Midnight Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${dustCost} ${quote.token}`,
+      `Midnight Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${dustCost} ${quote.token} (service fee: ${serviceFee})`,
     );
 
     return {
@@ -372,6 +377,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       type: quote.type,
       signedTx: signature,
       paidAt: Date.now(),
+      serviceFee,
     };
   }
 
@@ -391,11 +397,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       txId,
       signature,
       txAmount: arCost,
+      serviceFee,
     } = await this._sendSignTxRequest(body, quote.network, onStatus);
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Arweave Turbo Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token}`,
+      `Arweave Turbo Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token} (service fee: ${serviceFee})`,
     );
 
     return {
@@ -405,6 +412,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       type: quote.type,
       signedTx: signature,
       paidAt: Date.now(),
+      serviceFee,
     };
   }
 
