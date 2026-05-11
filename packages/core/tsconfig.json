@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
+    "rootDir": "..",
     "paths": {
-      "@dstorage/crypto": ["../crypto/src/index.ts"],
       "@dstorage/encryption": ["../encryption/src/index.ts"],
       "@dstorage/storage": ["../storage/src/index.ts"],
       "@dstorage/chain": ["../chain/src/index.ts"],

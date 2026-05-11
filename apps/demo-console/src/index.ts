@@ -37,27 +37,22 @@ import { config as loadEnv } from "dotenv";
 import {
   DStorage,
   type Logger as DStorageLogger,
+  MnemonicEncryptionAdapter,
+  PasswordEncryptionAdapter,
+  //MockMidnightChainAdapter,
+  //MockStorageAdapter,
 } from "@dstorage-tech/dstorage";
 import {
   ArweaveLocalStorageAdapter,
   //ArweaveStorageAdapter,
-  //MockStorageAdapter,
 } from "@dstorage/storage";
-import {
-  MidnightChainAdapter,
-  NETWORKS,
-  //MockMidnightChainAdapter,
-} from "@dstorage/chain";
+import { MidnightChainAdapter, NETWORKS } from "@dstorage/chain";
 import {
   type EnvironmentConfiguration,
   resolveSeedHex,
   derivePrivateStatePassword,
   initWallet,
 } from "./wallet/index.js";
-import {
-  MnemonicEncryptionAdapter,
-  PasswordEncryptionAdapter,
-} from "@dstorage/encryption";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
