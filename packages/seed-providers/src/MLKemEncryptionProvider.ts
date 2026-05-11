@@ -104,6 +104,29 @@ export class MLKemEncryptionProvider implements EncryptionSeedProvider {
   }
 
   /**
+   * Deterministically derive a ML-KEM keypair from a BIP-39 mnemonic phrase or hex seed.
+   *
+   * Delegates to MnemonicSeedProvider.intoMLKemEncryptionProvider() so all
+   * mnemonic/seed handling lives in a single place.
+   *
+   * Same inputs + variant always produce the same keypair.
+   *
+   * Note: 32-byte seedHex (64 hex characters) is not supported — use a mnemonic
+   * or a 64-byte seedHex (128 hex characters) instead.
+   *
+   * @param input    { mnemonic } or { seedHex } (64-byte hex, 128 chars)
+   * @param variant  Default: "mlkem768"
+   */
+  static async fromMnemonic(
+    input: { mnemonic?: string; seedHex?: string },
+    variant: MLKemVariant = "mlkem768",
+  ): Promise<MLKemEncryptionProvider> {
+    const { MnemonicSeedProvider } = await import("./MnemonicSeedProvider.js");
+    const ms = new MnemonicSeedProvider(input);
+    return ms.intoMLKemEncryptionProvider(variant);
+  }
+
+  /**
    * Deterministically derive a ML-KEM keypair from a password and salt.
    *
    * Delegates to PasswordSeedProvider.intoMLKemEncryptionProvider() so all

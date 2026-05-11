@@ -174,3 +174,73 @@ describe("fromPassword", () => {
     ).rejects.toThrow();
   });
 });
+
+// ── fromMnemonic — determinism ─────────────────────────────────────────────────
+
+describe("fromMnemonic", () => {
+  const MNEMONIC =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+  const MNEMONIC2 = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+  const SEED_HEX_64 =
+    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" +
+    "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f";
+  const SEED_HEX_32 =
+    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
+  it("same mnemonic + variant → same public key", async () => {
+    const a = await MLKemEncryptionProvider.fromMnemonic(
+      { mnemonic: MNEMONIC },
+      "mlkem768",
+    );
+    const b = await MLKemEncryptionProvider.fromMnemonic(
+      { mnemonic: MNEMONIC },
+      "mlkem768",
+    );
+    expect(bytesToHex(a.publicKey)).toBe(bytesToHex(b.publicKey));
+  });
+
+  it("different mnemonic → different public key", async () => {
+    const a = await MLKemEncryptionProvider.fromMnemonic(
+      { mnemonic: MNEMONIC },
+      "mlkem768",
+    );
+    const b = await MLKemEncryptionProvider.fromMnemonic(
+      { mnemonic: MNEMONIC2 },
+      "mlkem768",
+    );
+    expect(bytesToHex(a.publicKey)).not.toBe(bytesToHex(b.publicKey));
+  });
+
+  it("64-byte seedHex → deterministic", async () => {
+    const a = await MLKemEncryptionProvider.fromMnemonic(
+      { seedHex: SEED_HEX_64 },
+      "mlkem768",
+    );
+    const b = await MLKemEncryptionProvider.fromMnemonic(
+      { seedHex: SEED_HEX_64 },
+      "mlkem768",
+    );
+    expect(bytesToHex(a.publicKey)).toBe(bytesToHex(b.publicKey));
+  });
+
+  it("wrapDek + unwrapDek roundtrip (same mnemonic both sides)", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const writer = await MLKemEncryptionProvider.fromMnemonic(
+      { mnemonic: MNEMONIC },
+      "mlkem768",
+    );
+    const reader = await MLKemEncryptionProvider.fromMnemonic(
+      { mnemonic: MNEMONIC },
+      "mlkem768",
+    );
+    const wrapped = await writer.wrapDek(dek);
+    const recovered = await reader.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
+  });
+
+  it("32-byte seedHex → throws", async () => {
+    await expect(
+      MLKemEncryptionProvider.fromMnemonic({ seedHex: SEED_HEX_32 }),
+    ).rejects.toThrow("64-byte seed");
+  });
+});

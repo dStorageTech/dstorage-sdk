@@ -37,4 +37,32 @@ export class MnemonicSeedProvider implements EncryptionSeedProvider {
     const kek = await deriveKek(await this.getSeed());
     return unwrapKey(wrappedDek, kek);
   }
+
+  /**
+   * Deterministically derive a ML-KEM keypair from this mnemonic provider's seed.
+   *
+   * The seed is passed directly to mlkemGenerateKeypairFromSeed (which expects
+   * exactly 64 bytes per FIPS 203). A BIP-39 mnemonic always produces 64 bytes;
+   * a 64-byte seedHex (128 hex characters) also works. A 32-byte seedHex is not
+   * supported — use a mnemonic or a 64-byte seedHex instead.
+   *
+   * @param variant  ML-KEM variant. Default: "mlkem768".
+   */
+  async intoMLKemEncryptionProvider(
+    variant?: import("./MLKemEncryptionProvider.js").MLKemVariant,
+  ): Promise<import("./MLKemEncryptionProvider.js").MLKemEncryptionProvider> {
+    const { MLKemEncryptionProvider } =
+      await import("./MLKemEncryptionProvider.js");
+    const { mlkemGenerateKeypairFromSeed } = await import("@dstorage/crypto");
+    const seed = await this.getSeed();
+    if (seed.length !== 64) {
+      throw new Error(
+        "[dStorage] MnemonicSeedProvider.intoMLKemEncryptionProvider: " +
+          "ML-KEM key derivation requires a 64-byte seed. " +
+          "Use a BIP-39 mnemonic phrase (always 64 bytes) or provide a 64-byte hex seed (128 hex characters).",
+      );
+    }
+    const { pk, sk } = mlkemGenerateKeypairFromSeed(seed, variant);
+    return MLKemEncryptionProvider.fromKeypair(pk, sk, variant);
+  }
 }
