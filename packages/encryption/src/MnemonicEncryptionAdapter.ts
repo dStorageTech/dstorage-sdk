@@ -48,21 +48,21 @@ export class MnemonicEncryptionAdapter implements EncryptionAdapter {
    *
    * @param variant  ML-KEM variant. Default: "mlkem768".
    */
-  async intoMLKemEncryptionAdapter(
-    variant?: import("./MLKemEncryptionAdapter.js").MLKemVariant,
-  ): Promise<import("./MLKemEncryptionAdapter.js").MLKemEncryptionAdapter> {
-    const { MLKemEncryptionAdapter } =
-      await import("./MLKemEncryptionAdapter.js");
+  async intoKeypairEncryptionAdapter(
+    variant?: import("./KeypairEncryptionAdapter.js").MLKemVariant,
+  ): Promise<import("./KeypairEncryptionAdapter.js").KeypairEncryptionAdapter> {
+    const { KeypairEncryptionAdapter } =
+      await import("./KeypairEncryptionAdapter.js");
     const { mlkemGenerateKeypairFromSeed } = await import("@dstorage/crypto");
     const seed = await this.getSeed();
     if (seed.length !== 64) {
       throw new Error(
-        "[dStorage] MnemonicEncryptionAdapter.intoMLKemEncryptionAdapter: " +
+        "[dStorage] MnemonicEncryptionAdapter.intoKeypairEncryptionAdapter: " +
           "ML-KEM key derivation requires a 64-byte seed. " +
           "Use a BIP-39 mnemonic phrase (always 64 bytes) or provide a 64-byte hex seed (128 hex characters).",
       );
     }
     const { pk, sk } = mlkemGenerateKeypairFromSeed(seed, variant);
-    return MLKemEncryptionAdapter.fromKeypair(pk, sk, variant);
+    return KeypairEncryptionAdapter.fromKeypair(pk, sk, variant);
   }
 }

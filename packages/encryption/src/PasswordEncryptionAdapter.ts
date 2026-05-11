@@ -316,16 +316,16 @@ export class PasswordEncryptionAdapter implements EncryptionAdapter {
    *
    * @param variant  ML-KEM variant. Default: "mlkem768".
    */
-  async intoMLKemEncryptionAdapter(
-    variant?: import("./MLKemEncryptionAdapter.js").MLKemVariant,
-  ): Promise<import("./MLKemEncryptionAdapter.js").MLKemEncryptionAdapter> {
+  async intoKeypairEncryptionAdapter(
+    variant?: import("./KeypairEncryptionAdapter.js").MLKemVariant,
+  ): Promise<import("./KeypairEncryptionAdapter.js").KeypairEncryptionAdapter> {
     // Imported inside the method body to avoid circular module initialization.
-    const { MLKemEncryptionAdapter } =
-      await import("./MLKemEncryptionAdapter.js");
+    const { KeypairEncryptionAdapter } =
+      await import("./KeypairEncryptionAdapter.js");
     const { mlkemGenerateKeypairFromSeed } = await import("@dstorage/crypto");
     const seed64 = await this.getSeed();
     const { pk, sk } = mlkemGenerateKeypairFromSeed(seed64, variant);
-    return MLKemEncryptionAdapter.fromKeypair(pk, sk, variant);
+    return KeypairEncryptionAdapter.fromKeypair(pk, sk, variant);
   }
 }
 

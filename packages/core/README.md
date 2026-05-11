@@ -146,18 +146,18 @@ The `@dstorage/encryption` package is responsible for producing the raw seed byt
 | --------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `PasswordEncryptionAdapter` | scrypt(password, caller-supplied salt)                       | ✅ Same seed on any device — depends only on password + salt                                                        |
 | `MnemonicEncryptionAdapter` | BIP-39 mnemonic phrase or 64-byte hex seed                   | ✅ Same seed wherever the same mnemonic/hex is imported                                                             |
-| `MLKemEncryptionAdapter`    | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum) | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()` |
+| `KeypairEncryptionAdapter`  | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum) | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()` |
 
 #### Cross-device portability
 
-| Scenario                                                                            | Expected outcome                                                                                              |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Same password + same salt on a different device (`PasswordEncryptionAdapter`)       | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required.              |
-| BIP-39 mnemonic imported on a different machine (`MnemonicEncryptionAdapter`)       | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                            |
-| Different password, same salt (`PasswordEncryptionAdapter`)                         | ❌ Different seed — intentional; each password produces an independent key.                                   |
-| ML-KEM keypair from `generateKeypair()` re-imported (`MLKemEncryptionAdapter`)      | ✅ Same keypair wherever the SK bytes are imported — but the SK must be stored; it cannot be re-derived.      |
-| ML-KEM keypair from `fromPassword()` or `fromMnemonic()` (`MLKemEncryptionAdapter`) | ✅ Same keypair — deterministic; no key storage needed, re-derive from password+salt or mnemonic at any time. |
-| `MLKemEncryptionAdapter.fromPublicKey(pk)` (upload-only)                            | 🔒 PK-only — can wrap DEK for upload; unwrapping requires the matching SK.                                    |
+| Scenario                                                                              | Expected outcome                                                                                              |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Same password + same salt on a different device (`PasswordEncryptionAdapter`)         | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required.              |
+| BIP-39 mnemonic imported on a different machine (`MnemonicEncryptionAdapter`)         | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                            |
+| Different password, same salt (`PasswordEncryptionAdapter`)                           | ❌ Different seed — intentional; each password produces an independent key.                                   |
+| ML-KEM keypair from `generateKeypair()` re-imported (`KeypairEncryptionAdapter`)      | ✅ Same keypair wherever the SK bytes are imported — but the SK must be stored; it cannot be re-derived.      |
+| ML-KEM keypair from `fromPassword()` or `fromMnemonic()` (`KeypairEncryptionAdapter`) | ✅ Same keypair — deterministic; no key storage needed, re-derive from password+salt or mnemonic at any time. |
+| `KeypairEncryptionAdapter.fromPublicKey(pk)` (upload-only)                            | 🔒 PK-only — can wrap DEK for upload; unwrapping requires the matching SK.                                    |
 
 #### Multi-key encryption
 
@@ -176,7 +176,7 @@ You can also mix in a post-quantum adapter — the uploader needs only the Publi
 
 ```typescript
 const { adapter: mlkemAdapter, secretKey } =
-  MLKemEncryptionAdapter.generateKeypair();
+  KeypairEncryptionAdapter.generateKeypair();
 // Store `secretKey` bytes safely — needed to decrypt later.
 encryptionAdapters: [
   new PasswordEncryptionAdapter({ password, salt }), // symmetric fallback
@@ -186,7 +186,7 @@ encryptionAdapters: [
 
 #### Post-quantum (ML-KEM)
 
-`MLKemEncryptionAdapter` uses ML-KEM (CRYSTALS-Kyber, NIST FIPS 203) — a post-quantum Key Encapsulation Mechanism — to wrap the per-upload DEK. Unlike the symmetric adapters it uses an asymmetric public/secret keypair:
+`KeypairEncryptionAdapter` uses ML-KEM (CRYSTALS-Kyber, NIST FIPS 203) — a post-quantum Key Encapsulation Mechanism — to wrap the per-upload DEK. Unlike the symmetric adapters it uses an asymmetric public/secret keypair:
 
 - **`wrapDek()`** requires only the **Public Key** — safe to hand to upload-only parties.
 - **`unwrapDek()`** requires the **Secret Key** — held only by the authorised reader.
@@ -202,19 +202,19 @@ encryptionAdapters: [
 ```typescript
 // 1 — Fresh random keypair (store the SK):
 const { adapter, publicKey, secretKey } =
-  MLKemEncryptionAdapter.generateKeypair();
+  KeypairEncryptionAdapter.generateKeypair();
 
 // 2 — PK-only uploader (no SK needed at upload time):
-const uploader = MLKemEncryptionAdapter.fromPublicKey(publicKey);
+const uploader = KeypairEncryptionAdapter.fromPublicKey(publicKey);
 
 // 3 — Full keypair reader:
-const reader = MLKemEncryptionAdapter.fromKeypair(publicKey, secretKey);
+const reader = KeypairEncryptionAdapter.fromKeypair(publicKey, secretKey);
 
 // 4 — Deterministic keypair from password (same inputs → same keypair, always):
-const adapter = await MLKemEncryptionAdapter.fromPassword(password, salt);
+const adapter = await KeypairEncryptionAdapter.fromPassword(password, salt);
 
 // 5 — Deterministic keypair from BIP-39 mnemonic:
-const adapter = await MLKemEncryptionAdapter.fromMnemonic({ mnemonic });
+const adapter = await KeypairEncryptionAdapter.fromMnemonic({ mnemonic });
 ```
 
 ### Wire formats
@@ -262,4 +262,4 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
 - **Losing your credentials means permanent data loss.** There is no key escrow, no recovery mechanism, and no way to decrypt data without the original inputs:
   - `PasswordEncryptionAdapter` — forgetting the password or losing the salt string makes data unrecoverable.
   - `MnemonicEncryptionAdapter` / wallet providers — losing the seed phrase or private key has the same effect. Follow standard seed-phrase backup practices.
-  - `MLKemEncryptionAdapter` — if created with `generateKeypair()`, losing the SK bytes makes data unrecoverable. If created deterministically via `fromPassword()` or `fromMnemonic()`, the keypair can be re-derived from the original inputs.
+  - `KeypairEncryptionAdapter` — if created with `generateKeypair()`, losing the SK bytes makes data unrecoverable. If created deterministically via `fromPassword()` or `fromMnemonic()`, the keypair can be re-derived from the original inputs.

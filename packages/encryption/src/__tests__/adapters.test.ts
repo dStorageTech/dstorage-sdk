@@ -50,9 +50,9 @@ describe("MnemonicEncryptionAdapter", () => {
   });
 });
 
-// ── MnemonicEncryptionAdapter — intoMLKemEncryptionAdapter ────────────────────────
+// ── MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter ────────────────────────
 
-describe("MnemonicEncryptionAdapter — intoMLKemEncryptionAdapter", () => {
+describe("MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter", () => {
   const MNEMONIC =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
   const MNEMONIC2 = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
@@ -67,30 +67,30 @@ describe("MnemonicEncryptionAdapter — intoMLKemEncryptionAdapter", () => {
   it("same mnemonic + variant → same public key (determinism)", async () => {
     const a = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     const b = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     expect(bytesToHex(a.publicKey)).toBe(bytesToHex(b.publicKey));
   });
 
   it("different mnemonic → different public key", async () => {
     const a = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     const b = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC2,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     expect(bytesToHex(a.publicKey)).not.toBe(bytesToHex(b.publicKey));
   });
 
   it("64-byte seedHex → same public key (determinism)", async () => {
     const a = await new MnemonicEncryptionAdapter({
       seedHex: SEED_HEX_64,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     const b = await new MnemonicEncryptionAdapter({
       seedHex: SEED_HEX_64,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     expect(bytesToHex(a.publicKey)).toBe(bytesToHex(b.publicKey));
   });
 
@@ -98,10 +98,10 @@ describe("MnemonicEncryptionAdapter — intoMLKemEncryptionAdapter", () => {
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const writer = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     const reader = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoMLKemEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("mlkem768");
     const wrapped = await writer.wrapDek(dek);
     const recovered = await reader.unwrapDek(wrapped);
     expect(recovered).toEqual(dek);
@@ -111,7 +111,7 @@ describe("MnemonicEncryptionAdapter — intoMLKemEncryptionAdapter", () => {
     await expect(
       new MnemonicEncryptionAdapter({
         seedHex: SEED_HEX_32,
-      }).intoMLKemEncryptionAdapter(),
+      }).intoKeypairEncryptionAdapter(),
     ).rejects.toThrow("64-byte seed");
   });
 });

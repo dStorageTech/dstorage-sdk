@@ -1,5 +1,5 @@
 /**
- * @dstorage/encryption — MLKemEncryptionAdapter
+ * @dstorage/encryption — KeypairEncryptionAdapter
  *
  * Post-quantum asymmetric DEK wrapping via ML-KEM (CRYSTALS-Kyber, NIST FIPS 203).
  *
@@ -18,18 +18,18 @@
  *
  * @example
  * // Generate a fresh keypair:
- * const { adapter, secretKey } = MLKemEncryptionAdapter.generateKeypair();
+ * const { adapter, secretKey } = KeypairEncryptionAdapter.generateKeypair();
  * // Share adapter.publicKey with upload-only parties
  *
  * @example
  * // Deterministic keypair from a password (same inputs → same keypair):
- * const adapter = await MLKemEncryptionAdapter.fromPassword("s3cr3t!", "myapp:v1");
+ * const adapter = await KeypairEncryptionAdapter.fromPassword("s3cr3t!", "myapp:v1");
  *
  * @example
  * // Upload with PK only:
- * const uploader = MLKemEncryptionAdapter.fromPublicKey(pk);
+ * const uploader = KeypairEncryptionAdapter.fromPublicKey(pk);
  * // Retrieve with full keypair:
- * const reader = MLKemEncryptionAdapter.fromKeypair(pk, sk);
+ * const reader = KeypairEncryptionAdapter.fromKeypair(pk, sk);
  */
 
 import {
@@ -42,7 +42,7 @@ import type { EncryptionAdapter, WrappedDekResult } from "./types.js";
 
 export type { MLKemVariant };
 
-export class MLKemEncryptionAdapter implements EncryptionAdapter {
+export class KeypairEncryptionAdapter implements EncryptionAdapter {
   readonly name: string;
   readonly publicKey: Uint8Array;
   private readonly secretKey: Uint8Array | undefined;
@@ -66,8 +66,8 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
   static fromPublicKey(
     pk: Uint8Array,
     variant: MLKemVariant = "mlkem768",
-  ): MLKemEncryptionAdapter {
-    return new MLKemEncryptionAdapter(pk, undefined, variant);
+  ): KeypairEncryptionAdapter {
+    return new KeypairEncryptionAdapter(pk, undefined, variant);
   }
 
   /**
@@ -78,8 +78,8 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
     pk: Uint8Array,
     sk: Uint8Array,
     variant: MLKemVariant = "mlkem768",
-  ): MLKemEncryptionAdapter {
-    return new MLKemEncryptionAdapter(pk, sk, variant);
+  ): KeypairEncryptionAdapter {
+    return new KeypairEncryptionAdapter(pk, sk, variant);
   }
 
   /**
@@ -91,13 +91,13 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
    * @param variant  Default: "mlkem768".
    */
   static generateKeypair(variant: MLKemVariant = "mlkem768"): {
-    adapter: MLKemEncryptionAdapter;
+    adapter: KeypairEncryptionAdapter;
     publicKey: Uint8Array;
     secretKey: Uint8Array;
   } {
     const { pk, sk } = mlkemGenerateKeypair(variant);
     return {
-      adapter: new MLKemEncryptionAdapter(pk, sk, variant),
+      adapter: new KeypairEncryptionAdapter(pk, sk, variant),
       publicKey: pk,
       secretKey: sk,
     };
@@ -106,7 +106,7 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
   /**
    * Deterministically derive a ML-KEM keypair from a BIP-39 mnemonic phrase or hex seed.
    *
-   * Delegates to MnemonicEncryptionAdapter.intoMLKemEncryptionAdapter() so all
+   * Delegates to MnemonicEncryptionAdapter.intoKeypairEncryptionAdapter() so all
    * mnemonic/seed handling lives in a single place.
    *
    * Same inputs + variant always produce the same keypair.
@@ -120,17 +120,17 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
   static async fromMnemonic(
     input: { mnemonic?: string; seedHex?: string },
     variant: MLKemVariant = "mlkem768",
-  ): Promise<MLKemEncryptionAdapter> {
+  ): Promise<KeypairEncryptionAdapter> {
     const { MnemonicEncryptionAdapter } =
       await import("./MnemonicEncryptionAdapter.js");
     const ms = new MnemonicEncryptionAdapter(input);
-    return ms.intoMLKemEncryptionAdapter(variant);
+    return ms.intoKeypairEncryptionAdapter(variant);
   }
 
   /**
    * Deterministically derive a ML-KEM keypair from a password and salt.
    *
-   * Delegates to PasswordEncryptionAdapter.intoMLKemEncryptionAdapter() so all
+   * Delegates to PasswordEncryptionAdapter.intoKeypairEncryptionAdapter() so all
    * password handling (scrypt params, entropy validation, 64-byte seed derivation)
    * lives in a single place.
    *
@@ -146,7 +146,7 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
     salt: string,
     variant: MLKemVariant = "mlkem768",
     params?: { N?: number; r?: number; p?: number },
-  ): Promise<MLKemEncryptionAdapter> {
+  ): Promise<KeypairEncryptionAdapter> {
     // Imported inside the method body to avoid circular module initialization.
     const { PasswordEncryptionAdapter } =
       await import("./PasswordEncryptionAdapter.js");
@@ -155,7 +155,7 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
       salt,
       ...(params ? { params } : {}),
     });
-    return ps.intoMLKemEncryptionAdapter(variant);
+    return ps.intoKeypairEncryptionAdapter(variant);
   }
 
   async wrapDek(dek: Uint8Array): Promise<WrappedDekResult> {
@@ -165,7 +165,7 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
   async unwrapDek(data: WrappedDekResult): Promise<Uint8Array> {
     if (!this.secretKey) {
       throw new Error(
-        `[dStorage] MLKemEncryptionAdapter(${this.variant}): cannot unwrapDek — ` +
+        `[dStorage] KeypairEncryptionAdapter(${this.variant}): cannot unwrapDek — ` +
           "no Secret Key is available. Use fromKeypair() or fromPassword() to create an adapter with a SK.",
       );
     }

@@ -41,7 +41,7 @@ export interface DStorageConfig {
    * Choose the adapter(s) preferred by the user:
    *   PasswordEncryptionAdapter  — scrypt-derived from a user password + salt
    *   MnemonicEncryptionAdapter  — BIP-39 mnemonic or hex seed (Node.js / facade mode)
-   *   MLKemEncryptionAdapter     — post-quantum asymmetric (ML-KEM keypair)
+   *   KeypairEncryptionAdapter   — post-quantum asymmetric (ML-KEM keypair)
    *
    * When omitted or empty, no encryption key is available and all uploaded data
    * will be stored as plaintext (public).

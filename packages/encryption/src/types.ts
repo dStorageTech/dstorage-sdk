@@ -23,7 +23,7 @@ export type { WrappedDekResult };
  * Implementations:
  *   PasswordEncryptionAdapter  — symmetric: scrypt → HKDF → KEK → XChaCha20
  *   MnemonicEncryptionAdapter  — symmetric: BIP-39 seed → HKDF → KEK → XChaCha20
- *   MLKemEncryptionAdapter     — asymmetric: ML-KEM encapsulate/decapsulate + HKDF + XChaCha20
+ *   KeypairEncryptionAdapter    — asymmetric: ML-KEM encapsulate/decapsulate + HKDF + XChaCha20
  */
 export interface EncryptionAdapter {
   /** Stable identifier used as wrapKeyName in key envelopes. */
