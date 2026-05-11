@@ -88,6 +88,70 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   });
 });
 
+// ── cross-variant unwrap: variant read from key envelope ──────────────────────
+
+describe("cross-variant unwrap (variant auto-detected from key envelope)", () => {
+  const VARIANT_PAIRS: [MLKemVariant, MLKemVariant][] = [
+    ["mlkem512", "mlkem768"],
+    ["mlkem512", "mlkem1024"],
+    ["mlkem768", "mlkem512"],
+    ["mlkem768", "mlkem1024"],
+    ["mlkem1024", "mlkem512"],
+    ["mlkem1024", "mlkem768"],
+  ];
+
+  for (const [wrapVariant, adapterVariant] of VARIANT_PAIRS) {
+    it(`wrapped with ${wrapVariant}, adapter constructed as ${adapterVariant} → unwraps correctly`, async () => {
+      const { publicKey, secretKey } =
+        MLKemEncryptionAdapter.generateKeypair(wrapVariant);
+
+      // Wrap using wrapVariant keypair
+      const wrapper = MLKemEncryptionAdapter.fromKeypair(
+        publicKey,
+        secretKey,
+        wrapVariant,
+      );
+      const wrapped = await wrapper.wrapDek(TEST_DEK);
+      expect(wrapped.algorithm).toBe(`${wrapVariant}-xchacha20poly1305-v1`);
+
+      // Unwrap with adapter whose constructor variant differs — should still work
+      // because the variant is read from wrapped.algorithm, not from this.variant.
+      const reader = MLKemEncryptionAdapter.fromKeypair(
+        publicKey,
+        secretKey,
+        adapterVariant,
+      );
+      const recovered = await reader.unwrapDek(wrapped);
+      expect(recovered).toEqual(TEST_DEK);
+    });
+  }
+
+  it("malformed algorithm string → throws with clear message", async () => {
+    const { adapter, publicKey, secretKey } =
+      MLKemEncryptionAdapter.generateKeypair();
+    const wrapped = await adapter.wrapDek(TEST_DEK);
+    const reader = MLKemEncryptionAdapter.fromKeypair(publicKey, secretKey);
+
+    await expect(
+      reader.unwrapDek({ ...wrapped, algorithm: "xchacha20poly1305-v1" }),
+    ).rejects.toThrow("unrecognised algorithm");
+  });
+
+  it("unknown variant prefix → throws with clear message", async () => {
+    const { adapter, publicKey, secretKey } =
+      MLKemEncryptionAdapter.generateKeypair();
+    const wrapped = await adapter.wrapDek(TEST_DEK);
+    const reader = MLKemEncryptionAdapter.fromKeypair(publicKey, secretKey);
+
+    await expect(
+      reader.unwrapDek({
+        ...wrapped,
+        algorithm: "mlkem9999-xchacha20poly1305-v1",
+      }),
+    ).rejects.toThrow("unknown ML-KEM variant");
+  });
+});
+
 // ── fromPassword — determinism ────────────────────────────────────────────────
 
 describe("fromPassword", () => {

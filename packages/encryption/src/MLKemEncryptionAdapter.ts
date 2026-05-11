@@ -169,6 +169,6 @@ export class MLKemEncryptionAdapter implements EncryptionAdapter {
           "no Secret Key is available. Use fromKeypair() or fromPassword() to create an adapter with a SK.",
       );
     }
-    return mlkemUnwrapDek(data, this.secretKey, this.variant);
+    return mlkemUnwrapDek(data, this.secretKey);
   }
 }

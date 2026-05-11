@@ -31,6 +31,28 @@ export type MLKemVariant = "mlkem512" | "mlkem768" | "mlkem1024";
 
 const DEFAULT_VARIANT: MLKemVariant = "mlkem768";
 
+const MLKEM_ALGO_SUFFIX = "-xchacha20poly1305-v1";
+
+function parseVariantFromAlgorithm(algorithm: string): MLKemVariant {
+  if (!algorithm.endsWith(MLKEM_ALGO_SUFFIX)) {
+    throw new Error(
+      `[dStorage] mlkemUnwrapDek: unrecognised algorithm "${algorithm}". ` +
+        `Expected format: "<variant>-xchacha20poly1305-v1".`,
+    );
+  }
+  const prefix = algorithm.slice(0, -MLKEM_ALGO_SUFFIX.length) as MLKemVariant;
+  if (
+    prefix !== "mlkem512" &&
+    prefix !== "mlkem768" &&
+    prefix !== "mlkem1024"
+  ) {
+    throw new Error(
+      `[dStorage] mlkemUnwrapDek: unknown ML-KEM variant "${prefix}" in algorithm "${algorithm}".`,
+    );
+  }
+  return prefix;
+}
+
 function getImpl(variant: MLKemVariant = DEFAULT_VARIANT) {
   if (variant === "mlkem512") return ml_kem512;
   if (variant === "mlkem1024") return ml_kem1024;
@@ -129,23 +151,22 @@ export async function mlkemWrapDek(
 /**
  * Unwrap a DEK from a ML-KEM wrapped DEK result.
  *
- * Decapsulates the shared secret from the KEM ciphertext using the secret key,
- * derives the KEK via HKDF, then unwraps the DEK.
+ * The ML-KEM variant is read from `data.algorithm` (e.g. "mlkem768-xchacha20poly1305-v1"),
+ * so the caller does not need to supply it — the key envelope is self-describing.
  *
- * @param data    WrappedDekResult containing kemCiphertext and wrappedDek
- * @param sk      ML-KEM secret key
- * @param variant ML-KEM variant. Default: "mlkem768".
+ * @param data  WrappedDekResult containing algorithm, kemCiphertext, and wrappedDek
+ * @param sk    ML-KEM secret key
  */
 export async function mlkemUnwrapDek(
   data: WrappedDekResult,
   sk: Uint8Array,
-  variant: MLKemVariant = DEFAULT_VARIANT,
 ): Promise<Uint8Array> {
   if (!data.kemCiphertext) {
     throw new Error(
       "[dStorage] mlkemUnwrapDek: kemCiphertext is missing from the wrapper — cannot decapsulate.",
     );
   }
+  const variant = parseVariantFromAlgorithm(data.algorithm);
   const cipherText = base64urlToBytes(data.kemCiphertext);
   const sharedSecret = getImpl(variant).decapsulate(cipherText, sk);
   const kek = await deriveKekFromSharedSecret(sharedSecret);
