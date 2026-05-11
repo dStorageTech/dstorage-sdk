@@ -12,6 +12,18 @@ export class MnemonicEncryptionAdapter implements EncryptionAdapter {
   private readonly deriver: KeyDeriver;
 
   constructor(input: { mnemonic?: string; seedHex?: string }) {
+    if (input.mnemonic !== undefined) {
+      const wordCount = input.mnemonic.trim().split(/\s+/).length;
+      if (wordCount < 24) {
+        throw new Error(
+          `[dStorage] MnemonicEncryptionAdapter: a 24-word BIP-39 mnemonic is required ` +
+            `(${wordCount} word${wordCount === 1 ? "" : "s"} provided). ` +
+            `Shorter mnemonics provide insufficient entropy for post-quantum-safe key derivation — ` +
+            `a 12-word mnemonic gives only 64-bit PQ security (below NIST's 128-bit minimum). ` +
+            `Use a 24-word mnemonic or pass a 64-byte seedHex instead.`,
+        );
+      }
+    }
     this.deriver = new KeyDeriver(input);
   }
 

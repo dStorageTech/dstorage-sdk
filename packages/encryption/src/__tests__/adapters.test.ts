@@ -12,8 +12,9 @@ function bytesToHex(b: Uint8Array): string {
 // ---------------------------------------------------------------------------
 
 describe("MnemonicEncryptionAdapter", () => {
+  // Standard BIP-39 256-bit (24-word) test vectors
   const MNEMONIC =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
   const SEED_HEX =
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" +
     "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f";
@@ -38,8 +39,19 @@ describe("MnemonicEncryptionAdapter", () => {
     expect(a).toEqual(b);
   });
 
+  it("12-word mnemonic → throws at construction", () => {
+    expect(
+      () =>
+        new MnemonicEncryptionAdapter({
+          mnemonic:
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        }),
+    ).toThrow("24-word BIP-39 mnemonic is required");
+  });
+
   it("different mnemonic → different seed", async () => {
-    const MNEMONIC2 = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+    const MNEMONIC2 =
+      "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote";
     const a = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
     }).getSeed();
@@ -54,8 +66,9 @@ describe("MnemonicEncryptionAdapter", () => {
 
 describe("MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter", () => {
   const MNEMONIC =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-  const MNEMONIC2 = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+  const MNEMONIC2 =
+    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote";
   // 64-byte hex seed (128 hex chars)
   const SEED_HEX_64 =
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" +

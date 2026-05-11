@@ -25,7 +25,7 @@ const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 // ── Shared test constants ─────────────────────────────────────────────────────
 
 const TEST_MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
 const passwordProvider = () =>
   new PasswordEncryptionAdapter({

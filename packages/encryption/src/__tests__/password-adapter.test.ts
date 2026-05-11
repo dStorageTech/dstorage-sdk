@@ -508,8 +508,13 @@ describe("generatePqsPassword", () => {
 
   it("result passes PasswordEncryptionAdapter construction", () => {
     const pw = generatePqsPassword();
-    expect(() =>
-      new PasswordEncryptionAdapter({ password: pw, salt: GOOD_SALT, params: FAST_PARAMS }),
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: pw,
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
     ).not.toThrow();
   });
 
@@ -528,8 +533,11 @@ describe("generatePqsPassword", () => {
   it("same password + same salt → same keypair adapter (deterministic)", async () => {
     const pw = generatePqsPassword();
     const make = () =>
-      new PasswordEncryptionAdapter({ password: pw, salt: GOOD_SALT, params: FAST_PARAMS })
-        .intoKeypairEncryptionAdapter();
+      new PasswordEncryptionAdapter({
+        password: pw,
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      }).intoKeypairEncryptionAdapter();
     const [a, b] = await Promise.all([make(), make()]);
     // Wrap a fresh DEK with adapter A, unwrap with adapter B — must succeed.
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));

@@ -423,11 +423,18 @@ export function generatePqsPassword(): string {
   while (true) {
     const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const b64 = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));
-    const password = b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+    const password = b64
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
     // Mirror the structural checks from validatePassword(). Failures are
     // astronomically rare (~10⁻⁵) but the loop guarantees the function
     // always returns a password that passes construction.
-    if (new Set(password).size >= 3 && !hasSequentialRun(password) && !hasKeyboardWalk(password)) {
+    if (
+      new Set(password).size >= 3 &&
+      !hasSequentialRun(password) &&
+      !hasKeyboardWalk(password)
+    ) {
       return password;
     }
   }
