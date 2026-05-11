@@ -9,7 +9,18 @@ import {
   serializeKeyEnvelope,
   parseKeyEnvelope,
   findWrapper,
+  type KeyWrapper,
 } from "../keyEnvelope.js";
+
+// Helper: create a minimal symmetric KeyWrapper for tests.
+function symWrapper(wrappedDek: string, wrapKeyName: string): KeyWrapper {
+  return {
+    wrapKeyName,
+    algorithm: "xchacha20poly1305-v1",
+    kekDerivation: "hkdf-sha256-v1",
+    wrappedDek,
+  };
+}
 
 // ── generateDek ───────────────────────────────────────────────────────────────
 
@@ -143,16 +154,12 @@ describe("deriveOwnerSecret", () => {
 
 describe("buildKeyEnvelope", () => {
   it("returns an envelope with v=1", () => {
-    const envelope = buildKeyEnvelope([
-      { wrappedDek: "a".repeat(96), wrapKeyName: "password" },
-    ]);
+    const envelope = buildKeyEnvelope([symWrapper("a".repeat(96), "password")]);
     expect(envelope.v).toBe(1);
   });
 
   it("each wrapper has the expected fields", () => {
-    const envelope = buildKeyEnvelope([
-      { wrappedDek: "a".repeat(96), wrapKeyName: "password" },
-    ]);
+    const envelope = buildKeyEnvelope([symWrapper("a".repeat(96), "password")]);
     const w = envelope.wrappers[0];
     expect(w.wrapKeyName).toBe("password");
     expect(w.algorithm).toBe("xchacha20poly1305-v1");
@@ -162,8 +169,8 @@ describe("buildKeyEnvelope", () => {
 
   it("two wrappers → wrappers array length 2", () => {
     const envelope = buildKeyEnvelope([
-      { wrappedDek: "a".repeat(96), wrapKeyName: "password" },
-      { wrappedDek: "b".repeat(96), wrapKeyName: "mnemonic" },
+      symWrapper("a".repeat(96), "password"),
+      symWrapper("b".repeat(96), "mnemonic"),
     ]);
     expect(envelope.wrappers).toHaveLength(2);
   });
@@ -177,9 +184,7 @@ describe("buildKeyEnvelope", () => {
 
 describe("serializeKeyEnvelope / parseKeyEnvelope", () => {
   it("parse(serialize(envelope)) round-trips correctly", () => {
-    const original = buildKeyEnvelope([
-      { wrappedDek: "z".repeat(96), wrapKeyName: "test-key" },
-    ]);
+    const original = buildKeyEnvelope([symWrapper("z".repeat(96), "test-key")]);
     const serialized = serializeKeyEnvelope(original);
     const parsed = parseKeyEnvelope(serialized);
     expect(parsed).not.toBeNull();
@@ -189,9 +194,7 @@ describe("serializeKeyEnvelope / parseKeyEnvelope", () => {
   });
 
   it("serialized form is a valid JSON string", () => {
-    const envelope = buildKeyEnvelope([
-      { wrappedDek: "c".repeat(96), wrapKeyName: "pw" },
-    ]);
+    const envelope = buildKeyEnvelope([symWrapper("c".repeat(96), "pw")]);
     const json = serializeKeyEnvelope(envelope);
     expect(() => JSON.parse(json)).not.toThrow();
   });
@@ -243,8 +246,8 @@ describe("parseKeyEnvelope", () => {
 describe("findWrapper", () => {
   it("returns the wrapper matching the given wrapKeyName", () => {
     const envelope = buildKeyEnvelope([
-      { wrappedDek: "a".repeat(96), wrapKeyName: "password" },
-      { wrappedDek: "b".repeat(96), wrapKeyName: "mnemonic" },
+      symWrapper("a".repeat(96), "password"),
+      symWrapper("b".repeat(96), "mnemonic"),
     ]);
     const found = findWrapper(envelope, "mnemonic");
     expect(found).not.toBeNull();
@@ -253,9 +256,7 @@ describe("findWrapper", () => {
   });
 
   it("returns null when the name is not found", () => {
-    const envelope = buildKeyEnvelope([
-      { wrappedDek: "a".repeat(96), wrapKeyName: "password" },
-    ]);
+    const envelope = buildKeyEnvelope([symWrapper("a".repeat(96), "password")]);
     expect(findWrapper(envelope, "biometric")).toBeNull();
   });
 });

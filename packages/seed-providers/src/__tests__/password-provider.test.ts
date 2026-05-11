@@ -93,14 +93,14 @@ describe("sensitivity", () => {
 // ---------------------------------------------------------------------------
 
 describe("output format", () => {
-  it("getSeed() returns a 32-byte Uint8Array", async () => {
+  it("getSeed() returns a 64-byte Uint8Array", async () => {
     const seed = await new PasswordSeedProvider({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     }).getSeed();
     expect(seed).toBeInstanceOf(Uint8Array);
-    expect(seed.byteLength).toBe(32);
+    expect(seed.byteLength).toBe(64);
   });
 });
 
@@ -180,7 +180,7 @@ describe("password validation", () => {
       minPasswordLength: 8,
       minEntropyBits: 30, // lower bar too so it doesn't fail entropy
     }).getSeed();
-    expect(seed.byteLength).toBe(32);
+    expect(seed.byteLength).toBe(64);
   });
 
   it("custom minEntropyBits: 30 → accepts low-entropy password", async () => {
@@ -191,7 +191,7 @@ describe("password validation", () => {
       params: FAST_PARAMS,
       minEntropyBits: 30,
     }).getSeed();
-    expect(seed.byteLength).toBe(32);
+    expect(seed.byteLength).toBe(64);
   });
 
   it("high-entropy mixed password passes validation", async () => {
@@ -200,7 +200,7 @@ describe("password validation", () => {
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     }).getSeed();
-    expect(seed.byteLength).toBe(32);
+    expect(seed.byteLength).toBe(64);
   });
 
   it("additionalValidators: called and can throw", () => {
@@ -243,14 +243,14 @@ describe("KDF presets", () => {
     expect(KDF_PRESETS["v1-lite"].N).toBe(65536);
   });
 
-  it("preset 'v1-lite' → same password + same salt produces a 32-byte seed", async () => {
+  it("preset 'v1-lite' → same password + same salt produces a 64-byte seed", async () => {
     const seed = await new PasswordSeedProvider({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       preset: "v1-lite",
     }).getSeed();
     expect(seed).toBeInstanceOf(Uint8Array);
-    expect(seed.byteLength).toBe(32);
+    expect(seed.byteLength).toBe(64);
   });
 
   it("custom params override preset N/r/p → deterministic output", async () => {

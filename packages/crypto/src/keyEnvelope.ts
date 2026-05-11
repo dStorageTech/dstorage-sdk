@@ -35,19 +35,17 @@
  */
 
 import { encryptStorageIdXChaCha, decryptStorageIdXChaCha } from "./xchacha.js";
-import { bytesToBase64url, base64urlToBytes } from "./types.js";
+import {
+  bytesToBase64url,
+  base64urlToBytes,
+  type WrappedDekResult,
+} from "./types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface KeyWrapper {
-  /** Index identifying the wrapping key source (e.g. "password", "biometric", "recipient:addr"). */
+export interface KeyWrapper extends WrappedDekResult {
+  /** Identifies the wrapping key source (e.g. "password", "mnemonic", "mlkem768"). */
   wrapKeyName: string;
-  /** Cipher used to wrap the DEK. */
-  algorithm: "xchacha20poly1305-v1";
-  /** How the KEK was derived from its source material. */
-  kekDerivation: "hkdf-sha256-v1";
-  /** base64url-encoded 72-byte wrapped DEK: [nonce(24)|ciphertext(32)|mac(16)]. */
-  wrappedDek: string;
 }
 
 export interface KeyEnvelope {
@@ -214,9 +212,7 @@ export async function deriveOwnerSecret(
  *
  * @throws if `wrappers` is empty.
  */
-export function buildKeyEnvelope(
-  wrappers: Array<{ wrappedDek: string; wrapKeyName: string }>,
-): KeyEnvelope {
+export function buildKeyEnvelope(wrappers: Array<KeyWrapper>): KeyEnvelope {
   if (wrappers.length === 0) {
     throw new Error(
       "[dStorage/crypto] buildKeyEnvelope: at least one wrapper is required.",
@@ -224,12 +220,7 @@ export function buildKeyEnvelope(
   }
   return {
     v: 1,
-    wrappers: wrappers.map(({ wrappedDek, wrapKeyName }) => ({
-      wrapKeyName,
-      algorithm: "xchacha20poly1305-v1" as const,
-      kekDerivation: "hkdf-sha256-v1" as const,
-      wrappedDek,
-    })) as [KeyWrapper, ...KeyWrapper[]],
+    wrappers: wrappers as [KeyWrapper, ...KeyWrapper[]],
   };
 }
 

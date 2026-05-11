@@ -1,23 +1,50 @@
 /**
  * @dstorage/seed-providers — types.ts
  *
- * The EncryptionSeedProvider interface: the single abstraction for how the
- * dStorage SDK obtains the raw seed bytes used to derive encryption keys.
+ * The EncryptionSeedProvider interface: the unified abstraction for how the
+ * dStorage SDK wraps and unwraps per-upload Data Encryption Keys (DEKs).
  *
- * The seed can come from any entropy source — a user password, a wallet
- * signature, a BIP-39 mnemonic, or a fixed test value. Which source is used
- * is entirely up to the application via this interface.
+ * Both symmetric (password, mnemonic) and asymmetric (ML-KEM) providers implement
+ * this interface, so the core SDK calls wrapDek/unwrapDek uniformly with no
+ * knowledge of which algorithm is in use.
+ *
+ * The result of wrapDek() is stored as a KeyWrapper entry in the on-chain
+ * KeyEnvelope. At retrieval time, the same result is passed back to unwrapDek()
+ * to recover the DEK.
  */
 
+import type { WrappedDekResult } from "@dstorage/crypto";
+
+export type { WrappedDekResult };
+
 /**
- * Provides raw seed bytes for dStorage encryption key derivation.
+ * Wraps and unwraps per-upload DEKs using provider-specific key material.
  *
  * Implementations:
- *   PasswordSeedProvider  — scrypt-derived from a user password + caller-supplied salt
- *   MnemonicSeedProvider  — BIP-39 mnemonic or hex seed
+ *   PasswordSeedProvider     — symmetric: scrypt → HKDF → KEK → XChaCha20
+ *   MnemonicSeedProvider     — symmetric: BIP-39 seed → HKDF → KEK → XChaCha20
+ *   MLKemEncryptionProvider  — asymmetric: ML-KEM encapsulate/decapsulate + HKDF + XChaCha20
  */
 export interface EncryptionSeedProvider {
-  /** Stable identifier for this provider type, used as the wrapper name in key envelopes. */
+  /** Stable identifier used as wrapKeyName in key envelopes. */
   readonly name: string;
-  getSeed(): Promise<Uint8Array>;
+
+  /**
+   * Wrap a DEK under this provider's key material.
+   * Called once per upload, per provider.
+   *
+   * @param dek  32-byte Data Encryption Key to protect
+   * @returns    WrappedDekResult to store in the on-chain key envelope
+   */
+  wrapDek(dek: Uint8Array): Promise<WrappedDekResult>;
+
+  /**
+   * Unwrap a DEK from a previously wrapped result.
+   * Called at retrieval time using the same result that wrapDek() returned.
+   *
+   * @param data  WrappedDekResult from the on-chain key envelope
+   * @returns     32-byte Data Encryption Key
+   * @throws      If the provider's key material cannot decrypt the wrapped DEK
+   */
+  unwrapDek(data: WrappedDekResult): Promise<Uint8Array>;
 }

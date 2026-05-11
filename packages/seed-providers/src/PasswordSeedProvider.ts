@@ -70,7 +70,8 @@
  */
 
 import { scrypt } from "@noble/hashes/scrypt";
-import type { EncryptionSeedProvider } from "./types.js";
+import { deriveKek, wrapKey, unwrapKey } from "@dstorage/crypto";
+import type { EncryptionSeedProvider, WrappedDekResult } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // KDF presets — convenience shorthands for input only, never stored
@@ -277,14 +278,54 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
     return { kdf: "scrypt", N: this.N, r: this.r, p: this.p };
   }
 
+  /**
+   * Derive the raw 64-byte seed from the password using scrypt.
+   * Kept public for interoperability (e.g. passing to ML-KEM keygen), but
+   * not part of the EncryptionSeedProvider interface — use wrapDek/unwrapDek instead.
+   */
   async getSeed(): Promise<Uint8Array> {
     const passwordBytes = new TextEncoder().encode(this.password);
     return scrypt(passwordBytes, this.salt, {
       N: this.N,
       r: this.r,
       p: this.p,
-      dkLen: 32,
+      dkLen: 64,
     });
+  }
+
+  async wrapDek(dek: Uint8Array): Promise<WrappedDekResult> {
+    const kek = await deriveKek(await this.getSeed());
+    return {
+      algorithm: "xchacha20poly1305-v1",
+      kekDerivation: "hkdf-sha256-v1",
+      wrappedDek: await wrapKey(dek, kek),
+    };
+  }
+
+  async unwrapDek({ wrappedDek }: WrappedDekResult): Promise<Uint8Array> {
+    const kek = await deriveKek(await this.getSeed());
+    return unwrapKey(wrappedDek, kek);
+  }
+
+  /**
+   * Deterministically derive a ML-KEM keypair from this password provider's seed.
+   *
+   * The 64-byte scrypt seed is passed directly to mlkemGenerateKeypairFromSeed
+   * (which expects exactly 64 bytes as the (d‖z) seed per FIPS 203).
+   * Same password + salt + variant always produces the same keypair.
+   *
+   * @param variant  ML-KEM variant. Default: "mlkem768".
+   */
+  async intoMLKemEncryptionProvider(
+    variant?: import("./MLKemEncryptionProvider.js").MLKemVariant,
+  ): Promise<import("./MLKemEncryptionProvider.js").MLKemEncryptionProvider> {
+    // Imported inside the method body to avoid circular module initialization.
+    const { MLKemEncryptionProvider } =
+      await import("./MLKemEncryptionProvider.js");
+    const { mlkemGenerateKeypairFromSeed } = await import("@dstorage/crypto");
+    const seed64 = await this.getSeed();
+    const { pk, sk } = mlkemGenerateKeypairFromSeed(seed64, variant);
+    return MLKemEncryptionProvider.fromKeypair(pk, sk, variant);
   }
 }
 

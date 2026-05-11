@@ -20,6 +20,28 @@
  */
 export type EncryptionScheme = "xchacha20poly1305-v1" | "";
 
+// ── WrappedDekResult ──────────────────────────────────────────────────────────
+
+/**
+ * The result of wrapping a DEK under a provider's key material.
+ * Returned by every EncryptionSeedProvider.wrapDek() implementation and
+ * stored as a KeyWrapper entry inside the on-chain KeyEnvelope.
+ *
+ * Symmetric providers set algorithm/kekDerivation for their own scheme and
+ * leave kemCiphertext undefined. Asymmetric providers (ML-KEM) additionally
+ * populate kemCiphertext with the KEM ciphertext needed for decapsulation.
+ */
+export interface WrappedDekResult {
+  /** Algorithm identifier, e.g. "xchacha20poly1305-v1" or "mlkem768-xchacha20poly1305-v1". */
+  algorithm: string;
+  /** How the KEK was derived from its source material, e.g. "hkdf-sha256-v1". */
+  kekDerivation: string;
+  /** base64url-encoded wrapped DEK ciphertext. */
+  wrappedDek: string;
+  /** base64url-encoded KEM ciphertext — present only for asymmetric providers. */
+  kemCiphertext?: string;
+}
+
 // ── CryptoScheme interface ────────────────────────────────────────────────────
 
 /**
