@@ -69,7 +69,7 @@
  * });
  */
 
-import { scrypt } from "@noble/hashes/scrypt";
+import { scrypt } from "@noble/hashes/scrypt.js";
 import { deriveKek, wrapKey, unwrapKey } from "@dstorage/crypto";
 import type { EncryptionAdapter, WrappedDekResult } from "./types.js";
 
