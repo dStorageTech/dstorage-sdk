@@ -128,6 +128,11 @@ export async function wrapKey(
   dek: Uint8Array,
   kek: Uint8Array,
 ): Promise<string> {
+  if (dek.length !== 32) {
+    throw new Error(
+      `[dStorage] wrapKey: DEK must be 32 bytes, got ${dek.length}`,
+    );
+  }
   const wrapped = await encryptStorageIdXChaCha(kek, dek);
   return bytesToBase64url(wrapped);
 }
