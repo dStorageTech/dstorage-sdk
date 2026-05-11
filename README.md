@@ -431,11 +431,11 @@ HKDF is appropriate here because the seed input is always high-entropy (32 bytes
 
 The `@dstorage/encryption` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
 
-| Adapter                     | Seed source                                                  | Cross-device portability                                                                                            |
-| --------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `PasswordEncryptionAdapter` | scrypt(password, caller-supplied salt)                       | ✅ Same seed on any device — depends only on password + salt                                                        |
-| `MnemonicEncryptionAdapter` | BIP-39 mnemonic phrase or 64-byte hex seed                   | ✅ Same seed wherever the same mnemonic/hex is imported                                                             |
-| `KeypairEncryptionAdapter`  | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum) | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()` |
+| Adapter                     | Seed source                                                  | Post-quantum safety | Cross-device portability                                                                                            |
+| --------------------------- | ------------------------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `PasswordEncryptionAdapter` | scrypt(password, caller-supplied salt)                       | ⚠️ 128-bit PQ at the data layer (NIST minimum). Key encapsulation safety depends on password entropy — use `generatePqsPassword()` for machine-generated PQ-safe input. | ✅ Same seed on any device — depends only on password + salt                                                        |
+| `MnemonicEncryptionAdapter` | BIP-39 mnemonic phrase or 64-byte hex seed                   | ✅ 128-bit PQ — unconditional for a 24-word mnemonic (CSPRNG-generated entropy; Grover's halves 256-bit to 128-bit). | ✅ Same seed wherever the same mnemonic/hex is imported                                                             |
+| `KeypairEncryptionAdapter`  | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum) | ✅ 192-bit PQ via ML-KEM768 — unconditional, no password or entropy requirement. | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()` |
 
 #### Cross-device portability
 
@@ -505,6 +505,50 @@ const adapter = await KeypairEncryptionAdapter.fromPassword(password, salt);
 // 5 — Deterministic keypair from BIP-39 mnemonic:
 const adapter = await KeypairEncryptionAdapter.fromMnemonic({ mnemonic });
 ```
+
+#### Post-quantum safety across all adapters
+
+Every private upload has two independently protected layers:
+
+| Layer | Primitive | PQ security (all adapters) |
+| ----- | --------- | -------------------------- |
+| **Data payload** | XChaCha20-Poly1305, 256-bit key | ✅ 128-bit PQ — Grover's algorithm halves effective key length; NIST SP 800-131A approves 128-bit PQ as sufficient |
+| **Key encapsulation** | Adapter-dependent | Varies — see table below |
+
+The **key encapsulation layer** is where adapters differ:
+
+| Adapter | Key encapsulation mechanism | PQ safety |
+| ------- | --------------------------- | --------- |
+| `PasswordEncryptionAdapter` | scrypt(password) → HKDF-SHA-256 → KEK | ⚠️ Conditional on password entropy. A quantum attacker can brute-force the password; human-chosen passwords cannot reach the 256-bit entropy required for PQ-safe key encapsulation. Use `generatePqsPassword()` for machine-generated input. |
+| `MnemonicEncryptionAdapter` | BIP-39(mnemonic) → HKDF-SHA-256 → KEK | ✅ 128-bit PQ — a 24-word BIP-39 mnemonic is CSPRNG-generated (256 bits of entropy); Grover's halves this to 128-bit. Unconditional: the entropy is guaranteed by the generation process, not by user input quality. |
+| `KeypairEncryptionAdapter` | ML-KEM encapsulate(PK) → HKDF-SHA-256 → KEK | ✅ 192-bit PQ — security rests on the LWE problem; no known quantum speedup exists. Highest level available. |
+
+For **"harvest now, decrypt later"** threat models, both `MnemonicEncryptionAdapter` (128-bit PQ, unconditional) and `KeypairEncryptionAdapter` (192-bit PQ, unconditional) provide solid post-quantum guarantees at the key encapsulation level. `PasswordEncryptionAdapter` with a human-chosen password does not — use `generatePqsPassword()` to close that gap.
+
+#### Machine-generated PQ-safe passwords
+
+If you want cross-device password recoverability **and** full ML-KEM post-quantum security, use `generatePqsPassword()`:
+
+```typescript
+import { generatePqsPassword, KeypairEncryptionAdapter } from "@dstorage/encryption";
+
+// 32 random bytes → 43-char base64url string (256 bits of real entropy).
+// Store this string — it is the only secret needed to re-derive the keypair on any device.
+const password = generatePqsPassword();
+
+// Derives an ML-KEM keypair via scrypt → 64-byte seed → ML-KEM keygen.
+// Same password + salt → same keypair, always, on any device.
+const adapter = await KeypairEncryptionAdapter.fromPassword(password, "myapp:alice");
+```
+
+> **Warning — human-chosen passwords are not PQ-safe at the key encapsulation layer.**
+> No human-memorable password or passphrase can reach the 256-bit entropy required to
+> resist a Grover's-algorithm brute-force. Human passwords still provide 128-bit PQ
+> security at the *data* layer (NIST minimum, sufficient for most applications) but a
+> quantum attacker could recover the password and rederive the KEK. Use
+> `generatePqsPassword()` with `KeypairEncryptionAdapter.fromPassword()`, or
+> `MnemonicEncryptionAdapter` with a 24-word BIP-39 mnemonic, if key-encapsulation-level
+> PQ safety is required.
 
 ---
 
