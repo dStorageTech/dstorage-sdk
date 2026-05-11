@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   PasswordEncryptionAdapter,
+  generatePqsPassword,
   KDF_PRESETS,
   type KdfPreset,
 } from "../PasswordEncryptionAdapter.js";
@@ -487,5 +488,53 @@ describe("weak-pattern rejection", () => {
       params: FAST_PARAMS,
     }).getSeed();
     expect(seed.byteLength).toBe(64);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generatePqsPassword
+// ---------------------------------------------------------------------------
+
+describe("generatePqsPassword", () => {
+  it("returns a 43-character base64url string", () => {
+    const pw = generatePqsPassword();
+    expect(pw).toHaveLength(43);
+    expect(pw).toMatch(/^[A-Za-z0-9\-_]+$/);
+  });
+
+  it("two calls return different passwords", () => {
+    expect(generatePqsPassword()).not.toBe(generatePqsPassword());
+  });
+
+  it("result passes PasswordEncryptionAdapter construction", () => {
+    const pw = generatePqsPassword();
+    expect(() =>
+      new PasswordEncryptionAdapter({ password: pw, salt: GOOD_SALT, params: FAST_PARAMS }),
+    ).not.toThrow();
+  });
+
+  it("result + intoKeypairEncryptionAdapter() produces a keypair adapter", async () => {
+    const pw = generatePqsPassword();
+    const adapter = new PasswordEncryptionAdapter({
+      password: pw,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    });
+    const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+    expect(keypairAdapter).toBeDefined();
+    expect(keypairAdapter.name).toMatch(/^mlkem/);
+  });
+
+  it("same password + same salt → same keypair adapter (deterministic)", async () => {
+    const pw = generatePqsPassword();
+    const make = () =>
+      new PasswordEncryptionAdapter({ password: pw, salt: GOOD_SALT, params: FAST_PARAMS })
+        .intoKeypairEncryptionAdapter();
+    const [a, b] = await Promise.all([make(), make()]);
+    // Wrap a fresh DEK with adapter A, unwrap with adapter B — must succeed.
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const wrapped = await a.wrapDek(dek);
+    const unwrapped = await b.unwrapDek(wrapped);
+    expect(Array.from(unwrapped)).toEqual(Array.from(dek));
   });
 });

@@ -403,6 +403,36 @@ function hasKeyboardWalk(pw: string, minLen = 5): boolean {
   return false;
 }
 
+/**
+ * Generate a cryptographically random password suitable for use with
+ * `PasswordEncryptionAdapter` when post-quantum-safe key derivation is required.
+ *
+ * Produces 32 random bytes (256 bits of real entropy) encoded as a 43-character
+ * base64url string. When combined with `intoKeypairEncryptionAdapter()`, this
+ * provides a fully recoverable path to ML-KEM 192-bit post-quantum security:
+ * the password is the only secret needed to re-derive the same ML-KEM keypair
+ * on any device, without storing the private key itself.
+ *
+ * @example
+ * const password = generatePqsPassword(); // store this securely
+ * const adapter = new PasswordEncryptionAdapter({ password, salt: "myapp:alice" });
+ * const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+ * await sdk.connect(keypairAdapter); // full 192-bit PQ security
+ */
+export function generatePqsPassword(): string {
+  while (true) {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const b64 = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));
+    const password = b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+    // Mirror the structural checks from validatePassword(). Failures are
+    // astronomically rare (~10⁻⁵) but the loop guarantees the function
+    // always returns a password that passes construction.
+    if (new Set(password).size >= 3 && !hasSequentialRun(password) && !hasKeyboardWalk(password)) {
+      return password;
+    }
+  }
+}
+
 function validatePassword(
   password: string,
   minLength: number,
