@@ -1,10 +1,10 @@
 /**
- * @dstorage/seed-providers — types.ts
+ * @dstorage/encryption — types.ts
  *
- * The EncryptionSeedProvider interface: the unified abstraction for how the
+ * The EncryptionAdapter interface: the unified abstraction for how the
  * dStorage SDK wraps and unwraps per-upload Data Encryption Keys (DEKs).
  *
- * Both symmetric (password, mnemonic) and asymmetric (ML-KEM) providers implement
+ * Both symmetric (password, mnemonic) and asymmetric (ML-KEM) adapters implement
  * this interface, so the core SDK calls wrapDek/unwrapDek uniformly with no
  * knowledge of which algorithm is in use.
  *
@@ -18,20 +18,20 @@ import type { WrappedDekResult } from "@dstorage/crypto";
 export type { WrappedDekResult };
 
 /**
- * Wraps and unwraps per-upload DEKs using provider-specific key material.
+ * Wraps and unwraps per-upload DEKs using adapter-specific key material.
  *
  * Implementations:
- *   PasswordSeedProvider     — symmetric: scrypt → HKDF → KEK → XChaCha20
- *   MnemonicSeedProvider     — symmetric: BIP-39 seed → HKDF → KEK → XChaCha20
- *   MLKemEncryptionProvider  — asymmetric: ML-KEM encapsulate/decapsulate + HKDF + XChaCha20
+ *   PasswordEncryptionAdapter  — symmetric: scrypt → HKDF → KEK → XChaCha20
+ *   MnemonicEncryptionAdapter  — symmetric: BIP-39 seed → HKDF → KEK → XChaCha20
+ *   MLKemEncryptionAdapter     — asymmetric: ML-KEM encapsulate/decapsulate + HKDF + XChaCha20
  */
-export interface EncryptionSeedProvider {
+export interface EncryptionAdapter {
   /** Stable identifier used as wrapKeyName in key envelopes. */
   readonly name: string;
 
   /**
-   * Wrap a DEK under this provider's key material.
-   * Called once per upload, per provider.
+   * Wrap a DEK under this adapter's key material.
+   * Called once per upload, per adapter.
    *
    * @param dek  32-byte Data Encryption Key to protect
    * @returns    WrappedDekResult to store in the on-chain key envelope
@@ -44,7 +44,7 @@ export interface EncryptionSeedProvider {
    *
    * @param data  WrappedDekResult from the on-chain key envelope
    * @returns     32-byte Data Encryption Key
-   * @throws      If the provider's key material cannot decrypt the wrapped DEK
+   * @throws      If the adapter's key material cannot decrypt the wrapped DEK
    */
   unwrapDek(data: WrappedDekResult): Promise<Uint8Array>;
 }

@@ -5,9 +5,9 @@ export * from "./metaTx/index.js";
 export { CHUNK_SIZE, isManifest } from "./chunked.js";
 export type { ChunkManifest, ChunkEntry } from "./chunked.js";
 
-// Crypto + seed providers (lightweight, no heavy deps)
+// Crypto + encryption adapters (lightweight, no heavy deps)
 export * from "@dstorage/crypto";
-export * from "@dstorage/seed-providers";
+export * from "@dstorage/encryption";
 
 // Storage: types + mock only.
 // Full package imports (not subpaths) so dts.resolve can inline type declarations.

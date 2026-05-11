@@ -19,9 +19,9 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { DStorage } from "@dstorage/core";
 import { MockMidnightChainAdapter } from "@dstorage/chain";
 import {
-  PasswordSeedProvider,
-  MnemonicSeedProvider,
-} from "@dstorage/seed-providers";
+  PasswordEncryptionAdapter,
+  MnemonicEncryptionAdapter,
+} from "@dstorage/encryption";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
 import type { ArweaveLocalStorageAdapter } from "@dstorage/storage";
@@ -39,14 +39,14 @@ const TEST_MNEMONIC =
 
 // Low-cost scrypt params so the integration suite stays fast.
 const passwordProvider = () =>
-  new PasswordSeedProvider({
+  new PasswordEncryptionAdapter({
     password: "dstorage-multikey-integration-test!",
     salt: "dstorage:multikey:integration:v1",
     params: { N: 1024, r: 8, p: 1 },
   });
 
 const mnemonicProvider = () =>
-  new MnemonicSeedProvider({ mnemonic: TEST_MNEMONIC });
+  new MnemonicEncryptionAdapter({ mnemonic: TEST_MNEMONIC });
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
 
@@ -66,7 +66,7 @@ describe.skipIf(!arlocalOk)(
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+        encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
 
@@ -76,7 +76,7 @@ describe.skipIf(!arlocalOk)(
       const sdk = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider()],
+        encryptionAdapters: [passwordProvider()],
       });
       await sdk.init();
 
@@ -88,7 +88,7 @@ describe.skipIf(!arlocalOk)(
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+        encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
 
@@ -98,7 +98,7 @@ describe.skipIf(!arlocalOk)(
       const sdk = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [mnemonicProvider()],
+        encryptionAdapters: [mnemonicProvider()],
       });
       await sdk.init();
 
@@ -110,7 +110,7 @@ describe.skipIf(!arlocalOk)(
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+        encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
 
@@ -120,12 +120,12 @@ describe.skipIf(!arlocalOk)(
       const passwordSdk = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider()],
+        encryptionAdapters: [passwordProvider()],
       });
       const mnemonicSdk = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [mnemonicProvider()],
+        encryptionAdapters: [mnemonicProvider()],
       });
       await Promise.all([passwordSdk.init(), mnemonicSdk.init()]);
 
@@ -142,7 +142,7 @@ describe.skipIf(!arlocalOk)(
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+        encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
 
@@ -151,8 +151,8 @@ describe.skipIf(!arlocalOk)(
       const unrelated = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [
-          new PasswordSeedProvider({
+        encryptionAdapters: [
+          new PasswordEncryptionAdapter({
             password: "completely-different-passphrase!",
             salt: "dstorage:multikey:integration:v1",
             params: { N: 1024, r: 8, p: 1 },
@@ -168,7 +168,7 @@ describe.skipIf(!arlocalOk)(
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+        encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
       const { chainRefId } = await uploader.upload(enc("public removable"), {
@@ -178,7 +178,7 @@ describe.skipIf(!arlocalOk)(
       const passwordSdk = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider()],
+        encryptionAdapters: [passwordProvider()],
       });
       await passwordSdk.init();
 
@@ -193,7 +193,7 @@ describe.skipIf(!arlocalOk)(
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+        encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
       const { chainRefId } = await uploader.upload(enc("public removable 2"), {
@@ -203,7 +203,7 @@ describe.skipIf(!arlocalOk)(
       const mnemonicSdk = new DStorage({
         storageAdapter,
         chainAdapter,
-        encryptionSeedProviders: [mnemonicProvider()],
+        encryptionAdapters: [mnemonicProvider()],
       });
       await mnemonicSdk.init();
 

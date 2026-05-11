@@ -2,7 +2,7 @@
  * @dstorage/core — dStorage.ts
  *
  * The main SDK class. Orchestrates:
- *   1. Seed-provider key generation   (@dstorage/seed-providers + @dstorage/crypto)
+ *   1. Encryption adapter key wrapping (@dstorage/encryption + @dstorage/crypto)
  *   2. Client-side encryption         (@dstorage/crypto)
  *   3. Decentralised storage          (@dstorage/storage)
  *   4. On-chain reference writing     (@dstorage/chain)
@@ -53,8 +53,8 @@ import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
-  /** Encryption providers — each wraps/unwraps per-upload DEKs using its own algorithm. */
-  private _encryptionProviders: import("@dstorage/seed-providers").EncryptionSeedProvider[] =
+  /** Encryption adapters — each wraps/unwraps per-upload DEKs using its own algorithm. */
+  private _encryptionProviders: import("@dstorage/encryption").EncryptionAdapter[] =
     [];
   private _initialized = false;
   private readonly logger: Logger | undefined;
@@ -91,8 +91,8 @@ export class DStorage implements DStorageContext {
       await this.config.chainAdapter.init();
     }
 
-    // 2. Store encryption providers — they wrap/unwrap DEKs on demand.
-    this._encryptionProviders = this.config.encryptionSeedProviders ?? [];
+    // 2. Store encryption adapters — they wrap/unwrap DEKs on demand.
+    this._encryptionProviders = this.config.encryptionAdapters ?? [];
 
     this._initialized = true;
     return this.config.chainAdapter.getContractAddress();

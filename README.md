@@ -17,7 +17,7 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Payments](#payments)
 - [Architecture](#architecture)
 - [Supported Providers](#supported-providers)
-- [Seed Providers](#seed-providers)
+- [Encryption Adapters](#encryption-adapters)
 - [Known Limitations](#known-limitations)
 - [High-Level Product Roadmap](#high-level-product-roadmap)
 
@@ -29,7 +29,7 @@ Deliver a **privacy-first, developer-friendly data layer** combining **Midnight 
 
 Instead of dApps collecting and storing user data on centralised servers, dStorage shifts data ownership to the user:
 
-- **Encrypts** data client-side using keys derived from a pluggable seed provider (password, wallet signature, mnemonic, or custom)
+- **Encrypts** data client-side using keys derived from a pluggable encryption adapter (password, wallet signature, mnemonic, or custom)
 - **Pays** storage and chain networks using adapter-defined tokens (MOCK, AR, DUST)
 - **Stores** encrypted blobs on decentralised storage (Arweave, Arweave Local, Mock, Autonomi)
 - **Writes** cryptographic references on-chain (Mock, Midnight)
@@ -39,7 +39,7 @@ Privacy becomes an **architectural guarantee**, not a compliance promise.
 
 Most applications store user data on servers they control. That means users have to trust that the service provider won't read, sell, or lose their data — and history shows that trust is often misplaced. dStorage takes a different approach: data is encrypted on the user's device before it ever leaves, stored on a decentralised network where no single party has control, and a tamper-proof on-chain record ties the data back to its owner. The service provider never sees the plaintext. Neither does anyone else.
 
-The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from a seed provider — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob/s, decrypt them locally. At no point does any server hold an unencrypted copy.
+The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from an encryption adapter — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob/s, decrypt them locally. At no point does any server hold an unencrypted copy.
 
 For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, call `init()`, and use `upload` and `retrieveByRefId`. You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready. If you are building on Midnight, the SDK supports wallet lifecycle management, contract deployment/joining, reference listing/lookups, and fee handling in adapter flows.
 
@@ -171,8 +171,8 @@ npm test
 Integration tests exercise real network adapters end-to-end:
 
 - **arlocal-only suite** — `ArweaveLocalStorageAdapter` against a local arlocal node with `MockMidnightChainAdapter`
-- **multi-key wrapping suite** — uploads encrypted with two seed providers verified against real arlocal storage; each provider independently decrypts and an unrelated provider is rejected
-- **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node); includes wallet-isolation test verifying that a different seed provider cannot decrypt another user's private references
+- **multi-key wrapping suite** — uploads encrypted with two encryption adapters verified against real arlocal storage; each adapter independently decrypts and an unrelated adapter is rejected
+- **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node); includes wallet-isolation test verifying that a different encryption adapter cannot decrypt another user's private references
 
 #### Prerequisites
 
@@ -249,20 +249,20 @@ import {
   DStorage,
   MockStorageAdapter,
   MockChainAdapter,
-  PasswordSeedProvider,
+  PasswordEncryptionAdapter,
 } from "@dstorage-tech/dstorage";
 
-// 1. Configure the SDK with your chosen adapters and encryption seed provider(s)
+// 1. Configure the SDK with your chosen adapters and encryption adapter(s)
 const sdk = new DStorage({
   storageAdapter: new MockStorageAdapter(), // swap for ArweaveStorageAdapter, ArweaveLocalStorageAdapter, etc.
   chainAdapter: new MockChainAdapter(), // swap for MidnightChainAdapter
-  encryptionSeedProviders: [
-    new PasswordSeedProvider({
+  encryptionAdapters: [
+    new PasswordEncryptionAdapter({
       password: "correct-horse-battery-staple",
       salt: "myapp:v1:alice@example.com", // app + user identifier — store this alongside your data
     }),
-    // Multiple providers are supported — any one of them can independently decrypt.
-    // e.g. add a MnemonicSeedProvider({ mnemonic: "..." }) as a backup key.
+    // Multiple adapters are supported — any one of them can independently decrypt.
+    // e.g. add a MnemonicEncryptionAdapter({ mnemonic: "..." }) as a backup key.
   ],
 });
 
@@ -336,7 +336,7 @@ Tokens are selected automatically based on your chosen adapters.
 ```
 @dstorage-tech/dstorage     ← Developer-facing API (npm install @dstorage-tech/dstorage)
     ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation       [bundled]
-    ├── @dstorage/seed-providers← Seed providers: PasswordSeedProvider | MnemonicSeedProvider [bundled]
+    ├── @dstorage/encryption    ← Encryption adapters: PasswordEncryptionAdapter | MnemonicEncryptionAdapter | MLKemEncryptionAdapter [bundled]
     ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveTurbo | Arweave Local | Autonomi(stub) [bundled: Mock only]
     ├── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed           [bundled: Mock only]
     └── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight     [bundled: Mock only]
@@ -348,7 +348,7 @@ Tokens are selected automatically based on your chosen adapters.
 User input
     │
     ▼
-[encrypt]      ← key derived from seed provider (password, wallet, mnemonic…)
+[encrypt]      ← key derived from encryption adapter (password, wallet, mnemonic…)
     │              (key never leaves the device)
     ▼
 [pay storage]  → adapter-defined token (commonly AR / MOCK)
@@ -418,7 +418,7 @@ The default (`isPublic` omitted or `false`) always encrypts both layers. Omittin
 
 ### Key derivation
 
-The raw seed bytes returned by the `EncryptionSeedProvider` are used to derive a Key Encryption Key (KEK) via HKDF-SHA-256. A fresh random Data Encryption Key (DEK) is generated per upload, encrypted under the KEK, and stored alongside the on-chain reference in the `keyEnvelope` field.
+The raw seed bytes returned by the `EncryptionAdapter` are used to derive a Key Encryption Key (KEK) via HKDF-SHA-256. A fresh random Data Encryption Key (DEK) is generated per upload, encrypted under the KEK, and stored alongside the on-chain reference in the `keyEnvelope` field.
 
 | Layer | Primitive    | Salt (fixed)            | Info label                             |
 | ----- | ------------ | ----------------------- | -------------------------------------- |
@@ -427,35 +427,35 @@ The raw seed bytes returned by the `EncryptionSeedProvider` are used to derive a
 
 HKDF is appropriate here because the seed input is always high-entropy (32 bytes from scrypt, a BIP-39 derivation, or similar). The fixed info label provides domain separation between the KEK and any other keys derived from the same seed.
 
-### Seed providers
+### Encryption adapters
 
-The `@dstorage/seed-providers` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
+The `@dstorage/encryption` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
 
-| Provider               | Seed source                                | Cross-device portability                                     |
-| ---------------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| `PasswordSeedProvider` | scrypt(password, caller-supplied salt)     | ✅ Same seed on any device — depends only on password + salt |
-| `MnemonicSeedProvider` | BIP-39 mnemonic phrase or 64-byte hex seed | ✅ Same seed wherever the same mnemonic/hex is imported      |
+| Adapter                     | Seed source                                | Cross-device portability                                     |
+| --------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| `PasswordEncryptionAdapter` | scrypt(password, caller-supplied salt)     | ✅ Same seed on any device — depends only on password + salt |
+| `MnemonicEncryptionAdapter` | BIP-39 mnemonic phrase or 64-byte hex seed | ✅ Same seed wherever the same mnemonic/hex is imported      |
 
 #### Cross-device portability
 
-| Scenario                                                                 | Expected outcome                                                                                 |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Same password + same salt on a different device (`PasswordSeedProvider`) | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required. |
-| BIP-39 mnemonic imported on a different machine (`MnemonicSeedProvider`) | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.               |
-| Different password, same salt (`PasswordSeedProvider`)                   | ❌ Different seed — intentional; each password produces an independent key.                      |
+| Scenario                                                                      | Expected outcome                                                                                 |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Same password + same salt on a different device (`PasswordEncryptionAdapter`) | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required. |
+| BIP-39 mnemonic imported on a different machine (`MnemonicEncryptionAdapter`) | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.               |
+| Different password, same salt (`PasswordEncryptionAdapter`)                   | ❌ Different seed — intentional; each password produces an independent key.                      |
 
 #### Multi-key encryption
 
-`encryptionSeedProviders` accepts an **array** of providers. When more than one is supplied, the SDK wraps the same per-upload DEK under every KEK independently. Any single provider can decrypt any upload made while it was in the list — useful for adding a recovery key or sharing access with a second identity:
+`encryptionAdapters` accepts an **array** of adapters. When more than one is supplied, the SDK wraps the same per-upload DEK under every KEK independently. Any single adapter can decrypt any upload made while it was in the list — useful for adding a recovery key or sharing access with a second identity:
 
 ```typescript
-encryptionSeedProviders: [
-  new PasswordSeedProvider({ password, salt }), // primary key
-  new MnemonicSeedProvider({ mnemonic: backupPhrase }), // recovery key
+encryptionAdapters: [
+  new PasswordEncryptionAdapter({ password, salt }), // primary key
+  new MnemonicEncryptionAdapter({ mnemonic: backupPhrase }), // recovery key
 ];
 ```
 
-Both providers can decrypt; neither knows anything about the other's credentials.
+Both adapters can decrypt; neither knows anything about the other's credentials.
 
 ---
 
@@ -504,12 +504,12 @@ All storage IDs are 43-character base64url strings — 32 random bytes encoded w
 
 ### Key loss and data recovery
 
-Encryption keys are derived deterministically from the seed provider's inputs — no key material is stored by the SDK. This means:
+Encryption keys are derived deterministically from the encryption adapter's inputs — no key material is stored by the SDK. This means:
 
-- **The same inputs always produce the same key**: reconnecting with the same provider and credentials decrypts existing data transparently.
+- **The same inputs always produce the same key**: reconnecting with the same adapter and credentials decrypts existing data transparently.
 - **Losing your credentials means permanent data loss.** There is no key escrow, no recovery mechanism, and no way to decrypt data without the original inputs:
-  - `PasswordSeedProvider` — forgetting the password or losing the salt string makes data unrecoverable.
-  - `MnemonicSeedProvider` / wallet providers — losing the seed phrase or private key has the same effect. Follow standard seed-phrase backup practices.
+  - `PasswordEncryptionAdapter` — forgetting the password or losing the salt string makes data unrecoverable.
+  - `MnemonicEncryptionAdapter` / wallet providers — losing the seed phrase or private key has the same effect. Follow standard seed-phrase backup practices.
 
 ---
 

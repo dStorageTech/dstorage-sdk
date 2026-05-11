@@ -10,7 +10,7 @@
   "dependencies": {
     "@dstorage/chain": "*",
     "@dstorage-tech/dstorage": "*",
-    "@dstorage/seed-providers": "*",
+    "@dstorage/encryption": "*",
     "@dstorage/storage": "*",
     "@midnight-ntwrk/compact-runtime": "^0.15.0",
     "@midnight-ntwrk/ledger-v8": "8.0.3",

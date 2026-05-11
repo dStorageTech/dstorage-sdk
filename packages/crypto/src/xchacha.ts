@@ -3,7 +3,7 @@
  * Symmetric authenticated encryption using XChaCha20-Poly1305.
  *
  * Key derivation:
- *   seed bytes (from EncryptionSeedProvider)
+ *   seed bytes (from EncryptionAdapter)
  *     → HKDF-SHA-256 (domain-separated, optionally address-bound)
  *     → 32-byte symmetric key (KEK)
  *     → per-upload random DEK wrapped under KEK

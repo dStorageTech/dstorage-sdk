@@ -27,9 +27,9 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { DStorage } from "@dstorage/core";
 import { MockMidnightChainAdapter } from "@dstorage/chain";
 import {
-  MnemonicSeedProvider,
-  PasswordSeedProvider,
-} from "@dstorage/seed-providers";
+  MnemonicEncryptionAdapter,
+  PasswordEncryptionAdapter,
+} from "@dstorage/encryption";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
 import { isMidnightAvailable, createChainAdapter } from "./helpers/midnight.js";
@@ -56,8 +56,8 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     sdk = new DStorage({
       storageAdapter: adapter,
       chainAdapter: mockChain,
-      encryptionSeedProviders: [
-        new PasswordSeedProvider({
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
           password: "dstorage-integration-test-v1!",
           salt: "dstorage:integration-test:arlocal",
           params: { N: 1024, r: 8, p: 1 },
@@ -129,8 +129,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     sdk = new DStorage({
       storageAdapter: adapter,
       chainAdapter,
-      encryptionSeedProviders: [
-        new MnemonicSeedProvider({
+      encryptionAdapters: [
+        new MnemonicEncryptionAdapter({
           mnemonic: ALICE_SEED,
         }),
       ],
@@ -156,8 +156,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     sdkBob = new DStorage({
       storageAdapter: adapter,
       chainAdapter,
-      encryptionSeedProviders: [
-        new MnemonicSeedProvider({ mnemonic: BOB_SEED }),
+      encryptionAdapters: [
+        new MnemonicEncryptionAdapter({ mnemonic: BOB_SEED }),
       ],
     });
     // chainAdapter.init() is a no-op on the second call (cached API); only sets up Bob's crypto.

@@ -2,8 +2,8 @@
  * Multi-key wrapping tests.
  *
  * Verifies that a single encrypted upload can be independently decrypted by
- * two different seed providers — one PasswordSeedProvider and one
- * MnemonicSeedProvider — each holding their own Key Encryption Key (KEK) that
+ * two different seed providers — one PasswordEncryptionAdapter and one
+ * MnemonicEncryptionAdapter — each holding their own Key Encryption Key (KEK) that
  * wraps the same per-upload DEK.
  *
  * All tests use fast scrypt params (N=1024) and the standard mock adapters so
@@ -15,9 +15,9 @@ import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
 import {
-  PasswordSeedProvider,
-  MnemonicSeedProvider,
-} from "@dstorage/seed-providers";
+  PasswordEncryptionAdapter,
+  MnemonicEncryptionAdapter,
+} from "@dstorage/encryption";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -28,14 +28,14 @@ const TEST_MNEMONIC =
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 const passwordProvider = () =>
-  new PasswordSeedProvider({
+  new PasswordEncryptionAdapter({
     password: "dstorage-multikey-test-passphrase!",
     salt: "dstorage:multikey:test:v1",
     params: { N: 1024, r: 8, p: 1 },
   });
 
 const mnemonicProvider = () =>
-  new MnemonicSeedProvider({ mnemonic: TEST_MNEMONIC });
+  new MnemonicEncryptionAdapter({ mnemonic: TEST_MNEMONIC });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,29 +52,29 @@ describe("multi-key wrapping — upload with two providers", () => {
   it("content uploaded with two providers can be retrieved by either one", async () => {
     const adapters = sharedAdapters();
 
-    // Upload with BOTH providers in encryptionSeedProviders.
+    // Upload with BOTH providers in encryptionAdapters.
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
 
     const content = "secret health record";
     const { chainRefId } = await uploader.upload(enc(content));
 
-    // Retrieve using only the PasswordSeedProvider.
+    // Retrieve using only the PasswordEncryptionAdapter.
     const passwordSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     await passwordSdk.init();
     const byPassword = await passwordSdk.retrieveByRefId(chainRefId);
     expect(dec(byPassword.bytes)).toBe(content);
 
-    // Retrieve using only the MnemonicSeedProvider.
+    // Retrieve using only the MnemonicEncryptionAdapter.
     const mnemonicSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mnemonicProvider()],
+      encryptionAdapters: [mnemonicProvider()],
     });
     await mnemonicSdk.init();
     const byMnemonic = await mnemonicSdk.retrieveByRefId(chainRefId);
@@ -85,7 +85,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
 
@@ -107,7 +107,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
 
@@ -115,8 +115,8 @@ describe("multi-key wrapping — upload with two providers", () => {
 
     const unrelatedSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        new PasswordSeedProvider({
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
           password: "completely-different-passphrase!",
           salt: "dstorage:multikey:test:v1",
           params: { N: 1024, r: 8, p: 1 },
@@ -132,7 +132,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
 
@@ -141,11 +141,11 @@ describe("multi-key wrapping — upload with two providers", () => {
 
     const passwordSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     const mnemonicSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mnemonicProvider()],
+      encryptionAdapters: [mnemonicProvider()],
     });
     await Promise.all([passwordSdk.init(), mnemonicSdk.init()]);
 
@@ -162,7 +162,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     const adapters = sharedAdapters();
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     await sdk.init();
 
@@ -177,7 +177,7 @@ describe("multi-key wrapping — upload with two providers", () => {
 
     const passwordSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     await passwordSdk.init();
 
@@ -185,7 +185,7 @@ describe("multi-key wrapping — upload with two providers", () => {
 
     const mnemonicSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mnemonicProvider()],
+      encryptionAdapters: [mnemonicProvider()],
     });
     await mnemonicSdk.init();
 
@@ -196,7 +196,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
 
@@ -218,7 +218,7 @@ describe("public upload — ownerSeed envelope", () => {
     const adapters = sharedAdapters();
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     await sdk.init();
 
@@ -239,7 +239,7 @@ describe("public upload — ownerSeed envelope", () => {
     const adapters = sharedAdapters();
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await sdk.init();
 
@@ -258,7 +258,7 @@ describe("public upload — ownerSeed envelope", () => {
     const adapters = sharedAdapters();
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     await sdk.init();
 
@@ -278,7 +278,7 @@ describe("public upload — ownerSeed envelope", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
     const { chainRefId } = await uploader.upload(enc("public removable"), {
@@ -287,7 +287,7 @@ describe("public upload — ownerSeed envelope", () => {
 
     const passwordSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     await passwordSdk.init();
 
@@ -302,7 +302,7 @@ describe("public upload — ownerSeed envelope", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
     const { chainRefId } = await uploader.upload(enc("public removable 2"), {
@@ -311,7 +311,7 @@ describe("public upload — ownerSeed envelope", () => {
 
     const mnemonicSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mnemonicProvider()],
+      encryptionAdapters: [mnemonicProvider()],
     });
     await mnemonicSdk.init();
 
@@ -329,7 +329,7 @@ describe("removeReference via any available KEK", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
 
@@ -337,7 +337,7 @@ describe("removeReference via any available KEK", () => {
 
     const passwordSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider()],
+      encryptionAdapters: [passwordProvider()],
     });
     await passwordSdk.init();
 
@@ -355,7 +355,7 @@ describe("removeReference via any available KEK", () => {
     const adapters = sharedAdapters();
     const uploader = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [passwordProvider(), mnemonicProvider()],
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
 
@@ -363,7 +363,7 @@ describe("removeReference via any available KEK", () => {
 
     const mnemonicSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mnemonicProvider()],
+      encryptionAdapters: [mnemonicProvider()],
     });
     await mnemonicSdk.init();
 

@@ -6,7 +6,7 @@
 import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
 import type { TokenSymbol } from "@dstorage/payment";
-import type { EncryptionSeedProvider } from "./index.js";
+import type { EncryptionAdapter } from "./index.js";
 
 /**
  * Minimal logger interface accepted by every SDK class.
@@ -35,29 +35,29 @@ export interface DStorageConfig {
   /** Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...) */
   chainAdapter: ChainAdapter;
   /**
-   * Seed providers that supply the raw bytes used to derive encryption keys.
-   * Each provider produces an independent Key Encryption Key (KEK); all KEKs
-   * wrap the same per-upload DEK, so any of them can independently decrypt.
+   * Encryption adapters that wrap and unwrap per-upload Data Encryption Keys (DEKs).
+   * Each adapter produces an independent wrapped DEK; any of them can independently decrypt.
    *
-   * Choose the provider(s) preferred by the user:
-   *   PasswordSeedProvider   — scrypt-derived from a user password + salt
-   *   MnemonicSeedProvider   — BIP-39 mnemonic or hex seed (Node.js / facade mode)
+   * Choose the adapter(s) preferred by the user:
+   *   PasswordEncryptionAdapter  — scrypt-derived from a user password + salt
+   *   MnemonicEncryptionAdapter  — BIP-39 mnemonic or hex seed (Node.js / facade mode)
+   *   MLKemEncryptionAdapter     — post-quantum asymmetric (ML-KEM keypair)
    *
    * When omitted or empty, no encryption key is available and all uploaded data
    * will be stored as plaintext (public).
    *
    * @example
-   * // Single provider (most common)
-   * encryptionSeedProviders: [new PasswordSeedProvider({ password, salt })]
+   * // Single adapter (most common)
+   * encryptionAdapters: [new PasswordEncryptionAdapter({ password, salt })]
    *
    * @example
-   * // Two providers — data accessible by either password or mnemonic
-   * encryptionSeedProviders: [
-   *   new PasswordSeedProvider({ password, salt }),
-   *   new MnemonicSeedProvider({ mnemonic }),
+   * // Two adapters — data accessible by either password or mnemonic
+   * encryptionAdapters: [
+   *   new PasswordEncryptionAdapter({ password, salt }),
+   *   new MnemonicEncryptionAdapter({ mnemonic }),
    * ]
    */
-  encryptionSeedProviders?: EncryptionSeedProvider[];
+  encryptionAdapters?: EncryptionAdapter[];
   /**
    * Optional logger for SDK operational output.
    * Pass `logger: console` to see all output, or inject your own logger.

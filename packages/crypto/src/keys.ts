@@ -3,7 +3,7 @@
  * Provides seed-based key derivation utilities:
  *
  * - KeyDeriver: resolves a BIP-39 mnemonic or raw hex seed to raw bytes,
- *   implementing EncryptionSeedProvider for use with deriveKek().
+ *   implementing EncryptionAdapter for use with deriveKek().
  * - deriveKek: derives a 32-byte Key Encryption Key (KEK) from raw seed bytes
  *   used to wrap per-upload random DEKs.
  */
@@ -12,7 +12,7 @@
 
 /**
  * Resolves a BIP-39 mnemonic or raw hex seed to raw bytes.
- * Implements EncryptionSeedProvider — pass an instance to DStorage config.
+ * Implements EncryptionAdapter — pass an instance to DStorage config.
  */
 export class KeyDeriver {
   private readonly input: { mnemonic?: string; seedHex?: string };

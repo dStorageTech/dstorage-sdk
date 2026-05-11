@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { MLKemEncryptionProvider } from "../MLKemEncryptionProvider.js";
-import type { MLKemVariant } from "../MLKemEncryptionProvider.js";
+import { MLKemEncryptionAdapter } from "../MLKemEncryptionAdapter.js";
+import type { MLKemVariant } from "../MLKemEncryptionAdapter.js";
 
 const VARIANTS: MLKemVariant[] = ["mlkem512", "mlkem768", "mlkem1024"];
 const TEST_DEK = globalThis.crypto.getRandomValues(new Uint8Array(32));
@@ -16,9 +16,9 @@ function bytesToHex(b: Uint8Array): string {
 describe("generateKeypair", () => {
   for (const variant of VARIANTS) {
     it(`${variant}: returns provider + raw keys`, () => {
-      const { provider, publicKey, secretKey } =
-        MLKemEncryptionProvider.generateKeypair(variant);
-      expect(provider.name).toBe(variant);
+      const { adapter, publicKey, secretKey } =
+        MLKemEncryptionAdapter.generateKeypair(variant);
+      expect(adapter.name).toBe(variant);
       expect(publicKey).toBeInstanceOf(Uint8Array);
       expect(secretKey).toBeInstanceOf(Uint8Array);
       expect(publicKey.length).toBeGreaterThan(0);
@@ -27,13 +27,13 @@ describe("generateKeypair", () => {
   }
 
   it("default variant is mlkem768", () => {
-    const { provider } = MLKemEncryptionProvider.generateKeypair();
-    expect(provider.name).toBe("mlkem768");
+    const { adapter } = MLKemEncryptionAdapter.generateKeypair();
+    expect(adapter.name).toBe("mlkem768");
   });
 
   it("each call produces a different keypair", () => {
-    const a = MLKemEncryptionProvider.generateKeypair();
-    const b = MLKemEncryptionProvider.generateKeypair();
+    const a = MLKemEncryptionAdapter.generateKeypair();
+    const b = MLKemEncryptionAdapter.generateKeypair();
     expect(bytesToHex(a.publicKey)).not.toBe(bytesToHex(b.publicKey));
   });
 });
@@ -43,16 +43,16 @@ describe("generateKeypair", () => {
 describe("wrapDek / unwrapDek roundtrip", () => {
   for (const variant of VARIANTS) {
     it(`${variant}: wrap then unwrap recovers the original DEK`, async () => {
-      const { provider } = MLKemEncryptionProvider.generateKeypair(variant);
-      const wrapped = await provider.wrapDek(TEST_DEK);
-      const recovered = await provider.unwrapDek(wrapped);
+      const { adapter } = MLKemEncryptionAdapter.generateKeypair(variant);
+      const wrapped = await adapter.wrapDek(TEST_DEK);
+      const recovered = await adapter.unwrapDek(wrapped);
       expect(recovered).toEqual(TEST_DEK);
     });
   }
 
   it("wrapped result contains kemCiphertext and wrappedDek", async () => {
-    const { provider } = MLKemEncryptionProvider.generateKeypair();
-    const result = await provider.wrapDek(TEST_DEK);
+    const { adapter } = MLKemEncryptionAdapter.generateKeypair();
+    const result = await adapter.wrapDek(TEST_DEK);
     expect(typeof result.kemCiphertext).toBe("string");
     expect(result.kemCiphertext!.length).toBeGreaterThan(0);
     expect(typeof result.wrappedDek).toBe("string");
@@ -61,8 +61,8 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   });
 
   it("PK-only provider can wrapDek, but unwrapDek throws", async () => {
-    const { publicKey } = MLKemEncryptionProvider.generateKeypair();
-    const uploadOnly = MLKemEncryptionProvider.fromPublicKey(publicKey);
+    const { publicKey } = MLKemEncryptionAdapter.generateKeypair();
+    const uploadOnly = MLKemEncryptionAdapter.fromPublicKey(publicKey);
     const wrapped = await uploadOnly.wrapDek(TEST_DEK);
     await expect(uploadOnly.unwrapDek(wrapped)).rejects.toThrow(
       "no Secret Key",
@@ -70,9 +70,9 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   });
 
   it("upload-only wraps can be unwrapped by a provider holding the SK", async () => {
-    const { publicKey, secretKey } = MLKemEncryptionProvider.generateKeypair();
-    const uploader = MLKemEncryptionProvider.fromPublicKey(publicKey);
-    const reader = MLKemEncryptionProvider.fromKeypair(publicKey, secretKey);
+    const { publicKey, secretKey } = MLKemEncryptionAdapter.generateKeypair();
+    const uploader = MLKemEncryptionAdapter.fromPublicKey(publicKey);
+    const reader = MLKemEncryptionAdapter.fromKeypair(publicKey, secretKey);
 
     const wrapped = await uploader.wrapDek(TEST_DEK);
     const recovered = await reader.unwrapDek(wrapped);
@@ -80,11 +80,11 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   });
 
   it("wrong SK cannot unwrap (different keypair)", async () => {
-    const a = MLKemEncryptionProvider.generateKeypair();
-    const b = MLKemEncryptionProvider.generateKeypair();
+    const a = MLKemEncryptionAdapter.generateKeypair();
+    const b = MLKemEncryptionAdapter.generateKeypair();
 
-    const wrapped = await a.provider.wrapDek(TEST_DEK);
-    await expect(b.provider.unwrapDek(wrapped)).rejects.toThrow();
+    const wrapped = await a.adapter.wrapDek(TEST_DEK);
+    await expect(b.adapter.unwrapDek(wrapped)).rejects.toThrow();
   });
 });
 
@@ -96,13 +96,13 @@ describe("fromPassword", () => {
   const SALT = "dstorage:test:mlkem:v1";
 
   it("same password + salt + variant → same public key", async () => {
-    const a = await MLKemEncryptionProvider.fromPassword(
+    const a = await MLKemEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
       "mlkem768",
       FAST_PARAMS,
     );
-    const b = await MLKemEncryptionProvider.fromPassword(
+    const b = await MLKemEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
       "mlkem768",
@@ -112,13 +112,13 @@ describe("fromPassword", () => {
   });
 
   it("different salt → different public key", async () => {
-    const a = await MLKemEncryptionProvider.fromPassword(
+    const a = await MLKemEncryptionAdapter.fromPassword(
       PASSWORD,
       "salt-a",
       "mlkem768",
       FAST_PARAMS,
     );
-    const b = await MLKemEncryptionProvider.fromPassword(
+    const b = await MLKemEncryptionAdapter.fromPassword(
       PASSWORD,
       "salt-b",
       "mlkem768",
@@ -128,13 +128,13 @@ describe("fromPassword", () => {
   });
 
   it("different password → different public key", async () => {
-    const a = await MLKemEncryptionProvider.fromPassword(
+    const a = await MLKemEncryptionAdapter.fromPassword(
       "Str0ng-PaSSw0rd!XY9",
       SALT,
       "mlkem768",
       FAST_PARAMS,
     );
-    const b = await MLKemEncryptionProvider.fromPassword(
+    const b = await MLKemEncryptionAdapter.fromPassword(
       "An0ther$ecureP@ss!Z",
       SALT,
       "mlkem768",
@@ -144,13 +144,13 @@ describe("fromPassword", () => {
   });
 
   it("wrapDek with one instance, unwrapDek with another (same password)", async () => {
-    const writerProvider = await MLKemEncryptionProvider.fromPassword(
+    const writerProvider = await MLKemEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
       "mlkem768",
       FAST_PARAMS,
     );
-    const readerProvider = await MLKemEncryptionProvider.fromPassword(
+    const readerProvider = await MLKemEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
       "mlkem768",
@@ -165,7 +165,7 @@ describe("fromPassword", () => {
 
   it("weak password throws", async () => {
     await expect(
-      MLKemEncryptionProvider.fromPassword(
+      MLKemEncryptionAdapter.fromPassword(
         "weak",
         SALT,
         "mlkem768",
@@ -188,11 +188,11 @@ describe("fromMnemonic", () => {
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
   it("same mnemonic + variant → same public key", async () => {
-    const a = await MLKemEncryptionProvider.fromMnemonic(
+    const a = await MLKemEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
       "mlkem768",
     );
-    const b = await MLKemEncryptionProvider.fromMnemonic(
+    const b = await MLKemEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
       "mlkem768",
     );
@@ -200,11 +200,11 @@ describe("fromMnemonic", () => {
   });
 
   it("different mnemonic → different public key", async () => {
-    const a = await MLKemEncryptionProvider.fromMnemonic(
+    const a = await MLKemEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
       "mlkem768",
     );
-    const b = await MLKemEncryptionProvider.fromMnemonic(
+    const b = await MLKemEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC2 },
       "mlkem768",
     );
@@ -212,11 +212,11 @@ describe("fromMnemonic", () => {
   });
 
   it("64-byte seedHex → deterministic", async () => {
-    const a = await MLKemEncryptionProvider.fromMnemonic(
+    const a = await MLKemEncryptionAdapter.fromMnemonic(
       { seedHex: SEED_HEX_64 },
       "mlkem768",
     );
-    const b = await MLKemEncryptionProvider.fromMnemonic(
+    const b = await MLKemEncryptionAdapter.fromMnemonic(
       { seedHex: SEED_HEX_64 },
       "mlkem768",
     );
@@ -225,11 +225,11 @@ describe("fromMnemonic", () => {
 
   it("wrapDek + unwrapDek roundtrip (same mnemonic both sides)", async () => {
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
-    const writer = await MLKemEncryptionProvider.fromMnemonic(
+    const writer = await MLKemEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
       "mlkem768",
     );
-    const reader = await MLKemEncryptionProvider.fromMnemonic(
+    const reader = await MLKemEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
       "mlkem768",
     );
@@ -240,7 +240,7 @@ describe("fromMnemonic", () => {
 
   it("32-byte seedHex → throws", async () => {
     await expect(
-      MLKemEncryptionProvider.fromMnemonic({ seedHex: SEED_HEX_32 }),
+      MLKemEncryptionAdapter.fromMnemonic({ seedHex: SEED_HEX_32 }),
     ).rejects.toThrow("64-byte seed");
   });
 });

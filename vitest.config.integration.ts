@@ -19,9 +19,9 @@ export default defineConfig({
         __dirname,
         "packages/crypto/src/index.ts",
       ),
-      "@dstorage/seed-providers": path.resolve(
+      "@dstorage/encryption": path.resolve(
         __dirname,
-        "packages/seed-providers/src/index.ts",
+        "packages/encryption/src/index.ts",
       ),
       "@dstorage/storage": path.resolve(
         __dirname,

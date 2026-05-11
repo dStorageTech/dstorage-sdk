@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
-import { PasswordSeedProvider } from "@dstorage/seed-providers";
+import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -13,8 +13,8 @@ function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
-    encryptionSeedProviders: [
-      new PasswordSeedProvider({
+    encryptionAdapters: [
+      new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
         salt: address,
         params: { N: 1024, r: 8, p: 1 },
@@ -216,7 +216,7 @@ describe("public upload and retrieve", () => {
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
       chainAdapter: new MockChainAdapter(),
-      encryptionSeedProviders: [],
+      encryptionAdapters: [],
     });
     await ds.init();
     await expect(
@@ -303,8 +303,8 @@ describe("listReferences", () => {
     const alice = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: sharedChain,
-      encryptionSeedProviders: [
-        new PasswordSeedProvider({
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
           password: "alice-passphrase-lr",
           salt: "0xAlice_lr",
           params: { N: 1024, r: 8, p: 1 },
@@ -314,8 +314,8 @@ describe("listReferences", () => {
     const bob = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: sharedChain,
-      encryptionSeedProviders: [
-        new PasswordSeedProvider({
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
           password: "bob-passphrase-lr",
           salt: "0xBob_lr",
           params: { N: 1024, r: 8, p: 1 },
@@ -347,8 +347,8 @@ describe("listReferences", () => {
     };
     const alice = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        new PasswordSeedProvider({
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
           password: "alice-passphrase",
           salt: "alice",
           params: { N: 1024, r: 8, p: 1 },
@@ -357,8 +357,8 @@ describe("listReferences", () => {
     });
     const bob = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        new PasswordSeedProvider({
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
           password: "bob-passphrase",
           salt: "bob",
           params: { N: 1024, r: 8, p: 1 },

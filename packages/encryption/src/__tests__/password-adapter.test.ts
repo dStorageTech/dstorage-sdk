@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  PasswordSeedProvider,
+  PasswordEncryptionAdapter,
   KDF_PRESETS,
   type KdfPreset,
-} from "../PasswordSeedProvider.js";
+} from "../PasswordEncryptionAdapter.js";
 
 // Use the "v1-lite" preset params for all functional tests.
 // N=65536 (64 MB) matches a real-world preset and exercises the full scrypt
@@ -25,12 +25,12 @@ function bytesToHex(bytes: Uint8Array): string {
 
 describe("determinism", () => {
   it("same password + same string salt → identical seed", async () => {
-    const a = await new PasswordSeedProvider({
+    const a = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     }).getSeed();
-    const b = await new PasswordSeedProvider({
+    const b = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -40,12 +40,12 @@ describe("determinism", () => {
 
   it("same password + same Uint8Array salt → identical seed", async () => {
     const salt = new TextEncoder().encode("raw-bytes-salt");
-    const a = await new PasswordSeedProvider({
+    const a = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt,
       params: FAST_PARAMS,
     }).getSeed();
-    const b = await new PasswordSeedProvider({
+    const b = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt,
       params: FAST_PARAMS,
@@ -60,12 +60,12 @@ describe("determinism", () => {
 
 describe("sensitivity", () => {
   it("same password + different string salt → different seed", async () => {
-    const a = await new PasswordSeedProvider({
+    const a = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: "myapp:alice",
       params: FAST_PARAMS,
     }).getSeed();
-    const b = await new PasswordSeedProvider({
+    const b = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: "myapp:bob",
       params: FAST_PARAMS,
@@ -74,12 +74,12 @@ describe("sensitivity", () => {
   });
 
   it("different password + same salt → different seed", async () => {
-    const a = await new PasswordSeedProvider({
+    const a = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     }).getSeed();
-    const b = await new PasswordSeedProvider({
+    const b = await new PasswordEncryptionAdapter({
       password: "An0ther$ecureP@ss!",
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -94,7 +94,7 @@ describe("sensitivity", () => {
 
 describe("output format", () => {
   it("getSeed() returns a 64-byte Uint8Array", async () => {
-    const seed = await new PasswordSeedProvider({
+    const seed = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -112,7 +112,7 @@ describe("salt validation", () => {
   it("empty string salt → throws at construction", () => {
     expect(
       () =>
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: GOOD_PASSWORD,
           salt: "",
           params: FAST_PARAMS,
@@ -123,7 +123,7 @@ describe("salt validation", () => {
   it("empty Uint8Array salt → throws at construction", () => {
     expect(
       () =>
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: GOOD_PASSWORD,
           salt: new Uint8Array(0),
           params: FAST_PARAMS,
@@ -140,7 +140,7 @@ describe("password validation", () => {
   it("password shorter than minPasswordLength → throws", () => {
     expect(
       () =>
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: "Sh0rt!",
           salt: GOOD_SALT,
           params: FAST_PARAMS,
@@ -151,7 +151,7 @@ describe("password validation", () => {
   it("all-same-character password → throws regardless of length", () => {
     expect(
       () =>
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: "aaaaaaaaaaaaaaa",
           salt: GOOD_SALT,
           params: FAST_PARAMS,
@@ -163,7 +163,7 @@ describe("password validation", () => {
     // charset = digits (pool 10), 12 chars → ~39.9 bits < 60
     expect(
       () =>
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: "123456789012",
           salt: GOOD_SALT,
           params: FAST_PARAMS,
@@ -173,7 +173,7 @@ describe("password validation", () => {
 
   it("custom minPasswordLength: 8 → accepts 8-char password", async () => {
     // "Pa$1Word" — 8 chars, mixed charset → should pass with minPasswordLength:8
-    const seed = await new PasswordSeedProvider({
+    const seed = await new PasswordEncryptionAdapter({
       password: "Pa$1Word",
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -185,7 +185,7 @@ describe("password validation", () => {
 
   it("custom minEntropyBits: 30 → accepts low-entropy password", async () => {
     // digits only, 12 chars → ~39.9 bits, accepted when threshold is 30
-    const seed = await new PasswordSeedProvider({
+    const seed = await new PasswordEncryptionAdapter({
       password: "123456789012",
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -195,7 +195,7 @@ describe("password validation", () => {
   });
 
   it("high-entropy mixed password passes validation", async () => {
-    const seed = await new PasswordSeedProvider({
+    const seed = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -211,7 +211,7 @@ describe("password validation", () => {
     });
     expect(
       () =>
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: "MyPassword!12345",
           salt: GOOD_SALT,
           params: FAST_PARAMS,
@@ -223,7 +223,7 @@ describe("password validation", () => {
 
   it("additionalValidators: called on passing password", async () => {
     const validator = vi.fn();
-    await new PasswordSeedProvider({
+    await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -244,7 +244,7 @@ describe("KDF presets", () => {
   });
 
   it("preset 'v1-lite' → same password + same salt produces a 64-byte seed", async () => {
-    const seed = await new PasswordSeedProvider({
+    const seed = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       preset: "v1-lite",
@@ -254,12 +254,12 @@ describe("KDF presets", () => {
   });
 
   it("custom params override preset N/r/p → deterministic output", async () => {
-    const a = await new PasswordSeedProvider({
+    const a = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 2048, r: 4, p: 1 },
     }).getSeed();
-    const b = await new PasswordSeedProvider({
+    const b = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 2048, r: 4, p: 1 },
@@ -268,12 +268,12 @@ describe("KDF presets", () => {
   });
 
   it("same password + same salt + different custom N → different seed", async () => {
-    const a = await new PasswordSeedProvider({
+    const a = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 1024, r: 8, p: 1 },
     }).getSeed();
-    const b = await new PasswordSeedProvider({
+    const b = await new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 2048, r: 8, p: 1 },
@@ -284,7 +284,7 @@ describe("KDF presets", () => {
   it("unknown preset string → throws at construction", () => {
     expect(
       () =>
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: GOOD_PASSWORD,
           salt: GOOD_SALT,
           preset: "v99" as KdfPreset,
@@ -299,7 +299,7 @@ describe("KDF presets", () => {
 
 describe("getKdfParams", () => {
   it("returns kdf: 'scrypt' with resolved N/r/p for default preset", () => {
-    const provider = new PasswordSeedProvider({
+    const provider = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
@@ -313,7 +313,7 @@ describe("getKdfParams", () => {
   });
 
   it("reflects the resolved preset values, not the preset name", () => {
-    const provider = new PasswordSeedProvider({
+    const provider = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       preset: "v1-lite",
@@ -326,7 +326,7 @@ describe("getKdfParams", () => {
   });
 
   it("returned object does not contain preset name", () => {
-    const provider = new PasswordSeedProvider({
+    const provider = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       preset: "v1-lite",
@@ -341,14 +341,14 @@ describe("getKdfParams", () => {
 
 describe("fromKdfParams", () => {
   it("produces the same seed as the original provider", async () => {
-    const original = new PasswordSeedProvider({
+    const original = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     });
     const storedParams = original.getKdfParams();
 
-    const reconstructed = PasswordSeedProvider.fromKdfParams({
+    const reconstructed = PasswordEncryptionAdapter.fromKdfParams({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       ...storedParams,
@@ -360,12 +360,12 @@ describe("fromKdfParams", () => {
   });
 
   it("getKdfParams() round-trips through fromKdfParams", () => {
-    const original = new PasswordSeedProvider({
+    const original = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     });
-    const reconstructed = PasswordSeedProvider.fromKdfParams({
+    const reconstructed = PasswordEncryptionAdapter.fromKdfParams({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       ...original.getKdfParams(),
@@ -375,7 +375,7 @@ describe("fromKdfParams", () => {
 
   it("unsupported kdf value → throws", () => {
     expect(() =>
-      PasswordSeedProvider.fromKdfParams({
+      PasswordEncryptionAdapter.fromKdfParams({
         password: GOOD_PASSWORD,
         salt: GOOD_SALT,
         kdf: "argon2id" as "scrypt",
@@ -388,7 +388,7 @@ describe("fromKdfParams", () => {
 
   it("still validates password entropy", () => {
     expect(() =>
-      PasswordSeedProvider.fromKdfParams({
+      PasswordEncryptionAdapter.fromKdfParams({
         password: "weak",
         salt: GOOD_SALT,
         kdf: "scrypt",

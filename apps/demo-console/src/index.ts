@@ -55,9 +55,9 @@ import {
   initWallet,
 } from "./wallet/index.js";
 import {
-  MnemonicSeedProvider,
-  PasswordSeedProvider,
-} from "@dstorage/seed-providers";
+  MnemonicEncryptionAdapter,
+  PasswordEncryptionAdapter,
+} from "@dstorage/encryption";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -323,10 +323,10 @@ async function main(): Promise<void> {
     const sdk = new DStorage({
       storageAdapter,
       chainAdapter,
-      encryptionSeedProviders: [
-        new MnemonicSeedProvider(credentials),
+      encryptionAdapters: [
+        new MnemonicEncryptionAdapter(credentials),
         // TODO: In a real app derive the password from user input.
-        new PasswordSeedProvider({
+        new PasswordEncryptionAdapter({
           password: "dstorage-demo-password-2026!",
           salt: "dstorage:demo:v1",
         }),

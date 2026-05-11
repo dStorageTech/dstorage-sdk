@@ -4,14 +4,14 @@ export default defineConfig({
   entry: { index: "src/index.publish.ts" },
   format: ["esm", "cjs"],
   dts: {
-    resolve: [/^@dstorage\/(crypto|payment|seed-providers|storage|chain)/],
+    resolve: [/^@dstorage\/(crypto|payment|encryption|storage|chain)/],
   },
   tsconfig: "tsconfig.build.json",
   // Bundle lightweight siblings inline.
   noExternal: [
     "@dstorage/crypto",
     "@dstorage/payment",
-    "@dstorage/seed-providers",
+    "@dstorage/encryption",
     "@dstorage/storage",
     "@dstorage/chain",
   ],

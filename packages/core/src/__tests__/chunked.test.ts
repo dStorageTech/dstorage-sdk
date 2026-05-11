@@ -18,7 +18,7 @@ vi.mock("../chunked.js", async (importOriginal) => {
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
-import { PasswordSeedProvider } from "@dstorage/seed-providers";
+import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import { isManifest } from "../chunked.js";
 import type { DStorageConfig } from "../types.js";
 
@@ -29,8 +29,8 @@ function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
     chainAdapter: new MockChainAdapter(),
-    encryptionSeedProviders: [
-      new PasswordSeedProvider({
+    encryptionAdapters: [
+      new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
         salt: address,
         params: { N: 1024, r: 8, p: 1 },

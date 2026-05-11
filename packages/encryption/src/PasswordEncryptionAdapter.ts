@@ -1,5 +1,5 @@
 /**
- * @dstorage/seed-providers — PasswordSeedProvider
+ * @dstorage/encryption — PasswordEncryptionAdapter
  *
  * Derives an encryption seed from a user-supplied password using scrypt, a
  * memory-hard key derivation function that is resistant to GPU/ASIC brute-force.
@@ -7,7 +7,7 @@
  * Security properties:
  *   - Memory-hard: each guess requires 128 MB RAM (default "v1" preset), making
  *     large-scale offline dictionary attacks prohibitively expensive.
- *   - Deterministic: same password + same salt → same 32-byte seed, always.
+ *   - Deterministic: same password + same salt → same 64-byte seed, always.
  *   - No stored secrets: as long as the caller retains the salt string, the seed
  *     can always be re-derived from the password alone.
  *
@@ -18,10 +18,10 @@
  *   seed collisions when passwords are reused.
  *
  * KDF versioning — interoperable metadata:
- *   Call `provider.getKdfParams()` to get the resolved `{ kdf, N, r, p }` values.
+ *   Call `adapter.getKdfParams()` to get the resolved `{ kdf, N, r, p }` values.
  *   Store these alongside encrypted data so any scrypt implementation (in any
  *   language or SDK) can re-derive the key without knowing our preset names.
- *   To reconstruct from stored params, use `PasswordSeedProvider.fromKdfParams()`.
+ *   To reconstruct from stored params, use `PasswordEncryptionAdapter.fromKdfParams()`.
  *
  * Entropy validation:
  *   Performed at construction (synchronous, no I/O). Charset-based estimation
@@ -40,17 +40,17 @@
  *
  * @example
  * // New encryption context:
- * const provider = new PasswordSeedProvider({
+ * const adapter = new PasswordEncryptionAdapter({
  *   password: "correct-horse-battery-staple",
  *   salt: "myapp:alice@example.com",
  * });
- * const seed = await provider.getSeed();
+ * const seed = await adapter.getSeed();
  * // Persist these alongside the encrypted blob:
- * const meta = { ...provider.getKdfParams(), salt: "myapp:alice@example.com" };
+ * const meta = { ...adapter.getKdfParams(), salt: "myapp:alice@example.com" };
  *
  * @example
  * // Re-derive from stored metadata (any SDK / language can do the same):
- * const provider = PasswordSeedProvider.fromKdfParams({
+ * const adapter = PasswordEncryptionAdapter.fromKdfParams({
  *   password: "correct-horse-battery-staple",
  *   salt: meta.salt,
  *   kdf: meta.kdf,   // "scrypt"
@@ -58,11 +58,11 @@
  *   r: meta.r,
  *   p: meta.p,
  * });
- * const seed = await provider.getSeed();
+ * const seed = await adapter.getSeed();
  *
  * @example
  * // Constrained environment (mobile browser):
- * const provider = new PasswordSeedProvider({
+ * const adapter = new PasswordEncryptionAdapter({
  *   password: "correct-horse-battery-staple",
  *   salt: "myapp:alice@example.com",
  *   preset: "v1-lite",  // 64 MB, ~200-400ms
@@ -71,7 +71,7 @@
 
 import { scrypt } from "@noble/hashes/scrypt";
 import { deriveKek, wrapKey, unwrapKey } from "@dstorage/crypto";
-import type { EncryptionSeedProvider, WrappedDekResult } from "./types.js";
+import type { EncryptionAdapter, WrappedDekResult } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // KDF presets — convenience shorthands for input only, never stored
@@ -119,7 +119,7 @@ export interface StoredKdfParams {
 // Config
 // ---------------------------------------------------------------------------
 
-export interface PasswordSeedProviderConfig {
+export interface PasswordEncryptionAdapterConfig {
   /** The user's password. Validated for entropy at construction time. */
   password: string;
 
@@ -184,7 +184,7 @@ export interface PasswordSeedProviderConfig {
   additionalValidators?: Array<(password: string) => void>;
 }
 
-/** Config for `PasswordSeedProvider.fromKdfParams()` — reconstructs from stored metadata. */
+/** Config for `PasswordEncryptionAdapter.fromKdfParams()` — reconstructs from stored metadata. */
 export interface FromKdfParamsConfig extends StoredKdfParams {
   password: string;
   salt: string | Uint8Array;
@@ -194,10 +194,10 @@ export interface FromKdfParamsConfig extends StoredKdfParams {
 }
 
 // ---------------------------------------------------------------------------
-// Provider
+// Adapter
 // ---------------------------------------------------------------------------
 
-export class PasswordSeedProvider implements EncryptionSeedProvider {
+export class PasswordEncryptionAdapter implements EncryptionAdapter {
   readonly name = "password";
   private readonly password: string;
   private readonly salt: Uint8Array;
@@ -205,7 +205,7 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
   private readonly r: number;
   private readonly p: number;
 
-  constructor(config: PasswordSeedProviderConfig) {
+  constructor(config: PasswordEncryptionAdapterConfig) {
     validatePassword(
       config.password,
       config.minPasswordLength ?? 12,
@@ -223,12 +223,12 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
   }
 
   /**
-   * Reconstruct a provider from parameters previously stored via `getKdfParams()`.
+   * Reconstruct an adapter from parameters previously stored via `getKdfParams()`.
    * Use this when loading existing encrypted data — ensures the exact same N/r/p
    * are used regardless of what the current SDK defaults are.
    *
    * @example
-   * const provider = PasswordSeedProvider.fromKdfParams({
+   * const adapter = PasswordEncryptionAdapter.fromKdfParams({
    *   password,
    *   salt: meta.salt,
    *   kdf: meta.kdf,
@@ -237,14 +237,14 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
    *   p: meta.p,
    * });
    */
-  static fromKdfParams(config: FromKdfParamsConfig): PasswordSeedProvider {
+  static fromKdfParams(config: FromKdfParamsConfig): PasswordEncryptionAdapter {
     if (config.kdf !== "scrypt") {
       throw new Error(
-        `[dStorage] PasswordSeedProvider.fromKdfParams: unsupported kdf "${config.kdf}". ` +
+        `[dStorage] PasswordEncryptionAdapter.fromKdfParams: unsupported kdf "${config.kdf}". ` +
           'Only "scrypt" is supported.',
       );
     }
-    return new PasswordSeedProvider({
+    return new PasswordEncryptionAdapter({
       password: config.password,
       salt: config.salt,
       params: { N: config.N, r: config.r, p: config.p },
@@ -269,7 +269,7 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
    *
    * @example
    * const meta = {
-   *   ...provider.getKdfParams(),  // { kdf: "scrypt", N: 131072, r: 8, p: 1 }
+   *   ...adapter.getKdfParams(),  // { kdf: "scrypt", N: 131072, r: 8, p: 1 }
    *   salt: "myapp:alice@example.com",
    * };
    * await db.save({ encryptedData, meta });
@@ -281,7 +281,7 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
   /**
    * Derive the raw 64-byte seed from the password using scrypt.
    * Kept public for interoperability (e.g. passing to ML-KEM keygen), but
-   * not part of the EncryptionSeedProvider interface — use wrapDek/unwrapDek instead.
+   * not part of the EncryptionAdapter interface — use wrapDek/unwrapDek instead.
    */
   async getSeed(): Promise<Uint8Array> {
     const passwordBytes = new TextEncoder().encode(this.password);
@@ -308,7 +308,7 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
   }
 
   /**
-   * Deterministically derive a ML-KEM keypair from this password provider's seed.
+   * Deterministically derive a ML-KEM keypair from this adapter's seed.
    *
    * The 64-byte scrypt seed is passed directly to mlkemGenerateKeypairFromSeed
    * (which expects exactly 64 bytes as the (d‖z) seed per FIPS 203).
@@ -316,16 +316,16 @@ export class PasswordSeedProvider implements EncryptionSeedProvider {
    *
    * @param variant  ML-KEM variant. Default: "mlkem768".
    */
-  async intoMLKemEncryptionProvider(
-    variant?: import("./MLKemEncryptionProvider.js").MLKemVariant,
-  ): Promise<import("./MLKemEncryptionProvider.js").MLKemEncryptionProvider> {
+  async intoMLKemEncryptionAdapter(
+    variant?: import("./MLKemEncryptionAdapter.js").MLKemVariant,
+  ): Promise<import("./MLKemEncryptionAdapter.js").MLKemEncryptionAdapter> {
     // Imported inside the method body to avoid circular module initialization.
-    const { MLKemEncryptionProvider } =
-      await import("./MLKemEncryptionProvider.js");
+    const { MLKemEncryptionAdapter } =
+      await import("./MLKemEncryptionAdapter.js");
     const { mlkemGenerateKeypairFromSeed } = await import("@dstorage/crypto");
     const seed64 = await this.getSeed();
     const { pk, sk } = mlkemGenerateKeypairFromSeed(seed64, variant);
-    return MLKemEncryptionProvider.fromKeypair(pk, sk, variant);
+    return MLKemEncryptionAdapter.fromKeypair(pk, sk, variant);
   }
 }
 
@@ -338,7 +338,7 @@ function resolveSalt(salt: string | Uint8Array): Uint8Array {
     typeof salt === "string" ? new TextEncoder().encode(salt) : salt;
   if (bytes.length === 0) {
     throw new Error(
-      "[dStorage] PasswordSeedProvider: salt must not be empty. " +
+      "[dStorage] PasswordEncryptionAdapter: salt must not be empty. " +
         'Provide an app-specific domain label, e.g. "myapp:v1:alice@example.com".',
     );
   }
@@ -347,12 +347,12 @@ function resolveSalt(salt: string | Uint8Array): Uint8Array {
 
 function resolveParams(
   preset: KdfPreset | undefined,
-  params: PasswordSeedProviderConfig["params"],
+  params: PasswordEncryptionAdapterConfig["params"],
 ): ScryptParams {
   if (preset !== undefined) {
     if (!(preset in KDF_PRESETS)) {
       throw new Error(
-        `[dStorage] PasswordSeedProvider: unknown preset "${preset}". ` +
+        `[dStorage] PasswordEncryptionAdapter: unknown preset "${preset}". ` +
           `Valid presets: ${Object.keys(KDF_PRESETS).join(", ")}.`,
       );
     }

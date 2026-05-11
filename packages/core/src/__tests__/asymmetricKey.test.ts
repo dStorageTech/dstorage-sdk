@@ -1,8 +1,8 @@
 /**
  * Asymmetric ML-KEM encryption provider tests.
  *
- * Verifies that MLKemEncryptionProvider can be used alongside symmetric
- * providers in the encryptionSeedProviders list, and that the upload/retrieve
+ * Verifies that MLKemEncryptionAdapter can be used alongside symmetric
+ * providers in the encryptionAdapters list, and that the upload/retrieve
  * flow works correctly with PK-only upload and SK-based retrieval.
  */
 
@@ -11,9 +11,9 @@ import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
 import {
-  MLKemEncryptionProvider,
-  PasswordSeedProvider,
-} from "@dstorage/seed-providers";
+  MLKemEncryptionAdapter,
+  PasswordEncryptionAdapter,
+} from "@dstorage/encryption";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -30,11 +30,11 @@ function sharedAdapters() {
 describe("ML-KEM upload and retrieve", () => {
   it("upload with full keypair provider, retrieve with same provider", async () => {
     const adapters = sharedAdapters();
-    const { provider } = MLKemEncryptionProvider.generateKeypair();
+    const { adapter } = MLKemEncryptionAdapter.generateKeypair();
 
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [provider],
+      encryptionAdapters: [adapter],
     });
     await sdk.init();
 
@@ -46,14 +46,12 @@ describe("ML-KEM upload and retrieve", () => {
 
   it("upload with PK-only provider, retrieve with SK provider", async () => {
     const adapters = sharedAdapters();
-    const { publicKey, secretKey } = MLKemEncryptionProvider.generateKeypair();
+    const { publicKey, secretKey } = MLKemEncryptionAdapter.generateKeypair();
 
     // Uploader: only has PK
     const uploaderSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        MLKemEncryptionProvider.fromPublicKey(publicKey),
-      ],
+      encryptionAdapters: [MLKemEncryptionAdapter.fromPublicKey(publicKey)],
     });
     await uploaderSdk.init();
 
@@ -63,8 +61,8 @@ describe("ML-KEM upload and retrieve", () => {
     // Retriever: has both PK + SK
     const readerSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        MLKemEncryptionProvider.fromKeypair(publicKey, secretKey),
+      encryptionAdapters: [
+        MLKemEncryptionAdapter.fromKeypair(publicKey, secretKey),
       ],
     });
     await readerSdk.init();
@@ -75,13 +73,11 @@ describe("ML-KEM upload and retrieve", () => {
 
   it("PK-only provider cannot retrieve (no SK)", async () => {
     const adapters = sharedAdapters();
-    const { publicKey } = MLKemEncryptionProvider.generateKeypair();
+    const { publicKey } = MLKemEncryptionAdapter.generateKeypair();
 
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        MLKemEncryptionProvider.fromPublicKey(publicKey),
-      ],
+      encryptionAdapters: [MLKemEncryptionAdapter.fromPublicKey(publicKey)],
     });
     await sdk.init();
 
@@ -90,9 +86,7 @@ describe("ML-KEM upload and retrieve", () => {
     // PK-only retriever
     const pkOnlySdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        MLKemEncryptionProvider.fromPublicKey(publicKey),
-      ],
+      encryptionAdapters: [MLKemEncryptionAdapter.fromPublicKey(publicKey)],
     });
     await pkOnlySdk.init();
 
@@ -103,13 +97,13 @@ describe("ML-KEM upload and retrieve", () => {
     const FAST_PARAMS = { N: 1024, r: 8, p: 1 };
     const adapters = sharedAdapters();
 
-    const writerProvider = await MLKemEncryptionProvider.fromPassword(
+    const writerProvider = await MLKemEncryptionAdapter.fromPassword(
       "Str0ng-PaSSw0rd!XY9",
       "dstorage:test:asym:v1",
       "mlkem768",
       FAST_PARAMS,
     );
-    const readerProvider = await MLKemEncryptionProvider.fromPassword(
+    const readerProvider = await MLKemEncryptionAdapter.fromPassword(
       "Str0ng-PaSSw0rd!XY9",
       "dstorage:test:asym:v1",
       "mlkem768",
@@ -118,7 +112,7 @@ describe("ML-KEM upload and retrieve", () => {
 
     const uploaderSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [writerProvider],
+      encryptionAdapters: [writerProvider],
     });
     await uploaderSdk.init();
 
@@ -127,7 +121,7 @@ describe("ML-KEM upload and retrieve", () => {
 
     const readerSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [readerProvider],
+      encryptionAdapters: [readerProvider],
     });
     await readerSdk.init();
 
@@ -142,11 +136,11 @@ describe("mixed symmetric + asymmetric envelope", () => {
   it("either provider alone can retrieve content uploaded with both", async () => {
     const adapters = sharedAdapters();
     const {
-      provider: mlkemProvider,
+      adapter: mlkemProvider,
       publicKey,
       secretKey,
-    } = MLKemEncryptionProvider.generateKeypair();
-    const passwordProvider = new PasswordSeedProvider({
+    } = MLKemEncryptionAdapter.generateKeypair();
+    const passwordProvider = new PasswordEncryptionAdapter({
       password: "dstorage-asym-test-passphrase!",
       salt: "dstorage:asym:test:v1",
       params: { N: 1024, r: 8, p: 1 },
@@ -155,7 +149,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
     // Upload with both providers
     const uploaderSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mlkemProvider, passwordProvider],
+      encryptionAdapters: [mlkemProvider, passwordProvider],
     });
     await uploaderSdk.init();
 
@@ -165,8 +159,8 @@ describe("mixed symmetric + asymmetric envelope", () => {
     // Retrieve with only ML-KEM
     const mlkemSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        MLKemEncryptionProvider.fromKeypair(publicKey, secretKey),
+      encryptionAdapters: [
+        MLKemEncryptionAdapter.fromKeypair(publicKey, secretKey),
       ],
     });
     await mlkemSdk.init();
@@ -176,8 +170,8 @@ describe("mixed symmetric + asymmetric envelope", () => {
     // Retrieve with only password
     const passwordSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [
-        new PasswordSeedProvider({
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
           password: "dstorage-asym-test-passphrase!",
           salt: "dstorage:asym:test:v1",
           params: { N: 1024, r: 8, p: 1 },
@@ -191,9 +185,8 @@ describe("mixed symmetric + asymmetric envelope", () => {
 
   it("envelope has one wrapper per provider", async () => {
     const adapters = sharedAdapters();
-    const { provider: mlkemProvider } =
-      MLKemEncryptionProvider.generateKeypair();
-    const passwordProvider = new PasswordSeedProvider({
+    const { adapter: mlkemProvider } = MLKemEncryptionAdapter.generateKeypair();
+    const passwordProvider = new PasswordEncryptionAdapter({
       password: "dstorage-asym-test-passphrase!",
       salt: "dstorage:asym:test:v1",
       params: { N: 1024, r: 8, p: 1 },
@@ -201,7 +194,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
 
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mlkemProvider, passwordProvider],
+      encryptionAdapters: [mlkemProvider, passwordProvider],
     });
     await sdk.init();
 
@@ -222,23 +215,21 @@ describe("mixed symmetric + asymmetric envelope", () => {
 
   it("unrelated provider cannot decrypt content from mixed envelope", async () => {
     const adapters = sharedAdapters();
-    const { provider: mlkemProvider } =
-      MLKemEncryptionProvider.generateKeypair();
+    const { adapter: mlkemProvider } = MLKemEncryptionAdapter.generateKeypair();
 
     const sdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [mlkemProvider],
+      encryptionAdapters: [mlkemProvider],
     });
     await sdk.init();
 
     const { chainRefId } = await sdk.upload(enc("secret"));
 
     // Different ML-KEM keypair — cannot unwrap
-    const { provider: otherProvider } =
-      MLKemEncryptionProvider.generateKeypair();
+    const { adapter: otherProvider } = MLKemEncryptionAdapter.generateKeypair();
     const otherSdk = new DStorage({
       ...adapters,
-      encryptionSeedProviders: [otherProvider],
+      encryptionAdapters: [otherProvider],
     });
     await otherSdk.init();
 

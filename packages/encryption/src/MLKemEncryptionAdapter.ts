@@ -1,9 +1,9 @@
 /**
- * @dstorage/seed-providers — MLKemEncryptionProvider
+ * @dstorage/encryption — MLKemEncryptionAdapter
  *
  * Post-quantum asymmetric DEK wrapping via ML-KEM (CRYSTALS-Kyber, NIST FIPS 203).
  *
- * Unlike symmetric providers (password, mnemonic), this provider uses a
+ * Unlike symmetric adapters (password, mnemonic), this adapter uses a
  * public/secret key pair:
  *   - wrapDek()   requires only the Public Key (PK) — safe for upload-only parties
  *   - unwrapDek() requires the Secret Key (SK) — held only by the authorized reader
@@ -18,18 +18,18 @@
  *
  * @example
  * // Generate a fresh keypair:
- * const { provider, secretKey } = MLKemEncryptionProvider.generateKeypair();
- * // Share provider.publicKey with upload-only parties
+ * const { adapter, secretKey } = MLKemEncryptionAdapter.generateKeypair();
+ * // Share adapter.publicKey with upload-only parties
  *
  * @example
  * // Deterministic keypair from a password (same inputs → same keypair):
- * const provider = await MLKemEncryptionProvider.fromPassword("s3cr3t!", "myapp:v1");
+ * const adapter = await MLKemEncryptionAdapter.fromPassword("s3cr3t!", "myapp:v1");
  *
  * @example
  * // Upload with PK only:
- * const uploader = MLKemEncryptionProvider.fromPublicKey(pk);
+ * const uploader = MLKemEncryptionAdapter.fromPublicKey(pk);
  * // Retrieve with full keypair:
- * const reader = MLKemEncryptionProvider.fromKeypair(pk, sk);
+ * const reader = MLKemEncryptionAdapter.fromKeypair(pk, sk);
  */
 
 import {
@@ -38,11 +38,11 @@ import {
   mlkemUnwrapDek,
 } from "@dstorage/crypto";
 import type { MLKemVariant } from "@dstorage/crypto";
-import type { EncryptionSeedProvider, WrappedDekResult } from "./types.js";
+import type { EncryptionAdapter, WrappedDekResult } from "./types.js";
 
 export type { MLKemVariant };
 
-export class MLKemEncryptionProvider implements EncryptionSeedProvider {
+export class MLKemEncryptionAdapter implements EncryptionAdapter {
   readonly name: string;
   readonly publicKey: Uint8Array;
   private readonly secretKey: Uint8Array | undefined;
@@ -60,44 +60,44 @@ export class MLKemEncryptionProvider implements EncryptionSeedProvider {
   }
 
   /**
-   * Upload-only provider — holds only the Public Key.
+   * Upload-only adapter — holds only the Public Key.
    * wrapDek() works normally; unwrapDek() throws (no SK available).
    */
   static fromPublicKey(
     pk: Uint8Array,
     variant: MLKemVariant = "mlkem768",
-  ): MLKemEncryptionProvider {
-    return new MLKemEncryptionProvider(pk, undefined, variant);
+  ): MLKemEncryptionAdapter {
+    return new MLKemEncryptionAdapter(pk, undefined, variant);
   }
 
   /**
-   * Full provider — holds both Public Key and Secret Key.
+   * Full adapter — holds both Public Key and Secret Key.
    * Both wrapDek() and unwrapDek() work.
    */
   static fromKeypair(
     pk: Uint8Array,
     sk: Uint8Array,
     variant: MLKemVariant = "mlkem768",
-  ): MLKemEncryptionProvider {
-    return new MLKemEncryptionProvider(pk, sk, variant);
+  ): MLKemEncryptionAdapter {
+    return new MLKemEncryptionAdapter(pk, sk, variant);
   }
 
   /**
    * Generate a fresh random ML-KEM keypair.
    *
-   * Returns the provider (with both PK+SK) plus the raw keys so the caller
+   * Returns the adapter (with both PK+SK) plus the raw keys so the caller
    * can persist the secret key and share the public key separately.
    *
    * @param variant  Default: "mlkem768".
    */
   static generateKeypair(variant: MLKemVariant = "mlkem768"): {
-    provider: MLKemEncryptionProvider;
+    adapter: MLKemEncryptionAdapter;
     publicKey: Uint8Array;
     secretKey: Uint8Array;
   } {
     const { pk, sk } = mlkemGenerateKeypair(variant);
     return {
-      provider: new MLKemEncryptionProvider(pk, sk, variant),
+      adapter: new MLKemEncryptionAdapter(pk, sk, variant),
       publicKey: pk,
       secretKey: sk,
     };
@@ -106,7 +106,7 @@ export class MLKemEncryptionProvider implements EncryptionSeedProvider {
   /**
    * Deterministically derive a ML-KEM keypair from a BIP-39 mnemonic phrase or hex seed.
    *
-   * Delegates to MnemonicSeedProvider.intoMLKemEncryptionProvider() so all
+   * Delegates to MnemonicEncryptionAdapter.intoMLKemEncryptionAdapter() so all
    * mnemonic/seed handling lives in a single place.
    *
    * Same inputs + variant always produce the same keypair.
@@ -120,16 +120,17 @@ export class MLKemEncryptionProvider implements EncryptionSeedProvider {
   static async fromMnemonic(
     input: { mnemonic?: string; seedHex?: string },
     variant: MLKemVariant = "mlkem768",
-  ): Promise<MLKemEncryptionProvider> {
-    const { MnemonicSeedProvider } = await import("./MnemonicSeedProvider.js");
-    const ms = new MnemonicSeedProvider(input);
-    return ms.intoMLKemEncryptionProvider(variant);
+  ): Promise<MLKemEncryptionAdapter> {
+    const { MnemonicEncryptionAdapter } =
+      await import("./MnemonicEncryptionAdapter.js");
+    const ms = new MnemonicEncryptionAdapter(input);
+    return ms.intoMLKemEncryptionAdapter(variant);
   }
 
   /**
    * Deterministically derive a ML-KEM keypair from a password and salt.
    *
-   * Delegates to PasswordSeedProvider.intoMLKemEncryptionProvider() so all
+   * Delegates to PasswordEncryptionAdapter.intoMLKemEncryptionAdapter() so all
    * password handling (scrypt params, entropy validation, 64-byte seed derivation)
    * lives in a single place.
    *
@@ -145,15 +146,16 @@ export class MLKemEncryptionProvider implements EncryptionSeedProvider {
     salt: string,
     variant: MLKemVariant = "mlkem768",
     params?: { N?: number; r?: number; p?: number },
-  ): Promise<MLKemEncryptionProvider> {
+  ): Promise<MLKemEncryptionAdapter> {
     // Imported inside the method body to avoid circular module initialization.
-    const { PasswordSeedProvider } = await import("./PasswordSeedProvider.js");
-    const ps = new PasswordSeedProvider({
+    const { PasswordEncryptionAdapter } =
+      await import("./PasswordEncryptionAdapter.js");
+    const ps = new PasswordEncryptionAdapter({
       password,
       salt,
       ...(params ? { params } : {}),
     });
-    return ps.intoMLKemEncryptionProvider(variant);
+    return ps.intoMLKemEncryptionAdapter(variant);
   }
 
   async wrapDek(dek: Uint8Array): Promise<WrappedDekResult> {
@@ -163,8 +165,8 @@ export class MLKemEncryptionProvider implements EncryptionSeedProvider {
   async unwrapDek(data: WrappedDekResult): Promise<Uint8Array> {
     if (!this.secretKey) {
       throw new Error(
-        `[dStorage] MLKemEncryptionProvider(${this.variant}): cannot unwrapDek — ` +
-          "no Secret Key is available. Use fromKeypair() or fromPassword() to create a provider with a SK.",
+        `[dStorage] MLKemEncryptionAdapter(${this.variant}): cannot unwrapDek — ` +
+          "no Secret Key is available. Use fromKeypair() or fromPassword() to create an adapter with a SK.",
       );
     }
     return mlkemUnwrapDek(data, this.secretKey, this.variant);

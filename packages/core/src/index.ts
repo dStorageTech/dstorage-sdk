@@ -9,4 +9,4 @@ export type { ChunkManifest, ChunkEntry } from "./chunked.js";
 export * from "@dstorage/storage";
 export * from "@dstorage/chain";
 export * from "@dstorage/payment";
-export * from "@dstorage/seed-providers";
+export * from "@dstorage/encryption";
