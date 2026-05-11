@@ -156,15 +156,15 @@ describe("password validation", () => {
           salt: GOOD_SALT,
           params: FAST_PARAMS,
         }),
-    ).toThrow("all characters are identical");
+    ).toThrow("too few distinct characters");
   });
 
   it("low entropy password (digits only, 12 chars) → throws", () => {
-    // charset = digits (pool 10), 12 chars → ~39.9 bits < 60
+    // charset = digits (pool 10), 12 non-sequential chars → ~39.9 bits < 60
     expect(
       () =>
         new PasswordEncryptionAdapter({
-          password: "123456789012",
+          password: "159753246801",
           salt: GOOD_SALT,
           params: FAST_PARAMS,
         }),
@@ -184,9 +184,9 @@ describe("password validation", () => {
   });
 
   it("custom minEntropyBits: 30 → accepts low-entropy password", async () => {
-    // digits only, 12 chars → ~39.9 bits, accepted when threshold is 30
+    // non-sequential digits only, 12 chars → ~39.9 bits, accepted when threshold is 30
     const seed = await new PasswordEncryptionAdapter({
-      password: "123456789012",
+      password: "159753246801",
       salt: GOOD_SALT,
       params: FAST_PARAMS,
       minEntropyBits: 30,
@@ -212,13 +212,13 @@ describe("password validation", () => {
     expect(
       () =>
         new PasswordEncryptionAdapter({
-          password: "MyPassword!12345",
+          password: "Mypassword!XyZ8",
           salt: GOOD_SALT,
           params: FAST_PARAMS,
           additionalValidators: [validator],
         }),
     ).toThrow("Common word detected.");
-    expect(validator).toHaveBeenCalledWith("MyPassword!12345");
+    expect(validator).toHaveBeenCalledWith("Mypassword!XyZ8");
   });
 
   it("additionalValidators: called on passing password", async () => {
@@ -397,5 +397,95 @@ describe("fromKdfParams", () => {
         p: 1,
       }),
     ).toThrow("too short");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Weak-pattern rejection (D3 structural checks)
+// ---------------------------------------------------------------------------
+
+describe("weak-pattern rejection", () => {
+  it("keyboard-row walk 'qwertyuiop12' → throws", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "qwertyuiop12",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("keyboard-row pattern");
+  });
+
+  it("keyboard-row walk 'asdfghjkl123' → throws", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "asdfghjkl123",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("keyboard-row pattern");
+  });
+
+  it("keyboard-row walk reversed 'poiuytrewq1!' → throws", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "poiuytrewq1!",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("keyboard-row pattern");
+  });
+
+  it("sequential alpha run 'abcdefghij12' → throws", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "abcdefghij12",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("sequential character run");
+  });
+
+  it("sequential numeric run '123456789012' → throws", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "123456789012",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("sequential character run");
+  });
+
+  it("near-identical chars 'aaaaaaaaaaaab' → throws (too few distinct)", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "aaaaaaaaaaaab",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).toThrow("too few distinct characters");
+  });
+
+  it("long passphrase 'correcthorsebatterystaple' → passes", async () => {
+    const seed = await new PasswordEncryptionAdapter({
+      password: "correcthorsebatterystaple",
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(seed.byteLength).toBe(64);
+  });
+
+  it("strong mixed password passes all structural checks", async () => {
+    const seed = await new PasswordEncryptionAdapter({
+      password: "Str0ng-PaSSw0rd!",
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    }).getSeed();
+    expect(seed.byteLength).toBe(64);
   });
 });

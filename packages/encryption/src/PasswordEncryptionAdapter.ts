@@ -374,6 +374,35 @@ function estimateEntropyBits(password: string): number {
   return pool === 0 ? 0 : Math.log2(pool) * password.length;
 }
 
+function hasSequentialRun(pw: string, runLength = 5): boolean {
+  for (let i = 0; i <= pw.length - runLength; i++) {
+    let ascending = true;
+    let descending = true;
+    for (let j = 1; j < runLength; j++) {
+      const diff = pw.charCodeAt(i + j) - pw.charCodeAt(i + j - 1);
+      if (diff !== 1) ascending = false;
+      if (diff !== -1) descending = false;
+      if (!ascending && !descending) break;
+    }
+    if (ascending || descending) return true;
+  }
+  return false;
+}
+
+const KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890"];
+
+function hasKeyboardWalk(pw: string, minLen = 5): boolean {
+  const lower = pw.toLowerCase();
+  for (const row of KEYBOARD_ROWS) {
+    for (let i = 0; i <= row.length - minLen; i++) {
+      const fwd = row.slice(i, i + minLen);
+      const rev = fwd.split("").reverse().join("");
+      if (lower.includes(fwd) || lower.includes(rev)) return true;
+    }
+  }
+  return false;
+}
+
 function validatePassword(
   password: string,
   minLength: number,
@@ -387,9 +416,21 @@ function validatePassword(
     );
   }
 
-  if (new Set(password).size === 1) {
+  if (new Set(password).size < 3) {
     throw new Error(
-      "[dStorage] Password is too weak: all characters are identical.",
+      "[dStorage] Password is too weak: too few distinct characters.",
+    );
+  }
+
+  if (hasSequentialRun(password)) {
+    throw new Error(
+      "[dStorage] Password is too weak: contains a sequential character run (e.g. abcde, 12345).",
+    );
+  }
+
+  if (hasKeyboardWalk(password)) {
+    throw new Error(
+      "[dStorage] Password is too weak: contains a keyboard-row pattern (e.g. qwerty, asdfg).",
     );
   }
 
