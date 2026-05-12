@@ -6,7 +6,10 @@ import {
   MockMidnightChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage-tech/dstorage";
-import { PasswordEncryptionAdapter } from "@dstorage/encryption";
+import {
+  PasswordEncryptionAdapter,
+  type EncryptionAdapter,
+} from "@dstorage/encryption";
 import { PROOF_SERVER_ENDPOINT } from "./adapterConfigs";
 import type {
   StorageAdapterKey,
@@ -22,10 +25,15 @@ export async function buildSDK(
     managedAuthToken: string;
     managedServiceUrl: string;
     selectedContractAddress: string;
+    encryptionAdapter?: EncryptionAdapter;
   },
 ): Promise<DStorage> {
-  const { managedAuthToken, managedServiceUrl, selectedContractAddress } =
-    options;
+  const {
+    managedAuthToken,
+    managedServiceUrl,
+    selectedContractAddress,
+    encryptionAdapter,
+  } = options;
 
   const managedConfig =
     paymentKey === "managed"
@@ -75,13 +83,14 @@ export async function buildSDK(
     });
   }
 
-  const encryptionAdapters = [
-    // TODO: In a real app derive the password from user input.
-    new PasswordEncryptionAdapter({
-      password: "dstorage-demo-password-2026!",
-      salt: "dstorage:demo:v1",
-    }),
-  ];
+  const encryptionAdapters = encryptionAdapter
+    ? [encryptionAdapter]
+    : [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-demo-password-2026!",
+          salt: "dstorage:demo:v1",
+        }),
+      ];
 
   return new DStorage({
     storageAdapter,

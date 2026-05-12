@@ -14,6 +14,9 @@ import {
   CHAIN_ADAPTER_CONFIGS,
   PAYMENT_ADAPTER_CONFIGS,
 } from "../adapterConfigs";
+import { hasCredential } from "../lib/webAuthnPrf";
+
+type KeySource = "webauthn-prf" | "mnemonic" | "demo";
 
 interface Props {
   step: AppStep;
@@ -36,6 +39,11 @@ interface Props {
   onContinueToProof: () => void;
   onUpload: (file: File) => Promise<void>;
   onGenerateProof: (claimId: string) => Promise<void>;
+  prfSupported: boolean | null;
+  keySource: KeySource;
+  onKeySourceChange: (src: KeySource) => void;
+  mnemonic: string;
+  onMnemonicChange: (m: string) => void;
 }
 
 export function PatientPanel({
@@ -59,6 +67,11 @@ export function PatientPanel({
   onContinueToProof,
   onUpload,
   onGenerateProof,
+  prfSupported,
+  keySource,
+  onKeySourceChange,
+  mnemonic,
+  onMnemonicChange,
 }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -366,10 +379,88 @@ export function PatientPanel({
           </div>
         </div>
 
+        <div className="as-picker">
+          <div className="as-picker-label">Encryption Key</div>
+          <div className="as-cards">
+            <button
+              className={`as-card ${keySource === "webauthn-prf" ? "selected" : ""}`}
+              onClick={() => onKeySourceChange("webauthn-prf")}
+              disabled={!prfSupported}
+            >
+              <div className="as-card-top">
+                <span className="as-card-name">Platform Authenticator</span>
+              </div>
+              <div className="as-card-desc">
+                Touch ID, Face ID, or Windows Hello. Your key is derived by your
+                device and never stored on disk.
+              </div>
+              {prfSupported === false && (
+                <div className="as-card-note">
+                  Not supported in this browser — use Chrome or Edge 116+
+                </div>
+              )}
+              {prfSupported === null && (
+                <div className="as-card-note">Checking support…</div>
+              )}
+              {prfSupported === true && hasCredential() && (
+                <div className="as-card-note">
+                  Credential saved — tap your authenticator to unlock
+                </div>
+              )}
+            </button>
+            <button
+              className={`as-card ${keySource === "mnemonic" ? "selected" : ""}`}
+              onClick={() => onKeySourceChange("mnemonic")}
+            >
+              <div className="as-card-top">
+                <span className="as-card-name">Passphrase</span>
+              </div>
+              <div className="as-card-desc">
+                24-word BIP-39 mnemonic. Re-derive your ML-KEM keypair on any
+                device — 128-bit post-quantum secure.
+              </div>
+            </button>
+            <button
+              className={`as-card ${keySource === "demo" ? "selected" : ""}`}
+              onClick={() => onKeySourceChange("demo")}
+            >
+              <div className="as-card-top">
+                <span className="as-card-name">Demo Mode</span>
+              </div>
+              <div className="as-card-desc">
+                Hardcoded demo key shared by all demo users. Not secure — for
+                development only.
+              </div>
+            </button>
+          </div>
+          {keySource === "mnemonic" && (
+            <textarea
+              className="pp-contract-addr-input pp-mnemonic-input"
+              placeholder="Enter your 24-word BIP-39 mnemonic (e.g. abandon abandon … art)"
+              value={mnemonic}
+              onChange={(e) => onMnemonicChange(e.target.value)}
+              rows={3}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          )}
+          <div className="as-picker-hint">
+            {keySource === "webauthn-prf"
+              ? "Your authenticator will be prompted when you start the upload flow."
+              : keySource === "mnemonic"
+                ? "Your mnemonic derives a post-quantum ML-KEM keypair — never sent anywhere."
+                : "Swap to Platform Authenticator or Passphrase for real-world use."}
+          </div>
+        </div>
+
         <button
           className="pp-btn pp-btn-primary pp-btn-full"
           type="button"
-          disabled={managedUserIdRequired}
+          disabled={
+            managedUserIdRequired ||
+            (keySource === "mnemonic" &&
+              mnemonic.trim().split(/\s+/).length < 24)
+          }
           onClick={onContinueFromSetup}
         >
           Continue →

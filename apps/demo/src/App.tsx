@@ -1,5 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
 import { DStorage } from "@dstorage-tech/dstorage";
+import { MnemonicEncryptionAdapter } from "@dstorage/encryption";
+import {
+  isPrfSupported,
+  hasCredential,
+  createPrfCredential,
+  getPrfSeed,
+} from "./lib/webAuthnPrf";
 import { INSURANCE_CLAIMS, simulateZkProof } from "./zkProof.js";
 import type {
   DataReferenceSummary,
@@ -55,6 +62,11 @@ export default function App() {
     useState<ChainAdapterKey>("mock");
   const [paymentAdapterKey, setPaymentAdapterKey] =
     useState<PaymentAdapterKey>("local");
+  const [keySource, setKeySource] = useState<
+    "webauthn-prf" | "mnemonic" | "demo"
+  >("demo");
+  const [mnemonic, setMnemonic] = useState("");
+  const [prfSupported, setPrfSupported] = useState<boolean | null>(null);
   const [managedAuthToken, setManagedAuthToken] = useState(
     import.meta.env["VITE_DSTORAGE_AUTH_TOKEN"] ?? "",
   );
@@ -77,6 +89,10 @@ export default function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    isPrfSupported().then(setPrfSupported);
+  }, []);
+
   const releasePendingCertificate = useCallback(
     (cert: PendingCertificate | null) => {
       if (cert?.pdfUrl) {
@@ -94,11 +110,29 @@ export default function App() {
   const ensureSdkReady = useCallback(async (): Promise<DStorage> => {
     if (dstorage) return dstorage;
 
+    let encryptionAdapter;
+    if (keySource === "webauthn-prf") {
+      const seed = hasCredential()
+        ? await getPrfSeed()
+        : await createPrfCredential();
+      const seedHex = Array.from(seed, (b) =>
+        b.toString(16).padStart(2, "0"),
+      ).join("");
+      encryptionAdapter = new MnemonicEncryptionAdapter({ seedHex });
+    } else if (keySource === "mnemonic") {
+      encryptionAdapter = new MnemonicEncryptionAdapter({ mnemonic });
+    }
+
     const sdk = await buildSDK(
       storageAdapterKey,
       chainAdapterKey,
       paymentAdapterKey,
-      { managedAuthToken, managedServiceUrl, selectedContractAddress },
+      {
+        managedAuthToken,
+        managedServiceUrl,
+        selectedContractAddress,
+        ...(encryptionAdapter ? { encryptionAdapter } : {}),
+      },
     );
 
     const contractAddress = await sdk.init();
@@ -113,6 +147,8 @@ export default function App() {
   }, [
     chainAdapterKey,
     dstorage,
+    keySource,
+    mnemonic,
     managedServiceUrl,
     managedAuthToken,
     paymentAdapterKey,
@@ -326,6 +362,7 @@ export default function App() {
     setDrawerOpen(false);
     setMetaTxProgress(null);
     setZkProgress(null);
+    setMnemonic("");
     setPendingCertificate((previous) => {
       releasePendingCertificate(previous);
       return null;
@@ -469,6 +506,11 @@ export default function App() {
               onContinueToProof={handleContinueToProof}
               onUpload={handleUpload}
               onGenerateProof={handleGenerateProof}
+              prfSupported={prfSupported}
+              keySource={keySource}
+              onKeySourceChange={setKeySource}
+              mnemonic={mnemonic}
+              onMnemonicChange={setMnemonic}
             />
           </div>
         ) : (
@@ -498,6 +540,11 @@ export default function App() {
                 onContinueToProof={handleContinueToProof}
                 onUpload={handleUpload}
                 onGenerateProof={handleGenerateProof}
+                prfSupported={prfSupported}
+                keySource={keySource}
+                onKeySourceChange={setKeySource}
+                mnemonic={mnemonic}
+                onMnemonicChange={setMnemonic}
               />
             </div>
             <div className="hv-divider">

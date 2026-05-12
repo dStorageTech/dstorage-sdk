@@ -596,6 +596,13 @@ code {
   font-family: inherit;
 }
 
+.pp-mnemonic-input {
+  width: 100%;
+  resize: vertical;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
 .pp-connect-btns {
   display: flex;
   flex-direction: column;
@@ -908,9 +915,13 @@ code {
   cursor: pointer;
   transition: all 0.15s;
 }
-.as-card:hover {
+.as-card:hover:not(:disabled) {
   border-color: var(--c-blue-mid);
   background: var(--c-blue-light);
+}
+.as-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .as-card.selected {
   border-color: var(--c-blue);
