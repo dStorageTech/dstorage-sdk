@@ -70,7 +70,7 @@ export class DStorage implements DStorageContext {
     return this.config.storageAdapter;
   }
 
-  get chainAdapter(): ChainAdapter {
+  get chainAdapter(): ChainAdapter | undefined {
     return this.config.chainAdapter;
   }
 
@@ -87,7 +87,7 @@ export class DStorage implements DStorageContext {
    */
   async init() {
     // 1. Initialize chain adapter wallet (syncs wallet, etc.)
-    if (this.config.chainAdapter.init) {
+    if (this.config.chainAdapter?.init) {
       await this.config.chainAdapter.init();
     }
 
@@ -95,7 +95,7 @@ export class DStorage implements DStorageContext {
     this._encryptionProviders = this.config.encryptionAdapters ?? [];
 
     this._initialized = true;
-    return this.config.chainAdapter.getContractAddress();
+    return this.config.chainAdapter?.getContractAddress();
   }
 
   /** Disconnect and clear the in-memory encryption providers. */
@@ -214,7 +214,9 @@ export class DStorage implements DStorageContext {
     if (isPublic) {
       // 3a. Public: no content DEK needed, but generate a random ownerSeed so that
       // any provider can independently re-derive the ownerSecret (mirrors private DEK handling).
-      if (this._encryptionProviders.length === 0) {
+      // The owner secret is only needed for chain reference management; skip the
+      // check in storage-only mode (no chain adapter).
+      if (this.config.chainAdapter && this._encryptionProviders.length === 0) {
         throw new Error(
           "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
             "Without a provider there is no owner secret, so the reference " +
@@ -248,40 +250,58 @@ export class DStorage implements DStorageContext {
       );
     }
 
-    // 4. Write on-chain reference — only the storage pointer, never the data
-    const dataLabel = metadata["label"];
-    const chainResult = await this.config.chainAdapter.writeReference({
-      storageId: onChainStorageId,
-      encryptionScheme,
-      storageProvider: storageResult.provider,
-      ...(dataLabel !== undefined ? { dataLabel } : {}),
-      writtenAt: Date.now(),
-      isOurs: true,
-      keyEnvelope,
-      ownerSecret,
-    });
+    const storageCost = {
+      amount: storageResult.cost?.amount ?? "unknown",
+      token: storageResult.cost?.token ?? "AR",
+    };
 
-    const refId = chainResult.refId;
-    this.logger?.log("dStorage", `Upload complete → refId: ${refId}`);
+    // 4. Write on-chain reference — only the storage pointer, never the data.
+    //    Skipped in storage-only mode (no chain adapter).
+    if (this.config.chainAdapter) {
+      const dataLabel = metadata["label"];
+      const chainResult = await this.config.chainAdapter.writeReference({
+        storageId: onChainStorageId,
+        encryptionScheme,
+        storageProvider: storageResult.provider,
+        ...(dataLabel !== undefined ? { dataLabel } : {}),
+        writtenAt: Date.now(),
+        isOurs: true,
+        keyEnvelope,
+        ownerSecret,
+      });
 
+      const refId = chainResult.refId;
+      this.logger?.log("dStorage", `Upload complete → refId: ${refId}`);
+
+      return {
+        chainRefId: refId,
+        storageId: storageResult.id,
+        storageProvider: storageResult.provider,
+        chainProvider: chainResult.provider,
+        uploadedAt: storageResult.uploadedAt,
+        encryptionScheme,
+        costEstimate: {
+          storageCost,
+          chainCost: {
+            amount: chainResult.paymentReceipt?.amount ?? "unknown",
+            token: chainResult.paymentReceipt?.token ?? "DUST",
+          },
+          fileSizeBytes: uploadData.length,
+        },
+      };
+    }
+
+    // Storage-only mode: return result without chain fields.
+    this.logger?.log(
+      "dStorage",
+      `Upload complete (storage-only) → storageId: ${storageResult.id}`,
+    );
     return {
-      chainRefId: refId,
       storageId: storageResult.id,
       storageProvider: storageResult.provider,
-      chainProvider: chainResult.provider,
       uploadedAt: storageResult.uploadedAt,
       encryptionScheme,
-      costEstimate: {
-        storageCost: {
-          amount: storageResult.cost?.amount ?? "unknown",
-          token: storageResult.cost?.token ?? "AR",
-        },
-        chainCost: {
-          amount: chainResult.paymentReceipt?.amount ?? "unknown",
-          token: chainResult.paymentReceipt?.token ?? "DUST",
-        },
-        fileSizeBytes: uploadData.length,
-      },
+      costEstimate: { storageCost, fileSizeBytes: uploadData.length },
     };
   }
 
@@ -380,7 +400,7 @@ export class DStorage implements DStorageContext {
    *   4. Return HKDF-SHA256(dek, rawStorageId) for private, or HKDF-SHA256(ownerSeed, rawStorageId) for public
    */
   private async _computeOwnerSecret(refId: string): Promise<Uint8Array> {
-    const ref = await this.config.chainAdapter.readReference(refId);
+    const ref = await this.config.chainAdapter!.readReference(refId);
     const isPublic = !ref.encryptionScheme;
 
     if (isPublic) {
@@ -467,6 +487,13 @@ export class DStorage implements DStorageContext {
   async retrieveByRefId(refId: string): Promise<RetrieveResult> {
     this.assertConnected();
 
+    if (!this.config.chainAdapter) {
+      throw new Error(
+        "[dStorage] retrieveByRefId() requires a chain adapter. " +
+          "Configure one in DStorageConfig or use retrieveByStorageId() instead.",
+      );
+    }
+
     const ref = await this.config.chainAdapter.readReference(refId);
     if (!ref)
       throw new Error(
@@ -500,6 +527,9 @@ export class DStorage implements DStorageContext {
    * List references currently available from the configured chain adapter.
    */
   async listReferences(): Promise<DataReferenceSummary[]> {
+    if (!this.config.chainAdapter) {
+      throw new Error("[dStorage] listReferences() requires a chain adapter.");
+    }
     if (typeof this.config.chainAdapter.listReferences !== "function") {
       throw new Error(
         "[dStorage] listReferences() is not supported by this chain adapter.",
@@ -554,6 +584,9 @@ export class DStorage implements DStorageContext {
    * enforces ownership via ZK proof using the witness-derived ownerSecret.
    */
   async removeReference(refId: string): Promise<void> {
+    if (!this.config.chainAdapter) {
+      throw new Error("[dStorage] removeReference() requires a chain adapter.");
+    }
     if (typeof this.config.chainAdapter.removeReference !== "function") {
       throw new Error(
         "[dStorage] removeReference() is not supported by this chain adapter.",
@@ -569,12 +602,14 @@ export class DStorage implements DStorageContext {
   async estimateCost(sizeBytes: number): Promise<CostEstimate> {
     const [storageQuote, chainQuote] = await Promise.all([
       this.config.storageAdapter.estimateCost(sizeBytes),
-      this.config.chainAdapter.estimateCost(),
+      this.config.chainAdapter?.estimateCost(),
     ]);
 
     return {
       storageCost: { amount: storageQuote.amount, token: storageQuote.token },
-      chainCost: { amount: chainQuote.amount, token: chainQuote.token },
+      ...(chainQuote
+        ? { chainCost: { amount: chainQuote.amount, token: chainQuote.token } }
+        : {}),
       fileSizeBytes: sizeBytes,
     };
   }
@@ -836,39 +871,60 @@ export class DStorage implements DStorageContext {
           "dstorage:owner-secret:public:v1",
         );
 
-    const dataLabel = metadata["label"];
-    const chainResult = await this.config.chainAdapter.writeReference({
-      storageId: onChainManifestId,
-      encryptionScheme,
-      storageProvider: manifestResult.provider,
-      ...(dataLabel !== undefined ? { dataLabel } : {}),
-      writtenAt: Date.now(),
-      isOurs: true,
-      keyEnvelope,
-      ownerSecret,
-    });
+    if (this.config.chainAdapter) {
+      const dataLabel = metadata["label"];
+      const chainResult = await this.config.chainAdapter.writeReference({
+        storageId: onChainManifestId,
+        encryptionScheme,
+        storageProvider: manifestResult.provider,
+        ...(dataLabel !== undefined ? { dataLabel } : {}),
+        writtenAt: Date.now(),
+        isOurs: true,
+        keyEnvelope,
+        ownerSecret,
+      });
 
-    const refId = chainResult.refId;
+      const refId = chainResult.refId;
+      this.logger?.log(
+        "dStorage",
+        `Chunked upload complete → ${totalChunks} chunks + manifest, refId: ${refId}`,
+      );
+
+      return {
+        chainRefId: refId,
+        storageId: manifestResult.id,
+        storageProvider: manifestResult.provider,
+        chainProvider: chainResult.provider,
+        uploadedAt: manifestResult.uploadedAt,
+        encryptionScheme,
+        costEstimate: {
+          storageCost: {
+            amount: manifestResult.cost?.amount ?? "unknown",
+            token: manifestResult.cost?.token ?? "AR",
+          },
+          chainCost: {
+            amount: chainResult.paymentReceipt?.amount ?? "unknown",
+            token: chainResult.paymentReceipt?.token ?? "DUST",
+          },
+          fileSizeBytes: bytes.length,
+        },
+      };
+    }
+
     this.logger?.log(
       "dStorage",
-      `Chunked upload complete → ${totalChunks} chunks + manifest, refId: ${refId}`,
+      `Chunked upload complete (storage-only) → ${totalChunks} chunks + manifest, storageId: ${manifestResult.id}`,
     );
 
     return {
-      chainRefId: refId,
       storageId: manifestResult.id,
       storageProvider: manifestResult.provider,
-      chainProvider: chainResult.provider,
       uploadedAt: manifestResult.uploadedAt,
       encryptionScheme,
       costEstimate: {
         storageCost: {
           amount: manifestResult.cost?.amount ?? "unknown",
           token: manifestResult.cost?.token ?? "AR",
-        },
-        chainCost: {
-          amount: chainResult.paymentReceipt?.amount ?? "unknown",
-          token: chainResult.paymentReceipt?.token ?? "DUST",
         },
         fileSizeBytes: bytes.length,
       },

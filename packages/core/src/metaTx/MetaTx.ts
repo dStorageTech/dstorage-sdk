@@ -58,7 +58,9 @@ export class MetaTx {
       const estimate = await this.sdk.estimateCost(file.size);
       this.completeStep(
         "estimate",
-        `${estimate.storageCost.amount} ${estimate.storageCost.token} + ${estimate.chainCost.amount} ${estimate.chainCost.token}`,
+        estimate.chainCost
+          ? `${estimate.storageCost.amount} ${estimate.storageCost.token} + ${estimate.chainCost.amount} ${estimate.chainCost.token}`
+          : `${estimate.storageCost.amount} ${estimate.storageCost.token} (storage only)`,
       );
       this.emit({ overallStatus: "running", estimate });
 
@@ -142,60 +144,75 @@ export class MetaTx {
       );
 
       // ── Step 4: On-chain fee payment and write reference ────────────────
-      this.startStep(
-        "chain_reference",
-        `Fee payment and writing reference to ${this.sdk.chainAdapter.name}…`,
-      );
+      let chainRefId: string | undefined;
+      let chainPayment: import("@dstorage/payment").PaymentReceipt | undefined;
+      let chainToken: import("@dstorage/payment").TokenSymbol | undefined;
 
-      const onChainStorageId = uploadCrypto.uploadScheme
-        ? await uploadCrypto.uploadScheme.encryptStorageId(uploadResult.id)
-        : uploadResult.id;
+      if (this.sdk.chainAdapter) {
+        this.startStep(
+          "chain_reference",
+          `Fee payment and writing reference to ${this.sdk.chainAdapter.name}…`,
+        );
 
-      const { deriveOwnerSecret } = await import("@dstorage/crypto");
-      let ownerSecret: Uint8Array;
-      if (uploadCrypto.dek) {
-        ownerSecret = await deriveOwnerSecret(
-          uploadCrypto.dek,
-          new TextEncoder().encode(uploadResult.id),
+        const onChainStorageId = uploadCrypto.uploadScheme
+          ? await uploadCrypto.uploadScheme.encryptStorageId(uploadResult.id)
+          : uploadResult.id;
+
+        const { deriveOwnerSecret } = await import("@dstorage/crypto");
+        let ownerSecret: Uint8Array;
+        if (uploadCrypto.dek) {
+          ownerSecret = await deriveOwnerSecret(
+            uploadCrypto.dek,
+            new TextEncoder().encode(uploadResult.id),
+          );
+        } else {
+          ownerSecret = await deriveOwnerSecret(
+            uploadCrypto.ownerSeed!,
+            new TextEncoder().encode(uploadResult.id),
+            "dstorage:owner-secret:public:v1",
+          );
+        }
+
+        const chainResult = await this.sdk.chainAdapter.writeReference({
+          storageId: onChainStorageId,
+          encryptionScheme: uploadCrypto.encryptionScheme,
+          storageProvider: uploadResult.provider,
+          dataLabel: file.name,
+          writtenAt: Date.now(),
+          isOurs: true,
+          keyEnvelope: uploadCrypto.keyEnvelope,
+          ownerSecret,
+        });
+
+        // If the chain adapter handled payment internally (e.g. Midnight), use that receipt.
+        const finalChainReceipt = chainResult.paymentReceipt ?? {
+          amount: "<unknown>",
+          token: estimate.chainCost!.token,
+          txHash: "",
+          type: "chain" as const,
+          paidAt: 0,
+          serviceFee: "0",
+        };
+
+        chainRefId = chainResult.refId;
+        chainPayment = finalChainReceipt;
+        chainToken = finalChainReceipt.token;
+
+        this.completeStep(
+          "chain_reference",
+          `Reference written → ${finalChainReceipt.amount} ${finalChainReceipt.token} → ${truncateId(chainResult.refId)}`,
         );
       } else {
-        // Public upload: derive ownerSecret from the ownerSeed wrapped in the envelope.
-        ownerSecret = await deriveOwnerSecret(
-          uploadCrypto.ownerSeed!,
-          new TextEncoder().encode(uploadResult.id),
-          "dstorage:owner-secret:public:v1",
+        this.completeStep(
+          "chain_reference",
+          "Skipped — no chain adapter configured",
         );
       }
 
-      const chainResult = await this.sdk.chainAdapter.writeReference({
-        storageId: onChainStorageId,
-        encryptionScheme: uploadCrypto.encryptionScheme,
-        storageProvider: uploadResult.provider,
-        dataLabel: file.name,
-        writtenAt: Date.now(),
-        isOurs: true,
-        keyEnvelope: uploadCrypto.keyEnvelope,
-        ownerSecret,
-      });
-
-      // If the chain adapter handled payment internally (e.g. Midnight managed
-      // payment embedded in the transaction), use that receipt instead.
-      const finalChainReceipt = chainResult.paymentReceipt ?? {
-        amount: "<unknown>",
-        token: estimate.chainCost.token,
-        txHash: "",
-        type: "chain",
-        paidAt: 0,
-        serviceFee: "0",
-      };
-
-      this.completeStep(
-        "chain_reference",
-        `Reference written → ${finalChainReceipt.amount} ${finalChainReceipt.token} → ${truncateId(chainResult.refId)}`,
-      );
-
       // ── Step 5: Complete ─────────────────────────────────────────────────
-      const dataId = `${uploadResult.id}::${chainResult.refId}`;
+      const dataId = chainRefId
+        ? `${uploadResult.id}::${chainRefId}`
+        : uploadResult.id;
       const totalDurationMs = Date.now() - this.startedAt;
 
       this.completeStep(
@@ -206,16 +223,15 @@ export class MetaTx {
       const receipt: MetaTxReceipt = {
         dataId,
         storageId: uploadResult.id,
-        chainRefId: chainResult.refId,
+        ...(chainRefId ? { chainRefId } : {}),
         file: {
           name: file.name,
           type: file.type,
           sizeBytes: file.size,
         },
         storagePayment: storageReceipt,
-        chainPayment: finalChainReceipt,
+        ...(chainPayment ? { chainPayment, chainToken: chainToken! } : {}),
         storageToken: storageReceipt.token,
-        chainToken: finalChainReceipt.token,
         ...(config.contractAddress
           ? {
               contract: {

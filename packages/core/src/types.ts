@@ -32,8 +32,12 @@ export interface WalletInfo {
 export interface DStorageConfig {
   /** Storage adapter to use (MockStorageAdapter | ArweaveStorageAdapter | ...) */
   storageAdapter: StorageAdapter;
-  /** Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...) */
-  chainAdapter: ChainAdapter;
+  /**
+   * Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...).
+   * When omitted the SDK operates in storage-only mode — uploads store to the
+   * storage backend but no on-chain reference is written.
+   */
+  chainAdapter?: ChainAdapter;
   /**
    * Encryption adapters that wrap and unwrap per-upload Data Encryption Keys (DEKs).
    * Each adapter produces an independent wrapped DEK; any of them can independently decrypt.
@@ -90,7 +94,8 @@ export interface CostEstimate {
     amount: string;
     token: TokenSymbol;
   };
-  chainCost: {
+  /** Chain cost. Undefined when no chain adapter is configured. */
+  chainCost?: {
     amount: string;
     token: TokenSymbol;
   };
@@ -102,15 +107,15 @@ export interface CostEstimate {
 export interface UploadResult {
   /**
    * The primary on-chain reference ID.
-   * Use this to retrieve or share the stored data.
+   * Undefined when no chain adapter is configured (storage-only mode).
    */
-  chainRefId: string;
+  chainRefId?: string;
   /** The storage network content ID */
   storageId: string;
   /** Storage provider used */
   storageProvider: StorageProviderName;
-  /** Chain provider used */
-  chainProvider: ChainProviderName;
+  /** Chain provider used. Undefined when no chain adapter is configured. */
+  chainProvider?: ChainProviderName;
   /** Timestamp */
   uploadedAt: number;
   /**

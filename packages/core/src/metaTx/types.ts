@@ -58,7 +58,8 @@ export interface MetaTxProgress {
 export interface MetaTxReceipt {
   dataId: string;
   storageId: string;
-  chainRefId: string;
+  /** Undefined when no chain adapter is configured (storage-only mode). */
+  chainRefId?: string;
   /** Original file info */
   file: {
     name: string;
@@ -67,10 +68,12 @@ export interface MetaTxReceipt {
   };
   /** Payment receipts */
   storagePayment: PaymentReceipt;
-  chainPayment: PaymentReceipt;
+  /** Undefined when no chain adapter is configured. */
+  chainPayment?: PaymentReceipt;
   /** Tokens used */
   storageToken: TokenSymbol;
-  chainToken: TokenSymbol;
+  /** Undefined when no chain adapter is configured. */
+  chainToken?: TokenSymbol;
   /** Contract invoked (if selected) */
   contract?: {
     address: string;
@@ -136,7 +139,7 @@ export interface UploadCrypto {
  */
 export interface DStorageContext {
   readonly storageAdapter: StorageAdapter;
-  readonly chainAdapter: ChainAdapter;
+  readonly chainAdapter: ChainAdapter | undefined;
   /** Wallet address of the connected user, or null if using init() / facade mode. */
   readonly connectedAddress: string | null;
   /**
