@@ -27,18 +27,11 @@ jobs:
       - name: Start undeployed stack
         run: docker compose -f tools/compose-undeployed.yml up -d --wait
 
-      - name: Generate random test wallet seed
+      - name: Write integration test environment
         run: |
-          # bip39 is a direct dep of @dstorage/crypto, hoisted into root
-          # node_modules after `npm install`. --input-type=commonjs overrides
-          # "type":"module" in package.json so require() works from -e input.
-          SEED=$(node --input-type=commonjs -e \
-            "const bip39 = require('bip39'); console.log(bip39.generateMnemonic(256));")
-          echo "INTEGRATION_SEED=$SEED" >> "$GITHUB_ENV"
-          # .env.integration is gitignored so it does not exist in CI after
-          # checkout. Write it from scratch; setup.ts loads it with
-          # override:true so these values win over any process.env entries.
-          cat > .env.integration <<EOF
+          # .env.integration is gitignored and absent in CI after checkout.
+          # Write it from scratch; setup.ts loads it with override:true.
+          cat > .env.integration <<'EOF'
           INTEGRATION_ARLOCAL_URL=http://localhost:1984
           INTEGRATION_PROOF_SERVER=http://localhost:6300
           INTEGRATION_MIDNIGHT_NETWORK=undeployed
@@ -46,14 +39,16 @@ jobs:
           INTEGRATION_NODE_WS_ENDPOINT=ws://127.0.0.1:9944
           INTEGRATION_INDEXER_ENDPOINT=http://127.0.0.1:8088/api/v3/graphql
           INTEGRATION_INDEXER_WS_ENDPOINT=ws://127.0.0.1:8088/api/v3/graphql/ws
-          INTEGRATION_SEED="${SEED}"
+          INTEGRATION_SEED=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
           INTEGRATION_CONTRACT_ADDRESS=
           EOF
 
       - name: Fund test wallet (NIGHT + DUST)
         # fund-wallet.sh auto-clones bricktowers/midnight-local-network and
         # installs deps via corepack yarn when the directory is absent.
-        run: ./tools/fund-wallet.sh --dust "$INTEGRATION_SEED"
+        run: >
+          ./tools/fund-wallet.sh --dust
+          "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
       - name: Run integration tests
         run: npm run test:integration
