@@ -51,24 +51,17 @@ else
     echo "midnight-local-network not found — cloning into $MLN_DIR ..."
     git clone "$MLN_REPO" "$MLN_DIR"
     echo "Installing dependencies..."
-    if command -v yarn &>/dev/null; then
-      (cd "$MLN_DIR" && yarn install --frozen-lockfile)
-    else
-      (cd "$MLN_DIR" && npm install)
-    fi
+    # The repo declares packageManager: yarn@x.y.z — use corepack to get the
+    # exact version, which respects the yarn.lock and avoids version skew.
+    (cd "$MLN_DIR" && corepack yarn install)
   fi
 fi
 
 cd "$MLN_DIR"
 
-# Choose runner: yarn if available, otherwise npx tsx directly.
-if command -v yarn &>/dev/null; then
-  run_fund()      { exec yarn fund "$@"; }
-  run_fund_dust() { exec yarn fund-and-register-dust "$@"; }
-else
-  run_fund()      { exec npx tsx src/fund.ts "$@"; }
-  run_fund_dust() { exec npx tsx src/fund-and-register-dust.ts "$@"; }
-fi
+# Always run via corepack yarn so the version declared in package.json is used.
+run_fund()      { exec corepack yarn fund "$@"; }
+run_fund_dust() { exec corepack yarn fund-and-register-dust "$@"; }
 
 if [[ "${1:-}" == "--dust" ]]; then
   shift
