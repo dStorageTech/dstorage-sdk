@@ -113,8 +113,9 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
   let chainAdapter: Awaited<ReturnType<typeof createChainAdapter>>;
 
   const ALICE_SEED =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-  const BOB_SEED = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+  const BOB_SEED =
+    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote";
 
   beforeAll(async () => {
     const [{ adapter }, chain] = await Promise.all([
