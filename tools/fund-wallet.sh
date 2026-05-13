@@ -1,16 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Resolve the midnight-local-network directory.
-# Default: sibling directory of dstorage-sdk. Override via env var.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MLN_DIR="${MIDNIGHT_LOCAL_NETWORK_DIR:-"$SCRIPT_DIR/../../midnight-local-network"}"
-
-if [[ ! -d "$MLN_DIR" ]]; then
-  echo "Error: midnight-local-network not found at: $MLN_DIR"
-  echo "Set MIDNIGHT_LOCAL_NETWORK_DIR to its path and retry."
-  exit 1
-fi
+MLN_REPO="git@github.com:bricktowers/midnight-local-network.git"
 
 usage() {
   cat <<EOF
@@ -29,8 +21,9 @@ Options:
   -h, --help    Show this help message
 
 Environment:
-  MIDNIGHT_LOCAL_NETWORK_DIR   Path to the midnight-local-network repo
-                               (default: sibling directory ../midnight-local-network)
+  MIDNIGHT_LOCAL_NETWORK_DIR   Path to an existing midnight-local-network checkout.
+                               When unset the repo is cloned automatically into
+                               tools/midnight-local-network on first run.
 
 Prerequisites:
   The undeployed stack must be running:
@@ -43,7 +36,39 @@ if [[ $# -eq 0 || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
+# Resolve the midnight-local-network directory.
+# If MIDNIGHT_LOCAL_NETWORK_DIR is set, use it directly.
+# Otherwise clone the repo into tools/midnight-local-network on first run.
+if [[ -n "${MIDNIGHT_LOCAL_NETWORK_DIR:-}" ]]; then
+  MLN_DIR="$MIDNIGHT_LOCAL_NETWORK_DIR"
+  if [[ ! -d "$MLN_DIR" ]]; then
+    echo "Error: MIDNIGHT_LOCAL_NETWORK_DIR does not exist: $MLN_DIR"
+    exit 1
+  fi
+else
+  MLN_DIR="$SCRIPT_DIR/midnight-local-network"
+  if [[ ! -d "$MLN_DIR" ]]; then
+    echo "midnight-local-network not found — cloning into $MLN_DIR ..."
+    git clone "$MLN_REPO" "$MLN_DIR"
+    echo "Installing dependencies..."
+    if command -v yarn &>/dev/null; then
+      (cd "$MLN_DIR" && yarn install --frozen-lockfile)
+    else
+      (cd "$MLN_DIR" && npm install)
+    fi
+  fi
+fi
+
 cd "$MLN_DIR"
+
+# Choose runner: yarn if available, otherwise npx tsx directly.
+if command -v yarn &>/dev/null; then
+  run_fund()      { exec yarn fund "$@"; }
+  run_fund_dust() { exec yarn fund-and-register-dust "$@"; }
+else
+  run_fund()      { exec npx tsx src/fund.ts "$@"; }
+  run_fund_dust() { exec npx tsx src/fund-and-register-dust.ts "$@"; }
+fi
 
 if [[ "${1:-}" == "--dust" ]]; then
   shift
@@ -53,7 +78,7 @@ if [[ "${1:-}" == "--dust" ]]; then
     usage
     exit 1
   fi
-  exec yarn fund-and-register-dust "$@"
+  run_fund_dust "$@"
 else
-  exec yarn fund "$@"
+  run_fund "$@"
 fi
