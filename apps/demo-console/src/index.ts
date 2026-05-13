@@ -162,7 +162,7 @@ async function main(): Promise<void> {
       console.log("\nSeed loaded from DSTORAGE_SEED env var.");
     } else {
       console.log(
-        "\nEnter BIP-39 mnemonic (12/24 words) or hex seed (64/128 chars).",
+        "\nEnter BIP-39 mnemonic (24 words) or hex seed (64/128 chars).",
       );
       console.log("Leave blank to auto-generate a new random seed.");
       rl.close();
