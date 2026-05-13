@@ -1,0 +1,48 @@
+name: Weekly Integration Tests
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Every Monday at 08:00 UTC
+  workflow_dispatch: # Allow manual triggering from the Actions tab
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Start undeployed stack
+        run: docker compose -f tools/compose-undeployed.yml up -d --wait
+
+      - name: Generate random test wallet seed
+        run: |
+          # bip39 is a direct dep of @dstorage/crypto, hoisted into root
+          # node_modules after `npm install`. --input-type=commonjs overrides
+          # "type":"module" in package.json so require() works from -e input.
+          SEED=$(node --input-type=commonjs -e \
+            "const bip39 = require('bip39'); console.log(bip39.generateMnemonic(256));")
+          echo "INTEGRATION_SEED=$SEED" >> "$GITHUB_ENV"
+          # tests/integration/setup.ts uses dotenv with override:true, so
+          # .env.integration values win over process.env — write there directly.
+          sed -i "s|^INTEGRATION_SEED=.*|INTEGRATION_SEED=\"${SEED}\"|" .env.integration
+
+      - name: Fund test wallet (NIGHT + DUST)
+        # fund-wallet.sh auto-clones bricktowers/midnight-local-network and
+        # installs deps via corepack yarn when the directory is absent.
+        run: ./tools/fund-wallet.sh --dust "$INTEGRATION_SEED"
+
+      - name: Run integration tests
+        run: npm run test:integration
