@@ -27,11 +27,11 @@
     "build": "tsup src/index.ts src/types.ts src/adapters/mock.ts --format esm,cjs --dts"
   },
   "devDependencies": {
-    "arweave": "^1.15.0",
-    "typescript": "^5.4.5"
+    "arweave": "^1.15.7",
+    "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "arweave": "^1.15.0",
+    "arweave": "^1.15.7",
     "@midnight-ntwrk/ledger-v8": "8.0.3"
   },
   "peerDependenciesMeta": {

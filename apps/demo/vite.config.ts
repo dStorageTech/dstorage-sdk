@@ -59,8 +59,8 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    rollupOptions: {
-      // Mark Node.js-only packages as external so Rollup never tries to bundle them.
+    rolldownOptions: {
+      // Mark Node.js-only packages as external so Rolldown never tries to bundle them.
       // These packages are only used in /* @vite-ignore */ dynamic imports that
       // never execute in connector (browser) mode.
       external: [
@@ -74,8 +74,10 @@ export default defineConfig({
       ],
       output: {
         // Isolate the WASM runtime in its own chunk to avoid top-level await conflicts.
-        manualChunks: {
-          wasm: ["@midnight-ntwrk/onchain-runtime-v2"],
+        manualChunks(id: string) {
+          if (id.includes("@midnight-ntwrk/onchain-runtime-v3")) {
+            return "wasm";
+          }
         },
       },
     },
@@ -117,7 +119,7 @@ export default defineConfig({
     // Exclude the raw WASM runtime (must be a separate chunk loaded at runtime).
     // Also exclude Node.js-only Midnight packages so esbuild doesn't choke on them.
     exclude: [
-      "@midnight-ntwrk/onchain-runtime-v2",
+      "@midnight-ntwrk/onchain-runtime-v3",
       "@midnight-ntwrk/midnight-js-node-zk-config-provider",
       "@midnight-ntwrk/midnight-js-level-private-state-provider",
       "@midnight-ntwrk/wallet-sdk-facade",

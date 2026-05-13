@@ -204,7 +204,13 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     try {
       // Dynamic import — arweave-js is only bundled when this adapter is used.
-      const { default: Arweave } = await import("arweave");
+      const _m = await import("arweave");
+      // Vite 8/Rolldown wraps CJS modules differently: unwrap double-default if needed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Arweave: any =
+        typeof (_m.default as any)?.init === "function"
+          ? _m.default
+          : (_m.default as any)?.default;
       this.arweaveClient = Arweave.init(this.gateway);
       return this.arweaveClient;
     } catch {

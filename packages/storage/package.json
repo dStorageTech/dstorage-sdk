@@ -30,14 +30,14 @@
     "@dstorage/payment": "*"
   },
   "devDependencies": {
-    "typescript": "^5.4.5",
-    "arweave": "^1.15.0",
-    "@ardrive/turbo-sdk": "^1.41.0"
+    "typescript": "^6.0.3",
+    "arweave": "^1.15.7",
+    "@ardrive/turbo-sdk": "^1.41.2"
   },
   "peerDependencies": {
-    "arweave": "^1.15.0",
-    "@ardrive/turbo-sdk": "^1.41.0",
-    "@dha-team/arbundles": "^1.0.0"
+    "arweave": "^1.15.7",
+    "@ardrive/turbo-sdk": "^1.41.2",
+    "@dha-team/arbundles": "^1.0.4"
   },
   "peerDependenciesMeta": {
     "arweave": {

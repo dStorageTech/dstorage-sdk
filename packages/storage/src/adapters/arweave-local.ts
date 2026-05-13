@@ -321,7 +321,14 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     gateway: ArweaveGatewayConfig,
   ): Promise<void> {
     try {
-      const { default: Arweave } = await import("arweave");
+      const _m = await import("arweave");
+      // Vite 8/Rolldown wraps CJS modules differently: mod.default may be the
+      // full exports object { default: Arweave } rather than the class itself.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Arweave: any =
+        typeof (_m.default as any)?.init === "function"
+          ? _m.default
+          : (_m.default as any)?.default;
       const arweave = Arweave.init(gateway);
       const address: string = await arweave.wallets.jwkToAddress(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -374,7 +381,11 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     let arweaveModule: any;
     try {
       const mod = await import("arweave");
-      arweaveModule = mod.default;
+      // Vite 8/Rolldown wraps CJS modules differently: unwrap double-default if needed.
+      arweaveModule =
+        typeof (mod.default as any)?.init === "function"
+          ? mod.default
+          : (mod.default as any)?.default;
     } catch {
       throw new Error(
         "[dStorage/arweave-local] arweave package not found.\n" +

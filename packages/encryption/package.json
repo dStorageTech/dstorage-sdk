@@ -30,6 +30,6 @@
   },
   "devDependencies": {
     "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
-    "typescript": "^5.4.5"
+    "typescript": "^6.0.3"
   }
 }
