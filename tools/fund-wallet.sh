@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MLN_REPO="git@github.com:bricktowers/midnight-local-network.git"
+MLN_REPO="https://github.com/bricktowers/midnight-local-network.git"
 
 usage() {
   cat <<EOF
