@@ -35,7 +35,7 @@ const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 // ── Seed providers ────────────────────────────────────────────────────────────
 
 const TEST_MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
 // Low-cost scrypt params so the integration suite stays fast.
 const passwordProvider = () =>
