@@ -6,6 +6,7 @@
 import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
 import type { TokenSymbol } from "@dstorage/payment";
+import type { CryptoScheme } from "@dstorage/crypto";
 import type { EncryptionAdapter } from "./index.js";
 
 /**
@@ -124,6 +125,13 @@ export interface UploadResult {
    * Empty string ("") for public (unencrypted) uploads.
    */
   encryptionScheme: string;
+  /**
+   * Decryption scheme for the uploaded content.
+   * Present only for private uploads in storage-only mode (no chainAdapter).
+   * In chain mode the scheme is recoverable from the on-chain key envelope instead.
+   * Pass this back to retrieveByStorageId() to decrypt locally.
+   */
+  cryptoScheme?: CryptoScheme;
   /** Estimated cost of upload */
   costEstimate: CostEstimate;
 }

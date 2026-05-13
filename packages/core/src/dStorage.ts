@@ -172,7 +172,7 @@ export class DStorage implements DStorageContext {
     let uploadScheme: CryptoScheme | null = null;
     let keyEnvelope: string = "";
     let dek: Uint8Array | null = null;
-    let ownerSecret: Uint8Array;
+    let ownerSecret: Uint8Array = new Uint8Array(0);
 
     if (isPublic) {
       // 1a. Public: store raw bytes, write storageId as plaintext on-chain.
@@ -212,30 +212,30 @@ export class DStorage implements DStorageContext {
     });
 
     if (isPublic) {
-      // 3a. Public: no content DEK needed, but generate a random ownerSeed so that
-      // any provider can independently re-derive the ownerSecret (mirrors private DEK handling).
-      // The owner secret is only needed for chain reference management; skip the
-      // check in storage-only mode (no chain adapter).
-      if (this.config.chainAdapter && this._encryptionProviders.length === 0) {
-        throw new Error(
-          "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
-            "Without a provider there is no owner secret, so the reference " +
-            "could never be removed or updated.",
+      // 3a. Public: no content DEK needed. Key envelope and ownerSecret are only
+      // needed for on-chain reference management — skip in storage-only mode.
+      if (this.config.chainAdapter) {
+        if (this._encryptionProviders.length === 0) {
+          throw new Error(
+            "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
+              "Without a provider there is no owner secret, so the reference " +
+              "could never be removed or updated.",
+          );
+        }
+        const ownerSeed = generateDek();
+        const ownerSeedWrappers = await Promise.all(
+          this._encryptionProviders.map(async (provider) => ({
+            wrapKeyName: provider.name,
+            ...(await provider.wrapDek(ownerSeed)),
+          })),
+        );
+        keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(ownerSeedWrappers));
+        ownerSecret = await deriveOwnerSecret(
+          ownerSeed,
+          new TextEncoder().encode(storageResult.id),
+          "dstorage:owner-secret:public:v1",
         );
       }
-      const ownerSeed = generateDek();
-      const ownerSeedWrappers = await Promise.all(
-        this._encryptionProviders.map(async (provider) => ({
-          wrapKeyName: provider.name,
-          ...(await provider.wrapDek(ownerSeed)),
-        })),
-      );
-      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(ownerSeedWrappers));
-      ownerSecret = await deriveOwnerSecret(
-        ownerSeed,
-        new TextEncoder().encode(storageResult.id),
-        "dstorage:owner-secret:public:v1",
-      );
       // Write storageId as-is on-chain.
       onChainStorageId = storageResult.id;
     } else {
@@ -301,6 +301,7 @@ export class DStorage implements DStorageContext {
       storageProvider: storageResult.provider,
       uploadedAt: storageResult.uploadedAt,
       encryptionScheme,
+      ...(uploadScheme ? { cryptoScheme: uploadScheme } : {}),
       costEstimate: { storageCost, fileSizeBytes: uploadData.length },
     };
   }
@@ -313,13 +314,16 @@ export class DStorage implements DStorageContext {
    *
    * @param storageId  The storageId returned from upload()
    */
-  async retrieveByStorageId(storageId: string): Promise<RetrieveResult> {
+  async retrieveByStorageId(
+    storageId: string,
+    dekScheme?: CryptoScheme,
+  ): Promise<RetrieveResult> {
     this.assertConnected();
 
     // 1. Fetch blob from storage
     const rawBytes = await this.config.storageAdapter.retrieve(storageId);
 
-    return this._decryptAndReassemble(rawBytes, storageId);
+    return this._decryptAndReassemble(rawBytes, storageId, dekScheme);
   }
 
   /**
@@ -519,8 +523,7 @@ export class DStorage implements DStorageContext {
       storageId = await dekScheme.decryptStorageId(ref.storageId);
     }
 
-    const rawBytes = await this.config.storageAdapter.retrieve(storageId);
-    return this._decryptAndReassemble(rawBytes, storageId, dekScheme);
+    return await this.retrieveByStorageId(storageId, dekScheme);
   }
 
   /**
