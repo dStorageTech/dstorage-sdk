@@ -16,11 +16,11 @@ import { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
 import {
   createKeystore,
-  InMemoryTransactionHistoryStorage,
   PublicKey,
   type UnshieldedKeystore,
   UnshieldedWallet,
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
+import { InMemoryTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
 
