@@ -18,11 +18,11 @@ import { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
 import {
   createKeystore,
-  InMemoryTransactionHistoryStorage,
   PublicKey,
   type UnshieldedKeystore,
   UnshieldedWallet,
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
+import { NoOpTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
 
@@ -283,7 +283,7 @@ export class MidnightWalletProvider
           try {
             unshieldedWallet = UnshieldedWallet({
               ...cfg,
-              txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+              txHistoryStorage: new NoOpTransactionHistoryStorage(),
             }).restore(cache.unshielded);
             return unshieldedWallet;
           } catch (e) {
@@ -292,7 +292,7 @@ export class MidnightWalletProvider
         }
         unshieldedWallet = UnshieldedWallet({
           ...cfg,
-          txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+          txHistoryStorage: new NoOpTransactionHistoryStorage(),
         }).startWithPublicKey(PublicKey.fromKeyStore(keystore));
         return unshieldedWallet;
       },

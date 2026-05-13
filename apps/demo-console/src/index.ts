@@ -27,7 +27,7 @@ globalThis.WebSocket = WebSocket;
 
 import { randomBytes } from "node:crypto";
 import { stdin as input, stdout as output } from "node:process";
-import { createInterface } from "node:readline/promises";
+import { createInterface, type Interface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -96,6 +96,206 @@ async function withTicker<T>(
     return await fn();
   } finally {
     clearInterval(id);
+  }
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+
+function logError(label: string, err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  console.log(`\n  Error ${label}: ${msg}\n`);
+}
+
+function formatBytesForConsole(bytes: Uint8Array): string {
+  const looksLikeBinary = bytes.some((b) => b < 9 || (b > 13 && b < 32));
+  if (looksLikeBinary) {
+    const preview = Buffer.from(bytes.slice(0, 64)).toString("hex");
+    const ellipsis = bytes.byteLength > 64 ? "…" : "";
+    return [
+      `\n  ✓ Retrieved (binary, ${bytes.byteLength} bytes)`,
+      `  Hex preview (first 64 bytes): ${preview}${ellipsis}`,
+      "",
+    ].join("\n");
+  }
+  const decoded = new TextDecoder().decode(bytes);
+  const preview = decoded.slice(0, 512);
+  const truncated = decoded.length > 512 ? "…" : "";
+  return [
+    `\n  ✓ Retrieved (${bytes.byteLength} bytes):`,
+    "  ─────────────────────────────────────",
+    `  ${preview}${truncated}`,
+    "  ─────────────────────────────────────",
+    "",
+  ].join("\n");
+}
+
+// ── Action handlers ────────────────────────────────────────────────────────────
+
+async function listReferences(
+  sdk: DStorage,
+  chainAdapter: MidnightChainAdapter,
+): Promise<void> {
+  try {
+    const refs = await sdk.listReferences();
+    console.log(
+      `\n  Stored references on contract ${chainAdapter.getContractAddress()}: ${refs.length}`,
+    );
+    if (refs.length === 0) {
+      console.log("  (none)\n");
+      return;
+    }
+    for (let i = 0; i < refs.length; i += 1) {
+      const ref = refs[i]!;
+      const scheme = ref.encryptionScheme || null;
+      console.log(`  [${i + 1}] refId = ${ref.refId}`);
+      console.log(`      storageProvider  = ${ref.storageProvider}`);
+      console.log(
+        `      encryptionScheme = ${scheme ?? "(public/unencrypted)"}`,
+      );
+      console.log(
+        `      storageId        = ${ref.storageId ?? "(cannot decrypt it)"}`,
+      );
+      console.log(`      isOurs           = ${ref.isOurs ? "Yes" : "No"}`);
+    }
+    console.log("");
+  } catch (err) {
+    logError("listing references", err);
+  }
+}
+
+async function retrieveByRefId(sdk: DStorage, rl: Interface): Promise<void> {
+  const refId = (await rl.question("  Enter refId to retrieve: ")).trim();
+  if (!refId) {
+    console.log("  (cancelled)\n");
+    return;
+  }
+
+  try {
+    console.log(`\n  Resolving on-chain reference for refId: ${refId}`);
+    const result = await withTicker(
+      () => "Fetching reference from chain and retrieving from storage...",
+      () => sdk.retrieveByRefId(refId),
+    );
+
+    const outputPath = (
+      await rl.question("  Save to file (leave blank to print to console): ")
+    ).trim();
+
+    if (outputPath) {
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(outputPath, result.bytes);
+      console.log(`\n  ✓ Retrieved and saved to: ${outputPath}`);
+      console.log(`  Size: ${result.bytes.byteLength} bytes\n`);
+    } else {
+      console.log(formatBytesForConsole(result.bytes));
+    }
+  } catch (err) {
+    logError("during retrieve", err);
+  }
+}
+
+async function removeReference(
+  sdk: DStorage,
+  chainAdapter: MidnightChainAdapter,
+  rl: Interface,
+): Promise<void> {
+  const refId = (
+    await rl.question("  Enter refId to remove (or leave blank to cancel): ")
+  ).trim();
+  if (!refId) {
+    console.log("  (cancelled)\n");
+    return;
+  }
+
+  try {
+    console.log(`\n  Looking up reference ${refId}…`);
+    const ref = await chainAdapter.readReference(refId);
+    console.log(`     refId:         ${refId}`);
+    console.log(`  storageProvider:  ${ref.storageProvider}`);
+    console.log(
+      `  encryptionScheme: ${ref.encryptionScheme ?? "(public/unencrypted)"}`,
+    );
+    console.log(`  storageId:        ${ref.storageId ?? "(cannot decrypt)"}`);
+    console.log(`  writtenAt:        ${new Date(ref.writtenAt).toISOString()}`);
+    console.log(`     isOurs:        ${ref.isOurs ? "Yes" : "No"}\n`);
+  } catch (err) {
+    logError("reading reference", err);
+    return;
+  }
+
+  const confirmInput = (await rl.question("  Remove this reference? [y/N]: "))
+    .trim()
+    .toLowerCase();
+  if (confirmInput !== "y" && confirmInput !== "yes") {
+    console.log("  (cancelled)\n");
+    return;
+  }
+
+  try {
+    await withTicker(
+      () => "Submitting remove reference transaction…",
+      () => sdk.removeReference(refId),
+    );
+    console.log("\n  ✓ Reference removed.\n");
+  } catch (err) {
+    logError("removing reference", err);
+  }
+}
+
+async function uploadFile(
+  sdk: DStorage,
+  storageAdapter: ArweaveLocalStorageAdapter,
+  chainAdapter: MidnightChainAdapter,
+  rl: Interface,
+): Promise<void> {
+  const filePath = (
+    await rl.question("File path to upload (or leave blank to cancel): ")
+  ).trim();
+  if (!filePath) return;
+
+  let fileContent: Uint8Array;
+  try {
+    const buf = await readFile(filePath);
+    fileContent = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  } catch (err) {
+    logError("reading file", err);
+    return;
+  }
+
+  const visibilityInput = (
+    await rl.question("  Upload as [1=private (default), 2=public]: ")
+  ).trim();
+  const isPublic =
+    visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
+
+  console.log(
+    `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes) [${isPublic ? "public" : "private"}]`,
+  );
+  console.log(
+    `  Uploading to ${storageAdapter.name} storage and writing on-chain (${chainAdapter.name}) reference...`,
+  );
+
+  try {
+    const result = await withTicker(
+      () => "Generating ZK proof and submitting reference...",
+      () => sdk.upload(fileContent, { isPublic }),
+    );
+
+    const visibility = result.encryptionScheme
+      ? "private (encrypted)"
+      : "public (unencrypted)";
+    console.log("\n  ✓ Upload complete!");
+    console.log(`  refId:            ${result.chainRefId}`);
+    console.log(`  storageId:        ${result.storageId}`);
+    console.log(`  storageProvider:  ${result.storageProvider}`);
+    console.log(`  chainProvider:    ${result.chainProvider}`);
+    console.log(`  encryptionScheme: ${result.encryptionScheme || "(none)"}`);
+    console.log(`  visibility:       ${visibility}`);
+    console.log(
+      `  uploadedAt:       ${new Date(result.uploadedAt).toISOString()}\n`,
+    );
+  } catch (err) {
+    logError("during upload", err);
   }
 }
 
@@ -338,7 +538,7 @@ async function main(): Promise<void> {
     );
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
-    // ── 9. Display addresses and balances ───────────────────────────────────
+    // ── 10. Display addresses and balances ──────────────────────────────────
     const addresses = chainAdapter.getAddresses();
     console.log("\nWallet addresses:");
     console.log(`  Unshielded: ${addresses.unshielded}`);
@@ -367,7 +567,7 @@ async function main(): Promise<void> {
       }
     }
 
-    // ── 10. Action loop: upload files or list DataRegistry references ──────
+    // ── 11. Action loop ─────────────────────────────────────────────────────
 
     console.log(
       "\n─── Actions ──────────────────────────────────────────────────────────",
@@ -398,214 +598,14 @@ async function main(): Promise<void> {
         action.toLowerCase() === "quit"
       ) {
         done = true;
-        continue;
-      }
-
-      if (action === "2" || action.toLowerCase() === "list") {
-        try {
-          const refs = await sdk.listReferences();
-          console.log(
-            `\n  Stored references on contract ${chainAdapter.getContractAddress()}: ${refs.length}`,
-          );
-          if (refs.length === 0) {
-            console.log("  (none)\n");
-            continue;
-          }
-          for (let i = 0; i < refs.length; i += 1) {
-            const ref = refs[i]!;
-            const scheme = ref.encryptionScheme || null;
-            console.log(`  [${i + 1}] refId = ${ref.refId}`);
-            console.log(`      storageProvider  = ${ref.storageProvider}`);
-            console.log(
-              `      encryptionScheme = ${scheme ?? "(public/unencrypted)"}`,
-            );
-            console.log(
-              `      storageId        = ${ref.storageId ?? "(cannot decrypt it)"}`,
-            );
-            console.log(
-              `      isOurs           = ${ref.isOurs ? "Yes" : "No"}`,
-            );
-          }
-          console.log("");
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.log(`\n  Error listing references: ${msg}\n`);
-        }
-        continue;
-      }
-
-      if (action === "3" || action.toLowerCase() === "retrieve") {
-        const refId = (await rl.question("  Enter refId to retrieve: ")).trim();
-        if (!refId) {
-          console.log("  (cancelled)\n");
-          continue;
-        }
-
-        try {
-          console.log(`\n  Resolving on-chain reference for refId: ${refId}`);
-          const result = await withTicker(
-            () =>
-              "Fetching reference from chain and retrieving from storage...",
-            () => sdk.retrieveByRefId(refId),
-          );
-
-          const outputPath = (
-            await rl.question(
-              "  Save to file (leave blank to print to console): ",
-            )
-          ).trim();
-
-          if (outputPath) {
-            const { writeFile } = await import("node:fs/promises");
-            await writeFile(outputPath, result.bytes);
-            console.log(`\n  ✓ Retrieved and saved to: ${outputPath}`);
-            console.log(`  Size: ${result.bytes.byteLength} bytes\n`);
-          } else {
-            // Print as text; if it looks like binary data, show a hex preview
-            const looksLikeBinary = result.bytes.some(
-              (b) => b < 9 || (b > 13 && b < 32),
-            );
-            if (looksLikeBinary) {
-              const preview = Buffer.from(result.bytes.slice(0, 64)).toString(
-                "hex",
-              );
-              console.log(
-                `\n  ✓ Retrieved (binary, ${result.bytes.byteLength} bytes)`,
-              );
-              console.log(
-                `  Hex preview (first 64 bytes): ${preview}${result.bytes.byteLength > 64 ? "…" : ""}\n`,
-              );
-            } else {
-              const decoded = new TextDecoder().decode(result.bytes);
-              const preview = decoded.slice(0, 512);
-              const truncated = decoded.length > 512 ? "…" : "";
-              console.log(
-                `\n  ✓ Retrieved (${result.bytes.byteLength} bytes):`,
-              );
-              console.log("  ─────────────────────────────────────");
-              console.log(`  ${preview}${truncated}`);
-              console.log("  ─────────────────────────────────────\n");
-            }
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.log(`\n  Error during retrieve: ${msg}\n`);
-        }
-        continue;
-      }
-
-      if (action === "4" || action.toLowerCase() === "remove") {
-        const refId = (
-          await rl.question(
-            "  Enter refId to remove (or leave blank to cancel): ",
-          )
-        ).trim();
-        if (!refId) {
-          console.log("  (cancelled)\n");
-          continue;
-        }
-
-        try {
-          console.log(`\n  Looking up reference ${refId}…`);
-          const ref = await chainAdapter.readReference(refId);
-          console.log(`     refId:         ${refId}`);
-          console.log(`  storageProvider:  ${ref.storageProvider}`);
-          console.log(
-            `  encryptionScheme: ${ref.encryptionScheme ?? "(public/unencrypted)"}`,
-          );
-          console.log(
-            `  storageId:        ${ref.storageId ?? "(cannot decrypt)"}`,
-          );
-          console.log(
-            `  writtenAt:        ${new Date(ref.writtenAt).toISOString()}`,
-          );
-          console.log(`     isOurs:        ${ref.isOurs ? "Yes" : "No"}\n`);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.log(`\n  Error reading reference: ${msg}\n`);
-          continue;
-        }
-
-        const confirmInput = (
-          await rl.question("  Remove this reference? [y/N]: ")
-        )
-          .trim()
-          .toLowerCase();
-        if (confirmInput !== "y" && confirmInput !== "yes") {
-          console.log("  (cancelled)\n");
-          continue;
-        }
-
-        try {
-          await withTicker(
-            () => "Submitting remove reference transaction…",
-            () => sdk.removeReference(refId),
-          );
-          console.log("\n  ✓ Reference removed.\n");
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.log(`\n  Error removing reference: ${msg}\n`);
-        }
-        continue;
-      }
-
-      const filePath = (
-        await rl.question("File path to upload (or leave blank to cancel): ")
-      ).trim();
-      if (!filePath) continue;
-
-      // Read file from disk
-      let fileContent: Uint8Array;
-      try {
-        const buf = await readFile(filePath);
-        fileContent = new Uint8Array(
-          buf.buffer,
-          buf.byteOffset,
-          buf.byteLength,
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.log(`  Error reading file: ${msg}`);
-        continue;
-      }
-
-      const visibilityInput = (
-        await rl.question("  Upload as [1=private (default), 2=public]: ")
-      ).trim();
-      const isPublic =
-        visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
-
-      console.log(
-        `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes) [${isPublic ? "public" : "private"}]`,
-      );
-      console.log(
-        `  Uploading to ${storageAdapter.name} storage and writing on-chain (${chainAdapter.name}) reference...`,
-      );
-
-      try {
-        const result = await withTicker(
-          () => "Generating ZK proof and submitting reference...",
-          () => sdk.upload(fileContent, { isPublic }),
-        );
-
-        const visibility = result.encryptionScheme
-          ? "private (encrypted)"
-          : "public (unencrypted)";
-        console.log("\n  ✓ Upload complete!");
-        console.log(`  refId:            ${result.chainRefId}`);
-        console.log(`  storageId:        ${result.storageId}`);
-        console.log(`  storageProvider:  ${result.storageProvider}`);
-        console.log(`  chainProvider:    ${result.chainProvider}`);
-        console.log(
-          `  encryptionScheme: ${result.encryptionScheme || "(none)"}`,
-        );
-        console.log(`  visibility:       ${visibility}`);
-        console.log(
-          `  uploadedAt:       ${new Date(result.uploadedAt).toISOString()}\n`,
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.log(`\n  Error during upload: ${msg}\n`);
+      } else if (action === "2" || action.toLowerCase() === "list") {
+        await listReferences(sdk, chainAdapter);
+      } else if (action === "3" || action.toLowerCase() === "retrieve") {
+        await retrieveByRefId(sdk, rl);
+      } else if (action === "4" || action.toLowerCase() === "remove") {
+        await removeReference(sdk, chainAdapter, rl);
+      } else {
+        await uploadFile(sdk, storageAdapter, chainAdapter, rl);
       }
     }
 
