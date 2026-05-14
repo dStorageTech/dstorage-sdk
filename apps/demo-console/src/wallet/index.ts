@@ -102,10 +102,18 @@ export async function initWallet(
       "Managed payment mode — skipping wallet sync and NIGHT balance check.",
     );
   } else {
-    await ticker(
-      () => "Syncing wallet...",
-      () => syncWallet(walletProvider.wallet, 2_000, 3_600_000),
-    );
+    const SAVE_INTERVAL_MS = 30_000;
+    const saveInterval = setInterval(() => {
+      void walletProvider.saveState();
+    }, SAVE_INTERVAL_MS);
+    try {
+      await ticker(
+        () => "Syncing wallet...",
+        () => syncWallet(walletProvider.wallet, 2_000, 3_600_000),
+      );
+    } finally {
+      clearInterval(saveInterval);
+    }
     await ticker(
       () => "Caching wallet state...",
       () => walletProvider.saveState(),
