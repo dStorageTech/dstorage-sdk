@@ -602,11 +602,15 @@ The `encryptionScheme` field is stored on-chain alongside the reference. On read
 
 | Label      | Value                         | Purpose                                                      |
 | ---------- | ----------------------------- | ------------------------------------------------------------ |
-| Payload    | `"dstorage:payload:v1"`       | Single-shot file uploads and chunked manifests               |
+| Payload    | `"dstorage:payload:v1"`       | Single-shot file uploads (non-chunked user content)          |
+| Manifest   | `"dstorage:manifest:v1"`      | The chunked upload manifest (distinct from user content)     |
 | Chunk      | `"dstorage:chunk:v1:<i>/<n>"` | Each chunk in a chunked upload, bound to its index and total |
 | Storage ID | `"dstorage:storageId:v1"`     | The storage pointer encrypted on-chain                       |
 
-This means a ciphertext produced for one role cannot be silently substituted into another. In particular, a storage gateway that reorders or swaps chunk blobs will cause the affected chunk's decryption to throw rather than reassemble silently corrupted data — because the MAC was computed with a different index label than the one the SDK expects.
+This means a ciphertext produced for one role cannot be silently substituted into another. In particular:
+
+- A storage gateway that reorders or swaps chunk blobs causes decryption to throw — the MAC was computed with a different index label.
+- A user file whose plaintext happens to look like a manifest JSON cannot be misinterpreted as one — a payload ciphertext (encrypted with `"dstorage:payload:v1"`) will fail MAC verification when the SDK attempts to decrypt it as a manifest (with `"dstorage:manifest:v1"`). Manifest detection is cryptographic, not JSON-shape-based.
 
 ### Storage ID format
 

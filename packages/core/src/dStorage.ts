@@ -41,7 +41,7 @@ import type {
   UploadResult,
   WalletInfo,
 } from "./types.js";
-import { PAYLOAD_AAD, chunkAad } from "./types.js";
+import { PAYLOAD_AAD, MANIFEST_AAD, chunkAad } from "./types.js";
 import { MetaTx } from "./metaTx/index.js";
 import type {
   DStorageContext,
@@ -436,31 +436,59 @@ export class DStorage implements DStorageContext {
   ): Promise<RetrieveResult> {
     const scheme: CryptoScheme | null = dekScheme ?? null;
 
-    // 2. Decrypt if content is private; return raw bytes if public.
-    let decryptedBytes = rawBytes;
+    // 2. Decrypt and dispatch on content type.
     if (scheme) {
+      // Private upload: use AAD to distinguish manifest from raw payload.
+      // Try MANIFEST_AAD first — Poly1305 auth failure means it is not a manifest.
+      // This is cryptographic, not JSON-shape-based, so a crafted user file whose
+      // plaintext looks like a manifest cannot be mistaken for one.
+      let manifestBytes: Uint8Array | null = null;
       try {
-        decryptedBytes = await scheme.decryptPayload(rawBytes, PAYLOAD_AAD);
-        this.logger?.log(
-          "dStorage",
-          `Data decrypted successfully: ${decryptedBytes.byteLength} bytes`,
-        );
-      } catch (err) {
-        throw new Error(`[dStorage] Failed to decrypt payload: ${err}`);
+        manifestBytes = await scheme.decryptPayload(rawBytes, MANIFEST_AAD);
+      } catch {
+        // Not a manifest — expected for all non-chunked uploads.
       }
-    }
 
-    // 3. Detect chunked manifest and reassemble transparently.
-    try {
-      const parsed: unknown = JSON.parse(
-        new TextDecoder().decode(decryptedBytes),
-      );
-      if (isManifest(parsed)) {
+      if (manifestBytes !== null) {
+        const parsed: unknown = JSON.parse(
+          new TextDecoder().decode(manifestBytes),
+        );
+        if (!isManifest(parsed)) {
+          throw new Error(
+            "[dStorage] Payload authenticated as manifest but has invalid structure",
+          );
+        }
         this.logger?.log(
           "dStorage",
           `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
         );
         return this._retrieveChunked(parsed, scheme);
+      }
+
+      // Not a manifest — decrypt as regular payload.
+      let decryptedBytes: Uint8Array;
+      try {
+        decryptedBytes = await scheme.decryptPayload(rawBytes, PAYLOAD_AAD);
+      } catch (err) {
+        throw new Error(`[dStorage] Failed to decrypt payload: ${err}`);
+      }
+
+      this.logger?.log(
+        "dStorage",
+        `Retrieved by refId → storageId: ${storageId}`,
+      );
+      return { bytes: decryptedBytes, metadata: {} };
+    }
+
+    // Public upload (no encryption): fall back to JSON shape detection for manifests.
+    try {
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(rawBytes));
+      if (isManifest(parsed)) {
+        this.logger?.log(
+          "dStorage",
+          `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
+        );
+        return this._retrieveChunked(parsed, null);
       }
     } catch {
       // Not JSON — treat as raw content, fall through.
@@ -472,7 +500,7 @@ export class DStorage implements DStorageContext {
     );
 
     return {
-      bytes: decryptedBytes,
+      bytes: rawBytes,
       metadata: {},
     };
   }
@@ -841,7 +869,7 @@ export class DStorage implements DStorageContext {
     } else {
       manifestData = await uploadScheme!.encryptPayload(
         manifestBytes,
-        PAYLOAD_AAD,
+        MANIFEST_AAD,
       );
     }
 

@@ -151,8 +151,16 @@ export interface RetrieveResult {
 
 const _aadEnc = new TextEncoder();
 
-/** AAD for single-shot payload and manifest encryption. */
+/** AAD for single-shot payload encryption (non-chunked user content). */
 export const PAYLOAD_AAD: Uint8Array = _aadEnc.encode("dstorage:payload:v1");
+
+/**
+ * AAD for chunked manifest encryption.
+ * Using a distinct label from PAYLOAD_AAD means a ciphertext produced for a
+ * manifest cannot decrypt successfully under PAYLOAD_AAD and vice versa —
+ * manifest detection is cryptographic, not based on JSON shape inspection.
+ */
+export const MANIFEST_AAD: Uint8Array = _aadEnc.encode("dstorage:manifest:v1");
 
 /**
  * Per-chunk AAD that binds a ciphertext to its position in a chunked upload.

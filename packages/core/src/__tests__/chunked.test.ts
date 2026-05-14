@@ -352,3 +352,57 @@ describe("security: manifest structural validation", () => {
     );
   });
 });
+
+// ── Security: manifest detection by JSON shape ────────────────────────────────
+//
+// The SDK must not misinterpret a user file as a chunked manifest just because
+// its plaintext happens to parse as JSON with the manifest shape. An attacker
+// who uploads a crafted payload (or tricks a victim into uploading one) could
+// redirect retrieval to attacker-controlled storageIds. The SDK must distinguish
+// "this is a manifest produced by _uploadChunked" from "this is a user file that
+// looks like a manifest".
+
+describe("security: manifest shape in user content is not misinterpreted", () => {
+  /** Build a valid-looking manifest JSON as raw bytes. */
+  function craftedManifestBytes(storageId: string): Uint8Array {
+    const manifest = {
+      v: 1,
+      type: "dstorage-chunked-manifest",
+      totalSize: 10,
+      chunkSize: CHUNK_SIZE,
+      chunkCount: 1,
+      provider: "mock",
+      chunks: [{ index: 0, storageId, size: 10 }],
+    };
+    return new TextEncoder().encode(JSON.stringify(manifest));
+  }
+
+  it("uploading a file whose content is a manifest JSON round-trips as raw bytes", async () => {
+    const ds = await makeInitedDStorage();
+
+    // Upload a file whose plaintext looks exactly like a manifest.
+    const payload = craftedManifestBytes("attacker-controlled-id");
+    const { chainRefId } = await ds.upload(payload);
+
+    // Retrieval must return the original bytes, not attempt chunk reassembly.
+    const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
+    expect(retrieved).toEqual(payload);
+  });
+
+  it("manifest-shaped content does not trigger a fetch to the embedded storageId", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = await makeInitedDStorage(config);
+
+    const sentinelId = "attacker-controlled-id-sentinel";
+    const payload = craftedManifestBytes(sentinelId);
+    const { chainRefId } = await ds.upload(payload);
+
+    const retrieveSpy = vi.spyOn(storage, "retrieve");
+    await ds.retrieveByRefId(chainRefId);
+
+    // The sentinel ID must never have been passed to retrieve().
+    const calledIds = retrieveSpy.mock.calls.map((c) => c[0]);
+    expect(calledIds).not.toContain(sentinelId);
+  });
+});
