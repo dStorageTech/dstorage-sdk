@@ -598,6 +598,16 @@ The `encryptionScheme` field is stored on-chain alongside the reference. On read
 
 **Authenticated Encryption with Associated Data (AEAD)**. The Poly1305 tag (XChaCha) covers the ciphertext. Any bit-flip in the on-chain encrypted pointer causes decryption to throw before the SDK ever attempts to fetch from storage.
 
+**AAD context binding**. Beyond integrity, each ciphertext is bound to its _role and position_ via Additional Authenticated Data (AAD). The AAD is not encrypted — it is a plain label passed alongside the ciphertext — but the Poly1305 MAC covers it, so any mismatch causes decryption to fail. The SDK uses three distinct labels:
+
+| Label      | Value                         | Purpose                                                      |
+| ---------- | ----------------------------- | ------------------------------------------------------------ |
+| Payload    | `"dstorage:payload:v1"`       | Single-shot file uploads and chunked manifests               |
+| Chunk      | `"dstorage:chunk:v1:<i>/<n>"` | Each chunk in a chunked upload, bound to its index and total |
+| Storage ID | `"dstorage:storageId:v1"`     | The storage pointer encrypted on-chain                       |
+
+This means a ciphertext produced for one role cannot be silently substituted into another. In particular, a storage gateway that reorders or swaps chunk blobs will cause the affected chunk's decryption to throw rather than reassemble silently corrupted data — because the MAC was computed with a different index label than the one the SDK expects.
+
 ### Storage ID format
 
 All storage IDs are 43-character base64url strings — 32 random bytes encoded without padding. This matches the Arweave transaction ID format and guarantees a fixed-width 32-byte plaintext input for the storageId encryption functions.

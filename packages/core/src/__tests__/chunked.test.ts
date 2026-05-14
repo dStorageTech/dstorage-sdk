@@ -19,7 +19,7 @@ import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
-import { isManifest } from "../chunked.js";
+import { isManifest, type ChunkManifest } from "../chunked.js";
 import type { DStorageConfig } from "../types.js";
 
 // Must match the mocked value above.
@@ -224,5 +224,131 @@ describe("chunked upload via init() with encryptionSeedProvider", () => {
     const { chainRefId } = await ds.upload(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
+  });
+});
+
+// ── Security: chunk-index AAD binding ─────────────────────────────────────────
+//
+// A malicious gateway that swaps the bytes stored at two chunk storageIds must
+// be detected. With per-chunk AAD (chunkAad(i, n)), decrypting chunk i with
+// the ciphertext that was encrypted for chunk j (i≠j) fails the Poly1305 auth
+// check and throws — silently corrupt data cannot reach the caller.
+
+describe("security: chunk AAD binding catches gateway swap", () => {
+  it("swapping two chunks in storage causes decryption to throw", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+
+    // Spy on upload to record IDs in upload order (chunks first, manifest last).
+    const uploadedIds: string[] = [];
+    const origUpload = storage.upload.bind(storage);
+    vi.spyOn(storage, "upload").mockImplementation(async (data, meta) => {
+      const result = await origUpload(data, meta);
+      uploadedIds.push(result.id);
+      return result;
+    });
+
+    const ds = await makeInitedDStorage(config);
+    const bytes = makeBytes(CHUNK_SIZE * 3); // 3 chunks + 1 manifest
+    await ds.upload(bytes);
+
+    // uploadedIds = [chunk0, chunk1, chunk2, manifest]
+    // Swap chunk0 and chunk1 bytes — same DEK, wrong position.
+    const [id0, id1] = uploadedIds;
+    if (!id0 || !id1) throw new Error("expected at least 2 uploaded blobs");
+
+    const bytes0 = storage.get(id0)!;
+    const bytes1 = storage.get(id1)!;
+    storage.set(id0, bytes1);
+    storage.set(id1, bytes0);
+
+    // Re-create ds from the same config so it uses the tampered storage.
+    const ds2 = new DStorage(config);
+    await ds2.init();
+    const refs = await ds2.listReferences();
+    const refId = refs[0]?.refId;
+    if (!refId) throw new Error("no reference found");
+
+    // Retrieval must fail with an auth error, not return silently corrupted data.
+    await expect(ds2.retrieveByRefId(refId)).rejects.toThrow(
+      /Failed to decrypt chunk|decrypt/i,
+    );
+  });
+});
+
+// ── Security: manifest structural validation ───────────────────────────────────
+//
+// _retrieveChunked must reject manifests that are structurally invalid:
+// wrong count, duplicate indices, missing indices, totalSize overflow.
+// Uses public uploads so the manifest is stored as plaintext for easy tampering.
+// The manifest storageId is known from the upload result, so we tamper it
+// directly without needing to search the shared memoryStore.
+
+describe("security: manifest structural validation", () => {
+  /** Upload a public chunked file, tamper its manifest blob in-place, return
+   *  a fresh DStorage instance pointing at the tampered storage. */
+  async function uploadAndTamperManifest(
+    tamper: (m: ChunkManifest) => ChunkManifest,
+  ) {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = await makeInitedDStorage(config);
+
+    // Public upload — manifest stored as plaintext, easy to tamper.
+    const bytes = makeBytes(CHUNK_SIZE * 2 + 10);
+    // storageId is the manifest's storageId (the on-chain pointer).
+    const { chainRefId, storageId } = await ds.upload(bytes, {
+      isPublic: true,
+    });
+
+    const raw = storage.get(storageId)!;
+    const manifest = JSON.parse(new TextDecoder().decode(raw)) as ChunkManifest;
+    const tampered = tamper(manifest);
+    storage.set(storageId, new TextEncoder().encode(JSON.stringify(tampered)));
+
+    return { ds, chainRefId };
+  }
+
+  it("rejects manifest where chunks.length < chunkCount", async () => {
+    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+      ...m,
+      chunkCount: m.chunks.length + 1, // claim one more chunk than present
+    }));
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
+      /declares.*chunks.*contains|contains.*entries/i,
+    );
+  });
+
+  it("rejects manifest with duplicate chunk index", async () => {
+    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+      ...m,
+      chunks: m.chunks.map((c, i) => (i === 1 ? { ...c, index: 0 } : c)),
+    }));
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
+      /not contiguous|expected index/i,
+    );
+  });
+
+  it("rejects manifest with a missing chunk index (gap)", async () => {
+    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+      ...m,
+      // shift last chunk index to leave a gap: 0, 2 instead of 0, 1
+      chunks: m.chunks.map((c, i) =>
+        i === m.chunks.length - 1 ? { ...c, index: c.index + 1 } : c,
+      ),
+    }));
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
+      /not contiguous|expected index/i,
+    );
+  });
+
+  it("rejects manifest where chunk data overflows declared totalSize", async () => {
+    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+      ...m,
+      totalSize: 1, // shrink so real chunks overflow it
+    }));
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
+      /overflows|Reassembled|totalSize/i,
+    );
   });
 });

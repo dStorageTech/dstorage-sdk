@@ -26,6 +26,7 @@ import type {
   MetaTxStepState,
 } from "./types.js";
 import { buildInitialSteps, readFileAsBytes, truncateId } from "./utils.js";
+import { PAYLOAD_AAD } from "../types.js";
 
 export class MetaTx {
   private sdk: DStorageContext;
@@ -72,7 +73,7 @@ export class MetaTx {
       // Generate a fresh DEK for this upload (or no-op for public).
       const uploadCrypto = await this.sdk.prepareUploadCrypto();
       const uploadData = uploadCrypto.uploadScheme
-        ? await uploadCrypto.uploadScheme.encryptPayload(fileBytes)
+        ? await uploadCrypto.uploadScheme.encryptPayload(fileBytes, PAYLOAD_AAD)
         : fileBytes;
 
       // Let's create a human-readable file size, e.g. "1.2 MB" or "340.0 KB"

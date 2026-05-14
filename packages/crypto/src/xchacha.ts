@@ -117,6 +117,13 @@ export async function deriveSymmetricKeyFromSeed(
   return new Uint8Array(bits);
 }
 
+// ── AAD ───────────────────────────────────────────────────────────────────────
+
+/** Internal AAD for on-chain storageId encryption — not exposed to callers. */
+const STORAGE_ID_AAD: Uint8Array = new TextEncoder().encode(
+  "dstorage:storageId:v1",
+);
+
 // ── Core encryption / decryption ──────────────────────────────────────────────
 
 /**
@@ -126,13 +133,15 @@ export async function deriveSymmetricKeyFromSeed(
  *
  * @param key   32-byte symmetric key from deriveSymmetricKeyFromSeed()
  * @param data  Arbitrary plaintext bytes
+ * @param aad   Additional authenticated data bound to the ciphertext (recommended)
  */
 export async function encryptXChaCha(
   key: Uint8Array,
   data: Uint8Array,
+  aad?: Uint8Array,
 ): Promise<XChaChaPayload> {
   const nonce = getCrypto().getRandomValues(new Uint8Array(24));
-  const ciphertext = xchacha20poly1305(key, nonce).encrypt(data);
+  const ciphertext = xchacha20poly1305(key, nonce, aad).encrypt(data);
   return {
     ciphertext: bufferToBase64(ciphertext),
     nonce: bufferToBase64(nonce),
@@ -142,18 +151,22 @@ export async function encryptXChaCha(
 
 /**
  * Decrypt a payload produced by encryptXChaCha().
+ * The `aad` must match exactly what was passed to encryptXChaCha() — the Poly1305
+ * auth tag covers the AAD, so any mismatch causes decryption to throw.
  *
  * @param key      32-byte symmetric key (must match the key used to encrypt)
  * @param payload  XChaChaPayload from encryptXChaCha()
- * @throws If Poly1305 auth tag verification fails (wrong key or tampered data)
+ * @param aad      Must match the AAD used during encryption
+ * @throws If Poly1305 auth tag verification fails (wrong key, tampered data, or wrong AAD)
  */
 export async function decryptXChaCha(
   key: Uint8Array,
   payload: XChaChaPayload,
+  aad?: Uint8Array,
 ): Promise<Uint8Array> {
   const nonce = base64ToBytes(payload.nonce);
   const ciphertext = base64ToBytes(payload.ciphertext);
-  return xchacha20poly1305(key, nonce).decrypt(ciphertext);
+  return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
 }
 
 // ── On-chain storageId encryption ─────────────────────────────────────────────
@@ -181,7 +194,9 @@ export async function encryptStorageIdXChaCha(
   storageIdBytes: Uint8Array,
 ): Promise<Uint8Array> {
   const nonce = getCrypto().getRandomValues(new Uint8Array(24));
-  const encrypted = xchacha20poly1305(key, nonce).encrypt(storageIdBytes);
+  const encrypted = xchacha20poly1305(key, nonce, STORAGE_ID_AAD).encrypt(
+    storageIdBytes,
+  );
   // xchacha20poly1305 appends the 16-byte Poly1305 tag to the output
   const ct = encrypted.slice(0, encrypted.length - 16);
   const tag = encrypted.slice(encrypted.length - 16);
@@ -218,7 +233,7 @@ export async function decryptStorageIdXChaCha(
   const ctWithTag = new Uint8Array(ct.length + tag.length);
   ctWithTag.set(ct, 0);
   ctWithTag.set(tag, ct.length);
-  return xchacha20poly1305(key, nonce).decrypt(ctWithTag);
+  return xchacha20poly1305(key, nonce, STORAGE_ID_AAD).decrypt(ctWithTag);
 }
 
 // ── Serialisation helpers ─────────────────────────────────────────────────────
@@ -289,19 +304,22 @@ export class XChaChaScheme implements CryptoScheme {
     return new XChaChaScheme(key);
   }
 
-  async encryptPayload(bytes: Uint8Array): Promise<Uint8Array> {
-    const payload = await encryptXChaCha(this.key, bytes);
+  async encryptPayload(
+    bytes: Uint8Array,
+    aad: Uint8Array,
+  ): Promise<Uint8Array> {
+    const payload = await encryptXChaCha(this.key, bytes, aad);
     return new TextEncoder().encode(serializeXChaChaPayload(payload));
   }
 
-  async decryptPayload(data: Uint8Array): Promise<Uint8Array> {
+  async decryptPayload(data: Uint8Array, aad: Uint8Array): Promise<Uint8Array> {
     const payload = deserializeXChaChaPayload(new TextDecoder().decode(data));
     if (!payload) {
       throw new Error(
         "[dStorage/crypto] XChaCha: payload is missing required fields.",
       );
     }
-    return decryptXChaCha(this.key, payload);
+    return decryptXChaCha(this.key, payload, aad);
   }
 
   async encryptStorageId(storageId: string): Promise<string> {

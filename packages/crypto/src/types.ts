@@ -57,14 +57,18 @@ export interface CryptoScheme {
   /**
    * Encrypt raw bytes and return a self-contained serialized payload
    * ready to be uploaded to off-chain storage.
+   *
+   * `aad` is bound into the Poly1305 auth tag and must match on decrypt.
+   * Use PAYLOAD_AAD for single-shot uploads and manifests; use chunkAad(i, n)
+   * for individual chunks so a malicious gateway cannot swap chunk order.
    */
-  encryptPayload(bytes: Uint8Array): Promise<Uint8Array>;
+  encryptPayload(bytes: Uint8Array, aad: Uint8Array): Promise<Uint8Array>;
 
   /**
    * Deserialize and decrypt a payload previously produced by encryptPayload().
-   * Throws if the payload format is invalid or decryption fails.
+   * Throws if the payload format is invalid, the auth tag fails, or the AAD mismatches.
    */
-  decryptPayload(data: Uint8Array): Promise<Uint8Array>;
+  decryptPayload(data: Uint8Array, aad: Uint8Array): Promise<Uint8Array>;
 
   /**
    * Encrypt a 43-char base64url storage ID (32 decoded bytes) for on-chain storage.

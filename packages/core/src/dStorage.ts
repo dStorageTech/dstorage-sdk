@@ -24,6 +24,7 @@ import {
   parseKeyEnvelope,
   deriveOwnerSecret,
 } from "@dstorage/crypto";
+
 import type { CryptoScheme } from "@dstorage/crypto";
 import type { UploadCrypto } from "./metaTx/index.js";
 import type { StorageAdapter } from "@dstorage/storage";
@@ -40,6 +41,7 @@ import type {
   UploadResult,
   WalletInfo,
 } from "./types.js";
+import { PAYLOAD_AAD, chunkAad } from "./types.js";
 import { MetaTx } from "./metaTx/index.js";
 import type {
   DStorageContext,
@@ -191,7 +193,7 @@ export class DStorage implements DStorageContext {
         "dStorage",
         `Encrypting content using scheme: ${encryptionScheme}`,
       );
-      uploadData = await uploadScheme.encryptPayload(bytes);
+      uploadData = await uploadScheme.encryptPayload(bytes, PAYLOAD_AAD);
 
       // Wrap DEK under every provider (enables decryption and ownerSecret re-derivation).
       const wrapperEntries = await Promise.all(
@@ -438,7 +440,7 @@ export class DStorage implements DStorageContext {
     let decryptedBytes = rawBytes;
     if (scheme) {
       try {
-        decryptedBytes = await scheme.decryptPayload(rawBytes);
+        decryptedBytes = await scheme.decryptPayload(rawBytes, PAYLOAD_AAD);
         this.logger?.log(
           "dStorage",
           `Data decrypted successfully: ${decryptedBytes.byteLength} bytes`,
@@ -775,7 +777,10 @@ export class DStorage implements DStorageContext {
       if (isPublic) {
         chunkData = chunk;
       } else {
-        chunkData = await uploadScheme!.encryptPayload(chunk);
+        chunkData = await uploadScheme!.encryptPayload(
+          chunk,
+          chunkAad(i, totalChunks),
+        );
       }
 
       onProgress?.({
@@ -834,7 +839,10 @@ export class DStorage implements DStorageContext {
     if (isPublic) {
       manifestData = manifestBytes;
     } else {
-      manifestData = await uploadScheme!.encryptPayload(manifestBytes);
+      manifestData = await uploadScheme!.encryptPayload(
+        manifestBytes,
+        PAYLOAD_AAD,
+      );
     }
 
     const manifestResult = await this.config.storageAdapter.upload(
@@ -942,10 +950,25 @@ export class DStorage implements DStorageContext {
     manifest: ChunkManifest,
     scheme: CryptoScheme | null = null,
   ): Promise<RetrieveResult> {
+    // Validate manifest integrity before touching storage.
+    if (manifest.chunks.length !== manifest.chunkCount) {
+      throw new Error(
+        `[dStorage] Manifest declares ${manifest.chunkCount} chunks but contains ${manifest.chunks.length} entries`,
+      );
+    }
+    const sorted = [...manifest.chunks].sort((a, b) => a.index - b.index);
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i]!.index !== i) {
+        throw new Error(
+          `[dStorage] Manifest chunk list is not contiguous: expected index ${i}, got ${sorted[i]!.index}`,
+        );
+      }
+    }
+
     const result = new Uint8Array(manifest.totalSize);
     let offset = 0;
 
-    for (const entry of manifest.chunks) {
+    for (const entry of sorted) {
       const rawChunkBytes = await this.config.storageAdapter.retrieve(
         entry.storageId,
       );
@@ -953,7 +976,12 @@ export class DStorage implements DStorageContext {
       let chunkBytes = rawChunkBytes;
       if (scheme) {
         try {
-          chunkBytes = await scheme!.decryptPayload(rawChunkBytes);
+          // Bind each chunk to its position: a gateway swapping two chunks will
+          // produce an AEAD auth failure because the AAD won't match.
+          chunkBytes = await scheme.decryptPayload(
+            rawChunkBytes,
+            chunkAad(entry.index, manifest.chunkCount),
+          );
         } catch (err) {
           throw new Error(
             `[dStorage] Failed to decrypt chunk ${entry.index}: ${err}`,
@@ -961,12 +989,23 @@ export class DStorage implements DStorageContext {
         }
       }
 
+      if (offset + chunkBytes.length > manifest.totalSize) {
+        throw new Error(
+          `[dStorage] Chunk ${entry.index} overflows manifest totalSize`,
+        );
+      }
       result.set(chunkBytes, offset);
       offset += chunkBytes.length;
 
       this.logger?.log(
         "dStorage",
         `Retrieved chunk ${entry.index + 1}/${manifest.chunkCount}: ${chunkBytes.length} bytes`,
+      );
+    }
+
+    if (offset !== manifest.totalSize) {
+      throw new Error(
+        `[dStorage] Reassembled ${offset} bytes but manifest declares totalSize ${manifest.totalSize}`,
       );
     }
 

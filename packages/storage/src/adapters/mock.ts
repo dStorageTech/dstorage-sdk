@@ -166,4 +166,29 @@ export class MockStorageAdapter implements StorageAdapter {
 
     return ids;
   }
+
+  /** For unit tests only — return the raw bytes stored at `id`. */
+  get(id: string): Uint8Array | undefined {
+    const raw = storeGet(`dstorage:blob:${id}`);
+    if (!raw) return undefined;
+    const entry = JSON.parse(raw) as { data: string };
+    return base64ToUint8Array(entry.data);
+  }
+
+  /** For unit tests only — overwrite the bytes stored at `id` (keeps original metadata). */
+  set(id: string, bytes: Uint8Array): void {
+    const key = `dstorage:blob:${id}`;
+    const raw = storeGet(key);
+    const existing = raw
+      ? (JSON.parse(raw) as { metadata: unknown; uploadedAt: number })
+      : { metadata: {}, uploadedAt: Date.now() };
+    storeSet(
+      key,
+      JSON.stringify({
+        data: uint8ArrayToBase64(bytes),
+        metadata: existing.metadata,
+        uploadedAt: existing.uploadedAt,
+      }),
+    );
+  }
 }

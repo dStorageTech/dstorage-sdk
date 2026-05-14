@@ -143,3 +143,21 @@ export interface RetrieveResult {
   /** Metadata attached at upload time */
   metadata: Record<string, string>;
 }
+
+// ── Protocol-level AAD constants ──────────────────────────────────────────────
+// These live in core (not @dstorage/crypto) because they are SDK protocol
+// semantics, not crypto primitives. The crypto layer accepts any Uint8Array;
+// core defines what values belong in each role.
+
+const _aadEnc = new TextEncoder();
+
+/** AAD for single-shot payload and manifest encryption. */
+export const PAYLOAD_AAD: Uint8Array = _aadEnc.encode("dstorage:payload:v1");
+
+/**
+ * Per-chunk AAD that binds a ciphertext to its position in a chunked upload.
+ * A malicious gateway swapping two chunks will produce an AEAD auth failure
+ * because the stored AAD won't match the expected index.
+ */
+export const chunkAad = (index: number, total: number): Uint8Array =>
+  _aadEnc.encode(`dstorage:chunk:v1:${index}/${total}`);
