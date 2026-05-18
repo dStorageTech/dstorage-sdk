@@ -17,6 +17,7 @@ vi.mock("../chunked.js", async (importOriginal) => {
 
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
+import type { StorageProviderName } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import { isManifest, type ChunkManifest } from "../chunked.js";
@@ -191,6 +192,84 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     });
 
     expect(finalizingCount).toBe(1);
+  });
+});
+
+// ── Manifest field correctness ───────────────────────────────────────────────
+//
+// The manifest stored on the network must reflect the real state of the upload:
+// correct provider name, total size, chunk count, chunk sizes, and chunk indices.
+// Using a public upload so the manifest JSON is readable without decryption.
+
+describe("chunked manifest fields are correct in storage", () => {
+  // Use a non-"mock" name so the provider test detects the hardcoded "mock"
+  // placeholder rather than coincidentally matching the adapter name.
+  class ArweaveMockStorageAdapter extends MockStorageAdapter {
+    override readonly name: StorageProviderName = "arweave";
+  }
+
+  async function getStoredManifest(
+    bytes: Uint8Array,
+  ): Promise<ReturnType<typeof JSON.parse>> {
+    const storageAdapter = new ArweaveMockStorageAdapter();
+    // Encryption adapters are required even for public chunked uploads (ownerSeed
+    // wrapping). isPublic: true ensures the manifest JSON is stored in plaintext
+    // so we can parse it without decryption.
+    const ds = new DStorage({
+      storageAdapter,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-test-passphrase-v1!",
+          salt: "manifest-field-test",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await ds.init();
+    const result = await ds.upload(bytes, { isPublic: true });
+    // For public uploads storageId is the plaintext manifest storage ID.
+    const raw = await storageAdapter.retrieve(result.storageId);
+    return JSON.parse(new TextDecoder().decode(raw));
+  }
+
+  it("manifest type and version fields are correct", async () => {
+    const manifest = await getStoredManifest(makeBytes(CHUNK_SIZE + 1));
+    expect(manifest.type).toBe("dstorage-chunked-manifest");
+    expect(manifest.v).toBe(1);
+  });
+
+  it("manifest.provider matches the storage adapter name", async () => {
+    const manifest = await getStoredManifest(makeBytes(CHUNK_SIZE + 1));
+    expect(manifest.provider).toBe("arweave");
+  });
+
+  it("manifest.totalSize matches the uploaded byte count", async () => {
+    const size = CHUNK_SIZE + 77;
+    const manifest = await getStoredManifest(makeBytes(size));
+    expect(manifest.totalSize).toBe(size);
+  });
+
+  it("manifest.chunkCount is ceil(size / CHUNK_SIZE)", async () => {
+    const manifest = await getStoredManifest(makeBytes(CHUNK_SIZE * 3));
+    expect(manifest.chunkCount).toBe(3);
+  });
+
+  it("manifest.chunks has one entry per chunk with correct index and size", async () => {
+    const size = CHUNK_SIZE + 100; // 2 chunks: full + partial
+    const manifest = await getStoredManifest(makeBytes(size));
+    expect(manifest.chunks).toHaveLength(2);
+    expect(manifest.chunks[0].index).toBe(0);
+    expect(manifest.chunks[0].size).toBe(CHUNK_SIZE);
+    expect(manifest.chunks[1].index).toBe(1);
+    expect(manifest.chunks[1].size).toBe(100);
+  });
+
+  it("each chunk entry has a non-empty storageId", async () => {
+    const manifest = await getStoredManifest(makeBytes(CHUNK_SIZE + 1));
+    for (const chunk of manifest.chunks) {
+      expect(typeof chunk.storageId).toBe("string");
+      expect(chunk.storageId.length).toBeGreaterThan(0);
+    }
   });
 });
 

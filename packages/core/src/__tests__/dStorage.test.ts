@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
+import type { StorageProviderName } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
@@ -203,6 +204,44 @@ describe("retrieveByRefId", () => {
     const ds = await makeInitedDStorage();
     await expect(ds.retrieveByRefId("::ref_abc")).rejects.toThrow(
       "[dStorage/mock-chain] No reference found for refId: ::ref_abc",
+    );
+  });
+
+  it("throws a descriptive error when the configured storage adapter does not match the reference's storageProvider", async () => {
+    // Upload with mock storage (name: "mock"), then try to retrieve with an
+    // adapter that reports name: "arweave". Without a mismatch guard the SDK
+    // silently hands the storageId to the wrong adapter and returns a cryptic
+    // "not found" error. The guard must surface the real cause immediately.
+    class ArweaveMockStorageAdapter extends MockStorageAdapter {
+      override readonly name: StorageProviderName = "arweave";
+    }
+
+    const chainAdapter = new MockChainAdapter();
+    const encryption = new PasswordEncryptionAdapter({
+      password: "dstorage-test-passphrase-v1!",
+      salt: "mismatch-test",
+      params: { N: 1024, r: 8, p: 1 },
+    });
+
+    // Upload via "mock" storage adapter.
+    const ds1 = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter,
+      encryptionAdapters: [encryption],
+    });
+    await ds1.init();
+    const { chainRefId } = await ds1.upload(enc("hello"));
+
+    // Try to retrieve via "arweave" adapter against the same chain.
+    const ds2 = new DStorage({
+      storageAdapter: new ArweaveMockStorageAdapter(),
+      chainAdapter,
+      encryptionAdapters: [encryption],
+    });
+    await ds2.init();
+
+    await expect(ds2.retrieveByRefId(chainRefId)).rejects.toThrow(
+      /storage adapter mismatch|mock.*arweave|arweave.*mock/i,
     );
   });
 });

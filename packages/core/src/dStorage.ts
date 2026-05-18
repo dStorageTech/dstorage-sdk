@@ -534,6 +534,14 @@ export class DStorage implements DStorageContext {
         `[dStorage] No on-chain reference found for refId: ${refId}`,
       );
 
+    if (ref.storageProvider !== this.config.storageAdapter.name) {
+      throw new Error(
+        `[dStorage] Storage adapter mismatch: reference "${refId}" was stored on ` +
+          `"${ref.storageProvider}" but the configured adapter is "${this.config.storageAdapter.name}". ` +
+          `Configure a "${ref.storageProvider}" storage adapter to retrieve this reference.`,
+      );
+    }
+
     const isPublic = !ref.encryptionScheme;
 
     // For private data: unwrap the DEK from the key envelope, then use it to
@@ -858,7 +866,7 @@ export class DStorage implements DStorageContext {
       totalSize: bytes.length,
       chunkSize: CHUNK_SIZE,
       chunkCount: totalChunks,
-      provider: "mock", // will be overwritten by manifestResult.provider below
+      provider: this.config.storageAdapter.name,
       chunks: chunkEntries,
     };
 
@@ -881,11 +889,6 @@ export class DStorage implements DStorageContext {
         "dStorage-manifest-upload": "true",
       },
     );
-
-    // Update manifest provider now that we have it, and re-upload isn't needed —
-    // the provider field is informational only (retrieval uses stored chunk storageIds).
-    // We store the provider in the manifest for debugging; patch the in-memory object only.
-    manifest.provider = manifestResult.provider;
 
     // For private data: encrypt the manifest storageId with the same per-upload DEK.
     // For public data: write the storageId as plaintext.
