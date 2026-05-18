@@ -654,3 +654,7 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
 
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
 - Autonomi adapter is currently a stub path.
+- **ManagedPaymentAdapter — no response MAC.**
+  The signing server response (`txId`, `signature`, `publicKey`) is validated for schema correctness and a `success: true` flag, but there is no cryptographic proof that the response originated from the legitimate signing server and was not modified in transit. The adapter relies solely on TLS for transport integrity. A network-level MITM or a compromised CDN could substitute a valid-shaped but malicious response (e.g. replacing `txId` / `publicKey` with attacker-controlled values) and schema validation would still pass.
+  **Mitigation until this is resolved:** ensure `signingServerUrl` is always HTTPS with a valid certificate issued to the operator-controlled domain. Do not use this adapter over plain HTTP or with self-signed certificates in production.
+  A proper fix requires the signing server to include an `HMAC-SHA256(sharedSecret, requestId ‖ txId ‖ signature)` MAC in its response, and the adapter to verify it before trusting any field. This is deferred pending a stable signing-server API.
