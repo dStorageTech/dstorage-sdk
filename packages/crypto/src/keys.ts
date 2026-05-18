@@ -23,6 +23,15 @@ export class KeyDeriver {
         "[dStorage/crypto] Either mnemonic or seedHex must be provided.",
       );
     }
+    if (input.mnemonic !== undefined) {
+      const wordCount = input.mnemonic.trim().split(/\s+/).length;
+      if (wordCount < 24) {
+        throw new Error(
+          `[dStorage/crypto] A 24-word BIP-39 mnemonic is required (got ${wordCount} words). ` +
+            `Shorter mnemonics provide insufficient entropy for post-quantum-safe key derivation.`,
+        );
+      }
+    }
     this.input = input;
   }
 
