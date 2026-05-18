@@ -217,6 +217,44 @@ describe("ArweaveLocalHelper", () => {
         .catch((e: unknown) => e);
       expect((err as ArweaveLocalError).statusCode).toBe(503);
     });
+
+    // ── Security: address format validation ──────────────────────────────────
+    //
+    // A valid Arweave address is always exactly 43 base64url characters
+    // ([A-Za-z0-9_-]). Accepting arbitrary strings allows a caller to mint
+    // funds to a non-existent or attacker-controlled address, or to construct
+    // unexpected URL paths if encodeURIComponent is ever removed.
+    // These checks must throw before making any HTTP request.
+
+    it("throws when address is too short (42 chars)", async () => {
+      await expect(helper.mintTokens("a".repeat(42))).rejects.toThrow(
+        /address/i,
+      );
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("throws when address is too long (44 chars)", async () => {
+      await expect(helper.mintTokens("a".repeat(44))).rejects.toThrow(
+        /address/i,
+      );
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("throws when address is empty", async () => {
+      await expect(helper.mintTokens("")).rejects.toThrow(/address/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("throws when address contains characters outside base64url alphabet", async () => {
+      const invalid = "aaa!aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; // 43 chars but with !
+      await expect(helper.mintTokens(invalid)).rejects.toThrow(/address/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("accepts a valid 43-char base64url address", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse());
+      await expect(helper.mintTokens(MOCK_ADDRESS)).resolves.toBeUndefined();
+    });
   });
 
   // ── mine ───────────────────────────────────────────────────────────────────

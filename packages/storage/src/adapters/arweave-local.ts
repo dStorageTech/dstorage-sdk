@@ -129,6 +129,11 @@ export class ArweaveLocalHelper {
     address: string,
     winstons: bigint | number = 1_000_000_000_000n,
   ): Promise<void> {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(address)) {
+      throw new Error(
+        `[dStorage/arweave-local] Invalid Arweave address: expected 43 base64url characters, got "${address.slice(0, 60)}${address.length > 60 ? "…" : ""}"`,
+      );
+    }
     const amount =
       typeof winstons === "bigint" ? winstons.toString() : String(winstons);
     const res = await this.get(
