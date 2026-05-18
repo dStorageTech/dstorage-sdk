@@ -90,9 +90,10 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       /** For API symmetry with MidnightChainAdapter. Stored but unused by the mock. */
       contractAddress?: string;
       logger?: ChainAdapterLogger;
-    } & Partial<
-      Pick<ManagedPaymentAdapterConfig, "signingServerUrl" | "authToken">
-    > = {},
+    } & (
+      | { signingServerUrl: string; authToken: string }
+      | { signingServerUrl?: never; authToken?: never }
+    ) = {},
   ) {
     this.logger = options.logger;
     this.proofServer = new MockProofServer({
@@ -109,9 +110,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
         network: this.name,
         type: "chain",
         signingServerUrl: options.signingServerUrl,
-        ...(options.authToken !== undefined
-          ? { authToken: options.authToken }
-          : {}),
+        authToken: options.authToken,
         ...(options.logger !== undefined ? { logger: options.logger } : {}),
       });
     } else {

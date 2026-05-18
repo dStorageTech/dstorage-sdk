@@ -35,13 +35,17 @@ export async function buildSDK(
     encryptionAdapter,
   } = options;
 
+  if (paymentKey === "managed" && !managedAuthToken.trim()) {
+    throw new Error(
+      "[dStorage] An auth token is required when using the managed payment service.",
+    );
+  }
+
   const managedConfig =
     paymentKey === "managed"
       ? {
           signingServerUrl: managedServiceUrl,
-          ...(managedAuthToken.trim()
-            ? { authToken: managedAuthToken.trim() }
-            : {}),
+          authToken: managedAuthToken.trim(),
           logger: console,
         }
       : { logger: console };

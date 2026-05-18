@@ -103,9 +103,11 @@ export interface ManagedPaymentAdapterConfig extends Omit<
   signingServerUrl: string;
   /**
    * Bearer token sent as the `Authorization` header to authenticate with the signing server.
-   * When omitted, requests are sent without an Authorization header.
+   * Must be a non-empty, non-whitespace string — the constructor throws immediately on
+   * an empty value so a misconfigured caller (e.g. unresolved env var) fails fast
+   * rather than silently sending unauthenticated requests to the signing service.
    */
-  authToken?: string;
+  authToken: string;
 }
 
 // ── Server response shapes ────────────────────────────────────────────────────
@@ -132,7 +134,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   override readonly type: NetworkType;
 
   private readonly signingServerUrl: string;
-  private readonly authToken?: string;
+  private readonly authToken: string;
 
   constructor(config: ManagedPaymentAdapterConfig) {
     super({
@@ -143,7 +145,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       ...(config.logger !== undefined ? { logger: config.logger } : {}),
     });
     this.signingServerUrl = config.signingServerUrl.replace(/\/$/, "");
-    if (config.authToken !== undefined) this.authToken = config.authToken;
+    if (!config.authToken || config.authToken.trim() === "") {
+      throw new Error(
+        "[dStorage/managed-payment] authToken is required and must not be empty or whitespace.",
+      );
+    }
+    this.authToken = config.authToken;
     this.network = config.network;
     this.type = config.type;
   }
@@ -447,9 +454,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(this.authToken
-              ? { Authorization: `Bearer ${this.authToken}` }
-              : {}),
+            Authorization: `Bearer ${this.authToken}`,
           },
           body,
         },

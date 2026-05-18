@@ -57,9 +57,9 @@ export interface ArweaveTurboAdapterConfig {
   signingServerUrl?: string;
   /**
    * Bearer token sent as the `Authorization` header to authenticate with the signing server.
-   * When omitted, requests are sent without an Authorization header.
+   * Required when `signingServerUrl` is provided.
    */
-  authToken?: string;
+  authToken?: string; // validated at construction: required when signingServerUrl is set
   /**
    * Arweave gateway URL used for data retrieval.
    * Defaults to ARWEAVE_GATEWAY_URL
@@ -113,11 +113,14 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     // transactions are sent unsigned to the remote server, which holds a
     // funded Arweave wallet and returns the signature.
     if (config.signingServerUrl) {
+      if (!config.authToken?.trim()) {
+        throw new Error(
+          "[dStorage/arweave-turbo] authToken is required when signingServerUrl is provided.",
+        );
+      }
       this.paymentAdapter = new ManagedPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
-        ...(config.authToken !== undefined
-          ? { authToken: config.authToken }
-          : {}),
+        authToken: config.authToken,
         network: this.name as PaymentNetworkName,
         type: "storage",
         ...(config.logger !== undefined ? { logger: config.logger } : {}),

@@ -448,8 +448,8 @@ async function main(): Promise<void> {
           "  Auth token for dStorage API service (input hidden): ",
         );
         if (!authToken) {
-          console.log(
-            "⚠️  Warning: no auth token provided — requests may be rejected by the service.",
+          throw new Error(
+            "An auth token is required when using the managed payment service.",
           );
         }
       }
@@ -458,7 +458,7 @@ async function main(): Promise<void> {
     const managedPaymentService = useManagedPaymentService
       ? {
           signingServerUrl: SIGNING_SERVER_URL!,
-          ...(authToken ? { authToken } : {}),
+          authToken: authToken!,
         }
       : {};
 

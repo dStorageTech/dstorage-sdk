@@ -129,9 +129,9 @@ interface BaseConfig {
   signingServerUrl?: string;
   /**
    * Bearer token sent as the `Authorization` header to authenticate with the signing server.
-   * When omitted, requests are sent without an Authorization header.
+   * Required when `signingServerUrl` is provided.
    */
-  authToken?: string;
+  authToken?: string; // validated at construction: required when signingServerUrl is set
 }
 
 export type MidnightChainAdapterConfig = BaseConfig &
@@ -334,13 +334,16 @@ export class MidnightChainAdapter implements ChainAdapter {
     };
 
     if (config.signingServerUrl) {
+      if (!config.authToken?.trim()) {
+        throw new Error(
+          "[dStorage/midnight] authToken is required when signingServerUrl is provided.",
+        );
+      }
       this.managedPaymentAdapter = new ManagedPaymentAdapter({
         network: this.name,
         type: "chain",
         signingServerUrl: config.signingServerUrl,
-        ...(config.authToken !== undefined
-          ? { authToken: config.authToken }
-          : {}),
+        authToken: config.authToken,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     }
