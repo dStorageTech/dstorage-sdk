@@ -29,10 +29,7 @@ import type {
 } from "../types.js";
 import { MockProofServer } from "../mockProofServer.js";
 import { ManagedPaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
-import type {
-  ManagedPaymentAdapterConfig,
-  PaymentAdapter,
-} from "@dstorage/payment";
+import type { PaymentAdapter } from "@dstorage/payment";
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 

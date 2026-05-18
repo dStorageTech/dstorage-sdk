@@ -86,6 +86,24 @@ function parseSignedTxBytes(signedTx: string): Uint8Array {
   return hexToUint8Array(signedTx);
 }
 
+// ── Server error body sanitisation ───────────────────────────────────────────
+
+const MAX_ERROR_BODY_LENGTH = 200;
+
+/**
+ * Sanitise a raw server error body before embedding it in a thrown Error.
+ * - Strips ASCII control characters (log-injection / terminal escape attacks).
+ * - Strips HTML tags (UI injection if the message is rendered in a browser).
+ * - Truncates to MAX_ERROR_BODY_LENGTH characters.
+ */
+function sanitiseErrorBody(raw: string): string {
+  return raw
+    .replace(/[\x00-\x1f\x7f]/g, " ") // control chars → space
+    .replace(/<[^>]*>/g, "") // HTML tags → removed
+    .trim()
+    .slice(0, MAX_ERROR_BODY_LENGTH);
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export interface ManagedPaymentAdapterConfig extends Omit<
@@ -108,6 +126,12 @@ export interface ManagedPaymentAdapterConfig extends Omit<
    * rather than silently sending unauthenticated requests to the signing service.
    */
   authToken: string;
+  /**
+   * Maximum time in milliseconds to wait for the signing server to respond before
+   * aborting the request and throwing. Defaults to 30 000 ms (30 s).
+   * Pass `0` to disable the timeout entirely (not recommended for production).
+   */
+  requestTimeoutMs?: number;
 }
 
 // ── Server response shapes ────────────────────────────────────────────────────
@@ -127,6 +151,44 @@ interface SignTxResponse {
   serviceFee: string;
 }
 
+/**
+ * Validate and parse a raw signing server response.
+ * Throws a descriptive error if any required field is absent, the wrong type,
+ * or if the server reported success:false.
+ *
+ * Exported for unit testing — not part of the public SDK surface.
+ */
+export function parseSignTxResponse(raw: unknown): SignTxResponse {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(
+      "[dStorage/managed-payment] Signing server returned a non-object response.",
+    );
+  }
+  const r = raw as Record<string, unknown>;
+
+  if (r["success"] !== true) {
+    throw new Error(
+      `[dStorage/managed-payment] Signing server reported success:false — ${JSON.stringify(r)}`,
+    );
+  }
+
+  for (const field of [
+    "txId",
+    "signature",
+    "publicKey",
+    "txAmount",
+    "serviceFee",
+  ] as const) {
+    if (typeof r[field] !== "string") {
+      throw new Error(
+        `[dStorage/managed-payment] Signing server response missing or invalid field: ${field}`,
+      );
+    }
+  }
+
+  return r as unknown as SignTxResponse;
+}
+
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
@@ -135,6 +197,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
   private readonly signingServerUrl: string;
   private readonly authToken: string;
+  private readonly requestTimeoutMs: number;
 
   constructor(config: ManagedPaymentAdapterConfig) {
     super({
@@ -151,6 +214,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       );
     }
     this.authToken = config.authToken;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.network = config.network;
     this.type = config.type;
   }
@@ -448,6 +512,10 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         `${network}: delegating to managed payment service (serialized req length=${body.length})`,
       );
 
+      const signal =
+        this.requestTimeoutMs > 0
+          ? AbortSignal.timeout(this.requestTimeoutMs)
+          : undefined;
       signResp = await fetch(
         `${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
         {
@@ -457,6 +525,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
             Authorization: `Bearer ${this.authToken}`,
           },
           body,
+          ...(signal !== undefined ? { signal } : {}),
         },
       );
     } catch (err) {
@@ -465,19 +534,22 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       );
     }
     if (!signResp.ok) {
-      const body = await signResp.text().catch(() => "");
+      const rawBody = await signResp.text().catch(() => "");
+      const body = sanitiseErrorBody(rawBody);
       throw new Error(
         `[dStorage/managed-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
       );
     }
 
+    let parsed: unknown;
     try {
-      return (await signResp.json()) as SignTxResponse;
+      parsed = await signResp.json();
     } catch {
       throw new Error(
         `[dStorage/managed-payment] Managed payment service returned a non-JSON response — ` +
           `check that the service URL is correct and reachable: ${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
       );
     }
+    return parseSignTxResponse(parsed);
   }
 }
