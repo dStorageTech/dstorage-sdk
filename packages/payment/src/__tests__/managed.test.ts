@@ -7,12 +7,29 @@ import {
   ManagedPaymentAdapter,
   parseSignTxResponse,
 } from "../adapters/managed.js";
+import type { PaymentQuote } from "../types.js";
 
 const BASE_CONFIG = {
   signingServerUrl: "https://signing.example.com",
   network: "arweave" as const,
   type: "storage" as const,
 };
+
+function makeAdapter() {
+  return new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "tok_test" });
+}
+
+function makeQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
+  return {
+    token: "AR",
+    amount: "0.000001",
+    network: "arweave",
+    type: "storage",
+    dataSizeBytes: 1024,
+    expiresAt: Date.now() + 120_000,
+    ...overrides,
+  };
+}
 
 // ── Security: authToken validation ────────────────────────────────────────────
 //
@@ -273,5 +290,33 @@ describe("ManagedPaymentAdapter — request timeout", () => {
         expiresAt: Date.now() + 60_000,
       }),
     ).resolves.toMatchObject({ token: "DUST" });
+  });
+});
+
+// ── Quote TTL enforcement (M11) ───────────────────────────────────────────────
+
+describe("ManagedPaymentAdapter — quote TTL", () => {
+  it("pay() throws when the quote has already expired", async () => {
+    const adapter = makeAdapter();
+    const expiredQuote = makeQuote({ expiresAt: Date.now() - 1 });
+    await expect(adapter.pay(expiredQuote)).rejects.toThrow(
+      "[dStorage/payment]",
+    );
+  });
+
+  it("pay() error message mentions expiry", async () => {
+    const adapter = makeAdapter();
+    const expiredQuote = makeQuote({ expiresAt: Date.now() - 5_000 });
+    await expect(adapter.pay(expiredQuote)).rejects.toThrow(/expir/i);
+  });
+
+  it("pay() does not throw an expiry error for a valid quote", async () => {
+    const adapter = makeAdapter();
+    const validQuote = makeQuote({ expiresAt: Date.now() + 60_000 });
+    // pay() will fail later (network call) — we only care it is not an expiry error.
+    const result = await adapter.pay(validQuote).catch((err: unknown) => err);
+    if (result instanceof Error) {
+      expect(result.message).not.toMatch(/expir/i);
+    }
   });
 });

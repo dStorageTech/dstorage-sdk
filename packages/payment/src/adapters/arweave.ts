@@ -46,6 +46,9 @@ import type {
   NetworkType,
 } from "../types.js";
 
+/** Default quote validity window in milliseconds. 2 minutes is appropriate for Arweave's volatile pricing. */
+const DEFAULT_QUOTE_VALIDITY_MS = 120_000;
+
 export interface ArweavePaymentAdapterConfig {
   /**
    * Arweave gateway.
@@ -65,8 +68,7 @@ export interface ArweavePaymentAdapterConfig {
   walletKey?: Record<string, string>;
   /**
    * How long in ms before a quote expires.
-   * Arweave fees are relatively stable; 10 minutes is a safe default.
-   * Defaults to 600_000.
+   * Defaults to 120_000 (2 minutes) — appropriate for Arweave's volatile pricing.
    */
   quoteValidityMs?: number;
   /**
@@ -111,7 +113,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       protocol: "https",
     };
     this.walletKey = config.walletKey;
-    this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
+    this.quoteValidityMs = config.quoteValidityMs ?? DEFAULT_QUOTE_VALIDITY_MS;
     this.logger = config.logger;
   }
 
@@ -219,6 +221,13 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
+    if (Date.now() > quote.expiresAt) {
+      throw new Error(
+        `[dStorage/payment] Quote expired at ${new Date(quote.expiresAt).toISOString()}. ` +
+          "Request a fresh quote via estimateCost() before calling pay().",
+      );
+    }
+
     if (!this.pendingUpload) {
       // Fallback: payment handled inside upload()
       onStatus?.("AR fee will be deducted as part of the upload transaction.");

@@ -259,6 +259,13 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     quote: PaymentQuote,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
+    if (Date.now() > quote.expiresAt) {
+      throw new Error(
+        `[dStorage/payment] Quote expired at ${new Date(quote.expiresAt).toISOString()}. ` +
+          "Request a fresh quote via estimateCost() before calling pay().",
+      );
+    }
+
     if (quote.network === "midnight") {
       return this._payMidnight(quote, onStatus);
     } else if (quote.network === "arweave") {

@@ -1056,7 +1056,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     // Step 2: Retrieve wallet configuration (respects user preferences for proof server, indexer, etc.)
     try {
       const walletConfig = await connectedAPI.getConfiguration();
-      this.logger?.log(
+      this.logger?.debug?.(
         "dStorage/midnight",
         `Wallet configuration: ${JSON.stringify(walletConfig)}`,
       );
