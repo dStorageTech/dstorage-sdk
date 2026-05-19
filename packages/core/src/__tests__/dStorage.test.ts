@@ -320,23 +320,18 @@ describe("listReferences", () => {
     expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
   });
 
-  it("returned entry has a non-null storageId", async () => {
+  it("own private upload: storageId matches upload result and decryptionError is absent", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("storage id check"));
+    const { chainRefId, storageId: uploadedStorageId } = await ds.upload(
+      enc("mine"),
+    );
     const refs = await ds.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
-    expect(entry?.storageId).not.toBeNull();
+    expect(entry?.storageId).toBe(uploadedStorageId);
+    expect(entry?.decryptionError).toBeUndefined();
   });
 
-  it("isOurs is true for the uploader's own private upload", async () => {
-    const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("mine"));
-    const refs = await ds.listReferences();
-    const entry = refs.find((r) => r.refId === chainRefId);
-    expect(entry?.isOurs).toBe(true);
-  });
-
-  it("isOurs is false for a private upload by a different user on the same chain", async () => {
+  it("private upload by another user: storageId is null and decryptionError is set", async () => {
     const sharedStorage = new MockStorageAdapter();
     const sharedChain = new MockChainAdapter();
     const alice = new DStorage({
@@ -364,22 +359,31 @@ describe("listReferences", () => {
     await alice.init();
     await bob.init();
 
-    const { chainRefId } = await alice.upload(enc("Alice's secret"));
-    // Bob lists references and should not see Alice's ref as his own
+    const { chainRefId, storageId: aliceStorageId } = await alice.upload(
+      enc("Alice's secret"),
+    );
     const refs = await bob.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
-    expect(entry?.isOurs).toBe(false);
+    expect(entry?.storageId).toBeNull();
+    expect(entry?.decryptionError).toBeDefined();
+    expect(entry?.decryptionError).toBeTypeOf("string");
+    // Bob must not be able to see Alice's storageId
+    expect(entry?.storageId).not.toBe(aliceStorageId);
   });
 
-  it("isOurs is true for a public upload by the same user (ownerSeed envelope unwraps)", async () => {
+  it("own public upload: storageId matches upload result and decryptionError is absent", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("public"), { isPublic: true });
+    const { chainRefId, storageId: uploadedStorageId } = await ds.upload(
+      enc("public"),
+      { isPublic: true },
+    );
     const refs = await ds.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
-    expect(entry?.isOurs).toBe(true);
+    expect(entry?.storageId).toBe(uploadedStorageId);
+    expect(entry?.decryptionError).toBeUndefined();
   });
 
-  it("isOurs is false for a public upload viewed by a different user", async () => {
+  it("public upload by another user: storageId is visible but decryptionError is set", async () => {
     const adapters = {
       storageAdapter: new MockStorageAdapter(),
       chainAdapter: new MockChainAdapter(),
@@ -407,12 +411,15 @@ describe("listReferences", () => {
     await alice.init();
     await bob.init();
 
-    const { chainRefId } = await alice.upload(enc("alice public"), {
-      isPublic: true,
-    });
+    const { chainRefId, storageId: aliceStorageId } = await alice.upload(
+      enc("alice public"),
+      { isPublic: true },
+    );
     const refs = await bob.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
-    expect(entry?.isOurs).toBe(false);
+    // storageId is plaintext for public uploads — Bob can see it even though it's not his
+    expect(entry?.storageId).toBe(aliceStorageId);
+    expect(entry?.decryptionError).toBeDefined();
   });
 
   it("keyEnvelope is always a non-empty string for every entry in listReferences", async () => {

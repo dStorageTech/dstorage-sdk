@@ -153,9 +153,11 @@ async function listReferences(
         `      encryptionScheme = ${scheme ?? "(public/unencrypted)"}`,
       );
       console.log(
-        `      storageId        = ${ref.storageId ?? "(cannot decrypt it)"}`,
+        `      storageId        = ${ref.storageId ?? "(cannot decrypt)"}`,
       );
-      console.log(`      isOurs           = ${ref.isOurs ? "Yes" : "No"}`);
+      console.log(
+        `      owned            = ${ref.decryptionError === undefined ? "Yes" : `No (${ref.decryptionError})`}`,
+      );
     }
     console.log("");
   } catch (err) {
@@ -215,9 +217,8 @@ async function removeReference(
     console.log(
       `  encryptionScheme: ${ref.encryptionScheme ?? "(public/unencrypted)"}`,
     );
-    console.log(`  storageId:        ${ref.storageId ?? "(cannot decrypt)"}`);
+    console.log(`  storageId:        ${ref.storageId}`);
     console.log(`  writtenAt:        ${new Date(ref.writtenAt).toISOString()}`);
-    console.log(`     isOurs:        ${ref.isOurs ? "Yes" : "No"}\n`);
   } catch (err) {
     logError("reading reference", err);
     return;

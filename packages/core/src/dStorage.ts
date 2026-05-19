@@ -267,7 +267,6 @@ export class DStorage implements DStorageContext {
         storageProvider: storageResult.provider,
         ...(dataLabel !== undefined ? { dataLabel } : {}),
         writtenAt: Date.now(),
-        isOurs: true,
         keyEnvelope,
         ownerSecret,
       });
@@ -358,7 +357,8 @@ export class DStorage implements DStorageContext {
       }
     }
     throw new Error(
-      "[dStorage] Cannot decrypt: none of the DEK wrappers matched the available providers.",
+      "[dStorage] Cannot decrypt: this reference was not encrypted with any of your configured keys. " +
+        "Check that you are using the correct encryption adapter, password, seed phrase, or keypair.",
     );
   }
 
@@ -391,7 +391,8 @@ export class DStorage implements DStorageContext {
       }
     }
     throw new Error(
-      "[dStorage] Cannot unwrap DEK: none of the wrappers matched the available providers.",
+      "[dStorage] Cannot unwrap DEK: this reference was not encrypted with any of your configured keys. " +
+        "Check that you are using the correct encryption adapter, password, seed phrase, or keypair.",
     );
   }
 
@@ -581,31 +582,36 @@ export class DStorage implements DStorageContext {
     return Promise.all(
       refs.map(async (item) => {
         let storageId: string | null = null;
-        // isOurs: determined by whether we can unwrap the DEK from the keyEnvelope
-        // using our KEKs. The chain layer sets isOurs=false for all entries; the core SDK
-        // overrides with the correct value here.
-        let isOurs = false;
+        let decryptionError: string | undefined;
+        const isPublic = !item.encryptionScheme;
+
         if (item.storageId) {
-          const isPublic = !item.encryptionScheme;
           if (isPublic) {
             storageId = item.storageId;
           } else {
             try {
               const dekScheme = await this._getDekScheme(item.keyEnvelope);
               storageId = await dekScheme.decryptStorageId(item.storageId);
-            } catch {
-              /* we cannot decrypt */
+            } catch (err) {
+              decryptionError =
+                err instanceof Error ? err.message : String(err);
             }
           }
         }
-        try {
-          // isOurs: check if we can unwrap the key from the envelope.
-          // Works for both private (DEK) and public (ownerSeed) uploads.
-          await this._unwrapDek(item.keyEnvelope);
-          isOurs = true;
-        } catch {
-          isOurs = false;
+
+        if (!decryptionError) {
+          // For public uploads verify the ownerSeed can be unwrapped; for private
+          // this is implicit — if _getDekScheme succeeded above, so would _unwrapDek.
+          if (isPublic) {
+            try {
+              await this._unwrapDek(item.keyEnvelope);
+            } catch (err) {
+              decryptionError =
+                err instanceof Error ? err.message : String(err);
+            }
+          }
         }
+
         return {
           refId: item.refId,
           storageId,
@@ -613,7 +619,7 @@ export class DStorage implements DStorageContext {
           encryptionScheme: item.encryptionScheme,
           keyEnvelope: item.keyEnvelope,
           ownerCommitment: item.ownerCommitment,
-          isOurs,
+          ...(decryptionError !== undefined ? { decryptionError } : {}),
         };
       }),
     );
@@ -921,7 +927,6 @@ export class DStorage implements DStorageContext {
         storageProvider: manifestResult.provider,
         ...(dataLabel !== undefined ? { dataLabel } : {}),
         writtenAt: Date.now(),
-        isOurs: true,
         keyEnvelope,
         ownerSecret,
       });

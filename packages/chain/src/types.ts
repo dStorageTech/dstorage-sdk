@@ -58,12 +58,6 @@ export interface ChainReference {
    */
   keyEnvelope: string;
   /**
-   * Whether this reference was created by the current user.
-   * Determined by the core SDK: true if the DEK in the keyEnvelope can be
-   * successfully unwrapped using the available KEKs (encryption seed providers).
-   */
-  isOurs: boolean;
-  /**
    * Pre-computed owner secret for ZK witness injection.
    * Derived by the core SDK as: HKDF-SHA256(dek, rawStorageId).
    * Internal use only — consumed by the chain adapter to set private state before proof generation.
@@ -115,11 +109,12 @@ export interface DataReferenceSummary {
    */
   ownerCommitment: string;
   /**
-   * Whether this reference was created by the current user.
-   * Determined by the core SDK: true if the DEK in the keyEnvelope can be
-   * successfully unwrapped using the available KEKs (encryption seed providers).
+   * Set when the core SDK cannot unwrap the keyEnvelope using the configured KEKs.
+   * Undefined means ownership was verified (the caller can decrypt and manage this reference).
+   * A non-undefined value means the reference is either owned by someone else or the key
+   * has been rotated/corrupted — check the message for details.
    */
-  isOurs: boolean;
+  decryptionError?: string;
 }
 
 /**

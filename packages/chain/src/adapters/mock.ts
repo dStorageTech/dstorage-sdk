@@ -115,7 +115,6 @@ export class MockChainAdapter implements ChainAdapter {
       encryptionScheme: ref.encryptionScheme ?? null,
       ownerCommitment: "",
       keyEnvelope: ref.keyEnvelope ?? "",
-      isOurs: false,
     }));
   }
 

@@ -185,7 +185,7 @@ describe("upload → list → remove lifecycle", () => {
     expect(after.find((r) => r.refId === chainRefId)).toBeUndefined();
   });
 
-  it("Alice's private ref shows isOurs=true for Alice, isOurs=false for Bob", async () => {
+  it("Alice's private ref: storageId visible and no decryptionError for Alice; storageId null and decryptionError set for Bob", async () => {
     const sharedStorage = new MockStorageAdapter();
     const sharedChain = new MockChainAdapter();
     const alice = new DStorage({
@@ -201,15 +201,19 @@ describe("upload → list → remove lifecycle", () => {
     await alice.init();
     await bob.init();
 
-    const { chainRefId } = await alice.upload(enc("Alice only"));
+    const { chainRefId, storageId: aliceStorageId } = await alice.upload(
+      enc("Alice only"),
+    );
 
     const aliceRefs = await alice.listReferences();
     const aliceEntry = aliceRefs.find((r) => r.refId === chainRefId);
-    expect(aliceEntry?.isOurs).toBe(true);
+    expect(aliceEntry?.storageId).toBe(aliceStorageId);
+    expect(aliceEntry?.decryptionError).toBeUndefined();
 
     const bobRefs = await bob.listReferences();
     const bobEntry = bobRefs.find((r) => r.refId === chainRefId);
-    expect(bobEntry?.isOurs).toBe(false);
+    expect(bobEntry?.storageId).toBeNull();
+    expect(bobEntry?.decryptionError).toBeDefined();
   });
 });
 

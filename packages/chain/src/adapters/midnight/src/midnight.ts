@@ -515,8 +515,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const encPublicKey = this.connectorEncPublicKey;
 
     // Both keys are required. An empty or missing coin public key causes
-    // computeOwnerCommitment() to receive an empty Uint8Array, making every
-    // reference appear as isOurs:false with no error — ownership-gated
+    // computeOwnerCommitment() to receive an empty Uint8Array — ownership-gated
     // operations silently misbehave rather than failing loudly.
     if (!coinPublicKey) {
       throw new Error(
@@ -753,9 +752,6 @@ export class MidnightChainAdapter implements ChainAdapter {
         encryptionScheme: (entry.encryptionScheme ||
           null) as EncryptionScheme | null,
         ownerCommitment: uint8ArrayToHex(entry.ownerCommitment),
-        // isOurs is always false here — the core SDK (dStorage.ts) overrides this
-        // by attempting to unwrap the DEK from keyEnvelope using the available KEKs.
-        isOurs: false,
         keyEnvelope: entry.keyEnvelope ?? "",
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
@@ -785,9 +781,6 @@ export class MidnightChainAdapter implements ChainAdapter {
       storageProvider: refEntry.storageProvider,
       dataLabel: refEntry.dataLabel,
       writtenAt: Number(refEntry.writtenAt),
-      // isOurs is not meaningful here — readReference is used internally by the
-      // core SDK for decryption/ownerSecret derivation, not for ownership display.
-      isOurs: false,
       keyEnvelope: refEntry.keyEnvelope ?? "",
     };
   }

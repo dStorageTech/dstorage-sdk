@@ -217,7 +217,6 @@ export class MockMidnightChainAdapter implements ChainAdapter {
       encryptionScheme: ref.encryptionScheme ?? null,
       keyEnvelope: ref.keyEnvelope ?? "",
       ownerCommitment: "",
-      isOurs: true,
     }));
   }
 
