@@ -47,7 +47,14 @@ export interface ChainReference {
   encryptionScheme?: EncryptionScheme;
   /** Storage network used */
   storageProvider: string;
-  /** Optional label for the referenced data e.g. "profile", "document" */
+  /**
+   * Optional human-readable label for the referenced data (e.g. "profile", "document").
+   *
+   * **PLAINTEXT ON-CHAIN.** Despite the `Opaque<"string">` encoding in the Midnight contract,
+   * this field is publicly readable by anyone querying the DataRegistry. Do not use it for
+   * sensitive information such as names, email addresses, medical categories, or anything
+   * that could identify a person or reveal what the encrypted content contains.
+   */
   dataLabel?: string;
   /** Timestamp of when the reference was written on-chain */
   writtenAt: number;
@@ -126,6 +133,11 @@ export interface ChainReferenceUpdate {
   storageId: string;
   encryptionScheme: EncryptionScheme;
   storageProvider: string;
+  /**
+   * Optional human-readable label for the referenced data.
+   *
+   * **PLAINTEXT ON-CHAIN.** See `ChainReference.dataLabel` for the full warning.
+   */
   dataLabel?: string;
   writtenAt: number;
   /** JSON-encoded KeyEnvelope wrapping the DEK (private) or ownerSeed (public). Always a non-empty string. */

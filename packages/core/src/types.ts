@@ -80,6 +80,14 @@ export interface UploadProgress {
 }
 
 export interface UploadOptions {
+  /**
+   * Optional key/value tags attached to the on-chain reference.
+   *
+   * The `"label"` key is written as `dataLabel` on-chain and is **publicly readable**
+   * by anyone querying the DataRegistry — do not use it for names, email addresses,
+   * medical categories, or anything that could identify a person or reveal what the
+   * encrypted content contains.
+   */
   metadata?: Record<string, string>;
   onProgress?: (progress: UploadProgress) => void;
   /** When true, content is stored unencrypted and the storageId is written on-chain as plaintext. */

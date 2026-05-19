@@ -77,6 +77,24 @@ describe("KeyDeriver", () => {
     );
   });
 
+  it("rejects a seedHex containing non-hex characters", async () => {
+    const invalid = "G".repeat(64); // valid length, invalid chars
+    const deriver = new KeyDeriver({ seedHex: invalid });
+    await expect(deriver.getSeed()).rejects.toThrow("[dStorage/crypto]");
+  });
+
+  it("rejects a seedHex with odd length", async () => {
+    const oddLength = "a".repeat(63); // odd number of chars
+    const deriver = new KeyDeriver({ seedHex: oddLength });
+    await expect(deriver.getSeed()).rejects.toThrow("[dStorage/crypto]");
+  });
+
+  it("does not silently produce an all-zero seed for invalid hex input", async () => {
+    const invalid = "G".repeat(64);
+    const deriver = new KeyDeriver({ seedHex: invalid });
+    await expect(deriver.getSeed()).rejects.toThrow();
+  });
+
   it("getSeed() is deterministic for the same hex seed", async () => {
     const SEED_HEX =
       "0000000000000000000000000000000000000000000000000000000000000001";

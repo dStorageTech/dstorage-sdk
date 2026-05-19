@@ -68,6 +68,16 @@ export class KeyDeriver {
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+  if (clean.length % 2 !== 0) {
+    throw new Error(
+      `[dStorage/crypto] seedHex has odd length (${clean.length} chars) — each byte requires exactly 2 hex characters.`,
+    );
+  }
+  if (!/^[0-9a-fA-F]*$/.test(clean)) {
+    throw new Error(
+      "[dStorage/crypto] seedHex contains non-hexadecimal characters. Only 0-9 and a-f are valid.",
+    );
+  }
   const bytes = new Uint8Array(clean.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
