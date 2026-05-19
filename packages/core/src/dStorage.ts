@@ -338,10 +338,17 @@ export class DStorage implements DStorageContext {
         "[dStorage] Cannot decrypt: no encryption providers. Call init() before retrieving private data.",
       );
     }
+    if (!keyEnvelope) {
+      throw new Error("[dStorage] Cannot decrypt: key envelope is empty.", {
+        cause: { code: "envelope_empty" },
+      });
+    }
     const envelope = parseKeyEnvelope(keyEnvelope);
     if (!envelope) {
       throw new Error(
-        "[dStorage] Cannot decrypt: key envelope is missing or malformed.",
+        "[dStorage] Cannot decrypt: key envelope is malformed or has an invalid structure. " +
+          "The stored reference may be corrupted or tampered with.",
+        { cause: { code: "envelope_malformed" } },
       );
     }
     for (const wrapper of envelope.wrappers) {
@@ -352,13 +359,17 @@ export class DStorage implements DStorageContext {
       try {
         const dek = await provider.unwrapDek(wrapper);
         return XChaChaScheme.fromKey(dek);
-      } catch {
-        // This wrapper/provider pair didn't match — try the next wrapper.
+      } catch (err) {
+        this.logger?.debug?.(
+          "dStorage",
+          `Wrapper "${wrapper.wrapKeyName}" failed to unwrap DEK: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
     throw new Error(
       "[dStorage] Cannot decrypt: this reference was not encrypted with any of your configured keys. " +
         "Check that you are using the correct encryption adapter, password, seed phrase, or keypair.",
+      { cause: { code: "no_wrapper_matched" } },
     );
   }
 
@@ -373,10 +384,17 @@ export class DStorage implements DStorageContext {
         "[dStorage] Cannot unwrap DEK: no encryption providers. Call init() first.",
       );
     }
+    if (!keyEnvelope) {
+      throw new Error("[dStorage] Cannot unwrap DEK: key envelope is empty.", {
+        cause: { code: "envelope_empty" },
+      });
+    }
     const envelope = parseKeyEnvelope(keyEnvelope);
     if (!envelope) {
       throw new Error(
-        "[dStorage] Cannot unwrap DEK: key envelope is missing or malformed.",
+        "[dStorage] Cannot unwrap DEK: key envelope is malformed or has an invalid structure. " +
+          "The stored reference may be corrupted or tampered with.",
+        { cause: { code: "envelope_malformed" } },
       );
     }
     for (const wrapper of envelope.wrappers) {
@@ -386,13 +404,17 @@ export class DStorage implements DStorageContext {
       if (!provider) continue;
       try {
         return await provider.unwrapDek(wrapper);
-      } catch {
-        // This wrapper/provider pair didn't match — try the next wrapper.
+      } catch (err) {
+        this.logger?.debug?.(
+          "dStorage",
+          `Wrapper "${wrapper.wrapKeyName}" failed to unwrap DEK: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
     throw new Error(
       "[dStorage] Cannot unwrap DEK: this reference was not encrypted with any of your configured keys. " +
         "Check that you are using the correct encryption adapter, password, seed phrase, or keypair.",
+      { cause: { code: "no_wrapper_matched" } },
     );
   }
 
@@ -555,7 +577,8 @@ export class DStorage implements DStorageContext {
     } else {
       if (!ref.keyEnvelope) {
         throw new Error(
-          `[dStorage] Cannot decrypt refId ${refId}: key envelope is missing.`,
+          `[dStorage] Cannot decrypt refId ${refId}: key envelope is empty.`,
+          { cause: { code: "envelope_empty" } },
         );
       }
       dekScheme = await this._getDekScheme(ref.keyEnvelope);

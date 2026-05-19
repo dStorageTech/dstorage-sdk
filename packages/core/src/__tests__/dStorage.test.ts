@@ -246,6 +246,121 @@ describe("retrieveByRefId", () => {
   });
 });
 
+// ── keyEnvelope error codes ───────────────────────────────────────────────────
+// _getDekScheme must distinguish three structurally different failure modes so
+// callers can tell corruption/tampering apart from a simple wrong-password case.
+
+describe("keyEnvelope error codes on retrieveByRefId", () => {
+  // Helper: a chain adapter that overrides readReference to inject a bad envelope.
+  class TamperedChainAdapter extends MockChainAdapter {
+    constructor(private readonly badEnvelope: string) {
+      super();
+    }
+    override async readReference(
+      refId: string,
+    ): Promise<import("@dstorage/chain").ChainReference> {
+      const ref = await super.readReference(refId);
+      return { ...ref, keyEnvelope: this.badEnvelope };
+    }
+    override async listReferences(): Promise<
+      import("@dstorage/chain").DataReferenceSummary[]
+    > {
+      const refs = await super.listReferences();
+      return refs.map((r) => ({ ...r, keyEnvelope: this.badEnvelope }));
+    }
+  }
+
+  async function makeWithTamperedEnvelope(badEnvelope: string) {
+    const chain = new TamperedChainAdapter(badEnvelope);
+    // Upload with a normal adapter so a valid ref exists in the mock store.
+    const uploader = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: chain,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-test-passphrase-v1!",
+          salt: "envelope-test",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await uploader.init();
+    const { chainRefId } = await uploader.upload(enc("tamper test"));
+    return { ds: uploader, chainRefId };
+  }
+
+  it("throws with cause.code 'envelope_empty' when keyEnvelope is empty", async () => {
+    const { ds, chainRefId } = await makeWithTamperedEnvelope("");
+    const err = await ds.retrieveByRefId(chainRefId).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
+      "envelope_empty",
+    );
+  });
+
+  it("throws with cause.code 'envelope_malformed' when keyEnvelope is invalid JSON", async () => {
+    const { ds, chainRefId } = await makeWithTamperedEnvelope("not-valid-json");
+    const err = await ds.retrieveByRefId(chainRefId).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
+      "envelope_malformed",
+    );
+  });
+
+  it("throws with cause.code 'envelope_malformed' when keyEnvelope JSON has wrong structure", async () => {
+    const { ds, chainRefId } = await makeWithTamperedEnvelope(
+      JSON.stringify({ v: 1, wrappers: [] }),
+    );
+    const err = await ds.retrieveByRefId(chainRefId).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
+      "envelope_malformed",
+    );
+  });
+
+  it("throws with cause.code 'no_wrapper_matched' when the envelope is valid but the key is wrong", async () => {
+    const chain = new MockChainAdapter();
+    const alice = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: chain,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "alice-passphrase-ec",
+          salt: "0xAlice_ec",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    const bob = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: chain,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "bob-passphrase-ec",
+          salt: "0xBob_ec",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await alice.init();
+    await bob.init();
+    const { chainRefId } = await alice.upload(enc("alice secret ec"));
+    const err = await bob.retrieveByRefId(chainRefId).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
+      "no_wrapper_matched",
+    );
+  });
+
+  it("decryptionError in listReferences reflects the error code in its message", async () => {
+    const { ds, chainRefId } = await makeWithTamperedEnvelope("bad{json");
+    const refs = await ds.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.decryptionError).toBeDefined();
+    expect(entry?.decryptionError).toMatch(/malformed/i);
+  });
+});
+
 // ── public (isPublic: true) upload / retrieve ─────────────────────────────────
 
 describe("public upload and retrieve", () => {
