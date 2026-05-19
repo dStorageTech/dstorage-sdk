@@ -246,12 +246,8 @@ export class MidnightChainAdapter implements ChainAdapter {
   private readonly config: EnvironmentConfiguration;
 
   constructor(config: MidnightChainAdapterConfig) {
-    if (config.contractAddress !== undefined && !config.contractAddress) {
-      throw new Error(
-        "[dStorage/midnight] contractAddress is required. " +
-          "Deploy your DataRegistry contract to Midnight and pass the address, " +
-          "or omit it to auto-deploy via deployDataRegistry().",
-      );
+    if (config.contractAddress !== undefined) {
+      MidnightChainAdapter._validateContractAddress(config.contractAddress);
     }
     if (!config.network) {
       throw new Error("[dStorage/midnight] network is required.");
@@ -717,11 +713,22 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   // ── Contract address management ────────────────────────────────────────────
 
+  /** Midnight contract addresses are 32 bytes encoded as 64 lowercase hex chars. */
+  private static _validateContractAddress(address: string): void {
+    if (!/^[0-9a-f]{64}$/.test(address)) {
+      throw new Error(
+        `[dStorage/midnight] Invalid contract address "${address}". ` +
+          "Expected a 64-character lowercase hex string (32 bytes).",
+      );
+    }
+  }
+
   /**
    * Set the contract address to use for subsequent operations.
    * Resets the cached DataRegistryAPI so the next call re-joins at the new address.
    */
   setContractAddress(address: string): void {
+    MidnightChainAdapter._validateContractAddress(address);
     this._contractAddress = address;
     this._api = null;
   }
