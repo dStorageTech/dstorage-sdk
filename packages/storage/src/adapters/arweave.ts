@@ -123,12 +123,26 @@ export interface ArweaveAdapterConfig {
    */
   confirmationTimeoutMs?: number;
   /**
+   * When true, skip the SHA-256 content-hash check on retrieve.
+   * By default (false) the adapter fetches the transaction metadata and verifies
+   * that the `X-Content-Hash` tag recorded at upload time matches the retrieved
+   * bytes. Set to true only if you trust the gateway entirely or are using an
+   * Arweave node that does not expose the transaction metadata endpoint.
+   */
+  skipIntegrityCheck?: boolean;
+
+  /**
    * Optional logger for SDK operational output.
    * Pass `logger: console` to see all output, or inject your own logger.
    * Omit to suppress all SDK log output.
    */
   logger?: StorageAdapterLogger;
 }
+
+// ── Tag names ─────────────────────────────────────────────────────────────────
+
+/** Arweave transaction tag storing the SHA-256 hex digest of the uploaded bytes. */
+const CONTENT_HASH_TAG = "X-Content-Hash";
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
 
@@ -156,6 +170,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   private readonly shouldWaitForConfirm: boolean;
   private readonly confirmationPollMs: number;
   private readonly confirmationTimeoutMs: number;
+  private readonly skipIntegrityCheck: boolean;
   protected readonly logger: StorageAdapterLogger | undefined;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,6 +183,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     this.confirmationPollMs = config.confirmationPollMs ?? 30_000;
     this.confirmationTimeoutMs =
       config.confirmationTimeoutMs ?? 20 * 60 * 1_000;
+    this.skipIntegrityCheck = config.skipIntegrityCheck ?? false;
     this.logger = config.logger;
 
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
@@ -319,8 +335,70 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       );
     }
 
+    const bytes = raw as Uint8Array;
+
+    if (!this.skipIntegrityCheck) {
+      await this._verifyContentHash(arweave, id, bytes);
+    }
+
     this.logger?.log("dStorage/arweave", `Retrieved txId: ${id}`);
-    return raw as Uint8Array;
+    return bytes;
+  }
+
+  private async _verifyContentHash(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    arweave: any,
+    id: string,
+    bytes: Uint8Array,
+  ): Promise<void> {
+    let storedHash: string | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tx: any = await arweave.transactions.get(id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const tag of (tx.get("tags") as any[]) ?? []) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const name = (tag as any).get("name", {
+          decode: true,
+          string: true,
+        }) as string;
+        if (name === CONTENT_HASH_TAG) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          storedHash = (tag as any).get("value", {
+            decode: true,
+            string: true,
+          }) as string;
+          break;
+        }
+      }
+    } catch {
+      // Transaction metadata unavailable (e.g. not yet indexed) — skip rather than blocking retrieval.
+      this.logger?.warn(
+        "dStorage/arweave",
+        `Could not fetch transaction metadata for txId: ${id} — content hash not verified.`,
+      );
+      return;
+    }
+
+    if (!storedHash) {
+      throw new Error(
+        `[dStorage/arweave] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
+          "Set skipIntegrityCheck: true to retrieve data uploaded before integrity checking was enabled.",
+      );
+    }
+
+    const { blake3 } = await import("@noble/hashes/blake3.js");
+    const actualHash = Array.from(blake3(bytes))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    if (actualHash !== storedHash) {
+      throw new Error(
+        `[dStorage/arweave] Content hash mismatch for txId: ${id}.\n` +
+          "The retrieved data does not match the hash recorded at upload time.\n" +
+          "This may indicate data tampering by a malicious gateway.",
+      );
+    }
   }
 
   // ── estimateCost ───────────────────────────────────────────────────────────────

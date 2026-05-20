@@ -2,6 +2,7 @@
  * ArweavePaymentAdapter — unit tests
  */
 import { describe, it, expect } from "vitest";
+import { blake3 } from "@noble/hashes/blake3.js";
 import { ArweavePaymentAdapter } from "../adapters/arweave.js";
 import type { PaymentQuote } from "../types.js";
 
@@ -20,6 +21,53 @@ function makeQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
     ...overrides,
   };
 }
+
+// ── Content hash tagging in provideUploadData (M8) ───────────────────────────
+
+function hexOf(data: Uint8Array): string {
+  return Array.from(blake3(data))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+describe("ArweavePaymentAdapter — provideUploadData content hash (M8)", () => {
+  it("stores X-Content-Hash in metadata matching sha256 of the data", () => {
+    const adapter = makeAdapter();
+    const data = new TextEncoder().encode("hello arweave");
+    adapter.provideUploadData(data, {});
+    const pending = (
+      adapter as unknown as {
+        pendingUpload: { metadata: Record<string, string> };
+      }
+    ).pendingUpload;
+    expect(pending.metadata["X-Content-Hash"]).toBe(hexOf(data));
+  });
+
+  it("X-Content-Hash is present even when caller passes no metadata", () => {
+    const adapter = makeAdapter();
+    const data = new Uint8Array([1, 2, 3, 4]);
+    adapter.provideUploadData(data);
+    const pending = (
+      adapter as unknown as {
+        pendingUpload: { metadata: Record<string, string> };
+      }
+    ).pendingUpload;
+    expect(pending.metadata["X-Content-Hash"]).toBeDefined();
+  });
+
+  it("caller-supplied metadata is preserved alongside X-Content-Hash", () => {
+    const adapter = makeAdapter();
+    const data = new TextEncoder().encode("test");
+    adapter.provideUploadData(data, { "dstorage-version": "0.1.0" });
+    const pending = (
+      adapter as unknown as {
+        pendingUpload: { metadata: Record<string, string> };
+      }
+    ).pendingUpload;
+    expect(pending.metadata["dstorage-version"]).toBe("0.1.0");
+    expect(pending.metadata["X-Content-Hash"]).toBeDefined();
+  });
+});
 
 // ── Quote TTL enforcement (M11) ───────────────────────────────────────────────
 

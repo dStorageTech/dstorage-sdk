@@ -36,6 +36,7 @@
  * Docs: https://docs.arweave.org/developers
  */
 
+import { blake3 } from "@noble/hashes/blake3.js";
 import type {
   PaymentAdapterLogger,
   PaymentAdapter,
@@ -48,6 +49,9 @@ import type {
 
 /** Default quote validity window in milliseconds. 2 minutes is appropriate for Arweave's volatile pricing. */
 const DEFAULT_QUOTE_VALIDITY_MS = 120_000;
+
+/** Arweave transaction tag storing the SHA-256 hex digest of the uploaded bytes. */
+const CONTENT_HASH_TAG = "X-Content-Hash";
 
 export interface ArweavePaymentAdapterConfig {
   /**
@@ -171,7 +175,13 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): void {
-    this.pendingUpload = { data, metadata };
+    const hashHex = Array.from(blake3(data))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    this.pendingUpload = {
+      data,
+      metadata: { [CONTENT_HASH_TAG]: hashHex, ...metadata },
+    };
     this.logger?.log(
       "dStorage/arweave-payment",
       `Upload data staged: ${data.byteLength} bytes`,

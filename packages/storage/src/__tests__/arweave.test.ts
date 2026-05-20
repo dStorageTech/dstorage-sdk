@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { blake3 } from "@noble/hashes/blake3.js";
 import { ArweaveStorageAdapter, ARWEAVE_MAINNET } from "../adapters/arweave.js";
 
 // ── arweave-js mock ───────────────────────────────────────────────────────────
@@ -37,6 +38,25 @@ const mockUploader = {
   }),
 };
 
+function makeMockTxWithTags(tags: Record<string, string>) {
+  return {
+    get: (field: string) => {
+      if (field === "tags") {
+        return Object.entries(tags).map(([name, value]) => ({
+          get: (k: string, _opts?: unknown) => (k === "name" ? name : value),
+        }));
+      }
+    },
+  };
+}
+
+// The default getData response — keeps retrieve tests simple.
+const DEFAULT_RETRIEVED_DATA = new TextEncoder().encode("retrieved-data");
+// Pre-compute the matching hash so the default transactions.get mock passes verification.
+const DEFAULT_CONTENT_HASH = Array.from(blake3(DEFAULT_RETRIEVED_DATA))
+  .map((b) => b.toString(16).padStart(2, "0"))
+  .join("");
+
 const mockArweave = {
   // createTransaction is a top-level method on the Arweave instance
   createTransaction: vi.fn().mockResolvedValue(mockTx),
@@ -44,12 +64,15 @@ const mockArweave = {
     getPrice: vi.fn().mockResolvedValue("1000000"), // 1 winston
     sign: vi.fn().mockResolvedValue(undefined),
     getUploader: vi.fn().mockResolvedValue(mockUploader),
-    getData: vi
-      .fn()
-      .mockResolvedValue(new TextEncoder().encode("retrieved-data")),
+    getData: vi.fn().mockResolvedValue(DEFAULT_RETRIEVED_DATA),
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 1234567 } }),
+    get: vi
+      .fn()
+      .mockResolvedValue(
+        makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }),
+      ),
   },
   ar: {
     winstonToAr: vi.fn().mockReturnValue("0.000001"),
@@ -89,13 +112,14 @@ describe("ArweaveStorageAdapter", () => {
     mockUploader.uploadChunk.mockImplementation(async () => {
       uploaderState.calls++;
     });
-    mockArweave.transactions.getData.mockResolvedValue(
-      new TextEncoder().encode("retrieved-data"),
-    );
+    mockArweave.transactions.getData.mockResolvedValue(DEFAULT_RETRIEVED_DATA);
     mockArweave.transactions.getStatus.mockResolvedValue({
       status: 200,
       confirmed: { block_height: 1234567 },
     });
+    mockArweave.transactions.get.mockResolvedValue(
+      makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }),
+    );
     mockArweave.ar.winstonToAr.mockReturnValue("0.000001");
   });
 
@@ -314,6 +338,75 @@ describe("ArweaveStorageAdapter", () => {
 
       await expect(adapter.upload(enc("data"))).rejects.toThrow(/timeout/i);
     }, 10_000);
+  });
+
+  // ── M8: content integrity (X-Content-Hash) ───────────────────────────────────
+
+  function hexOf(data: Uint8Array): string {
+    return Array.from(blake3(data))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  describe("content integrity (M8)", () => {
+    it("upload adds X-Content-Hash tag matching sha256 of the data", async () => {
+      const data = enc("integrity test payload");
+      await nodeAdapter().upload(data);
+      expect(mockTx.addTag).toHaveBeenCalledWith("X-Content-Hash", hexOf(data));
+    });
+
+    it("retrieve passes when hash tag matches retrieved bytes", async () => {
+      const data = enc("retrieved-data");
+      mockArweave.transactions.get.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": hexOf(data) }),
+      );
+      await expect(nodeAdapter().retrieve("tx_123")).resolves.toBeDefined();
+    });
+
+    it("retrieve throws [dStorage/arweave] with 'hash mismatch' when data is tampered", async () => {
+      const originalData = enc("original bytes");
+      // Gateway serves wrong bytes but the tag still has the original hash
+      mockArweave.transactions.getData.mockResolvedValueOnce(
+        enc("tampered bytes"),
+      );
+      mockArweave.transactions.get.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": hexOf(originalData) }),
+      );
+      const err = await nodeAdapter()
+        .retrieve("tx_tampered")
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain("[dStorage/arweave]");
+      expect((err as Error).message).toMatch(/hash mismatch/i);
+    });
+
+    it("retrieve throws when X-Content-Hash tag is absent (integrity check enabled)", async () => {
+      mockArweave.transactions.get.mockResolvedValueOnce(
+        makeMockTxWithTags({}),
+      );
+      await expect(nodeAdapter().retrieve("tx_no_hash")).rejects.toThrow(
+        "[dStorage/arweave]",
+      );
+    });
+
+    it("retrieve skips hash verification when skipIntegrityCheck is true", async () => {
+      // Return data that would fail the hash check — adapter must not call transactions.get
+      mockArweave.transactions.getData.mockResolvedValueOnce(
+        enc("tampered bytes"),
+      );
+      const adapter = nodeAdapter({ skipIntegrityCheck: true });
+      await expect(adapter.retrieve("tx_skip")).resolves.toBeDefined();
+      expect(mockArweave.transactions.get).not.toHaveBeenCalled();
+    });
+
+    it("retrieve passes when transactions.get() fails (graceful degradation)", async () => {
+      mockArweave.transactions.get.mockRejectedValueOnce(
+        new Error("tx not indexed yet"),
+      );
+      await expect(
+        nodeAdapter().retrieve("tx_unindexed"),
+      ).resolves.toBeDefined();
+    });
   });
 
   // ── browser ArConnect detection ──────────────────────────────────────────────
