@@ -349,7 +349,7 @@ describe("ArweaveStorageAdapter", () => {
   }
 
   describe("content integrity (M8)", () => {
-    it("upload adds X-Content-Hash tag matching sha256 of the data", async () => {
+    it("upload adds X-Content-Hash tag matching blake3 of the data", async () => {
       const data = enc("integrity test payload");
       await nodeAdapter().upload(data);
       expect(mockTx.addTag).toHaveBeenCalledWith("X-Content-Hash", hexOf(data));
@@ -380,7 +380,7 @@ describe("ArweaveStorageAdapter", () => {
       expect((err as Error).message).toMatch(/hash mismatch/i);
     });
 
-    it("retrieve throws when X-Content-Hash tag is absent (integrity check enabled)", async () => {
+    it("retrieve throws when X-Content-Hash tag is absent", async () => {
       mockArweave.transactions.get.mockResolvedValueOnce(
         makeMockTxWithTags({}),
       );

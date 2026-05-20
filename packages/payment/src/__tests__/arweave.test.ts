@@ -31,7 +31,7 @@ function hexOf(data: Uint8Array): string {
 }
 
 describe("ArweavePaymentAdapter — provideUploadData content hash (M8)", () => {
-  it("stores X-Content-Hash in metadata matching sha256 of the data", () => {
+  it("stores X-Content-Hash in metadata matching blake3 of the data", () => {
     const adapter = makeAdapter();
     const data = new TextEncoder().encode("hello arweave");
     adapter.provideUploadData(data, {});

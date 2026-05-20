@@ -123,7 +123,7 @@ export interface ArweaveAdapterConfig {
    */
   confirmationTimeoutMs?: number;
   /**
-   * When true, skip the SHA-256 content-hash check on retrieve.
+   * When true, skip the BLAKE3 content-hash check on retrieve.
    * By default (false) the adapter fetches the transaction metadata and verifies
    * that the `X-Content-Hash` tag recorded at upload time matches the retrieved
    * bytes. Set to true only if you trust the gateway entirely or are using an
@@ -141,7 +141,7 @@ export interface ArweaveAdapterConfig {
 
 // ── Tag names ─────────────────────────────────────────────────────────────────
 
-/** Arweave transaction tag storing the SHA-256 hex digest of the uploaded bytes. */
+/** Arweave transaction tag storing the BLAKE3 hex digest of the uploaded bytes. */
 const CONTENT_HASH_TAG = "X-Content-Hash";
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
@@ -383,7 +383,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     if (!storedHash) {
       throw new Error(
         `[dStorage/arweave] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
-          "Set skipIntegrityCheck: true to retrieve data uploaded before integrity checking was enabled.",
+          "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
       );
     }
 

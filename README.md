@@ -411,6 +411,8 @@ In public mode **neither layer is encrypted**:
 - The on-chain `encryptionScheme` field is set to `""` (empty string), which the SDK uses on read to skip decryption entirely.
 
 > **Warning**: Public mode is a permanent, irreversible choice per upload. Once data is stored unencrypted on Arweave (or another permanent storage network) it cannot be made private retroactively. Only use `isPublic: true` for data you explicitly intend to be world-readable.
+>
+> **Integrity**: For public uploads, the only protection against a malicious gateway substituting the data is the `X-Content-Hash` BLAKE3 tag written to the Arweave transaction at upload time. `ArweaveStorageAdapter` verifies this tag on every `retrieve()` call. Private uploads have the additional guarantee of XChaCha20-Poly1305 AEAD authentication. Pass `skipIntegrityCheck: true` to the adapter to opt out of the hash check when using a fully trusted private gateway.
 
 The default (`isPublic` omitted or `false`) always encrypts both layers. Omitting the flag is safe — accidental public uploads require an explicit opt-in.
 

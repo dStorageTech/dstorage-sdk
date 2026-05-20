@@ -359,11 +359,8 @@ export class DStorage implements DStorageContext {
       try {
         const dek = await provider.unwrapDek(wrapper);
         return XChaChaScheme.fromKey(dek);
-      } catch (err) {
-        this.logger?.debug?.(
-          "dStorage",
-          `Wrapper "${wrapper.wrapKeyName}" failed to unwrap DEK: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      } catch {
+        // Wrapper didn't match — try the next one.
       }
     }
     throw new Error(
@@ -404,11 +401,8 @@ export class DStorage implements DStorageContext {
       if (!provider) continue;
       try {
         return await provider.unwrapDek(wrapper);
-      } catch (err) {
-        this.logger?.debug?.(
-          "dStorage",
-          `Wrapper "${wrapper.wrapKeyName}" failed to unwrap DEK: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      } catch {
+        // Wrapper didn't match — try the next one.
       }
     }
     throw new Error(

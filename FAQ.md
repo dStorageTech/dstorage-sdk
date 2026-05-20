@@ -249,6 +249,14 @@ Each ciphertext is bound to its role via Additional Authenticated Data (AAD). La
 
 A reordered chunk, a substituted manifest, or a ciphertext moved from one role to another causes MAC verification to fail before any data is returned.
 
+**How does the SDK verify that an Arweave gateway hasn't tampered with the retrieved data?**
+
+Every Arweave transaction includes an `X-Content-Hash` tag containing the BLAKE3 hex digest of the uploaded bytes (ciphertext for private uploads, plaintext for public ones). On retrieval, `ArweaveStorageAdapter` fetches the transaction metadata, recomputes the hash, and throws `[dStorage/arweave] Content hash mismatch` if they differ.
+
+For private uploads this is defence-in-depth on top of XChaCha20-Poly1305 AEAD authentication. For public uploads it is the primary integrity guarantee.
+
+To opt out when using a fully trusted private gateway, pass `skipIntegrityCheck: true` to `ArweaveStorageAdapter`.
+
 **Is the storage pointer on-chain encrypted?**
 
 Yes. The `storageId` (the Arweave content address) is encrypted with the same per-upload DEK using a fresh nonce, then stored in the `DataRegistry` contract. A blockchain observer cannot learn which storage resource belongs to which wallet even though the on-chain record is public.
@@ -300,7 +308,7 @@ Use the `walletMode` discriminated union:
 { walletMode: "connector", connectorName: "mnLace" }
 ```
 
-`walletMode` defaults to `"facade"` for backwards compatibility.
+`walletMode` defaults to `"facade"`.
 
 **How do I configure ArweaveTurbo for managed uploads?**
 
