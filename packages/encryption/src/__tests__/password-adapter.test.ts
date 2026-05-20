@@ -5,6 +5,9 @@ import {
   KDF_PRESETS,
   type KdfPreset,
 } from "../PasswordEncryptionAdapter.js";
+import { mlkemGenerateKeypairFromSeed } from "@dstorage/crypto";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 // Use the "v1-lite" preset params for all functional tests.
 // N=65536 (64 MB) matches a real-world preset and exercises the full scrypt
@@ -528,6 +531,74 @@ describe("generatePqsPassword", () => {
     const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
     expect(keypairAdapter).toBeDefined();
     expect(keypairAdapter.name).toMatch(/^mlkem/);
+  });
+
+  it("ML-KEM seed is domain-separated from the raw scrypt output (not passed directly)", async () => {
+    // Before the fix: mlkemGenerateKeypairFromSeed receives the raw seed64 directly,
+    // so the keypair derived from the raw seed matches. After the fix, HKDF with
+    // info="dstorage:mlkem-seed:v1" is applied first — the raw seed produces a
+    // different keypair, so this test fails before the fix.
+    const pw = generatePqsPassword();
+    const adapter = new PasswordEncryptionAdapter({
+      password: pw,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    });
+    const rawSeed = await adapter.getSeed();
+
+    // Keypair derived directly from the raw seed (old, unsafe behaviour).
+    const { pk: pkRaw } = mlkemGenerateKeypairFromSeed(rawSeed);
+
+    // Keypair produced by intoKeypairEncryptionAdapter (must use HKDF domain separation).
+    const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const wrapped = await keypairAdapter.wrapDek(dek);
+
+    // Trying to unwrap with the raw-seed keypair must FAIL — confirming the two
+    // paths are independent.
+    const { KeypairEncryptionAdapter } =
+      await import("../KeypairEncryptionAdapter.js");
+    const rawAdapter = KeypairEncryptionAdapter.fromPublicKey(pkRaw);
+    // wrapDek with raw public key should produce a ciphertext that the domain-separated
+    // adapter cannot unwrap — i.e. the public keys are different.
+    const wrappedRaw = await rawAdapter.wrapDek(dek);
+    await expect(keypairAdapter.unwrapDek(wrappedRaw)).rejects.toThrow();
+  });
+
+  it("ML-KEM seed is derived via HKDF with info='dstorage:mlkem-seed:v1'", async () => {
+    const pw = generatePqsPassword();
+    const adapter = new PasswordEncryptionAdapter({
+      password: pw,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    });
+    const rawSeed = await adapter.getSeed();
+
+    // Expected: HKDF-derived seed with the domain-separation label.
+    const expectedMlkemSeed = hkdf(
+      sha256,
+      rawSeed,
+      undefined,
+      new TextEncoder().encode("dstorage:mlkem-seed:v1"),
+      64,
+    );
+    const { pk: pkExpected } = mlkemGenerateKeypairFromSeed(expectedMlkemSeed);
+
+    // Actual: wrap a DEK with the adapter's keypair, then verify it can be unwrapped
+    // with the keypair derived from the expected HKDF seed.
+    const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const wrapped = await keypairAdapter.wrapDek(dek);
+
+    const { KeypairEncryptionAdapter } =
+      await import("../KeypairEncryptionAdapter.js");
+    const { sk: skExpected } = mlkemGenerateKeypairFromSeed(expectedMlkemSeed);
+    const expectedAdapter = KeypairEncryptionAdapter.fromKeypair(
+      pkExpected,
+      skExpected,
+    );
+    const unwrapped = await expectedAdapter.unwrapDek(wrapped);
+    expect(Array.from(unwrapped)).toEqual(Array.from(dek));
   });
 
   it("same password + same salt → same keypair adapter (deterministic)", async () => {

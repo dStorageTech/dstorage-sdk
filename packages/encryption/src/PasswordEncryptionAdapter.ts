@@ -323,8 +323,19 @@ export class PasswordEncryptionAdapter implements EncryptionAdapter {
     const { KeypairEncryptionAdapter } =
       await import("./KeypairEncryptionAdapter.js");
     const { mlkemGenerateKeypairFromSeed } = await import("@dstorage/crypto");
+    const { hkdf } = await import("@noble/hashes/hkdf.js");
+    const { sha256 } = await import("@noble/hashes/sha2.js");
     const seed64 = await this.getSeed();
-    const { pk, sk } = mlkemGenerateKeypairFromSeed(seed64, variant);
+    // Domain-separate the ML-KEM seed from the symmetric KEK path so that
+    // compromise of one derived value cannot aid an attack on the other.
+    const mlkemSeed = hkdf(
+      sha256,
+      seed64,
+      undefined,
+      new TextEncoder().encode("dstorage:mlkem-seed:v1"),
+      64,
+    );
+    const { pk, sk } = mlkemGenerateKeypairFromSeed(mlkemSeed, variant);
     return KeypairEncryptionAdapter.fromKeypair(pk, sk, variant);
   }
 }
