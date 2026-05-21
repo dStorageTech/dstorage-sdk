@@ -44,6 +44,7 @@ interface Props {
   onKeySourceChange: (src: KeySource) => void;
   mnemonic: string;
   onMnemonicChange: (m: string) => void;
+  onRegisterNewPrfCredential: () => Promise<void>;
 }
 
 export function PatientPanel({
@@ -72,6 +73,7 @@ export function PatientPanel({
   onKeySourceChange,
   mnemonic,
   onMnemonicChange,
+  onRegisterNewPrfCredential,
 }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -403,9 +405,28 @@ export function PatientPanel({
                 <div className="as-card-note">Checking support…</div>
               )}
               {prfSupported === true && hasCredential() && (
-                <div className="as-card-note">
-                  Credential saved — tap your authenticator to unlock
-                </div>
+                <>
+                  <div className="as-card-note">
+                    Credential saved — tap your authenticator to unlock
+                  </div>
+                  <span
+                    className="as-card-register-link"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRegisterNewPrfCredential();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        onRegisterNewPrfCredential();
+                      }
+                    }}
+                  >
+                    Register a different authenticator
+                  </span>
+                </>
               )}
             </button>
             <button

@@ -950,6 +950,18 @@ code {
   margin-top: 4px;
 }
 
+.as-card-register-link {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 10px;
+  color: var(--c-blue);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .as-card-cmd {
   display: flex;
   flex-direction: column;

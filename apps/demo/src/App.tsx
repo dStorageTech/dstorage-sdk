@@ -107,54 +107,68 @@ export default function App() {
    * sdk.init() handles wallet connection, contract deployment/join, and
    * encryption key derivation via the configured encryptionSeedProvider.
    */
-  const ensureSdkReady = useCallback(async (): Promise<DStorage> => {
-    if (dstorage) return dstorage;
+  const ensureSdkReady = useCallback(
+    async (forceRegisterPrf = false): Promise<DStorage> => {
+      if (dstorage && !forceRegisterPrf) return dstorage;
 
-    let encryptionAdapter;
-    if (keySource === "webauthn-prf") {
-      const seed = hasCredential()
-        ? await getPrfSeed()
-        : await createPrfCredential();
-      const seedHex = Array.from(seed, (b) =>
-        b.toString(16).padStart(2, "0"),
-      ).join("");
-      encryptionAdapter = new MnemonicEncryptionAdapter({ seedHex });
-    } else if (keySource === "mnemonic") {
-      encryptionAdapter = new MnemonicEncryptionAdapter({ mnemonic });
-    }
+      let encryptionAdapter;
+      if (keySource === "webauthn-prf") {
+        const seed =
+          !forceRegisterPrf && hasCredential()
+            ? await getPrfSeed()
+            : await createPrfCredential();
+        const seedHex = Array.from(seed, (b) =>
+          b.toString(16).padStart(2, "0"),
+        ).join("");
+        encryptionAdapter = new MnemonicEncryptionAdapter({ seedHex });
+      } else if (keySource === "mnemonic") {
+        encryptionAdapter = new MnemonicEncryptionAdapter({ mnemonic });
+      }
 
-    const sdk = await buildSDK(
-      storageAdapterKey,
+      const sdk = await buildSDK(
+        storageAdapterKey,
+        chainAdapterKey,
+        paymentAdapterKey,
+        {
+          managedAuthToken,
+          managedServiceUrl,
+          selectedContractAddress,
+          ...(encryptionAdapter ? { encryptionAdapter } : {}),
+        },
+      );
+
+      const contractAddress = await sdk.init();
+      if (contractAddress) {
+        setSelectedContractAddress(contractAddress);
+        setContractAddressInput(contractAddress);
+        setDeployNewContractSelected(false);
+      }
+
+      setDStorage(sdk);
+      return sdk;
+    },
+    [
       chainAdapterKey,
+      dstorage,
+      keySource,
+      mnemonic,
+      managedServiceUrl,
+      managedAuthToken,
       paymentAdapterKey,
-      {
-        managedAuthToken,
-        managedServiceUrl,
-        selectedContractAddress,
-        ...(encryptionAdapter ? { encryptionAdapter } : {}),
-      },
-    );
+      selectedContractAddress,
+      storageAdapterKey,
+    ],
+  );
 
-    const contractAddress = await sdk.init();
-    if (contractAddress) {
-      setSelectedContractAddress(contractAddress);
-      setContractAddressInput(contractAddress);
-      setDeployNewContractSelected(false);
+  const handleRegisterNewPrfCredential = useCallback(async () => {
+    setDStorage(null);
+    try {
+      await ensureSdkReady(true);
+      setStep("ready");
+    } catch (err) {
+      showError(err);
     }
-
-    setDStorage(sdk);
-    return sdk;
-  }, [
-    chainAdapterKey,
-    dstorage,
-    keySource,
-    mnemonic,
-    managedServiceUrl,
-    managedAuthToken,
-    paymentAdapterKey,
-    selectedContractAddress,
-    storageAdapterKey,
-  ]);
+  }, [ensureSdkReady]);
 
   const refreshExistingReferences = useCallback(
     async (sdk: DStorage): Promise<DataReferenceSummary[]> => {
@@ -511,6 +525,7 @@ export default function App() {
               onKeySourceChange={setKeySource}
               mnemonic={mnemonic}
               onMnemonicChange={setMnemonic}
+              onRegisterNewPrfCredential={handleRegisterNewPrfCredential}
             />
           </div>
         ) : (
@@ -545,6 +560,7 @@ export default function App() {
                 onKeySourceChange={setKeySource}
                 mnemonic={mnemonic}
                 onMnemonicChange={setMnemonic}
+                onRegisterNewPrfCredential={handleRegisterNewPrfCredential}
               />
             </div>
             <div className="hv-divider">

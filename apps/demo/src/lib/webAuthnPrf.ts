@@ -6,13 +6,15 @@
  * keyed to this origin and credential. We HKDF-expand it to 64 bytes and use
  * it as a seedHex for MnemonicEncryptionAdapter → intoKeypairEncryptionAdapter.
  *
- * Only the credential ID (a non-secret handle) is persisted in localStorage.
- * The derived seed lives in memory for the duration of the session.
+ * Multiple credential IDs are stored as a JSON array in localStorage so that
+ * multiple users can each register their own key on the same browser/device.
+ * On authentication, all stored IDs are passed to allowCredentials and the
+ * browser selects whichever matches the presented authenticator.
  *
  * PRF is supported in Chrome/Edge 116+. Firefox and Safari do not support it.
  */
 
-const CREDENTIAL_ID_KEY = "dstorage:webauthn:credentialId:v1";
+const CREDENTIAL_IDS_KEY = "dstorage:webauthn:credentialIds:v1";
 
 // Fixed salt — binds derived keys to this application context.
 const PRF_SALT = new TextEncoder().encode("dstorage:encryption-seed:v1");
@@ -27,17 +29,28 @@ type PrfExtOutput = {
   results?: { first?: ArrayBuffer; second?: ArrayBuffer };
 };
 
-function saveCredentialId(id: Uint8Array): void {
-  localStorage.setItem(
-    CREDENTIAL_ID_KEY,
-    btoa(Array.from(id, (b) => String.fromCharCode(b)).join("")),
-  );
+function toBase64(id: Uint8Array): string {
+  return btoa(Array.from(id, (b) => String.fromCharCode(b)).join(""));
 }
 
-function loadCredentialId(): Uint8Array | null {
-  const saved = localStorage.getItem(CREDENTIAL_ID_KEY);
-  if (!saved) return null;
-  return Uint8Array.from(atob(saved), (c) => c.charCodeAt(0));
+function loadCredentialIds(): Uint8Array[] {
+  const raw = localStorage.getItem(CREDENTIAL_IDS_KEY);
+  if (!raw) return [];
+  try {
+    const arr: string[] = JSON.parse(raw);
+    return arr.map((b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  } catch {
+    return [];
+  }
+}
+
+function saveCredentialId(id: Uint8Array): void {
+  const b64 = toBase64(id);
+  const raw = localStorage.getItem(CREDENTIAL_IDS_KEY);
+  const list: string[] = raw ? JSON.parse(raw) : [];
+  if (list.includes(b64)) return;
+  list.push(b64);
+  localStorage.setItem(CREDENTIAL_IDS_KEY, JSON.stringify(list));
 }
 
 async function expandToSeed(prfOutput: ArrayBuffer): Promise<Uint8Array> {
@@ -63,9 +76,32 @@ async function expandToSeed(prfOutput: ArrayBuffer): Promise<Uint8Array> {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** True if a credential has been registered on this device. */
+/** True if at least one credential has been registered on this device. */
 export function hasCredential(): boolean {
-  return localStorage.getItem(CREDENTIAL_ID_KEY) !== null;
+  return loadCredentialIds().length > 0;
+}
+
+/**
+ * Remove a stored credential.
+ * - No argument: clears all credentials.
+ * - With `id`: removes only that specific credential.
+ */
+export function clearCredential(id?: Uint8Array): void {
+  if (!id) {
+    localStorage.removeItem(CREDENTIAL_IDS_KEY);
+    return;
+  }
+  const target = toBase64(id);
+  const raw = localStorage.getItem(CREDENTIAL_IDS_KEY);
+  if (!raw) return;
+  const list: string[] = JSON.parse(raw).filter(
+    (b64: string) => b64 !== target,
+  );
+  if (list.length === 0) {
+    localStorage.removeItem(CREDENTIAL_IDS_KEY);
+  } else {
+    localStorage.setItem(CREDENTIAL_IDS_KEY, JSON.stringify(list));
+  }
 }
 
 /**
@@ -93,7 +129,7 @@ export async function isPrfSupported(): Promise<boolean> {
 /**
  * Register a new WebAuthn credential with PRF and derive the 64-byte seed.
  * Prompts the user to set up a biometric authenticator.
- * Saves the credential ID to localStorage for future sessions.
+ * Appends the credential ID to the stored list for future sessions.
  */
 export async function createPrfCredential(): Promise<Uint8Array> {
   const credential = (await navigator.credentials.create({
@@ -131,28 +167,32 @@ export async function createPrfCredential(): Promise<Uint8Array> {
   }
 
   const credentialId = new Uint8Array(credential.rawId);
-  saveCredentialId(credentialId);
 
   // Some authenticators return the PRF result directly from create().
   if (ext.prf.results?.first) {
+    saveCredentialId(credentialId);
     return expandToSeed(ext.prf.results.first);
   }
 
-  // Others require a separate get() to obtain the PRF output.
-  return getPrfSeed(credentialId);
+  // Save first so the new credential appears in the allowCredentials list,
+  // then authenticate with all credentials so the user can pick any of them.
+  saveCredentialId(credentialId);
+  return getPrfSeed();
 }
 
 /**
- * Derive the 64-byte seed using the stored credential.
- * Prompts biometric verification. Throws if no credential is saved.
+ * Derive the 64-byte seed using a stored credential.
+ * Passes all stored credential IDs to allowCredentials so the browser
+ * selects whichever matches the presented authenticator automatically.
  *
- * @param credentialId  Override the stored credential ID (used by createPrfCredential).
+ * @param credentialId  Override: use only this ID (used by createPrfCredential).
  */
 export async function getPrfSeed(
   credentialId?: Uint8Array,
 ): Promise<Uint8Array> {
-  const id = credentialId ?? loadCredentialId();
-  if (!id) {
+  const fromStorage = credentialId === undefined;
+  const ids = credentialId ? [credentialId] : loadCredentialIds();
+  if (ids.length === 0) {
     throw new Error(
       "No WebAuthn credential found. Please set up your authenticator first.",
     );
@@ -161,7 +201,10 @@ export async function getPrfSeed(
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
-      allowCredentials: [{ type: "public-key", id: id.buffer as ArrayBuffer }],
+      allowCredentials: ids.map((id) => ({
+        type: "public-key" as const,
+        id: Uint8Array.from(id),
+      })),
       userVerification: "required",
       extensions: {
         prf: { eval: { first: PRF_SALT } } satisfies PrfExtInput,
@@ -172,10 +215,22 @@ export async function getPrfSeed(
   const prfResults = (
     assertion.getClientExtensionResults() as { prf?: PrfExtOutput }
   ).prf;
-  if (!prfResults?.results?.first) {
+
+  if (!prfResults) {
+    throw new Error(
+      "PRF extension was not processed — Chrome/Edge 116+ required. " +
+        "Use the passphrase option instead.",
+    );
+  }
+
+  if (!prfResults.results?.first) {
+    // Remove only the specific credential that failed, preserving others.
+    if (fromStorage) clearCredential(new Uint8Array(assertion.rawId));
     throw new Error(
       "PRF evaluation returned no output — this authenticator may not support PRF. " +
-        "Use the passphrase option instead.",
+        (fromStorage
+          ? "Your saved credential has been cleared. Please re-register or use the passphrase option instead."
+          : "Use the passphrase option instead."),
     );
   }
 
