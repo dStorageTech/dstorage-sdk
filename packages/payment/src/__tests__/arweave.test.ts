@@ -22,7 +22,7 @@ function makeQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
   };
 }
 
-// ── Content hash tagging in provideUploadData (M8) ───────────────────────────
+// ── Content hash tagging in provideUploadData ────────────────────────────────
 
 function hexOf(data: Uint8Array): string {
   return Array.from(blake3(data))
@@ -30,7 +30,7 @@ function hexOf(data: Uint8Array): string {
     .join("");
 }
 
-describe("ArweavePaymentAdapter — provideUploadData content hash (M8)", () => {
+describe("ArweavePaymentAdapter — provideUploadData content hash", () => {
   it("stores X-Content-Hash in metadata matching blake3 of the data", () => {
     const adapter = makeAdapter();
     const data = new TextEncoder().encode("hello arweave");
@@ -69,7 +69,7 @@ describe("ArweavePaymentAdapter — provideUploadData content hash (M8)", () => 
   });
 });
 
-// ── Quote TTL enforcement (M11) ───────────────────────────────────────────────
+// ── Quote TTL enforcement ─────────────────────────────────────────────────────
 
 describe("ArweavePaymentAdapter — quote TTL", () => {
   it("pay() throws when the quote has already expired", async () => {

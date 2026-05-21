@@ -293,7 +293,7 @@ describe("ManagedPaymentAdapter — request timeout", () => {
   });
 });
 
-// ── Quote TTL enforcement (M11) ───────────────────────────────────────────────
+// ── Quote TTL enforcement ─────────────────────────────────────────────────────
 
 describe("ManagedPaymentAdapter — quote TTL", () => {
   it("pay() throws when the quote has already expired", async () => {

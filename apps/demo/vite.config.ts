@@ -86,24 +86,13 @@ export default defineConfig({
   // from @subsquid/scale-codec → assert → util don't throw "process is not defined".
   // The only access that fires at module init time is `process.env.NODE_DEBUG`.
   define: {
+    global: "globalThis",
     "process.env": "{}",
     "process.browser": "true",
     "process.version": '"v18.0.0"',
     "process.platform": '"browser"',
   },
   optimizeDeps: {
-    esbuildOptions: {
-      target: "esnext",
-      supported: { "top-level-await": true },
-      // Same shim for the esbuild pre-bundling phase (optimizeDeps).
-      define: {
-        global: "globalThis",
-        "process.env": "{}",
-        "process.browser": "true",
-        "process.version": '"v18.0.0"',
-        "process.platform": '"browser"',
-      },
-    },
     // Pre-bundle compact-runtime so esbuild converts its CJS/TLA to ESM.
     // Also pre-bundle other packages that need CJS→ESM conversion.
     include: [

@@ -132,6 +132,15 @@ export interface ArweaveAdapterConfig {
   skipIntegrityCheck?: boolean;
 
   /**
+   * Maximum number of bytes allowed in a single retrieve() call.
+   * The adapter rejects the download before materialising the blob if the
+   * Arweave transaction metadata reports a larger `data_size`, and always
+   * rejects after loading if the actual byte count exceeds this value.
+   * Defaults to 268_435_456 (256 MB).
+   */
+  maxRetrieveSizeBytes?: number;
+
+  /**
    * Optional logger for SDK operational output.
    * Pass `logger: console` to see all output, or inject your own logger.
    * Omit to suppress all SDK log output.
@@ -171,6 +180,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   private readonly confirmationPollMs: number;
   private readonly confirmationTimeoutMs: number;
   private readonly skipIntegrityCheck: boolean;
+  private readonly maxRetrieveSizeBytes: number;
   protected readonly logger: StorageAdapterLogger | undefined;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -184,6 +194,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     this.confirmationTimeoutMs =
       config.confirmationTimeoutMs ?? 20 * 60 * 1_000;
     this.skipIntegrityCheck = config.skipIntegrityCheck ?? false;
+    this.maxRetrieveSizeBytes =
+      config.maxRetrieveSizeBytes ?? 256 * 1024 * 1024;
     this.logger = config.logger;
 
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
@@ -322,6 +334,58 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   async retrieve(id: string): Promise<Uint8Array> {
     const arweave = await this.getClient();
 
+    // ── Pre-fetch transaction metadata ────────────────────────────────────────
+    // Done before downloading data so we can (a) reject oversized blobs before
+    // they materialise in memory, and (b) grab the X-Content-Hash tag for
+    // integrity verification — both in a single round trip.
+    let storedHash: string | undefined;
+    let metadataFetchFailed = false;
+    if (!this.skipIntegrityCheck) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tx: any = await arweave.transactions.get(id);
+
+        // Size guard — reject before materialising a potentially huge blob.
+        const dataSize = parseInt(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ((tx as any).data_size as string) ?? "0",
+          10,
+        );
+        if (!isNaN(dataSize) && dataSize > this.maxRetrieveSizeBytes) {
+          throw new Error(
+            `[dStorage/arweave] Transaction data_size (${dataSize} bytes) exceeds ` +
+              `the configured limit of ${this.maxRetrieveSizeBytes} bytes for txId: ${id}.`,
+          );
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const tag of (tx.get("tags") as any[]) ?? []) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const name = (tag as any).get("name", {
+            decode: true,
+            string: true,
+          }) as string;
+          if (name === CONTENT_HASH_TAG) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            storedHash = (tag as any).get("value", {
+              decode: true,
+              string: true,
+            }) as string;
+            break;
+          }
+        }
+      } catch (err) {
+        if ((err as Error).message.startsWith("[dStorage/arweave]")) throw err;
+        // Metadata unavailable (e.g. not yet indexed) — skip hash check but still download.
+        this.logger?.warn(
+          "dStorage/arweave",
+          `Could not fetch transaction metadata for txId: ${id} — content hash not verified.`,
+        );
+        metadataFetchFailed = true;
+      }
+    }
+
+    // ── Download data ─────────────────────────────────────────────────────────
     const raw = await arweave.transactions.getData(id, {
       decode: true,
       string: false,
@@ -337,68 +401,37 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     const bytes = raw as Uint8Array;
 
-    if (!this.skipIntegrityCheck) {
-      await this._verifyContentHash(arweave, id, bytes);
+    // Post-load size guard — defense-in-depth and covers the skipIntegrityCheck path.
+    if (bytes.byteLength > this.maxRetrieveSizeBytes) {
+      throw new Error(
+        `[dStorage/arweave] Downloaded ${bytes.byteLength} bytes for txId: ${id}, ` +
+          `which exceeds the configured limit of ${this.maxRetrieveSizeBytes} bytes.`,
+      );
+    }
+
+    // ── Content hash verification ─────────────────────────────────────────────
+    if (!this.skipIntegrityCheck && !metadataFetchFailed) {
+      if (!storedHash) {
+        throw new Error(
+          `[dStorage/arweave] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
+            "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
+        );
+      }
+      const { blake3 } = await import("@noble/hashes/blake3.js");
+      const actualHash = Array.from(blake3(bytes))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      if (actualHash !== storedHash) {
+        throw new Error(
+          `[dStorage/arweave] Content hash mismatch for txId: ${id}.\n` +
+            "The retrieved data does not match the hash recorded at upload time.\n" +
+            "This may indicate data tampering by a malicious gateway.",
+        );
+      }
     }
 
     this.logger?.log("dStorage/arweave", `Retrieved txId: ${id}`);
     return bytes;
-  }
-
-  private async _verifyContentHash(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    arweave: any,
-    id: string,
-    bytes: Uint8Array,
-  ): Promise<void> {
-    let storedHash: string | undefined;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tx: any = await arweave.transactions.get(id);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const tag of (tx.get("tags") as any[]) ?? []) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const name = (tag as any).get("name", {
-          decode: true,
-          string: true,
-        }) as string;
-        if (name === CONTENT_HASH_TAG) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          storedHash = (tag as any).get("value", {
-            decode: true,
-            string: true,
-          }) as string;
-          break;
-        }
-      }
-    } catch {
-      // Transaction metadata unavailable (e.g. not yet indexed) — skip rather than blocking retrieval.
-      this.logger?.warn(
-        "dStorage/arweave",
-        `Could not fetch transaction metadata for txId: ${id} — content hash not verified.`,
-      );
-      return;
-    }
-
-    if (!storedHash) {
-      throw new Error(
-        `[dStorage/arweave] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
-          "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
-      );
-    }
-
-    const { blake3 } = await import("@noble/hashes/blake3.js");
-    const actualHash = Array.from(blake3(bytes))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    if (actualHash !== storedHash) {
-      throw new Error(
-        `[dStorage/arweave] Content hash mismatch for txId: ${id}.\n` +
-          "The retrieved data does not match the hash recorded at upload time.\n" +
-          "This may indicate data tampering by a malicious gateway.",
-      );
-    }
   }
 
   // ── estimateCost ───────────────────────────────────────────────────────────────

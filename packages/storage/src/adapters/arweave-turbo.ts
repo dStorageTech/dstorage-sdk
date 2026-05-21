@@ -66,6 +66,13 @@ export interface ArweaveTurboAdapterConfig {
    */
   gateway?: string;
   /**
+   * Maximum number of bytes allowed in a single retrieve() call.
+   * Rejects if the `Content-Length` response header exceeds this value, and
+   * always rejects after loading if the actual byte count exceeds it.
+   * Defaults to 268_435_456 (256 MB).
+   */
+  maxRetrieveSizeBytes?: number;
+  /**
    * Optional logger for SDK operational output.
    */
   logger?: StorageAdapterLogger;
@@ -96,6 +103,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   private readonly signingServerUrl: string | null;
   private readonly authToken: string | undefined;
   private readonly gateway: string;
+  private readonly maxRetrieveSizeBytes: number;
   protected readonly logger: StorageAdapterLogger | undefined;
 
   /** Cached server RSA modulus (base64url). Fetched once, reused across uploads. */
@@ -107,6 +115,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       : null;
     this.authToken = config.authToken;
     this.gateway = config.gateway ?? ARWEAVE_GATEWAY_URL;
+    this.maxRetrieveSizeBytes =
+      config.maxRetrieveSizeBytes ?? 256 * 1024 * 1024;
     this.logger = config.logger;
 
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
@@ -184,8 +194,32 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
           `Check: https://viewblock.io/arweave/tx/${id}`,
       );
     }
+
+    // Pre-load size guard — reject before materialising the body when the
+    // server advertises a size that already exceeds the limit.
+    const contentLength = resp.headers.get("Content-Length");
+    if (contentLength !== null) {
+      const size = parseInt(contentLength, 10);
+      if (!isNaN(size) && size > this.maxRetrieveSizeBytes) {
+        throw new Error(
+          `[dStorage/arweave-turbo] Content-Length (${size} bytes) exceeds ` +
+            `the configured limit of ${this.maxRetrieveSizeBytes} bytes for txId: ${id}.`,
+        );
+      }
+    }
+
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+
+    // Post-load size guard — defense-in-depth; catches missing or incorrect Content-Length.
+    if (bytes.byteLength > this.maxRetrieveSizeBytes) {
+      throw new Error(
+        `[dStorage/arweave-turbo] Downloaded ${bytes.byteLength} bytes for txId: ${id}, ` +
+          `which exceeds the configured limit of ${this.maxRetrieveSizeBytes} bytes.`,
+      );
+    }
+
     this.logger?.log("dStorage/arweave-turbo", `Retrieved txId: ${id}`);
-    return new Uint8Array(await resp.arrayBuffer());
+    return bytes;
   }
 
   // ── estimateCost ───────────────────────────────────────────────────────────────

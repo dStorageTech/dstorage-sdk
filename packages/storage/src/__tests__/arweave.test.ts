@@ -38,8 +38,9 @@ const mockUploader = {
   }),
 };
 
-function makeMockTxWithTags(tags: Record<string, string>) {
+function makeMockTxWithTags(tags: Record<string, string>, dataSize = "0") {
   return {
+    data_size: dataSize,
     get: (field: string) => {
       if (field === "tags") {
         return Object.entries(tags).map(([name, value]) => ({
@@ -340,7 +341,7 @@ describe("ArweaveStorageAdapter", () => {
     }, 10_000);
   });
 
-  // ── M8: content integrity (X-Content-Hash) ───────────────────────────────────
+  // ── content integrity (X-Content-Hash) ───────────────────────────────────────
 
   function hexOf(data: Uint8Array): string {
     return Array.from(blake3(data))
@@ -348,7 +349,7 @@ describe("ArweaveStorageAdapter", () => {
       .join("");
   }
 
-  describe("content integrity (M8)", () => {
+  describe("content integrity", () => {
     it("upload adds X-Content-Hash tag matching blake3 of the data", async () => {
       const data = enc("integrity test payload");
       await nodeAdapter().upload(data);
@@ -406,6 +407,54 @@ describe("ArweaveStorageAdapter", () => {
       await expect(
         nodeAdapter().retrieve("tx_unindexed"),
       ).resolves.toBeDefined();
+    });
+  });
+
+  // ── retrieve size limit ───────────────────────────────────────────────────────
+
+  describe("retrieve size limit", () => {
+    it("throws when tx data_size exceeds maxRetrieveSizeBytes (pre-download guard)", async () => {
+      const limit = 100;
+      mockArweave.transactions.get.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }, "9999"),
+      );
+      const adapter = nodeAdapter({ maxRetrieveSizeBytes: limit });
+      await expect(adapter.retrieve("tx_huge")).rejects.toThrow(
+        /data_size.*exceeds.*configured limit/,
+      );
+      // Data was NOT downloaded.
+      expect(mockArweave.transactions.getData).not.toHaveBeenCalled();
+    });
+
+    it("throws when downloaded bytes exceed maxRetrieveSizeBytes (post-load guard)", async () => {
+      // data_size in tx metadata is below the limit so the pre-load guard passes,
+      // but getData returns more bytes than the limit — triggering the post-load guard.
+      const bigData = new Uint8Array(200);
+      mockArweave.transactions.get.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": hexOf(bigData) }, "50"),
+      );
+      mockArweave.transactions.getData.mockResolvedValueOnce(bigData);
+      const adapter = nodeAdapter({ maxRetrieveSizeBytes: 100 });
+      await expect(adapter.retrieve("tx_big")).rejects.toThrow(
+        /Downloaded.*exceeds.*configured limit/,
+      );
+    });
+
+    it("post-load guard applies even when skipIntegrityCheck is true", async () => {
+      const bigData = new Uint8Array(200);
+      mockArweave.transactions.getData.mockResolvedValueOnce(bigData);
+      const adapter = nodeAdapter({
+        maxRetrieveSizeBytes: 100,
+        skipIntegrityCheck: true,
+      });
+      await expect(adapter.retrieve("tx_big_skip")).rejects.toThrow(
+        /Downloaded.*exceeds.*configured limit/,
+      );
+    });
+
+    it("succeeds when data is within the limit", async () => {
+      const adapter = nodeAdapter({ maxRetrieveSizeBytes: 1024 * 1024 });
+      await expect(adapter.retrieve("tx_ok")).resolves.toBeDefined();
     });
   });
 
