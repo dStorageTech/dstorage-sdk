@@ -3,9 +3,9 @@
  * Provides seed-based key derivation utilities:
  *
  * - KeyDeriver: resolves a BIP-39 mnemonic or raw hex seed to raw bytes,
- *   implementing EncryptionAdapter for use with deriveKek().
- * - deriveKek: derives a 32-byte Key Encryption Key (KEK) from raw seed bytes
- *   used to wrap per-upload random DEKs.
+ *   importing seed bytes as a CryptoKey for use with deriveKek().
+ * - deriveKek: derives a 32-byte Key Encryption Key (KEK) from a non-extractable
+ *   HKDF CryptoKey, used to wrap per-upload random DEKs.
  */
 
 // ── KeyDeriver ────────────────────────────────────────────────────────────────
@@ -36,7 +36,8 @@ export class KeyDeriver {
   }
 
   /**
-   * Return the raw seed bytes for use with deriveKek().
+   * Return the raw seed bytes.
+   * Import the result as a non-extractable HKDF CryptoKey before passing to deriveKek().
    */
   async getSeed(): Promise<Uint8Array> {
     return this.getSeedBuffer();

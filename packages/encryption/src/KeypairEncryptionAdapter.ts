@@ -45,7 +45,7 @@ export type { MLKemVariant };
 export class KeypairEncryptionAdapter implements EncryptionAdapter {
   readonly name: string;
   readonly publicKey: Uint8Array;
-  private readonly secretKey: Uint8Array | undefined;
+  private secretKey: Uint8Array | undefined;
   private readonly variant: MLKemVariant;
 
   private constructor(
@@ -156,6 +156,17 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
       ...(params ? { params } : {}),
     });
     return ps.intoKeypairEncryptionAdapter(variant);
+  }
+
+  /**
+   * Zero the Secret Key bytes and mark this adapter as read-only.
+   * Call when the adapter is no longer needed to minimise the window
+   * during which raw ML-KEM key material sits in GC-reachable memory.
+   * After destroy(), unwrapDek() will throw.
+   */
+  destroy(): void {
+    this.secretKey?.fill(0);
+    this.secretKey = undefined;
   }
 
   async wrapDek(dek: Uint8Array): Promise<WrappedDekResult> {

@@ -47,4 +47,12 @@ export interface EncryptionAdapter {
    * @throws      If the adapter's key material cannot decrypt the wrapped DEK
    */
   unwrapDek(data: WrappedDekResult): Promise<Uint8Array>;
+
+  /**
+   * Zero any raw key bytes held by this adapter and mark it unusable.
+   * Optional — only adapters holding raw byte arrays implement this.
+   * Call after the adapter is no longer needed to minimise the window
+   * during which secret key material sits in GC-reachable memory.
+   */
+  destroy?(): void;
 }

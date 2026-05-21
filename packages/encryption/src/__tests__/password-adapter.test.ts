@@ -5,6 +5,7 @@ import {
   KDF_PRESETS,
   type KdfPreset,
 } from "../PasswordEncryptionAdapter.js";
+import { scrypt } from "@noble/hashes/scrypt.js";
 import { mlkemGenerateKeypairFromSeed } from "@dstorage/crypto";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -24,87 +25,81 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 // ---------------------------------------------------------------------------
-// Determinism
+// Determinism — same inputs always produce a key that can roundtrip
 // ---------------------------------------------------------------------------
 
 describe("determinism", () => {
-  it("same password + same string salt → identical seed", async () => {
-    const a = await new PasswordEncryptionAdapter({
+  it("same password + same string salt → identical encryption key (roundtrip)", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
-    }).getSeed();
-    const b = await new PasswordEncryptionAdapter({
+    });
+    const b = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
-    }).getSeed();
-    expect(bytesToHex(a)).toBe(bytesToHex(b));
+    });
+    const wrapped = await a.wrapDek(dek);
+    const recovered = await b.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
   });
 
-  it("same password + same Uint8Array salt → identical seed", async () => {
+  it("same password + same Uint8Array salt → identical encryption key (roundtrip)", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const salt = new TextEncoder().encode("raw-bytes-salt");
-    const a = await new PasswordEncryptionAdapter({
+    const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt,
       params: FAST_PARAMS,
-    }).getSeed();
-    const b = await new PasswordEncryptionAdapter({
+    });
+    const b = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt,
       params: FAST_PARAMS,
-    }).getSeed();
-    expect(bytesToHex(a)).toBe(bytesToHex(b));
+    });
+    const wrapped = await a.wrapDek(dek);
+    const recovered = await b.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Sensitivity
+// Sensitivity — different inputs cannot cross-unwrap
 // ---------------------------------------------------------------------------
 
 describe("sensitivity", () => {
-  it("same password + different string salt → different seed", async () => {
-    const a = await new PasswordEncryptionAdapter({
+  it("same password + different string salt → cannot unwrap (different key)", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: "myapp:alice",
       params: FAST_PARAMS,
-    }).getSeed();
-    const b = await new PasswordEncryptionAdapter({
+    });
+    const b = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: "myapp:bob",
       params: FAST_PARAMS,
-    }).getSeed();
-    expect(bytesToHex(a)).not.toBe(bytesToHex(b));
+    });
+    const wrapped = await a.wrapDek(dek);
+    await expect(b.unwrapDek(wrapped)).rejects.toThrow();
   });
 
-  it("different password + same salt → different seed", async () => {
-    const a = await new PasswordEncryptionAdapter({
+  it("different password + same salt → cannot unwrap (different key)", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
-    }).getSeed();
-    const b = await new PasswordEncryptionAdapter({
+    });
+    const b = new PasswordEncryptionAdapter({
       password: "An0ther$ecureP@ss!",
       salt: GOOD_SALT,
       params: FAST_PARAMS,
-    }).getSeed();
-    expect(bytesToHex(a)).not.toBe(bytesToHex(b));
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Output format
-// ---------------------------------------------------------------------------
-
-describe("output format", () => {
-  it("getSeed() returns a 64-byte Uint8Array", async () => {
-    const seed = await new PasswordEncryptionAdapter({
-      password: GOOD_PASSWORD,
-      salt: GOOD_SALT,
-      params: FAST_PARAMS,
-    }).getSeed();
-    expect(seed).toBeInstanceOf(Uint8Array);
-    expect(seed.byteLength).toBe(64);
+    });
+    const wrapped = await a.wrapDek(dek);
+    await expect(b.unwrapDek(wrapped)).rejects.toThrow();
   });
 });
 
@@ -175,36 +170,40 @@ describe("password validation", () => {
     ).toThrow("entropy too low");
   });
 
-  it("custom minPasswordLength: 8 → accepts 8-char password", async () => {
-    // "Pa$1Word" — 8 chars, mixed charset → should pass with minPasswordLength:8
-    const seed = await new PasswordEncryptionAdapter({
+  it("custom minPasswordLength: 8 → accepts 8-char password and can wrapDek", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const adapter = new PasswordEncryptionAdapter({
       password: "Pa$1Word",
       salt: GOOD_SALT,
       params: FAST_PARAMS,
       minPasswordLength: 8,
-      minEntropyBits: 30, // lower bar too so it doesn't fail entropy
-    }).getSeed();
-    expect(seed.byteLength).toBe(64);
+      minEntropyBits: 30,
+    });
+    const wrapped = await adapter.wrapDek(dek);
+    expect(wrapped.algorithm).toBe("xchacha20poly1305-v1");
   });
 
-  it("custom minEntropyBits: 30 → accepts low-entropy password", async () => {
-    // non-sequential digits only, 12 chars → ~39.9 bits, accepted when threshold is 30
-    const seed = await new PasswordEncryptionAdapter({
+  it("custom minEntropyBits: 30 → accepts low-entropy password and can wrapDek", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const adapter = new PasswordEncryptionAdapter({
       password: "159753246801",
       salt: GOOD_SALT,
       params: FAST_PARAMS,
       minEntropyBits: 30,
-    }).getSeed();
-    expect(seed.byteLength).toBe(64);
+    });
+    const wrapped = await adapter.wrapDek(dek);
+    expect(wrapped.algorithm).toBe("xchacha20poly1305-v1");
   });
 
-  it("high-entropy mixed password passes validation", async () => {
-    const seed = await new PasswordEncryptionAdapter({
+  it("high-entropy mixed password passes validation and can wrapDek", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const adapter = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
-    }).getSeed();
-    expect(seed.byteLength).toBe(64);
+    });
+    const wrapped = await adapter.wrapDek(dek);
+    expect(wrapped.algorithm).toBe("xchacha20poly1305-v1");
   });
 
   it("additionalValidators: called and can throw", () => {
@@ -225,14 +224,16 @@ describe("password validation", () => {
     expect(validator).toHaveBeenCalledWith("Mypassword!XyZ8");
   });
 
-  it("additionalValidators: called on passing password", async () => {
+  it("additionalValidators: called on passing password; wrapDek succeeds", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const validator = vi.fn();
-    await new PasswordEncryptionAdapter({
+    const adapter = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
       additionalValidators: [validator],
-    }).getSeed();
+    });
+    await adapter.wrapDek(dek);
     expect(validator).toHaveBeenCalledWith(GOOD_PASSWORD);
   });
 });
@@ -247,42 +248,53 @@ describe("KDF presets", () => {
     expect(KDF_PRESETS["v1-lite"].N).toBe(65536);
   });
 
-  it("preset 'v1-lite' → same password + same salt produces a 64-byte seed", async () => {
-    const seed = await new PasswordEncryptionAdapter({
+  it("preset 'v1-lite' → can wrapDek/unwrapDek", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       preset: "v1-lite",
-    }).getSeed();
-    expect(seed).toBeInstanceOf(Uint8Array);
-    expect(seed.byteLength).toBe(64);
+    });
+    const b = new PasswordEncryptionAdapter({
+      password: GOOD_PASSWORD,
+      salt: GOOD_SALT,
+      preset: "v1-lite",
+    });
+    const wrapped = await a.wrapDek(dek);
+    const recovered = await b.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
   });
 
-  it("custom params override preset N/r/p → deterministic output", async () => {
-    const a = await new PasswordEncryptionAdapter({
+  it("custom params override preset N/r/p → deterministic encryption key", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 2048, r: 4, p: 1 },
-    }).getSeed();
-    const b = await new PasswordEncryptionAdapter({
+    });
+    const b = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 2048, r: 4, p: 1 },
-    }).getSeed();
-    expect(bytesToHex(a)).toBe(bytesToHex(b));
+    });
+    const wrapped = await a.wrapDek(dek);
+    expect(await b.unwrapDek(wrapped)).toEqual(dek);
   });
 
-  it("same password + same salt + different custom N → different seed", async () => {
-    const a = await new PasswordEncryptionAdapter({
+  it("same password + same salt + different custom N → cannot unwrap", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 1024, r: 8, p: 1 },
-    }).getSeed();
-    const b = await new PasswordEncryptionAdapter({
+    });
+    const b = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
       params: { N: 2048, r: 8, p: 1 },
-    }).getSeed();
-    expect(bytesToHex(a)).not.toBe(bytesToHex(b));
+    });
+    const wrapped = await a.wrapDek(dek);
+    await expect(b.unwrapDek(wrapped)).rejects.toThrow();
   });
 
   it("unknown preset string → throws at construction", () => {
@@ -344,7 +356,8 @@ describe("getKdfParams", () => {
 // ---------------------------------------------------------------------------
 
 describe("fromKdfParams", () => {
-  it("produces the same seed as the original provider", async () => {
+  it("produces the same encryption key as the original provider (roundtrip)", async () => {
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const original = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
@@ -358,9 +371,9 @@ describe("fromKdfParams", () => {
       ...storedParams,
     });
 
-    const seedA = await original.getSeed();
-    const seedB = await reconstructed.getSeed();
-    expect(bytesToHex(seedA)).toBe(bytesToHex(seedB));
+    const wrapped = await original.wrapDek(dek);
+    const recovered = await reconstructed.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
   });
 
   it("getKdfParams() round-trips through fromKdfParams", () => {
@@ -405,7 +418,7 @@ describe("fromKdfParams", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Weak-pattern rejection (D3 structural checks)
+// Weak-pattern rejection (structural checks)
 // ---------------------------------------------------------------------------
 
 describe("weak-pattern rejection", () => {
@@ -475,22 +488,26 @@ describe("weak-pattern rejection", () => {
     ).toThrow("too few distinct characters");
   });
 
-  it("long passphrase 'correcthorsebatterystaple' → passes", async () => {
-    const seed = await new PasswordEncryptionAdapter({
-      password: "correcthorsebatterystaple",
-      salt: GOOD_SALT,
-      params: FAST_PARAMS,
-    }).getSeed();
-    expect(seed.byteLength).toBe(64);
+  it("long passphrase 'correcthorsebatterystaple' → construction succeeds", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "correcthorsebatterystaple",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).not.toThrow();
   });
 
-  it("strong mixed password passes all structural checks", async () => {
-    const seed = await new PasswordEncryptionAdapter({
-      password: "Str0ng-PaSSw0rd!",
-      salt: GOOD_SALT,
-      params: FAST_PARAMS,
-    }).getSeed();
-    expect(seed.byteLength).toBe(64);
+  it("strong mixed password passes all structural checks", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: "Str0ng-PaSSw0rd!",
+          salt: GOOD_SALT,
+          params: FAST_PARAMS,
+        }),
+    ).not.toThrow();
   });
 });
 
@@ -533,48 +550,48 @@ describe("generatePqsPassword", () => {
     expect(keypairAdapter.name).toMatch(/^mlkem/);
   });
 
-  it("ML-KEM seed is domain-separated from the raw scrypt output (not passed directly)", async () => {
-    // Before the fix: mlkemGenerateKeypairFromSeed receives the raw seed64 directly,
-    // so the keypair derived from the raw seed matches. After the fix, HKDF with
-    // info="dstorage:mlkem-seed:v1" is applied first — the raw seed produces a
-    // different keypair, so this test fails before the fix.
+  it("ML-KEM seed is domain-separated from the raw scrypt output", async () => {
     const pw = generatePqsPassword();
+
+    // Compute the raw scrypt output independently (without going through the adapter).
+    const passwordBytes = new TextEncoder().encode(pw);
+    const saltBytes = new TextEncoder().encode(GOOD_SALT);
+    const rawSeed = scrypt(passwordBytes, saltBytes, {
+      ...FAST_PARAMS,
+      dkLen: 64,
+    });
+
+    // Keypair derived directly from the raw scrypt output (no HKDF — old, unsafe path).
+    const { pk: pkRaw } = mlkemGenerateKeypairFromSeed(rawSeed);
+
+    // Keypair produced by intoKeypairEncryptionAdapter (must use HKDF domain separation).
     const adapter = new PasswordEncryptionAdapter({
       password: pw,
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     });
-    const rawSeed = await adapter.getSeed();
-
-    // Keypair derived directly from the raw seed (old, unsafe behaviour).
-    const { pk: pkRaw } = mlkemGenerateKeypairFromSeed(rawSeed);
-
-    // Keypair produced by intoKeypairEncryptionAdapter (must use HKDF domain separation).
     const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const wrapped = await keypairAdapter.wrapDek(dek);
 
-    // Trying to unwrap with the raw-seed keypair must FAIL — confirming the two
-    // paths are independent.
+    // Trying to unwrap with the raw-seed keypair MUST FAIL — the two paths are independent.
     const { KeypairEncryptionAdapter } =
       await import("../KeypairEncryptionAdapter.js");
     const rawAdapter = KeypairEncryptionAdapter.fromPublicKey(pkRaw);
-    // wrapDek with raw public key should produce a ciphertext that the domain-separated
-    // adapter cannot unwrap — i.e. the public keys are different.
     const wrappedRaw = await rawAdapter.wrapDek(dek);
     await expect(keypairAdapter.unwrapDek(wrappedRaw)).rejects.toThrow();
   });
 
   it("ML-KEM seed is derived via HKDF with info='dstorage:mlkem-seed:v1'", async () => {
     const pw = generatePqsPassword();
-    const adapter = new PasswordEncryptionAdapter({
-      password: pw,
-      salt: GOOD_SALT,
-      params: FAST_PARAMS,
-    });
-    const rawSeed = await adapter.getSeed();
 
-    // Expected: HKDF-derived seed with the domain-separation label.
+    // Compute expected ML-KEM seed independently: scrypt → HKDF(sha256, salt=32zeros, info).
+    const passwordBytes = new TextEncoder().encode(pw);
+    const saltBytes = new TextEncoder().encode(GOOD_SALT);
+    const rawSeed = scrypt(passwordBytes, saltBytes, {
+      ...FAST_PARAMS,
+      dkLen: 64,
+    });
     const expectedMlkemSeed = hkdf(
       sha256,
       rawSeed,
@@ -582,17 +599,21 @@ describe("generatePqsPassword", () => {
       new TextEncoder().encode("dstorage:mlkem-seed:v1"),
       64,
     );
-    const { pk: pkExpected } = mlkemGenerateKeypairFromSeed(expectedMlkemSeed);
+    const { pk: pkExpected, sk: skExpected } =
+      mlkemGenerateKeypairFromSeed(expectedMlkemSeed);
 
-    // Actual: wrap a DEK with the adapter's keypair, then verify it can be unwrapped
-    // with the keypair derived from the expected HKDF seed.
+    // Verify that intoKeypairEncryptionAdapter() uses the same derivation.
+    const adapter = new PasswordEncryptionAdapter({
+      password: pw,
+      salt: GOOD_SALT,
+      params: FAST_PARAMS,
+    });
     const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const wrapped = await keypairAdapter.wrapDek(dek);
 
     const { KeypairEncryptionAdapter } =
       await import("../KeypairEncryptionAdapter.js");
-    const { sk: skExpected } = mlkemGenerateKeypairFromSeed(expectedMlkemSeed);
     const expectedAdapter = KeypairEncryptionAdapter.fromKeypair(
       pkExpected,
       skExpected,

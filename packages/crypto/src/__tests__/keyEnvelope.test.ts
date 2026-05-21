@@ -38,34 +38,44 @@ describe("generateDek", () => {
   });
 });
 
+// Helper: import raw bytes as a non-extractable HKDF CryptoKey.
+function importSeed(bytes: Uint8Array): Promise<CryptoKey> {
+  return globalThis.crypto.subtle.importKey("raw", bytes, "HKDF", false, [
+    "deriveBits",
+  ]);
+}
+
 // ── deriveKek ─────────────────────────────────────────────────────────────────
 
 describe("deriveKek", () => {
   it("returns a 32-byte Uint8Array", async () => {
-    const seed = new Uint8Array(32).fill(0xab);
-    const kek = await deriveKek(seed);
+    const key = await importSeed(new Uint8Array(32).fill(0xab));
+    const kek = await deriveKek(key);
     expect(kek).toBeInstanceOf(Uint8Array);
     expect(kek.byteLength).toBe(32);
   });
 
   it("same seed and context → same KEK (deterministic)", async () => {
-    const seed = new Uint8Array(32).fill(0x42);
-    const kek1 = await deriveKek(seed, "0xAlice");
-    const kek2 = await deriveKek(seed, "0xAlice");
+    const key1 = await importSeed(new Uint8Array(32).fill(0x42));
+    const key2 = await importSeed(new Uint8Array(32).fill(0x42));
+    const kek1 = await deriveKek(key1, "0xAlice");
+    const kek2 = await deriveKek(key2, "0xAlice");
     expect(kek1).toEqual(kek2);
   });
 
   it("same seed with different context → different KEK", async () => {
-    const seed = new Uint8Array(32).fill(0x42);
-    const kekAlice = await deriveKek(seed, "0xAlice");
-    const kekBob = await deriveKek(seed, "0xBob");
+    const key1 = await importSeed(new Uint8Array(32).fill(0x42));
+    const key2 = await importSeed(new Uint8Array(32).fill(0x42));
+    const kekAlice = await deriveKek(key1, "0xAlice");
+    const kekBob = await deriveKek(key2, "0xBob");
     expect(kekAlice).not.toEqual(kekBob);
   });
 
   it("with context vs without context → different KEK", async () => {
-    const seed = new Uint8Array(32).fill(0x42);
-    const kekWithout = await deriveKek(seed);
-    const kekWith = await deriveKek(seed, "ctx");
+    const key1 = await importSeed(new Uint8Array(32).fill(0x42));
+    const key2 = await importSeed(new Uint8Array(32).fill(0x42));
+    const kekWithout = await deriveKek(key1);
+    const kekWith = await deriveKek(key2, "ctx");
     expect(kekWithout).not.toEqual(kekWith);
   });
 });

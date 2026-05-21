@@ -106,7 +106,7 @@ export function mlkemGenerateKeypair(variant: MLKemVariant = DEFAULT_VARIANT): {
  * Generate a deterministic ML-KEM keypair from a 64-byte seed (d‖z, per FIPS 203).
  * The same seed always produces the same keypair.
  *
- * Requires exactly 64 bytes — PasswordEncryptionAdapter.getSeed() outputs 64 bytes by design.
+ * Requires exactly 64 bytes — derive via Web Crypto HKDF deriveBits (512 bits) before calling.
  *
  * @param seed64   64-byte seed material
  * @param variant  ML-KEM variant. Default: "mlkem768".

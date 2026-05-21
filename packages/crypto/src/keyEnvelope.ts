@@ -74,28 +74,26 @@ export function generateDek(): Uint8Array {
 // ── KEK derivation ────────────────────────────────────────────────────────────
 
 /**
- * Derive a 32-byte Key Encryption Key from seed bytes using HKDF-SHA-256.
+ * Derive a 32-byte Key Encryption Key from a non-extractable HKDF CryptoKey.
+ *
+ * Callers must import their raw seed bytes via `crypto.subtle.importKey("raw", seed,
+ * "HKDF", false, ["deriveBits"])` before calling this function. Accepting only
+ * CryptoKey enforces that raw key material is never held in a JS-accessible heap
+ * variable at this call site.
  *
  * Uses the same salt as the data encryption key ("dstorage-xchacha-v1") but a
  * distinct info string ("dstorage:xchacha20poly1305:kek:v1") to domain-separate
  * the KEK from all other keys derived from the same seed.
  *
- * @param seed     High-entropy seed bytes (wallet signature, BIP-39 seed, etc.)
- * @param context  Optional wallet address or other binding context, incorporated
- *                 into the info string to bind the KEK to a specific account.
+ * @param keyMaterial  Non-extractable HKDF CryptoKey imported from the seed.
+ * @param context      Optional wallet address or other binding context, incorporated
+ *                     into the info string to bind the KEK to a specific account.
  */
 export async function deriveKek(
-  seed: Uint8Array,
+  keyMaterial: CryptoKey,
   context?: string,
 ): Promise<Uint8Array> {
   const enc = new TextEncoder();
-  const keyMaterial = await globalThis.crypto.subtle.importKey(
-    "raw",
-    new Uint8Array(seed),
-    "HKDF",
-    false,
-    ["deriveBits"],
-  );
   const info = context
     ? `dstorage:xchacha20poly1305:kek:v1:${context}`
     : "dstorage:xchacha20poly1305:kek:v1";

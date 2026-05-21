@@ -44,7 +44,6 @@
  *   password: "correct-horse-battery-staple",
  *   salt: "myapp:alice@example.com",
  * });
- * const seed = await adapter.getSeed();
  * // Persist these alongside the encrypted blob:
  * const meta = { ...adapter.getKdfParams(), salt: "myapp:alice@example.com" };
  *
@@ -58,7 +57,6 @@
  *   r: meta.r,
  *   p: meta.p,
  * });
- * const seed = await adapter.getSeed();
  *
  * @example
  * // Constrained environment (mobile browser):
@@ -199,11 +197,16 @@ export interface FromKdfParamsConfig extends StoredKdfParams {
 
 export class PasswordEncryptionAdapter implements EncryptionAdapter {
   readonly name = "password";
-  private readonly password: string;
   private readonly salt: Uint8Array;
   private readonly N: number;
   private readonly r: number;
   private readonly p: number;
+  /**
+   * Non-extractable HKDF CryptoKey imported from the scrypt output.
+   * The raw scrypt bytes are zeroed immediately after import; this handle is
+   * the only in-memory representation of the secret from this point on.
+   */
+  private readonly kekMaterialPromise: Promise<CryptoKey>;
 
   constructor(config: PasswordEncryptionAdapterConfig) {
     validatePassword(
@@ -213,13 +216,35 @@ export class PasswordEncryptionAdapter implements EncryptionAdapter {
       config.additionalValidators,
     );
 
-    this.password = config.password;
     this.salt = resolveSalt(config.salt);
 
     const resolved = resolveParams(config.preset, config.params);
     this.N = resolved.N;
     this.r = resolved.r;
     this.p = resolved.p;
+
+    // Run scrypt synchronously (noble is pure-JS, single-threaded), then
+    // immediately import the output as a non-extractable CryptoKey and zero
+    // the raw bytes so they leave the JS heap as soon as possible.
+    const passwordBytes = new TextEncoder().encode(config.password);
+    const seed = scrypt(passwordBytes, this.salt, {
+      N: this.N,
+      r: this.r,
+      p: this.p,
+      dkLen: 64,
+    });
+    this.kekMaterialPromise = globalThis.crypto.subtle
+      .importKey("raw", seed, "HKDF", false, ["deriveBits"])
+      .then(
+        (key) => {
+          seed.fill(0);
+          return key;
+        },
+        (err) => {
+          seed.fill(0);
+          throw err;
+        },
+      );
   }
 
   /**
@@ -278,40 +303,39 @@ export class PasswordEncryptionAdapter implements EncryptionAdapter {
     return { kdf: "scrypt", N: this.N, r: this.r, p: this.p };
   }
 
-  /**
-   * Derive the raw 64-byte seed from the password using scrypt.
-   * Kept public for interoperability (e.g. passing to ML-KEM keygen), but
-   * not part of the EncryptionAdapter interface — use wrapDek/unwrapDek instead.
-   */
-  async getSeed(): Promise<Uint8Array> {
-    const passwordBytes = new TextEncoder().encode(this.password);
-    return scrypt(passwordBytes, this.salt, {
-      N: this.N,
-      r: this.r,
-      p: this.p,
-      dkLen: 64,
-    });
-  }
-
   async wrapDek(dek: Uint8Array): Promise<WrappedDekResult> {
-    const kek = await deriveKek(await this.getSeed());
-    return {
-      algorithm: "xchacha20poly1305-v1",
-      kekDerivation: "hkdf-sha256-v1",
-      wrappedDek: await wrapKey(dek, kek),
-    };
+    const kekMaterial = await this.kekMaterialPromise;
+    const kek = await deriveKek(kekMaterial);
+    try {
+      return {
+        algorithm: "xchacha20poly1305-v1",
+        kekDerivation: "hkdf-sha256-v1",
+        wrappedDek: await wrapKey(dek, kek),
+      };
+    } finally {
+      kek.fill(0);
+    }
   }
 
   async unwrapDek({ wrappedDek }: WrappedDekResult): Promise<Uint8Array> {
-    const kek = await deriveKek(await this.getSeed());
-    return unwrapKey(wrappedDek, kek);
+    const kekMaterial = await this.kekMaterialPromise;
+    const kek = await deriveKek(kekMaterial);
+    try {
+      return unwrapKey(wrappedDek, kek);
+    } finally {
+      kek.fill(0);
+    }
   }
 
   /**
-   * Deterministically derive a ML-KEM keypair from this adapter's seed.
+   * Deterministically derive a ML-KEM keypair from this adapter's key material.
    *
-   * The 64-byte scrypt seed is passed directly to mlkemGenerateKeypairFromSeed
-   * (which expects exactly 64 bytes as the (d‖z) seed per FIPS 203).
+   * Uses Web Crypto HKDF to derive a 64-byte ML-KEM seed from the stored
+   * CryptoKey, domain-separated from the symmetric KEK derivation path with
+   * info="dstorage:mlkem-seed:v1". This is equivalent to noble's
+   * hkdf(sha256, scryptOutput, undefined, info, 64) but avoids materialising
+   * the raw scrypt output in a JS-accessible variable.
+   *
    * Same password + salt + variant always produces the same keypair.
    *
    * @param variant  ML-KEM variant. Default: "mlkem768".
@@ -319,24 +343,29 @@ export class PasswordEncryptionAdapter implements EncryptionAdapter {
   async intoKeypairEncryptionAdapter(
     variant?: import("./KeypairEncryptionAdapter.js").MLKemVariant,
   ): Promise<import("./KeypairEncryptionAdapter.js").KeypairEncryptionAdapter> {
-    // Imported inside the method body to avoid circular module initialization.
     const { KeypairEncryptionAdapter } =
       await import("./KeypairEncryptionAdapter.js");
     const { mlkemGenerateKeypairFromSeed } = await import("@dstorage/crypto");
-    const { hkdf } = await import("@noble/hashes/hkdf.js");
-    const { sha256 } = await import("@noble/hashes/sha2.js");
-    const seed64 = await this.getSeed();
-    // Domain-separate the ML-KEM seed from the symmetric KEK path so that
-    // compromise of one derived value cannot aid an attack on the other.
-    const mlkemSeed = hkdf(
-      sha256,
-      seed64,
-      undefined,
-      new TextEncoder().encode("dstorage:mlkem-seed:v1"),
-      64,
+    const kekMaterial = await this.kekMaterialPromise;
+    // noble hkdf(sha256, seed, undefined, info, 64) uses a 32-zero-byte salt
+    // when salt is undefined. The Web Crypto equivalent is salt: new Uint8Array(32).
+    const mlkemBits = await globalThis.crypto.subtle.deriveBits(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: new Uint8Array(32),
+        info: new TextEncoder().encode("dstorage:mlkem-seed:v1"),
+      },
+      kekMaterial,
+      512, // 64 bytes
     );
-    const { pk, sk } = mlkemGenerateKeypairFromSeed(mlkemSeed, variant);
-    return KeypairEncryptionAdapter.fromKeypair(pk, sk, variant);
+    const mlkemSeed = new Uint8Array(mlkemBits);
+    try {
+      const { pk, sk } = mlkemGenerateKeypairFromSeed(mlkemSeed, variant);
+      return KeypairEncryptionAdapter.fromKeypair(pk, sk, variant);
+    } finally {
+      mlkemSeed.fill(0);
+    }
   }
 }
 

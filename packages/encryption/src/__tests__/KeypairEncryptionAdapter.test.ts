@@ -303,9 +303,10 @@ describe("fromMnemonic", () => {
     expect(recovered).toEqual(dek);
   });
 
-  it("32-byte seedHex → throws", async () => {
-    await expect(
-      KeypairEncryptionAdapter.fromMnemonic({ seedHex: SEED_HEX_32 }),
-    ).rejects.toThrow("64-byte seed");
+  it("32-byte seedHex → produces a valid keypair adapter (derivation via HKDF)", async () => {
+    const adapter = await KeypairEncryptionAdapter.fromMnemonic({
+      seedHex: SEED_HEX_32,
+    });
+    expect(adapter.name).toMatch(/^mlkem/);
   });
 });
