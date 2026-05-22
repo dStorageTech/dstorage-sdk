@@ -15,7 +15,11 @@ import type { MinimalLogger } from "@dstorage/crypto";
 export type StorageAdapterLogger = MinimalLogger;
 
 /** Identifies which storage network an adapter represents. */
-export type StorageProviderName = "mock" | "arweave" | "arweave_bundler";
+export type StorageProviderName =
+  | "mock"
+  | "arweave"
+  | "arweave_bundler"
+  | "lumera";
 
 /**
  * A cost quote returned by StorageAdapter.estimateCost().

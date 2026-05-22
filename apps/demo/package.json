@@ -16,6 +16,7 @@
     "@dstorage/crypto": "*",
     "@dstorage/encryption": "*",
     "@dstorage/storage": "*",
+    "@lumera-protocol/sdk-js": "^0.2.7",
     "buffer": "^6.0.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

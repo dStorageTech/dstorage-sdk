@@ -3,6 +3,7 @@ import {
   MockStorageAdapter,
   ArweaveStorageAdapter,
   ArweaveLocalStorageAdapter,
+  LumeraCascadeStorageAdapter,
   MidnightSimulatorChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage-tech/dstorage-sdk";
@@ -58,6 +59,16 @@ export async function buildSDK(
         await ArweaveLocalStorageAdapter.createWithTestWallet();
       storageAdapter = adapter;
     }
+  } else if (storageKey === "lumera-testnet") {
+    storageAdapter = new LumeraCascadeStorageAdapter({
+      network: "testnet",
+      ...managedConfig,
+    });
+  } else if (storageKey === "lumera") {
+    storageAdapter = new LumeraCascadeStorageAdapter({
+      network: "mainnet",
+      ...managedConfig,
+    });
   } else {
     storageAdapter =
       storageKey === "arweave"

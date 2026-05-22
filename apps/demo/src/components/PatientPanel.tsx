@@ -267,6 +267,8 @@ export function PatientPanel({
           </div>
           {paymentAdapterKey === "local" &&
             (storageAdapterKey === "arweave" ||
+              storageAdapterKey === "lumera" ||
+              storageAdapterKey === "lumera-testnet" ||
               chainAdapterKey === "midnight-connector") && (
               <div className="pp-managed-info">
                 <div className="pp-managed-info-title">
@@ -308,6 +310,20 @@ export function PatientPanel({
                         rel="noreferrer"
                       >
                         Midnight Preprod Faucet
+                      </a>
+                    </li>
+                  )}
+                  {(storageAdapterKey === "lumera" ||
+                    storageAdapterKey === "lumera-testnet") && (
+                    <li>
+                      <strong>Keplr</strong> — required for Lumera / Cascade
+                      storage fees. Install from{" "}
+                      <a
+                        href="https://www.keplr.app/get"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        keplr.app
                       </a>
                     </li>
                   )}

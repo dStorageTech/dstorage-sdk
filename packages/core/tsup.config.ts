@@ -33,6 +33,8 @@ const sharedExternal: (string | RegExp)[] = [
   /^@noble\//,
   /^@scure\/bip39/,
   "bip39",
+  /^@lumera-protocol\//,
+  /^rq-library-wasm/,
 ];
 
 // "node:fs" and "fs" are added to the browser build external list because

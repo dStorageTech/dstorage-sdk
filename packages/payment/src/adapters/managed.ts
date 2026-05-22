@@ -334,6 +334,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       return this._payArweave(instruction, onStatus);
     } else if (instruction.network === "arweave_bundler") {
       return this._payArweaveBundler(instruction, onStatus);
+    } else if (instruction.network === "lumera") {
+      return this._payLumera(instruction, onStatus);
     }
 
     throw Error(`Unsupported network: ${instruction.network}`);
@@ -613,6 +615,26 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       paidAt: Date.now(),
       serviceFee,
     };
+  }
+
+  /**
+   * Lumera payment flow — managed service registers the Cascade action server-side.
+   *
+   * TODO: Full managed Lumera payment implementation. The signing server needs
+   * to run registerAction() with its own Lumera wallet and return
+   * { actionId, authSignature }. The client then uploads data to supernodes
+   * using the returned actionId. Until this is implemented on the server,
+   * use LumeraPaymentAdapter (local Keplr) instead.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async _payLumera(
+    _instruction: PaymentInstruction,
+    _onStatus?: (message: string) => void,
+  ): Promise<PaymentReceipt> {
+    throw new Error(
+      "[dStorage/managed-payment] Managed payment for Lumera is not yet supported. " +
+        "Use LumeraPaymentAdapter (local Keplr) instead.",
+    );
   }
 
   /**

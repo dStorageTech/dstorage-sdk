@@ -26,7 +26,12 @@ export type PendingCertificate = {
   pdfUrl?: string;
 };
 
-export type StorageAdapterKey = "mock" | "arweave-local" | "arweave";
+export type StorageAdapterKey =
+  | "mock"
+  | "arweave-local"
+  | "arweave"
+  | "lumera-testnet"
+  | "lumera";
 export type ChainAdapterKey = "mock" | "midnight-connector";
 export type PaymentAdapterKey = "local" | "managed";
 

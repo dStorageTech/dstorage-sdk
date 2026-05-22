@@ -3,7 +3,7 @@ import { TOKENS } from "../types.js";
 import type { TokenSymbol } from "../types.js";
 
 describe("TOKENS registry", () => {
-  const expectedSymbols: TokenSymbol[] = ["AR", "DUST", "MOCK"];
+  const expectedSymbols: TokenSymbol[] = ["AR", "DUST", "LUME", "MOCK"];
 
   it("contains all expected token symbols", () => {
     for (const symbol of expectedSymbols) {
@@ -11,8 +11,8 @@ describe("TOKENS registry", () => {
     }
   });
 
-  it("has exactly 3 tokens", () => {
-    expect(Object.keys(TOKENS)).toHaveLength(3);
+  it("has exactly 4 tokens", () => {
+    expect(Object.keys(TOKENS)).toHaveLength(4);
   });
 
   // ── Per-token checks ───────────────────────────────────────────────────────

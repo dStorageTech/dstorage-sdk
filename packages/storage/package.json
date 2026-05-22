@@ -45,6 +45,7 @@
   },
   "peerDependencies": {
     "arweave": "^2.1.0",
+    "@lumera-protocol/sdk-js": "^0.2.7",
     "@dha-team/arbundles": "^1.0.4"
   },
   "peerDependenciesMeta": {
@@ -52,6 +53,9 @@
       "optional": true
     },
     "@dha-team/arbundles": {
+      "optional": true
+    },
+    "@lumera-protocol/sdk-js": {
       "optional": true
     }
   }

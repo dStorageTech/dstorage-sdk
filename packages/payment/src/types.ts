@@ -21,7 +21,7 @@ export type NetworkType = "storage" | "chain";
 // ── Token definitions ─────────────────────────────────────────────────────────
 
 /** All tokens the SDK knows about. MOCK is used for development and testing. */
-export type TokenSymbol = "AR" | "DUST" | "MOCK";
+export type TokenSymbol = "AR" | "DUST" | "MOCK" | "LUME";
 
 /** Display metadata about a token — used for labels and cost conversion. */
 export interface Token {
@@ -34,6 +34,7 @@ export interface Token {
 export const TOKENS: Record<TokenSymbol, Token> = {
   AR: { symbol: "AR", name: "Arweave", decimals: 12 },
   DUST: { symbol: "DUST", name: "Midnight", decimals: 6 },
+  LUME: { symbol: "LUME", name: "Lumera", decimals: 6 },
   MOCK: {
     symbol: "MOCK",
     name: "Mock Token",
@@ -45,7 +46,12 @@ export const TOKENS: Record<TokenSymbol, Token> = {
 
 /** Identifies which network the payment provider works for. */
 export type PaymentNetworkName =
-  "mock" | "arweave" | "midnight" | "arweave_bundler" | "managedmock";
+  | "mock"
+  | "arweave"
+  | "midnight"
+  | "arweave_bundler"
+  | "managedmock"
+  | "lumera";
 
 // ── PaymentQuote ──────────────────────────────────────────────────────────────
 

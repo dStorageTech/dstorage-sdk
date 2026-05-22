@@ -32,13 +32,18 @@
   },
   "devDependencies": {
     "arweave": "^2.1.0",
+    "@lumera-protocol/sdk-js": "^0.2.7",
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "arweave": "^2.1.0",
+    "@lumera-protocol/sdk-js": "^0.2.7",
     "@midnight-ntwrk/midnight-js-protocol": "^4.1.1"
   },
   "peerDependenciesMeta": {
+    "@lumera-protocol/sdk-js": {
+      "optional": true
+    },
     "arweave": {
       "optional": true
     },

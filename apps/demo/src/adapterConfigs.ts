@@ -31,6 +31,19 @@ export const ADAPTER_CONFIGS: Record<
     description: "Pay-once permanent storage on the permaweb.",
     note: "Requires the ArConnect browser extension",
   },
+  "lumera-testnet": {
+    label: "Lumera Testnet",
+    description:
+      "Cascade storage on the Lumera testnet — real flow without spending mainnet LUME.",
+    status: "preview",
+    note: "Requires Keplr browser wallet extension",
+  },
+  lumera: {
+    label: "Lumera",
+    description: "Permanent storage on the Lumera Cascade mainnet.",
+    status: "preview",
+    note: "Requires Keplr browser wallet extension",
+  },
 };
 
 export const CHAIN_ADAPTER_CONFIGS: Record<
