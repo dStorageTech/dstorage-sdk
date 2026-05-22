@@ -22,9 +22,9 @@
  *   security. If cross-user encryption is required in the future the scheme
  *   can be extended with a KEM layer at that point.
  *
- * On-chain storageId layout (72 bytes):
- *   [ nonce(24) | ciphertext(32) | auth-tag(16) ]
- *   Base64url-encoded → 96 chars stored as Opaque<"string"> in the contract.
+ * On-chain storageId format (JSON):
+ *   Same envelope as off-chain payloads — handles arbitrary-length string IDs.
+ *   { ciphertext: base64, nonce: base64, algorithm: "XChaCha20-Poly1305" }
  *
  * Off-chain payload format (JSON):
  *   { ciphertext: base64, nonce: base64, algorithm: "XChaCha20-Poly1305" }
@@ -32,7 +32,6 @@
 
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import type { CryptoScheme } from "./types.js";
-import { base64urlToBytes, bytesToBase64url } from "./types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -323,14 +322,19 @@ export class XChaChaScheme implements CryptoScheme {
   }
 
   async encryptStorageId(storageId: string): Promise<string> {
-    const bytes = base64urlToBytes(storageId);
-    const encrypted = await encryptStorageIdXChaCha(this.key, bytes);
-    return bytesToBase64url(encrypted);
+    const bytes = new TextEncoder().encode(storageId);
+    const payload = await encryptXChaCha(this.key, bytes, STORAGE_ID_AAD);
+    return serializeXChaChaPayload(payload);
   }
 
   async decryptStorageId(encryptedId: string): Promise<string> {
-    const bytes = base64urlToBytes(encryptedId);
-    const decrypted = await decryptStorageIdXChaCha(this.key, bytes);
-    return bytesToBase64url(decrypted);
+    const payload = deserializeXChaChaPayload(encryptedId);
+    if (!payload) {
+      throw new Error(
+        "[dStorage/crypto] XChaCha: storageId payload is malformed.",
+      );
+    }
+    const decrypted = await decryptXChaCha(this.key, payload, STORAGE_ID_AAD);
+    return new TextDecoder().decode(decrypted);
   }
 }
