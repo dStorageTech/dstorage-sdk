@@ -23,6 +23,8 @@ import { getNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
 export type { MidnightWalletProvider, EnvironmentConfiguration };
 
+const WALLET_SYNC_TIMEOUT = 3_600_000;
+
 // ── Password derivation ────────────────────────────────────────────────────────
 
 /**

@@ -79,6 +79,8 @@ export type {
   ArweaveLocalInfo,
   ArweaveLocalBalance,
 } from "@dstorage/storage";
+export { LumeraCascadeStorageAdapter } from "@dstorage/storage";
+export type { LumeraCascadeAdapterConfig } from "@dstorage/storage";
 
 // Payment: types + all browser-safe adapters
 export type {
@@ -96,6 +98,11 @@ export type {
 export { MockPaymentAdapter, TOKENS } from "@dstorage/payment";
 export { ArweavePaymentAdapter } from "@dstorage/payment";
 export { ManagedPaymentAdapter } from "@dstorage/payment";
+export { LumeraPaymentAdapter } from "@dstorage/payment";
+export type {
+  LumeraPaymentAdapterConfig,
+  LumeraPendingUpload,
+} from "@dstorage/payment";
 
 // Chain: browser-safe entry (mocks + HttpGateway + MidnightChainAdapter connector mode).
 // MidnightChainAdapter provider/facade mode (uses node:fs) is excluded via the /browser subpath.

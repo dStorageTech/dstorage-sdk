@@ -30,7 +30,6 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import fs from "fs";
 import { config as loadEnv } from "dotenv";
 
 import {
@@ -41,7 +40,7 @@ import {
   PasswordEncryptionAdapter,
   MidnightSimulatorChainAdapter,
   MockStorageAdapter,
-  ArweaveLocalStorageAdapter,
+  LumeraCascadeStorageAdapter,
   MidnightChainAdapter,
   NETWORKS,
 } from "@dstorage-tech/dstorage-sdk";
@@ -273,10 +272,8 @@ async function main(): Promise<void> {
           },
           logger,
         })
-      : new ArweaveLocalStorageAdapter({
-          walletKey: JSON.parse(
-            fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
-          ),
+      : new LumeraCascadeStorageAdapter({
+          network: "mainnet",
           logger,
           ...managedPaymentService,
         });
