@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
@@ -197,7 +198,7 @@ export class MidnightWalletProvider
       dust,
       unshielded,
     });
-    console.log(`Wallet state cached to: ${this.cacheFilePath}`);
+    console.debug(`Wallet state cached to: ${this.cacheFilePath}`);
   }
 
   static async build(
@@ -238,7 +239,11 @@ export class MidnightWalletProvider
 
     const keystore = createKeystore(unshieldedSeed, env.networkId);
 
-    const walletId = masterSeedHex.slice(0, 16);
+    const walletId = createHash("sha256")
+      .update("dstorage:wallet-id:v1:")
+      .update(masterSeedHex)
+      .digest("hex")
+      .slice(0, 16);
     const cacheFilePath = walletCachePath(cacheDir, walletId);
     const cache = await loadWalletCache(cacheFilePath);
     if (cache) {
