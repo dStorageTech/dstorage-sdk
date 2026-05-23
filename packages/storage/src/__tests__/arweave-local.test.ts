@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { blake3 } from "@noble/hashes/blake3.js";
 import {
   ArweaveLocalStorageAdapter,
   ArweaveLocalHelper,
@@ -19,6 +20,24 @@ import {
 const MOCK_JWK: Record<string, string> = { kty: "RSA", n: "mock_n", e: "AQAB" };
 const MOCK_ADDRESS = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const MOCK_TX_ID = "test_tx_id_local_001";
+
+const MOCK_RETRIEVED_DATA = new TextEncoder().encode("test-retrieved-data");
+const MOCK_CONTENT_HASH = Array.from(blake3(MOCK_RETRIEVED_DATA))
+  .map((b) => b.toString(16).padStart(2, "0"))
+  .join("");
+
+function makeMockTxWithTags(tags: Record<string, string>) {
+  return {
+    data_size: "0",
+    get: (field: string) => {
+      if (field === "tags") {
+        return Object.entries(tags).map(([name, value]) => ({
+          get: (k: string, _opts?: unknown) => (k === "name" ? name : value),
+        }));
+      }
+    },
+  };
+}
 
 const mockTx = { id: MOCK_TX_ID, addTag: vi.fn() };
 
@@ -46,9 +65,12 @@ const mockArweaveInstance = {
     getPrice: vi.fn().mockResolvedValue("500000"),
     sign: vi.fn().mockResolvedValue(undefined),
     getUploader: vi.fn().mockResolvedValue(mockLocalUploader),
-    getData: vi
+    getData: vi.fn().mockResolvedValue(MOCK_RETRIEVED_DATA),
+    get: vi
       .fn()
-      .mockResolvedValue(new TextEncoder().encode("test-retrieved-data")),
+      .mockResolvedValue(
+        makeMockTxWithTags({ "X-Content-Hash": MOCK_CONTENT_HASH }),
+      ),
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 42 } }),
@@ -107,7 +129,10 @@ beforeEach(() => {
     localUploaderState.calls++;
   });
   mockArweaveInstance.transactions.getData.mockResolvedValue(
-    new TextEncoder().encode("test-retrieved-data"),
+    MOCK_RETRIEVED_DATA,
+  );
+  mockArweaveInstance.transactions.get.mockResolvedValue(
+    makeMockTxWithTags({ "X-Content-Hash": MOCK_CONTENT_HASH }),
   );
   mockArweaveInstance.ar.winstonToAr.mockReturnValue("0.0000005");
   mockArweaveInstance.wallets.generate.mockResolvedValue(MOCK_JWK);
@@ -412,7 +437,7 @@ describe("ArweaveLocalStorageAdapter", () => {
   describe("retrieve", () => {
     it("returns the data bytes for a known txId", async () => {
       const data = await makeAdapter().retrieve(MOCK_TX_ID);
-      expect(data).toEqual(new TextEncoder().encode("test-retrieved-data"));
+      expect(data).toEqual(MOCK_RETRIEVED_DATA);
     });
   });
 

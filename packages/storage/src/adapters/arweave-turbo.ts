@@ -44,6 +44,11 @@ import type {
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { Signer } from "@dha-team/arbundles";
+import {
+  CONTENT_HASH_TAG,
+  computeBlake3Hex,
+  assertContentHash,
+} from "./integrity.js";
 
 const ARWEAVE_GATEWAY_URL = "https://turbo-gateway.com";
 
@@ -72,6 +77,12 @@ export interface ArweaveTurboAdapterConfig {
    * Defaults to 268_435_456 (256 MB).
    */
   maxRetrieveSizeBytes?: number;
+  /**
+   * Skip BLAKE3 content-hash verification on retrieve.
+   * Only set to true when connecting to a fully trusted gateway.
+   * Defaults to false.
+   */
+  skipIntegrityCheck?: boolean;
   /**
    * Optional logger for SDK operational output.
    */
@@ -104,6 +115,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   private readonly authToken: string | undefined;
   private readonly gateway: string;
   private readonly maxRetrieveSizeBytes: number;
+  private readonly skipIntegrityCheck: boolean;
   protected readonly logger: StorageAdapterLogger | undefined;
 
   /** Cached server RSA modulus (base64url). Fetched once, reused across uploads. */
@@ -117,6 +129,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     this.gateway = config.gateway ?? ARWEAVE_GATEWAY_URL;
     this.maxRetrieveSizeBytes =
       config.maxRetrieveSizeBytes ?? 256 * 1024 * 1024;
+    this.skipIntegrityCheck = config.skipIntegrityCheck ?? false;
     this.logger = config.logger;
 
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
@@ -154,10 +167,11 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     const dataSizeBytes = data.byteLength;
     const signer = await this._buildSigner(dataSizeBytes);
 
-    const tags = Object.entries(metadata).map(([name, value]) => ({
-      name,
-      value,
-    }));
+    const hashHex = await computeBlake3Hex(data);
+    const tags = [
+      { name: CONTENT_HASH_TAG, value: hashHex },
+      ...Object.entries(metadata).map(([name, value]) => ({ name, value })),
+    ];
 
     this.logger?.log(
       "dStorage/arweave-turbo",
@@ -187,6 +201,36 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   // ── retrieve ───────────────────────────────────────────────────────────────────
 
   async retrieve(id: string): Promise<Uint8Array> {
+    // ── Pre-fetch transaction metadata ────────────────────────────────────────
+    let storedHash: string | undefined;
+    if (!this.skipIntegrityCheck) {
+      const metaResp = await fetch(`${this.gateway}/tx/${id}`);
+      if (!metaResp.ok) {
+        throw new Error(
+          `[dStorage/arweave-turbo] Could not fetch transaction metadata for txId: ${id} — ` +
+            "content hash cannot be verified. " +
+            "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
+        );
+      }
+      const tx = (await metaResp.json()) as {
+        tags?: Array<{ name: string; value: string }>;
+      };
+      for (const tag of tx.tags ?? []) {
+        const name = new TextDecoder().decode(_base64urlToBytes(tag.name));
+        if (name === CONTENT_HASH_TAG) {
+          storedHash = new TextDecoder().decode(_base64urlToBytes(tag.value));
+          break;
+        }
+      }
+      if (!storedHash) {
+        throw new Error(
+          `[dStorage/arweave-turbo] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
+            "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
+        );
+      }
+    }
+
+    // ── Download data ─────────────────────────────────────────────────────────
     const resp = await fetch(`${this.gateway}/${id}`);
     if (!resp.ok) {
       throw new Error(
@@ -216,6 +260,11 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
         `[dStorage/arweave-turbo] Downloaded ${bytes.byteLength} bytes for txId: ${id}, ` +
           `which exceeds the configured limit of ${this.maxRetrieveSizeBytes} bytes.`,
       );
+    }
+
+    // ── Content hash verification ─────────────────────────────────────────────
+    if (!this.skipIntegrityCheck && storedHash) {
+      await assertContentHash(id, bytes, storedHash, "arweave-turbo");
     }
 
     this.logger?.log("dStorage/arweave-turbo", `Retrieved txId: ${id}`);

@@ -54,6 +54,7 @@ import type {
   PaymentNetworkName,
   SignedArweaveUpload,
 } from "@dstorage/payment";
+import { CONTENT_HASH_TAG, assertContentHash } from "./integrity.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -149,9 +150,6 @@ export interface ArweaveAdapterConfig {
 }
 
 // ── Tag names ─────────────────────────────────────────────────────────────────
-
-/** Arweave transaction tag storing the BLAKE3 hex digest of the uploaded bytes. */
-const CONTENT_HASH_TAG = "X-Content-Hash";
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
 
@@ -339,7 +337,6 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // they materialise in memory, and (b) grab the X-Content-Hash tag for
     // integrity verification — both in a single round trip.
     let storedHash: string | undefined;
-    let metadataFetchFailed = false;
     if (!this.skipIntegrityCheck) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -376,12 +373,12 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         }
       } catch (err) {
         if ((err as Error).message.startsWith("[dStorage/arweave]")) throw err;
-        // Metadata unavailable (e.g. not yet indexed) — skip hash check but still download.
-        this.logger?.warn(
-          "dStorage/arweave",
-          `Could not fetch transaction metadata for txId: ${id} — content hash not verified.`,
+        throw new Error(
+          `[dStorage/arweave] Could not fetch transaction metadata for txId: ${id} — ` +
+            "content hash cannot be verified. " +
+            "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
+          { cause: err },
         );
-        metadataFetchFailed = true;
       }
     }
 
@@ -410,24 +407,14 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     }
 
     // ── Content hash verification ─────────────────────────────────────────────
-    if (!this.skipIntegrityCheck && !metadataFetchFailed) {
+    if (!this.skipIntegrityCheck) {
       if (!storedHash) {
         throw new Error(
           `[dStorage/arweave] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
       }
-      const { blake3 } = await import("@noble/hashes/blake3.js");
-      const actualHash = Array.from(blake3(bytes))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      if (actualHash !== storedHash) {
-        throw new Error(
-          `[dStorage/arweave] Content hash mismatch for txId: ${id}.\n` +
-            "The retrieved data does not match the hash recorded at upload time.\n" +
-            "This may indicate data tampering by a malicious gateway.",
-        );
-      }
+      await assertContentHash(id, bytes, storedHash, "arweave");
     }
 
     this.logger?.log("dStorage/arweave", `Retrieved txId: ${id}`);

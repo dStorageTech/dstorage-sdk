@@ -400,13 +400,13 @@ describe("ArweaveStorageAdapter", () => {
       expect(mockArweave.transactions.get).not.toHaveBeenCalled();
     });
 
-    it("retrieve passes when transactions.get() fails (graceful degradation)", async () => {
+    it("retrieve throws when transactions.get() fails (metadata required for integrity)", async () => {
       mockArweave.transactions.get.mockRejectedValueOnce(
         new Error("tx not indexed yet"),
       );
-      await expect(
-        nodeAdapter().retrieve("tx_unindexed"),
-      ).resolves.toBeDefined();
+      await expect(nodeAdapter().retrieve("tx_unindexed")).rejects.toThrow(
+        /Could not fetch transaction metadata.*content hash cannot be verified/,
+      );
     });
   });
 
