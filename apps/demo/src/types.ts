@@ -27,11 +27,7 @@ export type PendingCertificate = {
 };
 
 export type StorageAdapterKey =
-  | "mock"
-  | "arweave-local"
-  | "arweave"
-  | "lumera-testnet"
-  | "lumera";
+  "mock" | "arweave-local" | "arweave" | "lumera-testnet" | "lumera";
 export type ChainAdapterKey = "mock" | "midnight-connector";
 export type PaymentAdapterKey = "local" | "managed";
 

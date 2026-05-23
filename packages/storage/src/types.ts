@@ -16,10 +16,7 @@ export type StorageAdapterLogger = MinimalLogger;
 
 /** Identifies which storage network an adapter represents. */
 export type StorageProviderName =
-  | "mock"
-  | "arweave"
-  | "arweave_bundler"
-  | "lumera";
+  "mock" | "arweave" | "arweave_bundler" | "lumera";
 
 /**
  * A cost quote returned by StorageAdapter.estimateCost().

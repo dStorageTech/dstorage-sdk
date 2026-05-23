@@ -38,6 +38,13 @@ import type {
 
 // ── Lumera chain constants ─────────────────────────────────────────────────────
 
+const TESTNET_CHAIN_ID = "lumera-testnet-2";
+//const TESTNET_RPC_URL = "https://rpc.testnet.lumera.io";
+
+//const TESTNET_RPC_URL = "https://lumera-testnet-rpc.linknode.org/";
+//const TESTNET_RPC_URL = "https://lumera-testnet-rpc.stakerhouse.com/";
+const TESTNET_RPC_URL = "https://lumera-rpc.polkachu.com/";
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 /** Result of a successful registerAction() call — consumed by the storage adapter. */
@@ -334,14 +341,18 @@ export class LumeraPaymentAdapter implements PaymentAdapter {
       );
     }
 
-    // Use CHAIN_PRESETS from the SDK to get chainId and snapiUrl, but override
-    // rpcUrl with our own endpoint (the preset's built-in RPC may be unavailable).
+    // Use CHAIN_PRESETS from the SDK to get chainId and snapiUrl, but always
+    // override with our canonical testnet values when network is "testnet".
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const preset = sdk.CHAIN_PRESETS[this.lumeraNetwork];
+    const chainId =
+      this.lumeraNetwork === "testnet" ? TESTNET_CHAIN_ID : preset.chainId;
+    const rpcUrl =
+      this.lumeraNetwork === "testnet" ? TESTNET_RPC_URL : preset.rpcUrl;
 
     // Mirror the working keplr-test flow: first enable the chain in Keplr
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-    await keplr.enable(preset.chainId);
+    await keplr.enable(chainId);
 
     // Use the SDK's getKeplrSigner helper (matches the official browser example).
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
@@ -349,7 +360,7 @@ export class LumeraPaymentAdapter implements PaymentAdapter {
       sdk.getKeplrSigner as (
         chainId: string,
       ) => Promise<{ getAccounts: () => Promise<Array<{ address: string }>> }>
-    )(preset.chainId);
+    )(chainId);
     const accounts = await signer.getAccounts();
     const first = accounts[0];
     if (!first)
@@ -368,6 +379,8 @@ export class LumeraPaymentAdapter implements PaymentAdapter {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     return sdk.createLumeraClient({
       preset: this.lumeraNetwork,
+      chainId,
+      rpcUrl,
       signer,
       address,
       gasPrice: "0.025ulume",
