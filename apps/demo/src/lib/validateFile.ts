@@ -1,13 +1,13 @@
-/**
- * @dstorage/core — metaTx/validation.ts
- *
- * File validation for MetaTx uploads.
- */
-
-import type { FileValidationResult } from "./types.js";
+export interface FileValidationResult {
+  valid: boolean;
+  error?: string;
+}
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 
+// SVG can contain <script> tags, event handlers, and javascript: URIs — it is executable
+// in browsers. Sanitize (e.g. DOMPurify) or rasterize SVG bytes before rendering in a
+// browser context; never pass raw SVG to <iframe>, <object>, or createObjectURL().
 const ALLOWED_MIME_TYPES = new Set([
   // Images
   "image/jpeg",

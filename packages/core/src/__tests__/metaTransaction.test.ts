@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MetaTx, validateFile } from "../metaTx/index.js";
+import { MetaTx } from "../metaTx/index.js";
 import type { DStorageContext } from "../metaTx/index.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
@@ -52,80 +52,6 @@ function makeSdkContext(address = "0xTestOwner"): DStorageContext {
     },
   };
 }
-
-// ── validateFile ──────────────────────────────────────────────────────────────
-
-describe("validateFile", () => {
-  it("returns { valid: true } for a valid text file", () => {
-    const file = makeFile("hello", "doc.txt", "text/plain");
-    expect(validateFile(file).valid).toBe(true);
-  });
-
-  it("returns { valid: false } for an empty file", () => {
-    const file = makeEmptyFile();
-    const result = validateFile(file);
-    expect(result.valid).toBe(false);
-    expect(result.error).toContain("empty");
-  });
-
-  it("returns { valid: false } for a file over 2 GB", () => {
-    // Fake a large file by overriding size via Object.defineProperty
-    const file = makeFile("x", "large.txt", "text/plain");
-    Object.defineProperty(file, "size", { value: 3 * 1024 * 1024 * 1024 });
-    const result = validateFile(file);
-    expect(result.valid).toBe(false);
-    expect(result.error).toContain("large");
-    expect(result.error).toContain("2 GB");
-  });
-
-  it("error message for oversized file includes actual file size", () => {
-    const file = makeFile("x", "large.txt", "text/plain");
-    Object.defineProperty(file, "size", { value: 3 * 1024 * 1024 * 1024 });
-    const result = validateFile(file);
-    expect(result.error).toMatch(/\d+\.\d+ (MB|GB)/);
-  });
-
-  it("returns { valid: false } for an unsupported MIME type", () => {
-    const file = makeFile("x", "video.mp4", "video/mp4");
-    const result = validateFile(file);
-    expect(result.valid).toBe(false);
-    expect(result.error).toContain("not supported");
-  });
-
-  it("error for unsupported MIME includes the actual type", () => {
-    const file = makeFile("x", "audio.mp3", "audio/mpeg");
-    const result = validateFile(file);
-    expect(result.error).toContain("audio/mpeg");
-  });
-
-  it('error for empty MIME includes "unknown"', () => {
-    const file = makeFile("x", "unknown", "");
-    const result = validateFile(file);
-    expect(result.error).toContain("unknown");
-  });
-
-  const allowedTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "image/svg+xml",
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
-    "text/markdown",
-    "application/json",
-    "application/zip",
-  ] as const;
-
-  for (const mimeType of allowedTypes) {
-    it(`accepts MIME type: ${mimeType}`, () => {
-      const file = makeFile("content", "file", mimeType);
-      expect(validateFile(file).valid).toBe(true);
-    });
-  }
-});
 
 // ── MetaTx constructor ────────────────────────────────────────────────
 

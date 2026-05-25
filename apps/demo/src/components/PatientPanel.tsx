@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { validateFile } from "@dstorage-tech/dstorage";
+import { validateFile } from "../lib/validateFile.js";
 import { INSURANCE_CLAIMS } from "../zkProof.js";
 import type { DataReferenceSummary } from "@dstorage-tech/dstorage";
 import type {

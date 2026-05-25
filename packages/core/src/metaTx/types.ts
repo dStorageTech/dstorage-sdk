@@ -151,10 +151,3 @@ export interface DStorageContext {
   /** Estimate the full cost (storage + chain) for a given payload size. */
   estimateCost(sizeBytes: number): Promise<CostEstimate>;
 }
-
-// ── File validation result ────────────────────────────────────────────────────
-
-export interface FileValidationResult {
-  valid: boolean;
-  error?: string;
-}
