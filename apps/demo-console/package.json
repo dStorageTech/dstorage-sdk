@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@dstorage/chain": "*",
+    "@dstorage/crypto": "*",
     "@dstorage-tech/dstorage": "*",
     "@dstorage/encryption": "*",
     "@dstorage/storage": "*",

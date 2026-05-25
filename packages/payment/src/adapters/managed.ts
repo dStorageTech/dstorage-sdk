@@ -56,6 +56,7 @@ import type {
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
+import { hexToBytes } from "@dstorage/crypto";
 
 // Shared API endpoint for all network payment flows on the dStorage signing server.
 const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
@@ -66,14 +67,6 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function hexToUint8Array(hex: string): Uint8Array {
-  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++)
-    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
-
 /**
  * Extract raw transaction bytes from either a Midnight tagged string
  * ("midnight:transaction[v9](...):hexdata") or a plain hex string.
@@ -81,9 +74,9 @@ function hexToUint8Array(hex: string): Uint8Array {
 function parseSignedTxBytes(signedTx: string): Uint8Array {
   if (signedTx.startsWith("midnight:")) {
     const colonIdx = signedTx.lastIndexOf(":");
-    return hexToUint8Array(signedTx.slice(colonIdx + 1));
+    return hexToBytes(signedTx.slice(colonIdx + 1), "signedTx");
   }
-  return hexToUint8Array(signedTx);
+  return hexToBytes(signedTx, "signedTx");
 }
 
 // ── Server error body sanitisation ───────────────────────────────────────────

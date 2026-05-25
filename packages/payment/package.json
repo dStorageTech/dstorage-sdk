@@ -27,6 +27,7 @@
     "build": "tsup src/index.ts src/types.ts src/adapters/mock.ts --format esm,cjs --dts"
   },
   "dependencies": {
+    "@dstorage/crypto": "*",
     "@noble/hashes": "^2.2.0"
   },
   "devDependencies": {

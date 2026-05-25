@@ -46,7 +46,7 @@ export class KeyDeriver {
   /** Resolves and validates the seed as a Buffer. */
   private async getSeedBuffer(): Promise<Uint8Array> {
     if (this.input.seedHex) {
-      const bytes = hexToBytes(this.input.seedHex);
+      const bytes = hexToBytes(this.input.seedHex, "seedHex");
       if (bytes.length !== 32 && bytes.length !== 64) {
         throw new Error(
           "[dStorage/crypto] seedHex must be 32 bytes (64 hex chars) or 64 bytes (128 hex chars).",
@@ -67,16 +67,19 @@ export class KeyDeriver {
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
+export function hexToBytes(
+  hex: string,
+  label = "hex string",
+): Uint8Array<ArrayBuffer> {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   if (clean.length % 2 !== 0) {
     throw new Error(
-      `[dStorage/crypto] seedHex has odd length (${clean.length} chars) — each byte requires exactly 2 hex characters.`,
+      `[dStorage/crypto] ${label} has odd length (${clean.length} chars) — each byte requires exactly 2 hex characters.`,
     );
   }
   if (!/^[0-9a-fA-F]*$/.test(clean)) {
     throw new Error(
-      "[dStorage/crypto] seedHex contains non-hexadecimal characters. Only 0-9 and a-f are valid.",
+      `[dStorage/crypto] ${label} contains non-hexadecimal characters. Only 0-9 and a-f are valid.`,
     );
   }
   const bytes = new Uint8Array(clean.length / 2);

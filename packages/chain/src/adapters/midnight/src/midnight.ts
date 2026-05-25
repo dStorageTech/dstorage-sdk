@@ -23,6 +23,7 @@
 
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
+import { hexToBytes } from "@dstorage/crypto";
 import { type WalletProvider } from "@midnight-ntwrk/midnight-js-types";
 
 import type {
@@ -195,15 +196,6 @@ export type MidnightChainAdapterConfig = BaseConfig &
 /** Convert a Uint8Array to a lowercase hex string (browser-safe, no Buffer). */
 function uint8ArrayToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/** Convert a lowercase hex string to a Uint8Array (browser-safe, no Buffer). */
-function hexToUint8Array(hex: string): Uint8Array {
-  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++)
-    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-  return out;
 }
 
 // ── Adapter ────────────────────────────────────────────────────────────────────
@@ -581,7 +573,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           "signature",
           "proof",
           "binding",
-          hexToUint8Array(balancedHex),
+          hexToBytes(balancedHex, "balancedHex"),
         );
       },
     };
@@ -880,7 +872,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
     try {
       const api = await this._getAPI();
-      const refIdBytes = hexToUint8Array(refId);
+      const refIdBytes = hexToBytes(refId, "refId");
       await api.removeReference(refIdBytes, ownerSecret);
       this.logger?.log(
         "dStorage/midnight",
@@ -912,7 +904,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
     try {
       const api = await this._getAPI();
-      const refIdBytes = hexToUint8Array(refId);
+      const refIdBytes = hexToBytes(refId, "refId");
       await api.updateReference(
         refIdBytes,
         update.storageId,

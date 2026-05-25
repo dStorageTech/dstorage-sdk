@@ -26,6 +26,7 @@ import {
 import { NoOpTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
+import { hexToBytes } from "@dstorage/crypto";
 
 // ── Wallet state cache ─────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ export interface EnvironmentConfiguration {
  * HDWallet.fromSeed → selectAccount(0) → selectRole(role) → deriveKeyAt(0)
  */
 function deriveRoleSeed(masterSeedHex: string, role: Role): Uint8Array {
-  const seedBytes = hexToUint8Array(masterSeedHex);
+  const seedBytes = hexToBytes(masterSeedHex, "masterSeedHex");
   const result = HDWallet.fromSeed(seedBytes);
   if (result.type !== "seedOk") {
     throw new Error("HDWallet.fromSeed failed: invalid seed.");
@@ -89,14 +90,6 @@ function deriveRoleSeed(masterSeedHex: string, role: Role): Uint8Array {
     throw new Error(`Key derivation out of bounds for role ${role}.`);
   }
   return derivation.key;
-}
-
-function hexToUint8Array(hex: string): Uint8Array {
-  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++)
-    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-  return out;
 }
 
 // ── Provider ───────────────────────────────────────────────────────────────────
