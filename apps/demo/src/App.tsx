@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { DStorage } from "@dstorage-tech/dstorage";
-import { MnemonicEncryptionAdapter } from "@dstorage/encryption";
+import {
+  MnemonicEncryptionAdapter,
+  PasswordEncryptionAdapter,
+} from "@dstorage/encryption";
 import {
   isPrfSupported,
   hasCredential,
@@ -66,6 +69,9 @@ export default function App() {
     "webauthn-prf" | "mnemonic" | "demo"
   >("demo");
   const [mnemonic, setMnemonic] = useState("");
+  const [demoPassword, setDemoPassword] = useState(
+    import.meta.env["VITE_DEMO_PASSWORD"] ?? "",
+  );
   const [prfSupported, setPrfSupported] = useState<boolean | null>(null);
   const [managedAuthToken, setManagedAuthToken] = useState(
     import.meta.env["VITE_DSTORAGE_AUTH_TOKEN"] ?? "",
@@ -123,6 +129,11 @@ export default function App() {
         encryptionAdapter = new MnemonicEncryptionAdapter({ seedHex });
       } else if (keySource === "mnemonic") {
         encryptionAdapter = new MnemonicEncryptionAdapter({ mnemonic });
+      } else {
+        encryptionAdapter = new PasswordEncryptionAdapter({
+          password: demoPassword,
+          salt: "dstorage:demo:v1",
+        });
       }
 
       const sdk = await buildSDK(
@@ -133,7 +144,7 @@ export default function App() {
           managedAuthToken,
           managedServiceUrl,
           selectedContractAddress,
-          ...(encryptionAdapter ? { encryptionAdapter } : {}),
+          encryptionAdapter,
         },
       );
 
@@ -149,6 +160,7 @@ export default function App() {
     },
     [
       chainAdapterKey,
+      demoPassword,
       dstorage,
       keySource,
       mnemonic,
@@ -525,6 +537,8 @@ export default function App() {
               onKeySourceChange={setKeySource}
               mnemonic={mnemonic}
               onMnemonicChange={setMnemonic}
+              demoPassword={demoPassword}
+              onDemoPasswordChange={setDemoPassword}
               onRegisterNewPrfCredential={handleRegisterNewPrfCredential}
             />
           </div>
@@ -560,6 +574,8 @@ export default function App() {
                 onKeySourceChange={setKeySource}
                 mnemonic={mnemonic}
                 onMnemonicChange={setMnemonic}
+                demoPassword={demoPassword}
+                onDemoPasswordChange={setDemoPassword}
                 onRegisterNewPrfCredential={handleRegisterNewPrfCredential}
               />
             </div>

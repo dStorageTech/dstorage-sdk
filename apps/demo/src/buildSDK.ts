@@ -6,10 +6,7 @@ import {
   MockMidnightChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage-tech/dstorage";
-import {
-  PasswordEncryptionAdapter,
-  type EncryptionAdapter,
-} from "@dstorage/encryption";
+import { type EncryptionAdapter } from "@dstorage/encryption";
 import { PROOF_SERVER_ENDPOINT } from "./adapterConfigs";
 import type {
   StorageAdapterKey,
@@ -87,14 +84,12 @@ export async function buildSDK(
     });
   }
 
-  const encryptionAdapters = encryptionAdapter
-    ? [encryptionAdapter]
-    : [
-        new PasswordEncryptionAdapter({
-          password: "dstorage-demo-password-2026!",
-          salt: "dstorage:demo:v1",
-        }),
-      ];
+  if (!encryptionAdapter) {
+    throw new Error(
+      "[dStorage] No encryption adapter provided — select an encryption mode before connecting.",
+    );
+  }
+  const encryptionAdapters = [encryptionAdapter];
 
   return new DStorage({
     storageAdapter,

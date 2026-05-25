@@ -44,6 +44,8 @@ interface Props {
   onKeySourceChange: (src: KeySource) => void;
   mnemonic: string;
   onMnemonicChange: (m: string) => void;
+  demoPassword: string;
+  onDemoPasswordChange: (pw: string) => void;
   onRegisterNewPrfCredential: () => Promise<void>;
 }
 
@@ -73,6 +75,8 @@ export function PatientPanel({
   onKeySourceChange,
   mnemonic,
   onMnemonicChange,
+  demoPassword,
+  onDemoPasswordChange,
   onRegisterNewPrfCredential,
 }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
@@ -449,8 +453,8 @@ export function PatientPanel({
                 <span className="as-card-name">Demo Mode</span>
               </div>
               <div className="as-card-desc">
-                Hardcoded demo key shared by all demo users. Not secure — for
-                development only.
+                Password-based key. Enter a password below — use the same
+                password to retrieve your data later.
               </div>
             </button>
           </div>
@@ -465,12 +469,22 @@ export function PatientPanel({
               autoComplete="off"
             />
           )}
+          {keySource === "demo" && (
+            <input
+              type="password"
+              className="pp-contract-addr-input"
+              placeholder="Enter a password for this session"
+              value={demoPassword}
+              onChange={(e) => onDemoPasswordChange(e.target.value)}
+              autoComplete="new-password"
+            />
+          )}
           <div className="as-picker-hint">
             {keySource === "webauthn-prf"
               ? "Your authenticator will be prompted when you start the upload flow."
               : keySource === "mnemonic"
                 ? "Your mnemonic derives a post-quantum ML-KEM keypair — never sent anywhere."
-                : "Swap to Platform Authenticator or Passphrase for real-world use."}
+                : "For development only — swap to Platform Authenticator or Passphrase for production."}
           </div>
         </div>
 
@@ -480,7 +494,8 @@ export function PatientPanel({
           disabled={
             managedUserIdRequired ||
             (keySource === "mnemonic" &&
-              mnemonic.trim().split(/\s+/).length < 24)
+              mnemonic.trim().split(/\s+/).length < 24) ||
+            (keySource === "demo" && demoPassword.trim().length === 0)
           }
           onClick={onContinueFromSetup}
         >

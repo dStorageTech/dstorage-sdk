@@ -508,11 +508,34 @@ async function main(): Promise<void> {
       ...managedPaymentService,
     });
 
-    // ── 9. Initialise the DStorage SDK ──────────────────────────────────────
-    // Two seed providers are registered here, which means every uploaded file
-    // will be encrypted with a random DEK that is wrapped under *both* KEKs —
-    // one derived from the user's mnemonic/seed and one from the demo password.
-    // Either provider can independently decrypt the data: recovering the mnemonic
+    // ── 9. Demo password for the second encryption adapter ─────────────────
+    // Two encryption adapters are registered so every upload demonstrates
+    // multi-key wrapping: the DEK is wrapped under both the mnemonic KEK and
+    // a password KEK. Either one is enough to decrypt independently.
+    let demoPassword = process.env["DSTORAGE_DEMO_PASSWORD"]?.trim() ?? "";
+    if (demoPassword) {
+      console.log(
+        "\nDemo password loaded from DSTORAGE_DEMO_PASSWORD env var.",
+      );
+    } else {
+      demoPassword = (
+        await rl.question(
+          "\nEnter a password for the demo encryption adapter (or leave blank to auto-generate): ",
+        )
+      ).trim();
+
+      if (!demoPassword) {
+        demoPassword = randomBytes(16).toString("hex");
+        console.log("\n⚠️  A random demo password has been generated:");
+        console.log(`   Password: ${demoPassword}`);
+        console.log(
+          "   Record it — you need it to decrypt data if you lose your seed.\n",
+        );
+      }
+    }
+
+    // ── 10. Initialise the DStorage SDK ─────────────────────────────────────
+    // Either adapter can independently decrypt the data: recovering the mnemonic
     // is enough to regain access, and so is knowing the password. This mirrors a
     // real-world "backup recovery key" pattern without any re-encryption of the
     // stored content.
@@ -521,9 +544,8 @@ async function main(): Promise<void> {
       chainAdapter,
       encryptionAdapters: [
         new MnemonicEncryptionAdapter(credentials),
-        // TODO: In a real app derive the password from user input.
         new PasswordEncryptionAdapter({
-          password: "dstorage-demo-password-2026!",
+          password: demoPassword,
           salt: "dstorage:demo:v1",
         }),
       ],
@@ -539,7 +561,7 @@ async function main(): Promise<void> {
     );
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
-    // ── 10. Display addresses and balances ──────────────────────────────────
+    // ── 11. Display addresses and balances ──────────────────────────────────
     const addresses = chainAdapter.getAddresses();
     console.log("\nWallet addresses:");
     console.log(`  Unshielded: ${addresses.unshielded}`);
@@ -568,7 +590,7 @@ async function main(): Promise<void> {
       }
     }
 
-    // ── 11. Action loop ─────────────────────────────────────────────────────
+    // ── 12. Action loop ─────────────────────────────────────────────────────
 
     console.log(
       "\n─── Actions ──────────────────────────────────────────────────────────",

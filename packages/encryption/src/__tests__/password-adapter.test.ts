@@ -18,12 +18,6 @@ const FAST_PARAMS = { N: 65536, r: 8, p: 1 };
 const GOOD_PASSWORD = "Tr0ub4dor&3!XyZ8"; // 16 chars, mixed charset
 const GOOD_SALT = "myapp:v1:alice@example.com";
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 // ---------------------------------------------------------------------------
 // Determinism — same inputs always produce a key that can roundtrip
 // ---------------------------------------------------------------------------
@@ -572,7 +566,6 @@ describe("generatePqsPassword", () => {
     });
     const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
-    const wrapped = await keypairAdapter.wrapDek(dek);
 
     // Trying to unwrap with the raw-seed keypair MUST FAIL — the two paths are independent.
     const { KeypairEncryptionAdapter } =
