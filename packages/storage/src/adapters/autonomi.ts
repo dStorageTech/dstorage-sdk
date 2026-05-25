@@ -67,7 +67,10 @@ export class AutonomiStorageAdapter implements StorageAdapter {
      * TODO: Replace with real Autonomi upload when JS SDK is stable.
      */
     // Preview: in-memory stub
-    const id = `autonomi_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const id = `autonomi_${Date.now()}_${randomPart}`;
     this.store.set(id, data);
     const cost = await this.estimateCost(data.byteLength);
 
