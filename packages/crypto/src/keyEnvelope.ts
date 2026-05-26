@@ -131,6 +131,11 @@ export async function wrapKey(
       `[dStorage] wrapKey: DEK must be 32 bytes, got ${dek.length}`,
     );
   }
+  if (kek.length !== 32) {
+    throw new Error(
+      `[dStorage] wrapKey: KEK must be 32 bytes, got ${kek.length}`,
+    );
+  }
   const wrapped = await encryptStorageIdXChaCha(kek, dek);
   return bytesToBase64url(wrapped);
 }
@@ -145,6 +150,11 @@ export async function unwrapKey(
   wrappedDek: string,
   kek: Uint8Array,
 ): Promise<Uint8Array> {
+  if (kek.length !== 32) {
+    throw new Error(
+      `[dStorage] unwrapKey: KEK must be 32 bytes, got ${kek.length}`,
+    );
+  }
   const wrapped = base64urlToBytes(wrappedDek);
   return decryptStorageIdXChaCha(kek, wrapped);
 }
