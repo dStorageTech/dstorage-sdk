@@ -58,6 +58,7 @@ import type {
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
 import { hexToBytes } from "@dstorage/crypto";
+import { sanitiseErrorBody } from "../utils.js";
 
 // Shared API endpoint for all network payment flows on the dStorage signing server.
 const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
@@ -78,24 +79,6 @@ function parseSignedTxBytes(signedTx: string): Uint8Array {
     return hexToBytes(signedTx.slice(colonIdx + 1), "signedTx");
   }
   return hexToBytes(signedTx, "signedTx");
-}
-
-// ── Server error body sanitisation ───────────────────────────────────────────
-
-const MAX_ERROR_BODY_LENGTH = 200;
-
-/**
- * Sanitise a raw server error body before embedding it in a thrown Error.
- * - Strips ASCII control characters (log-injection / terminal escape attacks).
- * - Strips HTML tags (UI injection if the message is rendered in a browser).
- * - Truncates to MAX_ERROR_BODY_LENGTH characters.
- */
-function sanitiseErrorBody(raw: string): string {
-  return raw
-    .replace(/[\x00-\x1f\x7f]/g, " ") // control chars → space
-    .replace(/<[^>]*>/g, "") // HTML tags → removed
-    .trim()
-    .slice(0, MAX_ERROR_BODY_LENGTH);
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────

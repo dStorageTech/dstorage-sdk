@@ -42,7 +42,7 @@ import type {
   StorageQuote,
 } from "../types.js";
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
-import { ManagedPaymentAdapter } from "@dstorage/payment";
+import { ManagedPaymentAdapter, sanitiseErrorBody } from "@dstorage/payment";
 import type { Signer } from "@dha-team/arbundles";
 import {
   CONTENT_HASH_TAG,
@@ -394,7 +394,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (!resp.ok) {
       const text = await resp.text().catch(() => "");
       throw new Error(
-        `[dStorage/arweave-turbo] sign-tx request failed: HTTP ${resp.status}${text ? ` — ${text}` : ""}`,
+        `[dStorage/arweave-turbo] sign-tx request failed: HTTP ${resp.status}${text ? ` — ${sanitiseErrorBody(text)}` : ""}`,
       );
     }
     const json = await resp.json();
