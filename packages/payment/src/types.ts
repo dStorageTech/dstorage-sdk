@@ -93,6 +93,20 @@ export interface PaymentQuote {
   txData?: string;
 }
 
+// ── PaymentInstruction ────────────────────────────────────────────────────────
+
+/**
+ * Routing information passed to pay(). Omits the estimated cost and the token/type
+ * fields that every adapter already knows from its own instance state.
+ *
+ * A PaymentQuote returned by estimateCost() is structurally compatible and can be
+ * passed directly to pay() — the extra fields are simply ignored.
+ */
+export type PaymentInstruction = Omit<
+  PaymentQuote,
+  "amount" | "token" | "type"
+>;
+
 // ── PaymentReceipt ────────────────────────────────────────────────────────────
 
 /**
@@ -176,12 +190,12 @@ export interface PaymentAdapter {
    * For real adapters this triggers a wallet signature prompt and broadcasts
    * a transaction. For MockPaymentAdapter it simulates the UX with delays.
    *
-   * @param quote     The quote returned from estimateCost()
-   * @param onStatus  Optional callback for live status messages (used by MetaTransaction
-   *                  to update the step detail shown in the UI)
+   * @param instruction  The instruction returned from estimateCost()
+   * @param onStatus     Optional callback for live status messages (used by MetaTransaction
+   *                     to update the step detail shown in the UI)
    */
   pay(
-    quote: PaymentQuote,
+    instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt>;
 

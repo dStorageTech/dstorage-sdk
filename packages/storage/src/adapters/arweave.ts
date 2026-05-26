@@ -70,6 +70,12 @@ export interface ArweaveAdapterConfig {
    * Defaults to mainnet (arweave.net:443).
    *
    * Testnet: { host: 'arweave.dev', port: 443, protocol: 'https' }
+   *
+   * Security: always use `protocol: 'https'` (the default) in production.
+   * The SDK relies on standard OS/runtime TLS — no DNS or certificate pinning
+   * is applied. Users in adversarial network environments should enforce
+   * certificate pinning at the runtime level (e.g. a custom Node.js HTTPS
+   * agent or a trusted corporate proxy).
    */
   gateway?: ArweaveGatewayConfig;
 
@@ -280,10 +286,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       // Direct upload path — stage data and trigger signing via payment adapter.
       arwPayment.provideUploadData(data, metadata);
       await arwPayment.pay({
-        token: quote.token,
-        amount: quote.amount,
         network: this.name,
-        type: "storage",
         dataSizeBytes: quote.dataSizeBytes,
         expiresAt: quote.expiresAt,
       });

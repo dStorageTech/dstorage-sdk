@@ -39,7 +39,7 @@
  *
  *   MetaTransaction:
  *     provideUploadData(data, metadata)  ← stores data + tags
- *     pay(quote, onStatus)               ← routes by quote.network, creates tx,
+ *     pay(instruction, onStatus)          ← routes by instruction.network, creates tx,
  *                                           sends JSON to server, applies signature
  *
  *   ArweaveStorageAdapter.upload():
@@ -49,6 +49,7 @@
 
 import type {
   MidnightWalletProvider,
+  PaymentInstruction,
   PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
@@ -249,25 +250,25 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * (Arweave path only) or if the network is unrecognised.
    */
   override async pay(
-    quote: PaymentQuote,
+    instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
-    if (Date.now() > quote.expiresAt) {
+    if (Date.now() > instruction.expiresAt) {
       throw new Error(
-        `[dStorage/payment] Quote expired at ${new Date(quote.expiresAt).toISOString()}. ` +
+        `[dStorage/payment] Quote expired at ${new Date(instruction.expiresAt).toISOString()}. ` +
           "Request a fresh quote via estimateCost() before calling pay().",
       );
     }
 
-    if (quote.network === "midnight") {
-      return this._payMidnight(quote, onStatus);
-    } else if (quote.network === "arweave") {
-      return this._payArweave(quote, onStatus);
-    } else if (quote.network === "arweave_turbo") {
-      return this._payArweaveTurbo(quote, onStatus);
+    if (instruction.network === "midnight") {
+      return this._payMidnight(instruction, onStatus);
+    } else if (instruction.network === "arweave") {
+      return this._payArweave(instruction, onStatus);
+    } else if (instruction.network === "arweave_turbo") {
+      return this._payArweaveTurbo(instruction, onStatus);
     }
 
-    throw Error(`Unsupported network: ${quote.network}`);
+    throw Error(`Unsupported network: ${instruction.network}`);
   }
 
   // ── Network-specific wallet provider factories ────────────────────────────────
@@ -301,9 +302,6 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       balanceTx: async (tx, _ttl?) => {
         const txData = uint8ArrayToHex(tx.serialize());
         const receipt = await this.pay({
-          token: "DUST",
-          amount: "0",
-          type: "chain",
           network: "midnight",
           txData,
           dataSizeBytes: txData.length,
@@ -343,11 +341,11 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * Falls back to the base-class pass-through if provideUploadData() was not called.
    */
   private async _payArweave(
-    quote: PaymentQuote,
+    instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     if (!this.pendingUpload) {
-      return super.pay(quote, onStatus);
+      return super.pay(instruction, onStatus);
     }
 
     const { data, metadata } = this.pendingUpload;
@@ -374,7 +372,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     const body = JSON.stringify({
       txData: tx.toJSON(),
-      network: quote.network,
+      network: instruction.network,
     });
 
     const {
@@ -383,7 +381,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       publicKey,
       txAmount: arCost,
       serviceFee,
-    } = await this._sendSignTxRequest(body, quote.network, onStatus);
+    } = await this._sendSignTxRequest(body, instruction.network, onStatus);
 
     onStatus?.("Applying remote signature…");
     tx.setSignature({ id: txId, signature, owner: publicKey });
@@ -395,14 +393,14 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token} (service fee: ${serviceFee})`,
+      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee})`,
     );
 
     return {
       txHash: txId,
-      token: quote.token,
+      token: this.token,
       amount: arCost,
-      type: quote.type,
+      type: this.type,
       paidAt: Date.now(),
       serviceFee,
     };
@@ -421,12 +419,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * for the chain adapter to deserialize and pass to submitTx().
    */
   private async _payMidnight(
-    quote: PaymentQuote,
+    instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     const body = JSON.stringify({
-      txData: quote.txData ?? null,
-      network: quote.network,
+      txData: instruction.txData ?? null,
+      network: instruction.network,
     });
 
     const {
@@ -434,18 +432,18 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       signature,
       txAmount: dustCost,
       serviceFee,
-    } = await this._sendSignTxRequest(body, quote.network, onStatus);
+    } = await this._sendSignTxRequest(body, instruction.network, onStatus);
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Midnight Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${dustCost} ${quote.token} (service fee: ${serviceFee})`,
+      `Midnight Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${dustCost} ${this.token} (service fee: ${serviceFee})`,
     );
 
     return {
       txHash: txId,
       token: "DUST",
       amount: dustCost,
-      type: quote.type,
+      type: this.type,
       signedTx: signature,
       paidAt: Date.now(),
       serviceFee,
@@ -456,12 +454,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * Arweave Turbo
    */
   private async _payArweaveTurbo(
-    quote: PaymentQuote,
+    instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     const body = JSON.stringify({
-      txData: quote.txData ?? null,
-      network: quote.network,
+      txData: instruction.txData ?? null,
+      network: instruction.network,
     });
 
     const {
@@ -469,18 +467,18 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       signature,
       txAmount: arCost,
       serviceFee,
-    } = await this._sendSignTxRequest(body, quote.network, onStatus);
+    } = await this._sendSignTxRequest(body, instruction.network, onStatus);
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Arweave Turbo Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${quote.token} (service fee: ${serviceFee})`,
+      `Arweave Turbo Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee})`,
     );
 
     return {
       txHash: txId,
       token: "AR",
       amount: arCost,
-      type: quote.type,
+      type: this.type,
       signedTx: signature,
       paidAt: Date.now(),
       serviceFee,

@@ -18,6 +18,7 @@
 import type {
   PaymentAdapterLogger,
   PaymentAdapter,
+  PaymentInstruction,
   PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
@@ -83,17 +84,17 @@ export class MockPaymentAdapter implements PaymentAdapter {
   }
 
   async pay(
-    quote: PaymentQuote,
+    instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
-    const tokenName = TOKENS[quote.token]?.name ?? quote.token;
+    const tokenName = TOKENS[this.token]?.name ?? this.token;
 
     // Phase 1 — wallet prompt
     onStatus?.(`Requesting ${tokenName} wallet signature…`);
     await delay(600);
 
     // Phase 2 — broadcasting
-    onStatus?.(`Broadcasting ${quote.type} payment transaction…`);
+    onStatus?.(`Broadcasting ${this.type} payment transaction…`);
     await delay(800);
 
     // Phase 3 — confirmation
@@ -101,19 +102,20 @@ export class MockPaymentAdapter implements PaymentAdapter {
     await delay(500);
 
     const txHash = generateSimulatedTxHash();
+    const { amount } = await this.estimateCost(instruction.dataSizeBytes);
 
     this.logger?.log(
       "dStorage/mock-payment",
-      `Simulated ${quote.type} payment → txHash: ${txHash}`,
+      `Simulated ${this.type} payment → txHash: ${txHash}`,
     );
 
     return {
       txHash,
-      token: quote.token,
-      amount: quote.amount,
-      type: quote.type,
+      token: this.token,
+      amount,
+      type: this.type,
       paidAt: Date.now(),
-      serviceFee: "0", // No real fee, but could simulate if desired
+      serviceFee: "0",
     };
   }
 }

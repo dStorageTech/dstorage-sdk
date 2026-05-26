@@ -15,7 +15,7 @@
  *        Called after encryption. Stores the data + metadata tags so that
  *        pay() can build the complete transaction without a separate round-trip.
  *
- *   2. pay(quote, onStatus)  [payment_storage step]
+ *   2. pay(instruction, onStatus)  [payment_storage step]
  *        Creates the Arweave transaction, attaches tags, and prompts the
  *        wallet for approval (ArConnect popup / JWK signing). Stores the
  *        signed transaction for the upload step to pick up.
@@ -40,6 +40,7 @@ import { blake3 } from "@noble/hashes/blake3.js";
 import type {
   PaymentAdapterLogger,
   PaymentAdapter,
+  PaymentInstruction,
   PaymentNetworkName,
   PaymentQuote,
   PaymentReceipt,
@@ -59,6 +60,12 @@ export interface ArweavePaymentAdapterConfig {
    * Defaults to mainnet (arweave.net).
    * Use { host: 'arweave.dev', port: 443, protocol: 'https' } for testnet.
    * Use { host: 'localhost', port: 1984, protocol: 'http' } for arlocal.
+   *
+   * Security: always use `protocol: 'https'` (the default) in production.
+   * The SDK relies on standard OS/runtime TLS — no DNS or certificate pinning
+   * is applied. Users in adversarial network environments should enforce
+   * certificate pinning at the runtime level (e.g. a custom Node.js HTTPS
+   * agent or a trusted corporate proxy).
    */
   gateway?: {
     host: string;
@@ -228,12 +235,12 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
    *   ArweaveStorageAdapter.upload() performs the full create → sign → post flow.
    */
   async pay(
-    quote: PaymentQuote,
+    instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
-    if (Date.now() > quote.expiresAt) {
+    if (Date.now() > instruction.expiresAt) {
       throw new Error(
-        `[dStorage/payment] Quote expired at ${new Date(quote.expiresAt).toISOString()}. ` +
+        `[dStorage/payment] Quote expired at ${new Date(instruction.expiresAt).toISOString()}. ` +
           "Request a fresh quote via estimateCost() before calling pay().",
       );
     }
@@ -244,10 +251,10 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       return {
         txHash: "arweave-bundled-with-upload",
         token: this.token,
-        amount: quote.amount,
+        amount: "0",
         type: this.type,
         paidAt: Date.now(),
-        serviceFee: "0", // No fee
+        serviceFee: "0",
       };
     }
 
@@ -284,10 +291,10 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     return {
       txHash: tx.id as string,
       token: this.token,
-      amount: quote.amount,
+      amount: arCost,
       type: this.type,
       paidAt: Date.now(),
-      serviceFee: "0", // No fee
+      serviceFee: "0",
     };
   }
 

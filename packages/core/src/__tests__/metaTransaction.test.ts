@@ -18,10 +18,6 @@ function makeFile(
   return new File([content], name, { type });
 }
 
-function makeEmptyFile(name = "empty.txt", type = "text/plain"): File {
-  return new File([], name, { type });
-}
-
 /** Build a minimal DStorageContext for tests. */
 function makeSdkContext(address = "0xTestOwner"): DStorageContext {
   const storageAdapter = new MockStorageAdapter();

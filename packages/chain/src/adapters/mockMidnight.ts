@@ -156,9 +156,6 @@ export class MockMidnightChainAdapter implements ChainAdapter {
         "Sending request to balance Tx to remote service…",
       );
       paymentReceipt = await this.paymentAdapter.pay({
-        token: "DUST",
-        amount: "0.1000",
-        type: "chain",
         network: this.name,
         dataSizeBytes: 0,
         expiresAt: Date.now() + 60_000,

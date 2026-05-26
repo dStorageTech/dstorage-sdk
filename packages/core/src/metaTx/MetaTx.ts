@@ -113,9 +113,6 @@ export class MetaTx {
 
       const storageReceipt = await this.sdk.storageAdapter.paymentAdapter.pay(
         {
-          token: estimate.storageCost.token,
-          amount: estimate.storageCost.amount,
-          type: "storage",
           network: this.sdk.storageAdapter.name,
           dataSizeBytes: uploadData.byteLength,
           expiresAt: Date.now() + 600_000,

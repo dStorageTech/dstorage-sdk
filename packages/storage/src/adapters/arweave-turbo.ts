@@ -67,7 +67,13 @@ export interface ArweaveTurboAdapterConfig {
   authToken?: string; // validated at construction: required when signingServerUrl is set
   /**
    * Arweave gateway URL used for data retrieval.
-   * Defaults to ARWEAVE_GATEWAY_URL
+   * Defaults to the public Arweave gateway.
+   *
+   * Security: always use an `https://` URL (the default) in production.
+   * This adapter uses `globalThis.fetch` directly — no DNS or certificate
+   * pinning is applied. Users in adversarial network environments can override
+   * `globalThis.fetch` before constructing the adapter to inject their own
+   * certificate-pinned fetch implementation.
    */
   gateway?: string;
   /**
@@ -342,14 +348,12 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       "Delegating ANS-104 signature to server via sign-tx (only deep_hash sent, data stays on client)…",
     );
 
+    const quote = await this.estimateCost(dataSizeBytes);
     const paymentReceipt = await this.paymentAdapter.pay({
-      token: "AR",
-      amount: "0", // FIXME: add price estimation
       network: this.name,
-      type: "storage",
       txData: _bytesToBase64url(hash),
       dataSizeBytes: dataSizeBytes,
-      expiresAt: Date.now() + 600_000,
+      expiresAt: quote.expiresAt,
     });
 
     if (!paymentReceipt.signedTx) {
