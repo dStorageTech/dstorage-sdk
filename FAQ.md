@@ -315,7 +315,10 @@ Use the `walletMode` discriminated union:
 ```typescript
 new ArweaveTurboStorageAdapter({
   signingServerUrl: "https://dstorage.pro",
-  authToken: "ds_your_token_here",
+  // Token format: <credential>.<base64url_modulus> — issued by the signing server.
+  // The modulus (512 bytes, base64url) is the server's RSA-4096 public key and is
+  // used to pin the expected signing key at construction time.
+  authToken: process.env.DSTORAGE_AUTH_TOKEN ?? "",
 });
 ```
 
@@ -397,7 +400,13 @@ Both the storage adapter and the chain adapter accept `signingServerUrl` / `auth
 
 **Where do I get an auth token?**
 
-Sign up at [dstorage.pro](https://dstorage.pro). Tokens follow the format `ds_…`.
+Sign up at [dstorage.pro](https://dstorage.pro). Tokens use a compound format:
+
+```
+<credential>.<base64url_modulus>
+```
+
+`<credential>` is the authentication secret sent as the Bearer header. `<base64url_modulus>` is the 512-byte RSA-4096 public key modulus of the server's Arweave signing key, base64url-encoded (~683 chars). The adapter parses and pins this key at construction time — if the server rotates its signing key the token must be re-issued to reflect the new modulus.
 
 **How do I set the credentials via environment variables?**
 
@@ -422,9 +431,11 @@ Yes — the QUICK_START guide is built around the managed flow. `ArweaveTurboSto
 
 **Is there a known security limitation with the managed payment response?**
 
-Yes. The signing server response (`txId`, `signature`, `publicKey`) is validated for schema correctness but carries no cryptographic MAC. The adapter relies on TLS for transport integrity. A compromised CDN or network-level MITM could substitute a valid-shaped response and schema validation would still pass.
+The signing server response (`txId`, `signature`) is validated for schema correctness but carries no cryptographic MAC. The adapter relies on TLS for transport integrity. A compromised CDN or network-level MITM could substitute a valid-shaped response and schema validation would still pass.
 
-**Mitigation**: always use `signingServerUrl` with HTTPS and a valid certificate issued to the operator-controlled domain. Never use this adapter over plain HTTP or with self-signed certificates in production. A proper fix (an `HMAC-SHA256` response MAC verified by the adapter) is deferred pending a stable signing-server API.
+The signing key substitution attack (where a MITM replaces the server's public key to corrupt the on-chain ownership record) is mitigated: the expected key is embedded in the auth token and pinned at construction time. Each sign-tx request asserts the pinned key; the server rejects any mismatch.
+
+**Mitigation for the response MAC gap**: always use `signingServerUrl` with HTTPS and a valid certificate issued to the operator-controlled domain. Never use this adapter over plain HTTP or with self-signed certificates in production. A proper fix (an `HMAC-SHA256` response MAC) is deferred pending a stable signing-server API.
 
 **What payment tokens does the managed service handle?**
 

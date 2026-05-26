@@ -176,6 +176,24 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   private readonly authToken: string;
   private readonly requestTimeoutMs: number;
 
+  /**
+   * Strip a RSA-4096 modulus suffix from a compound auth token
+   * (<credential>.<base64url_683_chars>), returning only the credential.
+   * A plain token (no '.' or wrong suffix length) is returned unchanged.
+   * This lets ArweaveTurboStorageAdapter compound tokens be passed directly
+   * to any adapter that uses ManagedPaymentAdapter without breaking authentication.
+   */
+  private static _extractCredential(token: string): string {
+    const dot = token.lastIndexOf(".");
+    if (dot === -1) return token;
+    const suffix = token.slice(dot + 1);
+    // base64url-encoded 512-byte RSA modulus is always exactly 683 chars (512 = 170×3+2)
+    if (suffix.length === 683 && /^[A-Za-z0-9_-]+$/.test(suffix)) {
+      return token.slice(0, dot);
+    }
+    return token;
+  }
+
   constructor(config: ManagedPaymentAdapterConfig) {
     super({
       ...(config.gateway !== undefined ? { gateway: config.gateway } : {}),
@@ -190,7 +208,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         "[dStorage/managed-payment] authToken is required and must not be empty or whitespace.",
       );
     }
-    this.authToken = config.authToken;
+    this.authToken = ManagedPaymentAdapter._extractCredential(config.authToken);
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.network = config.network;
     this.type = config.type;
@@ -443,6 +461,9 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const body = JSON.stringify({
       txData: instruction.txData ?? null,
       network: instruction.network,
+      ...(instruction.ownerKey !== undefined
+        ? { ownerKey: instruction.ownerKey }
+        : {}),
     });
 
     const {
@@ -512,6 +533,12 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     } catch (err) {
       throw new Error(
         `[dStorage/managed-payment] Could not reach signing server: ${err}`,
+      );
+    }
+    if (signResp.status === 409) {
+      throw new Error(
+        "[dStorage/managed-payment] Signing server key has changed — " +
+          "re-issue your API token to obtain the updated public key.",
       );
     }
     if (!signResp.ok) {

@@ -23,10 +23,15 @@
  *   No extra install needed — @dha-team/arbundles ships as a dependency of @ardrive/turbo-sdk.
  *
  * ── Server requirements ───────────────────────────────────────────────────────
- *   The dStorage API server must expose (both auth-protected via Bearer token):
- *     GET  /api/service/public-key  → { publicKey: string }
- *     POST /api/service/sign-hash   → { signature: string, publicKey: string, success: boolean }
+ *   The dStorage API server must expose (auth-protected via Bearer token):
+ *     POST /api/service/sign-tx  → { signature: string, txId: string, success: boolean, … }
  *   The server's Arweave wallet must have Turbo Credits funded at https://ardrive.io.
+ *
+ * ── Auth token format ─────────────────────────────────────────────────────────
+ *   authToken must be in the format: <credential>.<base64url_modulus>
+ *   where <base64url_modulus> is the 512-byte RSA-4096 public key modulus
+ *   base64url-encoded. The adapter validates and pins the key at construction time.
+ *   Re-issue the token from the signing server to obtain the current key.
  *
  * ── Notes ─────────────────────────────────────────────────────────────────────
  *   • Turbo provides near-instant finality — unlike the 2–20 min Arweave L1 wait.
@@ -42,7 +47,7 @@ import type {
   StorageQuote,
 } from "../types.js";
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
-import { ManagedPaymentAdapter, sanitiseErrorBody } from "@dstorage/payment";
+import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { Signer } from "@dha-team/arbundles";
 import {
   CONTENT_HASH_TAG,
@@ -118,20 +123,18 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   readonly paymentAdapter: PaymentAdapter;
 
   private readonly signingServerUrl: string | null;
-  private readonly authToken: string | undefined;
   private readonly gateway: string;
   private readonly maxRetrieveSizeBytes: number;
   private readonly skipIntegrityCheck: boolean;
   protected readonly logger: StorageAdapterLogger | undefined;
 
-  /** Cached server RSA modulus (base64url). Fetched once, reused across uploads. */
-  private _serverPublicKey: string | undefined;
+  /** RSA-4096 public key modulus (512 bytes) parsed from the auth token at construction time. */
+  private readonly ownerPublicKey: Uint8Array;
 
   constructor(config: ArweaveTurboAdapterConfig = {}) {
     this.signingServerUrl = config.signingServerUrl
       ? config.signingServerUrl.replace(/\/$/, "")
       : null;
-    this.authToken = config.authToken;
     this.gateway = config.gateway ?? ARWEAVE_GATEWAY_URL;
     this.maxRetrieveSizeBytes =
       config.maxRetrieveSizeBytes ?? 256 * 1024 * 1024;
@@ -147,6 +150,9 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
           "[dStorage/arweave-turbo] authToken is required when signingServerUrl is provided.",
         );
       }
+      this.ownerPublicKey = ArweaveTurboStorageAdapter._parseToken(
+        config.authToken,
+      );
       this.paymentAdapter = new ManagedPaymentAdapter({
         signingServerUrl: config.signingServerUrl,
         authToken: config.authToken,
@@ -155,8 +161,6 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     } else {
-      // ...otherwise use the local-signing adapter
-      // FIXME!!!
       throw new Error("Local Arweave Turbo Adapter not supported yet");
     }
   }
@@ -171,7 +175,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
 
     // The signer only sends the 48-byte deep_hash to the server; data stays local.
     const dataSizeBytes = data.byteLength;
-    const signer = await this._buildSigner(dataSizeBytes);
+    const signer = this._buildSigner(dataSizeBytes);
 
     const hashHex = await computeBlake3Hex(data);
     const tags = [
@@ -314,15 +318,14 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
    * the DataItem's internal ANS-104 signing procedure to the selected payment adapter.
    * The payment adapter responds with the RSA-PSS signature over that hash (512 bytes, ANS-104 type 1).
    * Raw file bytes never leave the client.
+   *
+   * The owner public key is parsed from the auth token at construction time — no
+   * network round-trip is needed here.
    */
-  private async _buildSigner(dataSizeBytes: number): Promise<Signer> {
-    // Fetch the server's RSA modulus (needed as ANS-104 data item `owner` field).
-    const ownerBase64PublicKey = await this._getArweaveTurboPublicKey();
-    const ownerBytes = _base64urlToBytes(ownerBase64PublicKey);
-
+  private _buildSigner(dataSizeBytes: number): Signer {
     return {
       /** RSA-4096 public key modulus (512 bytes) — used as the ANS-104 data item `owner` field. */
-      publicKey: Buffer.from(ownerBytes),
+      publicKey: Buffer.from(this.ownerPublicKey),
       /** Arweave RSA-4096 signature type (ANS-104 type 1). */
       signatureType: 1,
       ownerLength: 512,
@@ -354,6 +357,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       txData: _bytesToBase64url(hash),
       dataSizeBytes: dataSizeBytes,
       expiresAt: quote.expiresAt,
+      ownerKey: _bytesToBase64url(this.ownerPublicKey),
     });
 
     if (!paymentReceipt.signedTx) {
@@ -366,45 +370,26 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   }
 
   /**
-   * FIXME: remove this function as we should set client's instead of server's PK
-   * Fetch the server's RSA modulus (base64url, 512 bytes) via the sign-tx endpoint.
-   * Sends network: "ARWEAVE_ARIO_TURBO" without txData — server returns publicKey without signing.
-   * Cached after the first fetch; also populated by subsequent sign-tx (signing) responses.
+   * Parse the compound auth token (<credential>.<base64url_modulus>) issued by the
+   * signing server. Validates that the embedded key is exactly 512 bytes (RSA-4096).
+   * Throws at construction time if the format is wrong — fail-fast before any network call.
    */
-  private async _getArweaveTurboPublicKey(): Promise<string> {
-    const body = { network: "arweave_turbo" };
-    let resp: Response;
-    try {
-      resp = await fetch(`${this.signingServerUrl}/api/service/pk`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(this.authToken
-            ? { Authorization: `Bearer ${this.authToken}` }
-            : {}),
-        },
-        body: JSON.stringify(body),
-      });
-    } catch (err) {
+  private static _parseToken(token: string): Uint8Array {
+    const dot = token.lastIndexOf(".");
+    if (dot === -1) {
       throw new Error(
-        `[dStorage/arweave-turbo] Could not reach signing server at ${this.signingServerUrl}: ${err}`,
+        "[dStorage/arweave-turbo] authToken must be in the format " +
+          "<credential>.<base64url_public_key> — re-issue your token from the signing server.",
       );
     }
-
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
+    const ownerBytes = _base64urlToBytes(token.slice(dot + 1));
+    if (ownerBytes.length !== 512) {
       throw new Error(
-        `[dStorage/arweave-turbo] sign-tx request failed: HTTP ${resp.status}${text ? ` — ${sanitiseErrorBody(text)}` : ""}`,
+        `[dStorage/arweave-turbo] authToken public key must be 512 bytes (RSA-4096 modulus), ` +
+          `got ${ownerBytes.length} — re-issue your token.`,
       );
     }
-    const json = await resp.json();
-    if (!json.publicKey) {
-      throw new Error(
-        "[dStorage/arweave-turbo] sign-tx (TURBO_ARWEAVE) returned no publicKey.",
-      );
-    }
-
-    return json.publicKey;
+    return ownerBytes;
   }
 
   /**

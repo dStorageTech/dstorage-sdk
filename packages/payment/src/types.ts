@@ -105,7 +105,10 @@ export interface PaymentQuote {
 export type PaymentInstruction = Omit<
   PaymentQuote,
   "amount" | "token" | "type"
->;
+> & {
+  /** base64url-encoded RSA-4096 modulus the client asserts as the expected signing key (Turbo path). */
+  ownerKey?: string;
+};
 
 // ── PaymentReceipt ────────────────────────────────────────────────────────────
 
