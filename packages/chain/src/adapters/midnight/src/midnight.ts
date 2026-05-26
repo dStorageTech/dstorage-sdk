@@ -46,6 +46,9 @@ import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import type { AdapterWalletProvider } from "./common-types.js";
 import { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 // ── Public types ──────────────────────────────────────────────────────────────
 
 export interface WalletAddresses {
@@ -85,6 +88,7 @@ interface EnvironmentConfiguration {
   indexerHttp: string;
   indexerWs: string;
   proofServer: string;
+  proofServerMaxRetries?: number;
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -113,6 +117,12 @@ interface BaseConfig {
    * Proof server URL.
    */
   proofServerEndpoint: string;
+  /**
+   * Number of times to retry a proof-server circuit call on failure before
+   * giving up. Uses exponential backoff (1 s, 2 s, 4 s, …).
+   * Defaults to 3. Set to 1 to disable retries.
+   */
+  proofServerMaxRetries?: number;
   /**
    * On-chain address of an already-deployed DataRegistry contract.
    * If omitted, sdk.init() will deploy a new contract and return its address.
@@ -319,6 +329,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       nodeHttp: config.nodeEndpoint ?? networkDefaults.nodeHttp,
       nodeWs: config.nodeWsEndpoint ?? networkDefaults.nodeWs,
       proofServer: config.proofServerEndpoint ?? networkDefaults.proofServer,
+      proofServerMaxRetries: config.proofServerMaxRetries ?? 3,
     };
 
     if (config.signingServerUrl) {
@@ -347,6 +358,32 @@ export class MidnightChainAdapter implements ChainAdapter {
    * local wallet. The server receives the hex-serialized UnboundTransaction,
    * balances and signs it, and returns the FinalizedTransaction in the receipt.
    */
+  private async _withProofRetry<T>(
+    fn: () => Promise<T>,
+    label: string,
+  ): Promise<T> {
+    const maxRetries = this.config.proofServerMaxRetries ?? 3;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxRetries - 1) {
+          const delayMs = 1_000 * 2 ** attempt; // 1 s, 2 s, 4 s, …
+          this.logger?.log(
+            "dStorage/midnight",
+            `${label} attempt ${attempt + 1}/${maxRetries} failed, retrying in ${delayMs} ms: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          await sleep(delayMs);
+        }
+      }
+    }
+    throw lastErr;
+  }
+
   private _wrapPaymentProvider(walletProvider: WalletProvider): WalletProvider {
     if (!this.managedPaymentAdapter) return walletProvider;
 
@@ -822,14 +859,19 @@ export class MidnightChainAdapter implements ChainAdapter {
             "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling writeReference.",
         );
       }
-      const { refId, blockHeight } = await api.storeReference(
-        ref.storageId,
-        ref.encryptionScheme ?? "",
-        ref.storageProvider,
-        ref.dataLabel ?? "",
-        BigInt(ref.writtenAt),
-        ref.keyEnvelope ?? "",
-        ref.ownerSecret,
+      const ownerSecret = ref.ownerSecret;
+      const { refId, blockHeight } = await this._withProofRetry(
+        () =>
+          api.storeReference(
+            ref.storageId,
+            ref.encryptionScheme ?? "",
+            ref.storageProvider,
+            ref.dataLabel ?? "",
+            BigInt(ref.writtenAt),
+            ref.keyEnvelope ?? "",
+            ownerSecret,
+          ),
+        "storeReference",
       );
       const refIdHex = uint8ArrayToHex(refId);
 
@@ -870,10 +912,14 @@ export class MidnightChainAdapter implements ChainAdapter {
           "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling removeReference.",
       );
     }
+    const secret = ownerSecret;
     try {
       const api = await this._getAPI();
       const refIdBytes = hexToBytes(refId, "refId");
-      await api.removeReference(refIdBytes, ownerSecret);
+      await this._withProofRetry(
+        () => api.removeReference(refIdBytes, secret),
+        "removeReference",
+      );
       this.logger?.log(
         "dStorage/midnight",
         `Reference removed → refId: ${refId}`,
@@ -902,18 +948,23 @@ export class MidnightChainAdapter implements ChainAdapter {
           "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling updateReference.",
       );
     }
+    const secret = ownerSecret;
     try {
       const api = await this._getAPI();
       const refIdBytes = hexToBytes(refId, "refId");
-      await api.updateReference(
-        refIdBytes,
-        update.storageId,
-        update.encryptionScheme,
-        update.storageProvider,
-        update.dataLabel ?? "",
-        BigInt(update.writtenAt),
-        update.keyEnvelope ?? "",
-        ownerSecret,
+      await this._withProofRetry(
+        () =>
+          api.updateReference(
+            refIdBytes,
+            update.storageId,
+            update.encryptionScheme,
+            update.storageProvider,
+            update.dataLabel ?? "",
+            BigInt(update.writtenAt),
+            update.keyEnvelope ?? "",
+            secret,
+          ),
+        "updateReference",
       );
       this.logger?.log(
         "dStorage/midnight",
