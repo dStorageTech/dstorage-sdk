@@ -21,6 +21,7 @@
  * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp
  */
 
+import { existsSync } from "node:fs";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
 import { hexToBytes } from "@dstorage/crypto";
@@ -298,6 +299,20 @@ export class MidnightChainAdapter implements ChainAdapter {
             >
           ).zkArtifactsPath
         : undefined;
+    if (this._zkArtifactsPath !== undefined) {
+      if (!this._zkArtifactsPath.trim()) {
+        throw new Error(
+          "[dStorage/midnight] zkArtifactsPath must not be empty — " +
+            "set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.",
+        );
+      }
+      if (!existsSync(this._zkArtifactsPath)) {
+        throw new Error(
+          `[dStorage/midnight] zkArtifactsPath does not exist: "${this._zkArtifactsPath}" — ` +
+            "check the path points to the compiled DataRegistry contract artifacts directory.",
+        );
+      }
+    }
     this._zkConfigBaseUrl =
       walletMode === "connector" && "zkConfigBaseUrl" in config
         ? (
@@ -307,6 +322,12 @@ export class MidnightChainAdapter implements ChainAdapter {
             >
           ).zkConfigBaseUrl
         : undefined;
+    if (this._zkConfigBaseUrl !== undefined && !this._zkConfigBaseUrl.trim()) {
+      throw new Error(
+        "[dStorage/midnight] zkConfigBaseUrl must not be empty — " +
+          "set it to the base URL where keys/ and zkir/ are served (e.g. window.location.origin).",
+      );
+    }
 
     const networkDefaults = NETWORKS[config.network as keyof typeof NETWORKS];
     if (
