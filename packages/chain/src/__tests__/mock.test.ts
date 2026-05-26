@@ -220,4 +220,99 @@ describe("MockChainAdapter", () => {
       expect(ref2.dataLabel).not.toBe("changed");
     });
   });
+
+  // ── ownership validation ───────────────────────────────────────────────────
+
+  describe("ownership validation", () => {
+    const ownerSecret = new Uint8Array(32).fill(42);
+    const wrongSecret = new Uint8Array(32).fill(99);
+
+    function refWithSecret(suffix: string) {
+      return {
+        storageId: `store_${suffix}`,
+        storageProvider: "mock",
+        writtenAt: Date.now(),
+        keyEnvelope: "{}",
+        ownerSecret,
+      };
+    }
+
+    it("removeReference succeeds with correct ownerSecret", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(refWithSecret("own1"));
+      await expect(
+        adapter.removeReference!(refId, ownerSecret),
+      ).resolves.toBeUndefined();
+    });
+
+    it("removeReference rejects wrong ownerSecret", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(refWithSecret("own2"));
+      await expect(
+        adapter.removeReference!(refId, wrongSecret),
+      ).rejects.toThrow("[dStorage/mock-chain] ownerSecret mismatch");
+    });
+
+    it("removeReference rejects missing ownerSecret when commitment exists", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(refWithSecret("own3"));
+      await expect(adapter.removeReference!(refId)).rejects.toThrow(
+        "[dStorage/mock-chain] ownerSecret required",
+      );
+    });
+
+    it("updateReference succeeds with correct ownerSecret", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(refWithSecret("own4"));
+      await expect(
+        adapter.updateReference!(refId, { dataLabel: "updated" }, ownerSecret),
+      ).resolves.toBeUndefined();
+    });
+
+    it("updateReference rejects wrong ownerSecret", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(refWithSecret("own5"));
+      await expect(
+        adapter.updateReference!(refId, { dataLabel: "updated" }, wrongSecret),
+      ).rejects.toThrow("[dStorage/mock-chain] ownerSecret mismatch");
+    });
+
+    it("updateReference rejects missing ownerSecret when commitment exists", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(refWithSecret("own6"));
+      await expect(
+        adapter.updateReference!(refId, { dataLabel: "updated" }),
+      ).rejects.toThrow("[dStorage/mock-chain] ownerSecret required");
+    });
+
+    it("public reference (no ownerSecret) can be removed without a secret", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef("own7"));
+      await expect(adapter.removeReference!(refId)).resolves.toBeUndefined();
+    });
+
+    it("public reference (no ownerSecret) can be updated without a secret", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef("own8"));
+      await expect(
+        adapter.updateReference!(refId, { dataLabel: "ok" }),
+      ).resolves.toBeUndefined();
+    });
+
+    it("listReferences returns 64-char hex ownerCommitment for private references", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(refWithSecret("own9"));
+      const all = await adapter.listReferences();
+      const found = all.find((r) => r.refId === refId);
+      expect(found?.ownerCommitment).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("listReferences returns empty ownerCommitment for public references", async () => {
+      const adapter = new MockChainAdapter();
+      const { refId } = await adapter.writeReference(uniqueRef("own10"));
+      const all = await adapter.listReferences();
+      const found = all.find((r) => r.refId === refId);
+      expect(found?.ownerCommitment).toBe("");
+    });
+  });
 });

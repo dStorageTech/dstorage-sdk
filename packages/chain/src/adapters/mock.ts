@@ -23,6 +23,19 @@ import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
 
 // ── Storage helpers ──
 const refs = new Map<string, ChainReference>();
+// SHA-256(ownerSecret) stored at write time; checked on remove/update.
+// In-memory only — not persisted to localStorage (mock limitation).
+const commitments = new Map<string, Uint8Array>();
+
+async function sha256(data: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(
+    await globalThis.crypto.subtle.digest("SHA-256", new Uint8Array(data)),
+  );
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 function generateRefId(): string {
   const id =
@@ -85,6 +98,9 @@ export class MockChainAdapter implements ChainAdapter {
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
     const refId = generateRefId();
     refs.set(refId, ref);
+    if (ref.ownerSecret) {
+      commitments.set(refId, await sha256(ref.ownerSecret));
+    }
 
     // Persist to localStorage
     const allRefs = Object.fromEntries(refs);
@@ -113,21 +129,25 @@ export class MockChainAdapter implements ChainAdapter {
       storageId: ref.storageId ?? null,
       storageProvider: ref.storageProvider ?? "",
       encryptionScheme: ref.encryptionScheme ?? null,
-      ownerCommitment: "",
+      ownerCommitment: commitments.has(refId)
+        ? bytesToHex(commitments.get(refId)!)
+        : "",
       keyEnvelope: ref.keyEnvelope ?? "",
     }));
   }
 
   async removeReference(
     refId: string,
-    _ownerSecret?: Uint8Array,
+    ownerSecret?: Uint8Array,
   ): Promise<void> {
     if (!refs.has(refId)) {
       throw new Error(
         `[dStorage/mock-chain] No reference found for refId: ${refId}`,
       );
     }
+    await this._checkOwnerSecret(refId, ownerSecret);
     refs.delete(refId);
+    commitments.delete(refId);
     persist("dstorage:chain:refs", Object.fromEntries(refs));
     this.logger?.log(
       "dStorage/mock-chain",
@@ -138,7 +158,7 @@ export class MockChainAdapter implements ChainAdapter {
   async updateReference(
     refId: string,
     update: ChainReferenceUpdate,
-    _ownerSecret?: Uint8Array,
+    ownerSecret?: Uint8Array,
   ): Promise<void> {
     const existing = refs.get(refId);
     if (!existing) {
@@ -146,12 +166,35 @@ export class MockChainAdapter implements ChainAdapter {
         `[dStorage/mock-chain] No reference found for refId: ${refId}`,
       );
     }
+    await this._checkOwnerSecret(refId, ownerSecret);
     refs.set(refId, { ...existing, ...update });
     persist("dstorage:chain:refs", Object.fromEntries(refs));
     this.logger?.log(
       "dStorage/mock-chain",
       `Reference updated → refId: ${refId}`,
     );
+  }
+
+  private async _checkOwnerSecret(
+    refId: string,
+    ownerSecret: Uint8Array | undefined,
+  ): Promise<void> {
+    const stored = commitments.get(refId);
+    if (!stored) return;
+    if (!ownerSecret) {
+      throw new Error(
+        `[dStorage/mock-chain] ownerSecret required — reference ${refId} has an ownerCommitment`,
+      );
+    }
+    const provided = await sha256(ownerSecret);
+    if (
+      provided.length !== stored.length ||
+      !provided.every((b, i) => b === stored[i])
+    ) {
+      throw new Error(
+        `[dStorage/mock-chain] ownerSecret mismatch for refId: ${refId}`,
+      );
+    }
   }
 
   async getBalances(): Promise<WalletBalances> {
