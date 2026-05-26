@@ -63,7 +63,7 @@
  * const adapter = new PasswordEncryptionAdapter({
  *   password: "correct-horse-battery-staple",
  *   salt: "myapp:alice@example.com",
- *   preset: "v1-lite",  // 64 MB, ~200-400ms
+ *   preset: "v1-lite",  // ⚠ half the work factor of "v1" — only for constrained devices
  * });
  */
 
@@ -80,8 +80,12 @@ import type { EncryptionAdapter, WrappedDekResult } from "./types.js";
  * convenience — they expand to concrete N/r/p values. For persistence,
  * always store the actual values from `getKdfParams()`, not the preset name.
  *
- * "v1"      — 128 MB, ~500ms–1s  — recommended for sensitive data (default)
- * "v1-lite" — 64 MB,  ~200–400ms — for constrained environments (mobile, low-RAM)
+ * "v1"      — N=131072, 128 MB, ~500ms–1s  — OWASP-recommended minimum.
+ *             Use for all sensitive data (default).
+ * "v1-lite" — N=65536,  64 MB,  ~200–400ms — half the work factor of "v1".
+ *             An offline attacker needs half the resources to brute-force the
+ *             same password. Use only on memory-constrained devices (mobile,
+ *             low-RAM embedded). Prefer "v1" whenever the environment allows.
  */
 export const KDF_PRESETS = {
   v1: { N: 131072, r: 8, p: 1 },
