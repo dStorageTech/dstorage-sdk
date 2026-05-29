@@ -89,17 +89,9 @@ export class MockPaymentAdapter implements PaymentAdapter {
   ): Promise<PaymentReceipt> {
     const tokenName = TOKENS[this.token]?.name ?? this.token;
 
-    // Phase 1 — wallet prompt
     onStatus?.(`Requesting ${tokenName} wallet signature…`);
-    await delay(600);
-
-    // Phase 2 — broadcasting
     onStatus?.(`Broadcasting ${this.type} payment transaction…`);
-    await delay(800);
-
-    // Phase 3 — confirmation
     onStatus?.("Awaiting confirmation…");
-    await delay(500);
 
     const txHash = generateSimulatedTxHash();
     const { amount } = await this.estimateCost(instruction.dataSizeBytes);
@@ -127,8 +119,4 @@ function generateSimulatedTxHash(): string {
     Math.floor(Math.random() * 16).toString(16),
   ).join("");
   return `0x${hex}`;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -39,8 +39,8 @@ import {
   type Logger as DStorageLogger,
   MnemonicEncryptionAdapter,
   PasswordEncryptionAdapter,
-  //MockMidnightChainAdapter,
-  //MockStorageAdapter,
+  MockMidnightChainAdapter,
+  MockStorageAdapter,
 } from "@dstorage-tech/dstorage";
 import {
   ArweaveLocalStorageAdapter,
@@ -304,7 +304,7 @@ async function uploadFile(
 
 async function main(): Promise<void> {
   let rl = createInterface({ input, output });
-  let chainAdapter: MidnightChainAdapter | undefined;
+  let chainAdapter: MidnightChainAdapter | MockMidnightChainAdapter | undefined;
 
   try {
     console.log("\n=== dStorage Midnight Console Demo ===\n");
@@ -419,6 +419,7 @@ async function main(): Promise<void> {
       .toLowerCase();
     const useManagedPaymentService =
       useCloudApiInput === "y" || useCloudApiInput === "yes";
+    let useManagedMock = false;
 
     let SIGNING_SERVER_URL = process.env["DSTORAGE_SIGNING_SERVER_URL"]?.trim();
     let authToken = process.env["DSTORAGE_AUTH_TOKEN"]?.trim();
@@ -455,6 +456,15 @@ async function main(): Promise<void> {
         }
       }
       console.log(`  All payments via dStorage API ${SIGNING_SERVER_URL}`);
+
+      console.log(`
+  Select payment network:
+    1. Live (arweave / midnight) [default]
+    2. Managed mock (TEST) — no real funds, uses mock storage and chain`);
+      const netChoice = (
+        await rl.question("  Choice [1/2, default: 1]: ")
+      ).trim();
+      useManagedMock = netChoice === "2";
     }
     const managedPaymentService = useManagedPaymentService
       ? {
@@ -465,14 +475,19 @@ async function main(): Promise<void> {
 
     // ── 6. Build the storage adapter ──────────────────────────────────────────
 
-    //const storageAdapter = new MockStorageAdapter();
-    const storageAdapter = new ArweaveLocalStorageAdapter({
-      walletKey: JSON.parse(
-        fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
-      ),
-      logger,
-      ...managedPaymentService,
-    });
+    const storageAdapter = useManagedMock
+      ? new MockStorageAdapter({
+          signingServerUrl: SIGNING_SERVER_URL!,
+          authToken: authToken!,
+          logger,
+        })
+      : new ArweaveLocalStorageAdapter({
+          walletKey: JSON.parse(
+            fs.readFileSync("test-arweave-wallet-key.json", "utf8"),
+          ),
+          logger,
+          ...managedPaymentService,
+        });
 
     // ── 7. Build the wallet and sync ────────────────────────────────────────
     const seedHex = await resolveSeedHex(credentials);
@@ -485,28 +500,38 @@ async function main(): Promise<void> {
       proofServer: proofServerEndpoint,
     };
 
-    const walletProvider = await initWallet(
-      envConfig,
-      seedHex,
-      useManagedPaymentService,
-      withTicker,
-    );
+    const walletProvider = useManagedMock
+      ? null
+      : await initWallet(
+          envConfig,
+          seedHex,
+          useManagedPaymentService,
+          withTicker,
+        );
 
     // ── 8. Build the chain adapter ──────────────────────────────────────────
-    chainAdapter = new MidnightChainAdapter({
-      logger,
-      network: networkName,
-      walletMode: "provider",
-      walletProvider,
-      privateStatePassword: derivePrivateStatePassword(seedHex),
-      ...(contractAddressInput
-        ? { contractAddress: contractAddressInput }
-        : {}),
-      proofServerEndpoint,
-      // ZK artifacts for the DataRegistry storeReference circuit
-      zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
-      ...managedPaymentService,
-    });
+    if (useManagedMock) {
+      chainAdapter = new MockMidnightChainAdapter({
+        signingServerUrl: SIGNING_SERVER_URL!,
+        authToken: authToken!,
+        logger,
+      });
+    } else {
+      chainAdapter = new MidnightChainAdapter({
+        logger,
+        network: networkName,
+        walletMode: "provider",
+        walletProvider: walletProvider!,
+        privateStatePassword: derivePrivateStatePassword(seedHex),
+        ...(contractAddressInput
+          ? { contractAddress: contractAddressInput }
+          : {}),
+        proofServerEndpoint,
+        // ZK artifacts for the DataRegistry storeReference circuit
+        zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
+        ...managedPaymentService,
+      });
+    }
 
     // ── 9. Demo password for the second encryption adapter ─────────────────
     // Two encryption adapters are registered so every upload demonstrates
@@ -562,31 +587,37 @@ async function main(): Promise<void> {
     console.log(`\nContract:   ${dataRegistryAddress}`);
 
     // ── 11. Display addresses and balances ──────────────────────────────────
-    const addresses = chainAdapter.getAddresses();
-    console.log("\nWallet addresses:");
-    console.log(`  Unshielded: ${addresses.unshielded}`);
-    console.log(`  Shielded:   ${addresses.shielded}`);
-    console.log(`  Dust:       ${addresses.dust}`);
-
-    if (useManagedPaymentService) {
+    if (useManagedMock) {
       console.log(
-        "\nManaged payment mode — wallet sync skipped, balances not shown.",
+        "\nManaged mock mode (TEST) — mock storage and chain, signing server handles payments.",
       );
-    } else {
-      const balances = await chainAdapter.getBalances();
-      if (balances.night === 0n) {
+    } else if (chainAdapter instanceof MidnightChainAdapter) {
+      const addresses = chainAdapter.getAddresses();
+      console.log("\nWallet addresses:");
+      console.log(`  Unshielded: ${addresses.unshielded}`);
+      console.log(`  Shielded:   ${addresses.shielded}`);
+      console.log(`  Dust:       ${addresses.dust}`);
+
+      if (useManagedPaymentService) {
         console.log(
-          `\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`,
+          "\nManaged payment mode — wallet sync skipped, balances not shown.",
         );
       } else {
-        console.log(`\nNIGHT balance: ${balances.night}`);
-      }
-      if (balances.dust === 0n) {
-        console.log(
-          "Warning: No DUST found. DUST is required for transaction fees.",
-        );
-      } else {
-        console.log(`DUST balance:  ${balances.dust}`);
+        const balances = await chainAdapter.getBalances();
+        if (balances.night === 0n) {
+          console.log(
+            `\nNo NIGHT tokens found. Send NIGHT to:\n  ${addresses.unshielded}`,
+          );
+        } else {
+          console.log(`\nNIGHT balance: ${balances.night}`);
+        }
+        if (balances.dust === 0n) {
+          console.log(
+            "Warning: No DUST found. DUST is required for transaction fees.",
+          );
+        } else {
+          console.log(`DUST balance:  ${balances.dust}`);
+        }
       }
     }
 

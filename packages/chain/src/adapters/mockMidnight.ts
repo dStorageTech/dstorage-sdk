@@ -104,7 +104,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     });
     if (options.signingServerUrl) {
       this.paymentAdapter = new ManagedPaymentAdapter({
-        network: this.name,
+        network: "managedmock",
         type: "chain",
         signingServerUrl: options.signingServerUrl,
         authToken: options.authToken,

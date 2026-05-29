@@ -14,7 +14,17 @@ import type {
   StorageUploadResult,
   StorageQuote,
 } from "../types.js";
-import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
+import {
+  MockPaymentAdapter,
+  ManagedPaymentAdapter,
+  PaymentAdapter,
+} from "@dstorage/payment";
+
+export interface MockStorageAdapterConfig {
+  logger?: StorageAdapterLogger;
+  signingServerUrl?: string;
+  authToken?: string;
+}
 
 // In Node.js (no localStorage), fall back to an in-memory map.
 const memoryStore = new Map<string, string>();
@@ -86,11 +96,24 @@ export class MockStorageAdapter implements StorageAdapter {
   readonly paymentAdapter: PaymentAdapter;
   private readonly logger: StorageAdapterLogger | undefined;
 
-  constructor(logger?: StorageAdapterLogger) {
-    this.logger = logger;
-    this.paymentAdapter = new MockPaymentAdapter({
-      type: "storage",
-    });
+  constructor(config: MockStorageAdapterConfig = {}) {
+    this.logger = config.logger;
+    if (config.signingServerUrl) {
+      if (!config.authToken?.trim()) {
+        throw new Error(
+          "[dStorage/mock-storage] authToken is required when signingServerUrl is provided.",
+        );
+      }
+      this.paymentAdapter = new ManagedPaymentAdapter({
+        network: "managedmock",
+        type: "storage",
+        signingServerUrl: config.signingServerUrl,
+        authToken: config.authToken,
+        ...(config.logger !== undefined ? { logger: config.logger } : {}),
+      });
+    } else {
+      this.paymentAdapter = new MockPaymentAdapter({ type: "storage" });
+    }
   }
 
   async upload(
@@ -99,6 +122,12 @@ export class MockStorageAdapter implements StorageAdapter {
   ): Promise<StorageUploadResult> {
     const id = generateId();
     const cost = await this.estimateCost(data.byteLength);
+
+    await this.paymentAdapter.pay({
+      network: this.name,
+      dataSizeBytes: data.byteLength,
+      expiresAt: Date.now() + 600_000,
+    });
 
     const entry = JSON.stringify({
       data: uint8ArrayToBase64(data),

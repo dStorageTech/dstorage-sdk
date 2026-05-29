@@ -261,6 +261,13 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       );
     }
 
+    // When the adapter itself is configured for managed mock, always use that
+    // flow regardless of what network the caller claims (e.g. MockMidnightChainAdapter
+    // passes network:"midnight" but the payment should still go through TEST).
+    if (this.network === "managedmock") {
+      return this._payManagedMock(instruction, onStatus);
+    }
+
     if (instruction.network === "midnight") {
       return this._payMidnight(instruction, onStatus);
     } else if (instruction.network === "arweave") {
@@ -484,6 +491,43 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       amount: arCost,
       type: this.type,
       signedTx: signature,
+      paidAt: Date.now(),
+      serviceFee,
+    };
+  }
+
+  /**
+   * Managed mock flow:
+   *   Sends a minimal request to the signing server with the literal network
+   *   identifier "TEST" — the server treats this as a sandbox/test flow with no
+   *   real funds involved. The SDK-side network name is "managedmock" to follow
+   *   the lowercase naming convention; the server-side string is always "TEST".
+   */
+  private async _payManagedMock(
+    instruction: PaymentInstruction,
+    onStatus?: (message: string) => void,
+  ): Promise<PaymentReceipt> {
+    const body = JSON.stringify({
+      txData: instruction.txData || "mock",
+      network: "TEST",
+    });
+
+    const { txId, txAmount, serviceFee } = await this._sendSignTxRequest(
+      body,
+      "TEST",
+      onStatus,
+    );
+
+    this.logger?.log(
+      "dStorage/managed-payment",
+      `ManagedMock Tx signed remotely (${this.signingServerUrl}) → txId: ${txId}  cost: ~${txAmount} MOCK (service fee: ${serviceFee})`,
+    );
+
+    return {
+      txHash: txId,
+      token: "MOCK",
+      amount: txAmount,
+      type: this.type,
       paidAt: Date.now(),
       serviceFee,
     };

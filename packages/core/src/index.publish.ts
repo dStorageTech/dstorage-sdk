@@ -20,6 +20,7 @@ export type {
   StorageUploadResult,
 } from "@dstorage/storage";
 export { MockStorageAdapter } from "@dstorage/storage";
+export type { MockStorageAdapterConfig } from "@dstorage/storage";
 
 // Payment: types + mock only
 export type {
@@ -47,4 +48,4 @@ export type {
   DataReferenceSummary,
   ChainQuote,
 } from "@dstorage/chain";
-export { MockChainAdapter } from "@dstorage/chain";
+export { MockChainAdapter, MockMidnightChainAdapter } from "@dstorage/chain";
