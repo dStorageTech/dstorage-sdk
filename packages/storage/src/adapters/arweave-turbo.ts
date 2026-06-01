@@ -373,6 +373,9 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
    * Parse the compound auth token (<credential>.<base64url_modulus>) issued by the
    * signing server. Validates that the embedded key is exactly 512 bytes (RSA-4096).
    * Throws at construction time if the format is wrong — fail-fast before any network call.
+   *
+   * lastIndexOf is intentional: the credential part may itself contain dots
+   * (e.g. a JWT), so we always split at the *last* dot to reach the modulus.
    */
   private static _parseToken(token: string): Uint8Array {
     const dot = token.lastIndexOf(".");

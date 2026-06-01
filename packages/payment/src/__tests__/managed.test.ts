@@ -63,6 +63,22 @@ describe("ManagedPaymentAdapter — authToken validation", () => {
       () => new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "   " }),
     ).toThrow(/authToken/i);
   });
+
+  it("accepts a compound token whose credential part is a JWT (dots in credential)", () => {
+    // A JWT credential produces a token with four dot-separated segments:
+    // <jwt_header>.<jwt_payload>.<jwt_sig>.<rsa_modulus_683_chars>
+    // _extractCredential uses lastIndexOf so the full JWT is returned as the
+    // Bearer credential and the modulus suffix is stripped correctly.
+    const modulus683 = "A".repeat(683);
+    const jwtCredential = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.fakeJwtSig";
+    expect(
+      () =>
+        new ManagedPaymentAdapter({
+          ...BASE_CONFIG,
+          authToken: `${jwtCredential}.${modulus683}`,
+        }),
+    ).not.toThrow();
+  });
 });
 
 // ── Security: signing server response validation ───────────────────────────────

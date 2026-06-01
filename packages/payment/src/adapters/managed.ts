@@ -182,6 +182,9 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * A plain token (no '.' or wrong suffix length) is returned unchanged.
    * This lets ArweaveTurboStorageAdapter compound tokens be passed directly
    * to any adapter that uses ManagedPaymentAdapter without breaking authentication.
+   *
+   * lastIndexOf is intentional: the credential part may itself contain dots
+   * (e.g. a JWT), so we always split at the *last* dot to reach the modulus.
    */
   private static _extractCredential(token: string): string {
     const dot = token.lastIndexOf(".");
