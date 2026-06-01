@@ -87,6 +87,7 @@ export class MnemonicEncryptionAdapter implements EncryptionAdapter {
    * @param variant  ML-KEM variant. Default: "mlkem768".
    */
   async intoKeypairEncryptionAdapter(
+    context: string,
     variant?: import("./KeypairEncryptionAdapter.js").MLKemVariant,
   ): Promise<import("./KeypairEncryptionAdapter.js").KeypairEncryptionAdapter> {
     const { KeypairEncryptionAdapter } =
@@ -108,7 +109,7 @@ export class MnemonicEncryptionAdapter implements EncryptionAdapter {
     const mlkemSeed = new Uint8Array(mlkemBits);
     try {
       const { pk, sk } = mlkemGenerateKeypairFromSeed(mlkemSeed, variant);
-      return KeypairEncryptionAdapter.fromKeypair(pk, sk, variant);
+      return KeypairEncryptionAdapter.fromKeypair(pk, sk, context, variant);
     } finally {
       mlkemSeed.fill(0);
     }

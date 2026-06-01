@@ -539,7 +539,8 @@ describe("generatePqsPassword", () => {
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     });
-    const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+    const keypairAdapter =
+      await adapter.intoKeypairEncryptionAdapter("test-context");
     expect(keypairAdapter).toBeDefined();
     expect(keypairAdapter.name).toMatch(/^mlkem/);
   });
@@ -564,13 +565,17 @@ describe("generatePqsPassword", () => {
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     });
-    const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+    const keypairAdapter =
+      await adapter.intoKeypairEncryptionAdapter("test-context");
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
 
     // Trying to unwrap with the raw-seed keypair MUST FAIL — the two paths are independent.
     const { KeypairEncryptionAdapter } =
       await import("../KeypairEncryptionAdapter.js");
-    const rawAdapter = KeypairEncryptionAdapter.fromPublicKey(pkRaw);
+    const rawAdapter = KeypairEncryptionAdapter.fromPublicKey(
+      pkRaw,
+      "test-context",
+    );
     const wrappedRaw = await rawAdapter.wrapDek(dek);
     await expect(keypairAdapter.unwrapDek(wrappedRaw)).rejects.toThrow();
   });
@@ -601,7 +606,8 @@ describe("generatePqsPassword", () => {
       salt: GOOD_SALT,
       params: FAST_PARAMS,
     });
-    const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+    const keypairAdapter =
+      await adapter.intoKeypairEncryptionAdapter("test-context");
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const wrapped = await keypairAdapter.wrapDek(dek);
 
@@ -610,6 +616,7 @@ describe("generatePqsPassword", () => {
     const expectedAdapter = KeypairEncryptionAdapter.fromKeypair(
       pkExpected,
       skExpected,
+      "test-context",
     );
     const unwrapped = await expectedAdapter.unwrapDek(wrapped);
     expect(Array.from(unwrapped)).toEqual(Array.from(dek));
@@ -622,7 +629,7 @@ describe("generatePqsPassword", () => {
         password: pw,
         salt: GOOD_SALT,
         params: FAST_PARAMS,
-      }).intoKeypairEncryptionAdapter();
+      }).intoKeypairEncryptionAdapter("test-context");
     const [a, b] = await Promise.all([make(), make()]);
     // Wrap a fresh DEK with adapter A, unwrap with adapter B — must succeed.
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));

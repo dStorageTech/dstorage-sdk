@@ -70,10 +70,10 @@ describe("MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter", () => {
   it("same mnemonic + variant → same public key (determinism)", async () => {
     const a = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const b = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const toHex = (u: Uint8Array) =>
       Array.from(u)
         .map((x) => x.toString(16).padStart(2, "0"))
@@ -84,10 +84,10 @@ describe("MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter", () => {
   it("different mnemonic → different public key", async () => {
     const a = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const b = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC2,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const toHex = (u: Uint8Array) =>
       Array.from(u)
         .map((x) => x.toString(16).padStart(2, "0"))
@@ -98,10 +98,10 @@ describe("MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter", () => {
   it("64-byte seedHex → same public key (determinism)", async () => {
     const a = await new MnemonicEncryptionAdapter({
       seedHex: SEED_HEX_64,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const b = await new MnemonicEncryptionAdapter({
       seedHex: SEED_HEX_64,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const toHex = (u: Uint8Array) =>
       Array.from(u)
         .map((x) => x.toString(16).padStart(2, "0"))
@@ -113,10 +113,10 @@ describe("MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter", () => {
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const writer = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const reader = await new MnemonicEncryptionAdapter({
       mnemonic: MNEMONIC,
-    }).intoKeypairEncryptionAdapter("mlkem768");
+    }).intoKeypairEncryptionAdapter("test-context", "mlkem768");
     const wrapped = await writer.wrapDek(dek);
     const recovered = await reader.unwrapDek(wrapped);
     expect(recovered).toEqual(dek);
@@ -125,7 +125,7 @@ describe("MnemonicEncryptionAdapter — intoKeypairEncryptionAdapter", () => {
   it("32-byte seedHex → produces a valid keypair adapter (via HKDF)", async () => {
     const adapter = await new MnemonicEncryptionAdapter({
       seedHex: SEED_HEX_32,
-    }).intoKeypairEncryptionAdapter();
+    }).intoKeypairEncryptionAdapter("test-context");
     expect(adapter.name).toMatch(/^mlkem/);
     // Verify it can perform a roundtrip
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));

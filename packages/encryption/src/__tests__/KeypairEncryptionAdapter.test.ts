@@ -4,6 +4,7 @@ import type { MLKemVariant } from "../KeypairEncryptionAdapter.js";
 
 const VARIANTS: MLKemVariant[] = ["mlkem512", "mlkem768", "mlkem1024"];
 const TEST_DEK = globalThis.crypto.getRandomValues(new Uint8Array(32));
+const CTX = "test-context";
 
 function bytesToHex(b: Uint8Array): string {
   return Array.from(b)
@@ -17,7 +18,7 @@ describe("generateKeypair", () => {
   for (const variant of VARIANTS) {
     it(`${variant}: returns provider + raw keys`, () => {
       const { adapter, publicKey, secretKey } =
-        KeypairEncryptionAdapter.generateKeypair(variant);
+        KeypairEncryptionAdapter.generateKeypair(CTX, variant);
       expect(adapter.name).toBe(variant);
       expect(publicKey).toBeInstanceOf(Uint8Array);
       expect(secretKey).toBeInstanceOf(Uint8Array);
@@ -27,13 +28,13 @@ describe("generateKeypair", () => {
   }
 
   it("default variant is mlkem768", () => {
-    const { adapter } = KeypairEncryptionAdapter.generateKeypair();
+    const { adapter } = KeypairEncryptionAdapter.generateKeypair(CTX);
     expect(adapter.name).toBe("mlkem768");
   });
 
   it("each call produces a different keypair", () => {
-    const a = KeypairEncryptionAdapter.generateKeypair();
-    const b = KeypairEncryptionAdapter.generateKeypair();
+    const a = KeypairEncryptionAdapter.generateKeypair(CTX);
+    const b = KeypairEncryptionAdapter.generateKeypair(CTX);
     expect(bytesToHex(a.publicKey)).not.toBe(bytesToHex(b.publicKey));
   });
 });
@@ -43,7 +44,10 @@ describe("generateKeypair", () => {
 describe("wrapDek / unwrapDek roundtrip", () => {
   for (const variant of VARIANTS) {
     it(`${variant}: wrap then unwrap recovers the original DEK`, async () => {
-      const { adapter } = KeypairEncryptionAdapter.generateKeypair(variant);
+      const { adapter } = KeypairEncryptionAdapter.generateKeypair(
+        CTX,
+        variant,
+      );
       const wrapped = await adapter.wrapDek(TEST_DEK);
       const recovered = await adapter.unwrapDek(wrapped);
       expect(recovered).toEqual(TEST_DEK);
@@ -51,7 +55,7 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   }
 
   it("wrapped result contains kemCiphertext and wrappedDek", async () => {
-    const { adapter } = KeypairEncryptionAdapter.generateKeypair();
+    const { adapter } = KeypairEncryptionAdapter.generateKeypair(CTX);
     const result = await adapter.wrapDek(TEST_DEK);
     expect(typeof result.kemCiphertext).toBe("string");
     expect(result.kemCiphertext!.length).toBeGreaterThan(0);
@@ -61,8 +65,8 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   });
 
   it("PK-only provider can wrapDek, but unwrapDek throws", async () => {
-    const { publicKey } = KeypairEncryptionAdapter.generateKeypair();
-    const uploadOnly = KeypairEncryptionAdapter.fromPublicKey(publicKey);
+    const { publicKey } = KeypairEncryptionAdapter.generateKeypair(CTX);
+    const uploadOnly = KeypairEncryptionAdapter.fromPublicKey(publicKey, CTX);
     const wrapped = await uploadOnly.wrapDek(TEST_DEK);
     await expect(uploadOnly.unwrapDek(wrapped)).rejects.toThrow(
       "no Secret Key",
@@ -70,9 +74,14 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   });
 
   it("upload-only wraps can be unwrapped by a provider holding the SK", async () => {
-    const { publicKey, secretKey } = KeypairEncryptionAdapter.generateKeypair();
-    const uploader = KeypairEncryptionAdapter.fromPublicKey(publicKey);
-    const reader = KeypairEncryptionAdapter.fromKeypair(publicKey, secretKey);
+    const { publicKey, secretKey } =
+      KeypairEncryptionAdapter.generateKeypair(CTX);
+    const uploader = KeypairEncryptionAdapter.fromPublicKey(publicKey, CTX);
+    const reader = KeypairEncryptionAdapter.fromKeypair(
+      publicKey,
+      secretKey,
+      CTX,
+    );
 
     const wrapped = await uploader.wrapDek(TEST_DEK);
     const recovered = await reader.unwrapDek(wrapped);
@@ -80,8 +89,8 @@ describe("wrapDek / unwrapDek roundtrip", () => {
   });
 
   it("wrong SK cannot unwrap (different keypair)", async () => {
-    const a = KeypairEncryptionAdapter.generateKeypair();
-    const b = KeypairEncryptionAdapter.generateKeypair();
+    const a = KeypairEncryptionAdapter.generateKeypair(CTX);
+    const b = KeypairEncryptionAdapter.generateKeypair(CTX);
 
     const wrapped = await a.adapter.wrapDek(TEST_DEK);
     await expect(b.adapter.unwrapDek(wrapped)).rejects.toThrow();
@@ -102,13 +111,16 @@ describe("cross-variant unwrap (variant auto-detected from key envelope)", () =>
 
   for (const [wrapVariant, adapterVariant] of VARIANT_PAIRS) {
     it(`wrapped with ${wrapVariant}, adapter constructed as ${adapterVariant} → unwraps correctly`, async () => {
-      const { publicKey, secretKey } =
-        KeypairEncryptionAdapter.generateKeypair(wrapVariant);
+      const { publicKey, secretKey } = KeypairEncryptionAdapter.generateKeypair(
+        CTX,
+        wrapVariant,
+      );
 
       // Wrap using wrapVariant keypair
       const wrapper = KeypairEncryptionAdapter.fromKeypair(
         publicKey,
         secretKey,
+        CTX,
         wrapVariant,
       );
       const wrapped = await wrapper.wrapDek(TEST_DEK);
@@ -119,6 +131,7 @@ describe("cross-variant unwrap (variant auto-detected from key envelope)", () =>
       const reader = KeypairEncryptionAdapter.fromKeypair(
         publicKey,
         secretKey,
+        CTX,
         adapterVariant,
       );
       const recovered = await reader.unwrapDek(wrapped);
@@ -128,9 +141,13 @@ describe("cross-variant unwrap (variant auto-detected from key envelope)", () =>
 
   it("malformed algorithm string → throws with clear message", async () => {
     const { adapter, publicKey, secretKey } =
-      KeypairEncryptionAdapter.generateKeypair();
+      KeypairEncryptionAdapter.generateKeypair(CTX);
     const wrapped = await adapter.wrapDek(TEST_DEK);
-    const reader = KeypairEncryptionAdapter.fromKeypair(publicKey, secretKey);
+    const reader = KeypairEncryptionAdapter.fromKeypair(
+      publicKey,
+      secretKey,
+      CTX,
+    );
 
     await expect(
       reader.unwrapDek({ ...wrapped, algorithm: "xchacha20poly1305-v1" }),
@@ -139,9 +156,13 @@ describe("cross-variant unwrap (variant auto-detected from key envelope)", () =>
 
   it("unknown variant prefix → throws with clear message", async () => {
     const { adapter, publicKey, secretKey } =
-      KeypairEncryptionAdapter.generateKeypair();
+      KeypairEncryptionAdapter.generateKeypair(CTX);
     const wrapped = await adapter.wrapDek(TEST_DEK);
-    const reader = KeypairEncryptionAdapter.fromKeypair(publicKey, secretKey);
+    const reader = KeypairEncryptionAdapter.fromKeypair(
+      publicKey,
+      secretKey,
+      CTX,
+    );
 
     await expect(
       reader.unwrapDek({
@@ -163,12 +184,14 @@ describe("fromPassword", () => {
     const a = await KeypairEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
     const b = await KeypairEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
@@ -179,12 +202,14 @@ describe("fromPassword", () => {
     const a = await KeypairEncryptionAdapter.fromPassword(
       PASSWORD,
       "salt-a",
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
     const b = await KeypairEncryptionAdapter.fromPassword(
       PASSWORD,
       "salt-b",
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
@@ -195,12 +220,14 @@ describe("fromPassword", () => {
     const a = await KeypairEncryptionAdapter.fromPassword(
       "Str0ng-PaSSw0rd!XY9",
       SALT,
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
     const b = await KeypairEncryptionAdapter.fromPassword(
       "An0ther$ecureP@ss!Z",
       SALT,
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
@@ -211,12 +238,14 @@ describe("fromPassword", () => {
     const writerProvider = await KeypairEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
     const readerProvider = await KeypairEncryptionAdapter.fromPassword(
       PASSWORD,
       SALT,
+      CTX,
       "mlkem768",
       FAST_PARAMS,
     );
@@ -232,6 +261,7 @@ describe("fromPassword", () => {
       KeypairEncryptionAdapter.fromPassword(
         "weak",
         SALT,
+        CTX,
         "mlkem768",
         FAST_PARAMS,
       ),
@@ -255,10 +285,12 @@ describe("fromMnemonic", () => {
   it("same mnemonic + variant → same public key", async () => {
     const a = await KeypairEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
+      CTX,
       "mlkem768",
     );
     const b = await KeypairEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
+      CTX,
       "mlkem768",
     );
     expect(bytesToHex(a.publicKey)).toBe(bytesToHex(b.publicKey));
@@ -267,10 +299,12 @@ describe("fromMnemonic", () => {
   it("different mnemonic → different public key", async () => {
     const a = await KeypairEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
+      CTX,
       "mlkem768",
     );
     const b = await KeypairEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC2 },
+      CTX,
       "mlkem768",
     );
     expect(bytesToHex(a.publicKey)).not.toBe(bytesToHex(b.publicKey));
@@ -279,10 +313,12 @@ describe("fromMnemonic", () => {
   it("64-byte seedHex → deterministic", async () => {
     const a = await KeypairEncryptionAdapter.fromMnemonic(
       { seedHex: SEED_HEX_64 },
+      CTX,
       "mlkem768",
     );
     const b = await KeypairEncryptionAdapter.fromMnemonic(
       { seedHex: SEED_HEX_64 },
+      CTX,
       "mlkem768",
     );
     expect(bytesToHex(a.publicKey)).toBe(bytesToHex(b.publicKey));
@@ -292,10 +328,12 @@ describe("fromMnemonic", () => {
     const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const writer = await KeypairEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
+      CTX,
       "mlkem768",
     );
     const reader = await KeypairEncryptionAdapter.fromMnemonic(
       { mnemonic: MNEMONIC },
+      CTX,
       "mlkem768",
     );
     const wrapped = await writer.wrapDek(dek);
@@ -304,9 +342,10 @@ describe("fromMnemonic", () => {
   });
 
   it("32-byte seedHex → produces a valid keypair adapter (derivation via HKDF)", async () => {
-    const adapter = await KeypairEncryptionAdapter.fromMnemonic({
-      seedHex: SEED_HEX_32,
-    });
+    const adapter = await KeypairEncryptionAdapter.fromMnemonic(
+      { seedHex: SEED_HEX_32 },
+      CTX,
+    );
     expect(adapter.name).toMatch(/^mlkem/);
   });
 });

@@ -47,14 +47,17 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
   readonly publicKey: Uint8Array;
   private secretKey: Uint8Array | undefined;
   private readonly variant: MLKemVariant;
+  private readonly context: string;
 
   private constructor(
     pk: Uint8Array,
     sk: Uint8Array | undefined,
+    context: string,
     variant: MLKemVariant,
   ) {
     this.publicKey = pk;
     this.secretKey = sk;
+    this.context = context;
     this.variant = variant;
     this.name = variant;
   }
@@ -65,9 +68,10 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
    */
   static fromPublicKey(
     pk: Uint8Array,
+    context: string,
     variant: MLKemVariant = "mlkem768",
   ): KeypairEncryptionAdapter {
-    return new KeypairEncryptionAdapter(pk, undefined, variant);
+    return new KeypairEncryptionAdapter(pk, undefined, context, variant);
   }
 
   /**
@@ -77,9 +81,10 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
   static fromKeypair(
     pk: Uint8Array,
     sk: Uint8Array,
+    context: string,
     variant: MLKemVariant = "mlkem768",
   ): KeypairEncryptionAdapter {
-    return new KeypairEncryptionAdapter(pk, sk, variant);
+    return new KeypairEncryptionAdapter(pk, sk, context, variant);
   }
 
   /**
@@ -90,14 +95,17 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
    *
    * @param variant  Default: "mlkem768".
    */
-  static generateKeypair(variant: MLKemVariant = "mlkem768"): {
+  static generateKeypair(
+    context: string,
+    variant: MLKemVariant = "mlkem768",
+  ): {
     adapter: KeypairEncryptionAdapter;
     publicKey: Uint8Array;
     secretKey: Uint8Array;
   } {
     const { pk, sk } = mlkemGenerateKeypair(variant);
     return {
-      adapter: new KeypairEncryptionAdapter(pk, sk, variant),
+      adapter: new KeypairEncryptionAdapter(pk, sk, context, variant),
       publicKey: pk,
       secretKey: sk,
     };
@@ -119,12 +127,13 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
    */
   static async fromMnemonic(
     input: { mnemonic?: string; seedHex?: string },
+    context: string,
     variant: MLKemVariant = "mlkem768",
   ): Promise<KeypairEncryptionAdapter> {
     const { MnemonicEncryptionAdapter } =
       await import("./MnemonicEncryptionAdapter.js");
     const ms = new MnemonicEncryptionAdapter(input);
-    return ms.intoKeypairEncryptionAdapter(variant);
+    return ms.intoKeypairEncryptionAdapter(context, variant);
   }
 
   /**
@@ -144,6 +153,7 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
   static async fromPassword(
     password: string,
     salt: string,
+    context: string,
     variant: MLKemVariant = "mlkem768",
     params?: { N?: number; r?: number; p?: number },
   ): Promise<KeypairEncryptionAdapter> {
@@ -155,7 +165,7 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
       salt,
       ...(params ? { params } : {}),
     });
-    return ps.intoKeypairEncryptionAdapter(variant);
+    return ps.intoKeypairEncryptionAdapter(context, variant);
   }
 
   /**
@@ -170,7 +180,7 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
   }
 
   async wrapDek(dek: Uint8Array): Promise<WrappedDekResult> {
-    return mlkemWrapDek(dek, this.publicKey, this.variant);
+    return mlkemWrapDek(dek, this.publicKey, this.context, this.variant);
   }
 
   async unwrapDek(data: WrappedDekResult): Promise<Uint8Array> {
@@ -180,6 +190,6 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
           "no Secret Key is available. Use fromKeypair() or fromPassword() to create an adapter with a SK.",
       );
     }
-    return mlkemUnwrapDek(data, this.secretKey);
+    return mlkemUnwrapDek(data, this.secretKey, this.context);
   }
 }

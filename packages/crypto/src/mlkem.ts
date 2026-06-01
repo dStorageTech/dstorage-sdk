@@ -64,9 +64,11 @@ function getImpl(variant: MLKemVariant = DEFAULT_VARIANT) {
 }
 
 // Derive a 32-byte KEK from the ML-KEM shared secret using HKDF-SHA-256.
-// Uses ML-KEM-specific salt and info strings to domain-separate from all other keys.
+// Uses ML-KEM-specific salt and a context-bound info string to domain-separate
+// from all other keys and bind to a specific deployment or account.
 async function deriveKekFromSharedSecret(
   sharedSecret: Uint8Array,
+  context: string,
 ): Promise<Uint8Array> {
   const enc = new TextEncoder();
   const keyMaterial = await globalThis.crypto.subtle.importKey(
@@ -81,7 +83,7 @@ async function deriveKekFromSharedSecret(
       name: "HKDF",
       hash: "SHA-256",
       salt: enc.encode("dstorage-mlkem-v1"),
-      info: enc.encode("dstorage:mlkem:kek:v1"),
+      info: enc.encode(`dstorage:mlkem:kek:v1:${context}`),
     },
     keyMaterial,
     256,
@@ -139,10 +141,11 @@ export function mlkemGenerateKeypairFromSeed(
 export async function mlkemWrapDek(
   dek: Uint8Array,
   pk: Uint8Array,
+  context: string,
   variant: MLKemVariant = DEFAULT_VARIANT,
 ): Promise<WrappedDekResult> {
   const { cipherText, sharedSecret } = getImpl(variant).encapsulate(pk);
-  const kek = await deriveKekFromSharedSecret(sharedSecret);
+  const kek = await deriveKekFromSharedSecret(sharedSecret, context);
   const wrappedDek = await wrapKey(dek, kek);
   return {
     algorithm: `${variant}-xchacha20poly1305-v1`,
@@ -164,6 +167,7 @@ export async function mlkemWrapDek(
 export async function mlkemUnwrapDek(
   data: WrappedDekResult,
   sk: Uint8Array,
+  context: string,
 ): Promise<Uint8Array> {
   if (!data.kemCiphertext) {
     throw new Error(
@@ -173,6 +177,6 @@ export async function mlkemUnwrapDek(
   const variant = parseVariantFromAlgorithm(data.algorithm);
   const cipherText = base64urlToBytes(data.kemCiphertext);
   const sharedSecret = getImpl(variant).decapsulate(cipherText, sk);
-  const kek = await deriveKekFromSharedSecret(sharedSecret);
+  const kek = await deriveKekFromSharedSecret(sharedSecret, context);
   return unwrapKey(data.wrappedDek, kek);
 }
