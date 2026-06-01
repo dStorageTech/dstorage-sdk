@@ -58,11 +58,11 @@ Yes. Files larger than 10 MB are automatically split into independently encrypte
 
 **What networks and storage providers are supported today?**
 
-| Area    | Available now                                           | Stub / planned |
-| ------- | ------------------------------------------------------- | -------------- |
-| Storage | Mock, Arweave Local, Arweave, Arweave Turbo (managed)   |
+| Area    | Available now                                             | Stub / planned |
+| ------- | --------------------------------------------------------- | -------------- |
+| Storage | Mock, Arweave Local, Arweave, Arweave Turbo (managed)     |
 | Chain   | Mock, MockMidnight, Midnight (connector + provider modes) |
-| Payment | Mock, Arweave (JWK), Managed (remote signing server)    |
+| Payment | Mock, Arweave (JWK), Managed (remote signing server)      |
 
 **What tokens are used for payments?**
 
@@ -94,7 +94,10 @@ const sdk = new DStorage({
   storageAdapter: new MockStorageAdapter(),
   chainAdapter: new MockChainAdapter(),
   encryptionAdapters: [
-    new PasswordEncryptionAdapter({ password: "Correct-Horse-Battery!", salt: "myapp:v1" }),
+    new PasswordEncryptionAdapter({
+      password: "Correct-Horse-Battery!",
+      salt: "myapp:v1",
+    }),
   ],
 });
 await sdk.init();
@@ -361,12 +364,12 @@ Omit `contractAddress` to deploy a new contract on first `init()`.
 
 Copy `tests/integration/env.example` to `.env.integration` and fill in:
 
-| Variable                       | Required               | Default                 | Purpose                                                                  |
-| ------------------------------ | ---------------------- | ----------------------- | ------------------------------------------------------------------------ |
+| Variable                       | Required               | Default                 | Purpose                                                                             |
+| ------------------------------ | ---------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
 | `INTEGRATION_SEED`             | Yes (full-stack suite) | —                       | 24-word BIP-39 mnemonic or 128-char (64-byte) hex seed for a funded Midnight wallet |
-| `INTEGRATION_CONTRACT_ADDRESS` | No                     | deploys fresh           | Reuse an existing DataRegistry to skip slow deployment                   |
-| `ARLOCAL_URL`                  | No                     | `http://localhost:1984` | Arweave Local endpoint                                                   |
-| `PROOF_SERVER_URL`             | No                     | `http://localhost:6300` | Midnight proof server endpoint                                           |
+| `INTEGRATION_CONTRACT_ADDRESS` | No                     | deploys fresh           | Reuse an existing DataRegistry to skip slow deployment                              |
+| `ARLOCAL_URL`                  | No                     | `http://localhost:1984` | Arweave Local endpoint                                                              |
+| `PROOF_SERVER_URL`             | No                     | `http://localhost:6300` | Midnight proof server endpoint                                                      |
 
 **Can I skip integration services in CI?**
 
@@ -472,7 +475,9 @@ const sdk = new DStorage({
     signingServerUrl: "http://localhost:3000",
     authToken: process.env.DSTORAGE_TEST_TOKEN ?? "",
   }),
-  encryptionAdapters: [ /* … */ ],
+  encryptionAdapters: [
+    /* … */
+  ],
 });
 ```
 

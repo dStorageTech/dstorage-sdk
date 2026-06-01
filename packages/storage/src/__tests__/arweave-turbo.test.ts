@@ -40,8 +40,7 @@ describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
   it("throws when the last segment decodes to fewer than 512 bytes (plain JWT, no modulus suffix)", () => {
     // A plain JWT has its signature as the last segment. RS256 produces 256 bytes
     // (344 base64url chars), not 512 — the 512-byte check rejects it at construction.
-    const plainJwt =
-      "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.shortSignature";
+    const plainJwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.shortSignature";
     expect(
       () =>
         new ArweaveTurboStorageAdapter({
