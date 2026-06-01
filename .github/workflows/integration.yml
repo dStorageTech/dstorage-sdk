@@ -43,12 +43,42 @@ jobs:
           INTEGRATION_CONTRACT_ADDRESS=
           EOF
 
+      - name: Wait for proof server
+        # The proof-server image (Nix-built, no shell in PATH) cannot carry a
+        # Docker healthcheck, so docker compose --wait does not block on it.
+        # Poll from the host until the HTTP port responds, which the server
+        # opens only after ZK circuits are fully loaded (~60-120 s on CI).
+        run: |
+          echo "Waiting for proof server on http://localhost:6300 ..."
+          for i in $(seq 1 36); do
+            if curl -s --connect-timeout 3 --max-time 5 http://localhost:6300 >/dev/null 2>&1; then
+              echo "Proof server ready after ~$((i * 5))s"
+              exit 0
+            fi
+            echo "  attempt $i/36 – not ready yet"
+            sleep 5
+          done
+          echo "ERROR: proof server did not become ready within 180s"
+          docker logs proof-server --tail 50 || true
+          exit 1
+
       - name: Fund test wallet (NIGHT + DUST)
         # fund-wallet.sh auto-clones bricktowers/midnight-local-network and
         # installs deps via corepack yarn when the directory is absent.
-        run: >
-          ./tools/fund-wallet.sh --dust
-          "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        run: |
+          MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+          for attempt in 1 2 3; do
+            echo "Fund attempt $attempt/3..."
+            if ./tools/fund-wallet.sh --dust "$MNEMONIC"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Attempt $attempt failed; retrying in 60s..."
+              sleep 60
+            fi
+          done
+          echo "All fund attempts failed"
+          exit 1
 
       - name: Run integration tests
         run: npm run test:integration
