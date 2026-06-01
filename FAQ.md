@@ -61,7 +61,7 @@ Yes. Files larger than 10 MB are automatically split into independently encrypte
 | Area    | Available now                                           | Stub / planned |
 | ------- | ------------------------------------------------------- | -------------- |
 | Storage | Mock, Arweave Local, Arweave, Arweave Turbo (managed)   |
-| Chain   | Mock, MockMidnight, Midnight (connector + facade modes) |
+| Chain   | Mock, MockMidnight, Midnight (connector + provider modes) |
 | Payment | Mock, Arweave (JWK), Managed (remote signing server)    |
 
 **What tokens are used for payments?**
@@ -94,7 +94,7 @@ const sdk = new DStorage({
   storageAdapter: new MockStorageAdapter(),
   chainAdapter: new MockChainAdapter(),
   encryptionAdapters: [
-    new PasswordEncryptionAdapter({ password: "s3cr3t", salt: "myapp:v1" }),
+    new PasswordEncryptionAdapter({ password: "Correct-Horse-Battery!", salt: "myapp:v1" }),
   ],
 });
 await sdk.init();
@@ -236,6 +236,18 @@ At the data layer, yes — XChaCha20-Poly1305 with a 256-bit key gives 128-bit p
 
 A helper that produces a cryptographically random 43-character base64url string (32 bytes = 256 bits of real entropy). Pass the result to `KeypairEncryptionAdapter.fromPassword()` to get full ML-KEM PQ protection without manual key storage. Store the generated string — it is the only secret needed to re-derive the keypair.
 
+**What makes a password acceptable to `PasswordEncryptionAdapter`?**
+
+The adapter enforces four rules at construction time:
+
+1. **Length** — at least 12 characters (configurable via `minPasswordLength`).
+2. **Character diversity** — at least 3 of 4 character classes: uppercase, lowercase, digits, special characters.
+3. **No sequential runs** — patterns like `abcde` or `12345` are rejected.
+4. **No keyboard-walk patterns** — sequences like `qwerty` or `asdfg` are rejected.
+5. **Entropy** — charset-based entropy estimate must reach 60 bits (configurable via `minEntropyBits`).
+
+If your use case requires bypassing these checks — for example, a machine-generated credential — use `generatePqsPassword()` to obtain a cryptographically random 43-character base64url string (256 bits of real entropy), then pass it to `KeypairEncryptionAdapter.fromPassword()` for full ML-KEM PQ protection.
+
 **How does the SDK prevent swapping chunks or blobs in transit?**
 
 Each ciphertext is bound to its role via Additional Authenticated Data (AAD). Labels used:
@@ -301,14 +313,19 @@ The `MidnightChainAdapter` supports `undeployed` (localhost) and `preprod`.
 Use the `walletMode` discriminated union:
 
 ```typescript
-// Node.js (facade mode) — SDK manages the wallet internally
-{ walletMode: "facade", credentials: { mnemonic: "twenty four words …" } }
+// Node.js (provider mode) — caller supplies a pre-built, synced WalletFacade
+{
+  walletMode: "provider",
+  walletProvider,       // AdapterWalletProvider built and synced by the app
+  privateStatePassword, // password for local LevelDB state encryption
+  zkArtifactsPath,      // optional: absolute path to keys/ and zkir/ dirs
+}
 
 // Browser (connector mode) — delegates to a wallet extension (Lace)
-{ walletMode: "connector", connectorName: "mnLace" }
+{ walletMode: "connector", connectorName: "mnLace", zkConfigBaseUrl: window.location.origin }
 ```
 
-`walletMode` defaults to `"facade"`.
+`walletMode` is required. See `QUICK_START.md` for a complete provider-mode setup example.
 
 **How do I configure ArweaveTurbo for managed uploads?**
 
@@ -346,7 +363,7 @@ Copy `tests/integration/env.example` to `.env.integration` and fill in:
 
 | Variable                       | Required               | Default                 | Purpose                                                                  |
 | ------------------------------ | ---------------------- | ----------------------- | ------------------------------------------------------------------------ |
-| `INTEGRATION_SEED`             | Yes (full-stack suite) | —                       | BIP-39 mnemonic or 64-char hex seed for a funded Midnight Preprod wallet |
+| `INTEGRATION_SEED`             | Yes (full-stack suite) | —                       | 24-word BIP-39 mnemonic or 128-char (64-byte) hex seed for a funded Midnight wallet |
 | `INTEGRATION_CONTRACT_ADDRESS` | No                     | deploys fresh           | Reuse an existing DataRegistry to skip slow deployment                   |
 | `ARLOCAL_URL`                  | No                     | `http://localhost:1984` | Arweave Local endpoint                                                   |
 | `PROOF_SERVER_URL`             | No                     | `http://localhost:6300` | Midnight proof server endpoint                                           |
@@ -440,6 +457,24 @@ The signing key substitution attack (where a MITM replaces the server's public k
 **What payment tokens does the managed service handle?**
 
 The managed service covers Arweave storage costs billed in AR. Midnight chain fees (DUST) remain the responsibility of the wallet configured in `MidnightChainAdapter`.
+
+**How do I test the managed payment code path without real dStorage Pro credentials?**
+
+Use `MockStorageAdapter` and `MockMidnightChainAdapter` with `signingServerUrl` and `authToken` pointing at a local signing server (or any reachable test endpoint). Both adapters automatically use the `managedmock` payment network, which sends the network identifier `"TEST"` to the server instead of `"arweave_turbo"` or `"midnight"`. This exercises the full managed payment request/response round-trip — including auth token pinning and error handling — without touching real funds or the production signing server.
+
+```typescript
+const sdk = new DStorage({
+  storageAdapter: new MockStorageAdapter({
+    signingServerUrl: "http://localhost:3000",
+    authToken: process.env.DSTORAGE_TEST_TOKEN ?? "",
+  }),
+  chainAdapter: new MockMidnightChainAdapter({
+    signingServerUrl: "http://localhost:3000",
+    authToken: process.env.DSTORAGE_TEST_TOKEN ?? "",
+  }),
+  encryptionAdapters: [ /* … */ ],
+});
+```
 
 ---
 
