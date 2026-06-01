@@ -39,7 +39,7 @@ jobs:
           INTEGRATION_NODE_WS_ENDPOINT=ws://127.0.0.1:9944
           INTEGRATION_INDEXER_ENDPOINT=http://127.0.0.1:8088/api/v3/graphql
           INTEGRATION_INDEXER_WS_ENDPOINT=ws://127.0.0.1:8088/api/v3/graphql/ws
-          INTEGRATION_SEED=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+          INTEGRATION_SEED=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art
           INTEGRATION_CONTRACT_ADDRESS=
           EOF
 
@@ -66,7 +66,7 @@ jobs:
         # fund-wallet.sh auto-clones bricktowers/midnight-local-network and
         # installs deps via corepack yarn when the directory is absent.
         run: |
-          MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+          MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
           for attempt in 1 2 3; do
             echo "Fund attempt $attempt/3..."
             if ./tools/fund-wallet.sh --dust "$MNEMONIC"; then
