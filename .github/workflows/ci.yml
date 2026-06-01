@@ -20,6 +20,16 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Check bn.js deduplication
+        run: |
+          DUPES=$(npm ls bn.js --all 2>/dev/null | grep "bn\.js@5\." | grep -v deduped | wc -l)
+          if [ "$DUPES" -gt 1 ]; then
+            echo "[dStorage] Multiple non-deduped bn.js 5.x copies detected. The overrides field may not be working — delete nested copies manually."
+            npm ls bn.js --all 2>/dev/null
+            exit 1
+          fi
+          echo "bn.js dedup check passed"
+
       - name: Build packages
         run: npm run build
 
