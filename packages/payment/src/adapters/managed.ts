@@ -175,6 +175,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   private readonly signingServerUrl: string;
   private readonly authToken: string;
   private readonly requestTimeoutMs: number;
+  private readonly ownerPublicKey: string | undefined;
 
   /**
    * Strip a RSA-4096 modulus suffix from a compound auth token
@@ -186,15 +187,19 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * lastIndexOf is intentional: the credential part may itself contain dots
    * (e.g. a JWT), so we always split at the *last* dot to reach the modulus.
    */
-  private static _extractCredential(token: string): string {
+  private static _parseAuthToken(token: string): {
+    credential: string;
+    ownerPublicKey: string | undefined;
+  } {
     const dot = token.lastIndexOf(".");
-    if (dot === -1) return token;
-    const suffix = token.slice(dot + 1);
-    // base64url-encoded 512-byte RSA modulus is always exactly 683 chars (512 = 170×3+2)
-    if (suffix.length === 683 && /^[A-Za-z0-9_-]+$/.test(suffix)) {
-      return token.slice(0, dot);
+    if (dot !== -1) {
+      const suffix = token.slice(dot + 1);
+      // base64url-encoded 512-byte RSA modulus is always exactly 683 chars (512 = 170×3+2)
+      if (suffix.length === 683 && /^[A-Za-z0-9_-]+$/.test(suffix)) {
+        return { credential: token.slice(0, dot), ownerPublicKey: suffix };
+      }
     }
-    return token;
+    return { credential: token, ownerPublicKey: undefined };
   }
 
   constructor(config: ManagedPaymentAdapterConfig) {
@@ -211,7 +216,10 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         "[dStorage/managed-payment] authToken is required and must not be empty or whitespace.",
       );
     }
-    this.authToken = ManagedPaymentAdapter._extractCredential(config.authToken);
+    const { credential, ownerPublicKey } =
+      ManagedPaymentAdapter._parseAuthToken(config.authToken);
+    this.authToken = credential;
+    this.ownerPublicKey = ownerPublicKey;
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.network = config.network;
     this.type = config.type;
@@ -367,6 +375,9 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     onStatus?.("Creating Arweave transaction…");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tx: any = await arweave.createTransaction({ data });
+    if (this.ownerPublicKey) {
+      tx.owner = this.ownerPublicKey;
+    }
     for (const [key, value] of Object.entries(metadata)) {
       tx.addTag(key, value);
     }

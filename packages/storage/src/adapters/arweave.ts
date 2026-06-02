@@ -458,7 +458,27 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const uploader: any = await arweave.transactions.getUploader(tx);
+    let uploader: any;
+    try {
+      uploader = await arweave.transactions.getUploader(tx);
+    } catch (err) {
+      const { protocol, host, port } = this.gateway;
+      const gwUrl = `${protocol}://${host}:${port}`;
+      try {
+        const diagResp = await fetch(`${gwUrl}/tx/${tx.id as string}`);
+        const diagBody = await diagResp.text();
+        this.logger?.warn(
+          "dStorage/arweave",
+          `gateway GET /tx/${tx.id as string} → HTTP ${diagResp.status} — ${diagBody}`,
+        );
+      } catch {
+        /* ignore diagnostic failures */
+      }
+      throw new Error(
+        `[dStorage/arweave] Failed to initialise transaction uploader: ${err}`,
+      );
+    }
+
     let chunkAttempt = 0;
 
     while (!uploader.isComplete) {
@@ -473,14 +493,27 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         }
       } catch (err) {
         chunkAttempt++;
+        const status =
+          (uploader.lastResponseStatus as number | undefined) ?? "n/a";
+        const rawErr = uploader.lastResponseError as unknown;
+        const body =
+          rawErr != null
+            ? typeof rawErr === "string"
+              ? rawErr
+              : JSON.stringify(rawErr)
+            : `${err}`;
+        this.logger?.warn(
+          "dStorage/arweave",
+          `chunk upload failed — HTTP ${status} — ${body}`,
+        );
         if (chunkAttempt >= this.maxRetries) {
           throw new Error(
-            `[dStorage/arweave] Chunk upload failed after ${this.maxRetries} attempts: ${err}`,
+            `[dStorage/arweave] Chunk upload failed after ${this.maxRetries} attempts — HTTP ${status}: ${body}`,
           );
         }
         this.logger?.warn(
           "dStorage/arweave",
-          `Chunk upload failed (attempt ${chunkAttempt}/${this.maxRetries}), retrying in ${chunkAttempt}s… ${err}`,
+          `Chunk upload failed (attempt ${chunkAttempt}/${this.maxRetries}), retrying in ${chunkAttempt}s…`,
         );
         await sleep(1_000 * chunkAttempt);
       }

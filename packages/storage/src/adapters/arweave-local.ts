@@ -312,18 +312,47 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
       url: `${protocol}://${host}:${port}`,
     });
 
-    // When a walletKey is provided, derive its address and auto-mint AR so the
-    // wallet can pay upload fees on arlocal without manual setup.
+    // When using ManagedPaymentAdapter (signingServerUrl + compound authToken),
+    // the Arweave transaction owner is set to the server's RSA public key, so
+    // arlocal checks the SERVER's wallet balance rather than the local wallet's.
+    // Extract that key here so we can also mint to the server's address on arlocal.
+    const managedOwnerKey = ArweaveLocalStorageAdapter._extractOwnerKey(
+      config.authToken,
+    );
+
     if (config.walletKey && Object.keys(config.walletKey).length > 0) {
-      this._initMintPromise = this._mintWallet(config.walletKey, gateway);
+      this._initMintPromise = this._mintWallet(
+        config.walletKey,
+        gateway,
+        managedOwnerKey,
+      );
+    } else if (managedOwnerKey) {
+      this._initMintPromise = this._mintManagedOwner(managedOwnerKey, gateway);
     } else {
       this._initMintPromise = null;
     }
   }
 
+  /**
+   * Extract the 683-char base64url RSA modulus suffix from a compound auth token
+   * (<credential>.<modulus>). Returns undefined for plain tokens.
+   * Mirrors the same logic in ManagedPaymentAdapter._parseAuthToken.
+   */
+  private static _extractOwnerKey(
+    authToken: string | undefined,
+  ): string | undefined {
+    if (!authToken) return undefined;
+    const dot = authToken.lastIndexOf(".");
+    if (dot === -1) return undefined;
+    const suffix = authToken.slice(dot + 1);
+    if (suffix.length === 683 && /^[A-Za-z0-9_-]+$/.test(suffix)) return suffix;
+    return undefined;
+  }
+
   private async _mintWallet(
     walletKey: Record<string, string>,
     gateway: ArweaveGatewayConfig,
+    managedOwnerKey?: string,
   ): Promise<void> {
     try {
       const _m = await import("arweave");
@@ -344,12 +373,48 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
         "dStorage/arweave-local",
         `Minted 10 AR to wallet ${address} on arlocal`,
       );
+      if (managedOwnerKey) {
+        await this._mintToOwnerKey(arweave, managedOwnerKey);
+      }
     } catch (err) {
       this.logger?.warn(
         "dStorage/arweave-local",
         `Auto-mint failed (non-fatal): ${err}`,
       );
     }
+  }
+
+  private async _mintManagedOwner(
+    managedOwnerKey: string,
+    gateway: ArweaveGatewayConfig,
+  ): Promise<void> {
+    try {
+      const _m = await import("arweave");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Arweave: any =
+        typeof (_m.default as any)?.init === "function"
+          ? _m.default
+          : (_m.default as any)?.default;
+      await this._mintToOwnerKey(Arweave.init(gateway), managedOwnerKey);
+    } catch (err) {
+      this.logger?.warn(
+        "dStorage/arweave-local",
+        `Auto-mint for managed owner failed (non-fatal): ${err}`,
+      );
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async _mintToOwnerKey(arweave: any, ownerKey: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const serverAddress: string = await arweave.wallets.jwkToAddress({
+      n: ownerKey,
+    } as any);
+    await this.testnet.mintTokens(serverAddress, 10_000_000_000_000n); // 10 AR
+    this.logger?.log(
+      "dStorage/arweave-local",
+      `Minted 10 AR to managed payment server wallet ${serverAddress} on arlocal`,
+    );
   }
 
   /**
