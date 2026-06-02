@@ -265,15 +265,22 @@ export class MidnightWalletProvider
         return shieldedWallet;
       },
       dust: (cfg: any) => {
+        const dustCfg = {
+          ...cfg,
+          txHistoryStorage: new NoOpTransactionHistoryStorage(),
+        };
         if (cache) {
           try {
-            dustWallet = DustWallet(cfg).restore(cache.dust);
+            dustWallet = DustWallet(dustCfg).restore(cache.dust);
             return dustWallet;
           } catch (e) {
             console.warn("Failed to restore dust wallet from cache:", e);
           }
         }
-        dustWallet = DustWallet(cfg).startWithSeed(dustSeed, dustParameters);
+        dustWallet = DustWallet(dustCfg).startWithSeed(
+          dustSeed,
+          dustParameters,
+        );
         return dustWallet;
       },
       unshielded: (cfg: any) => {
