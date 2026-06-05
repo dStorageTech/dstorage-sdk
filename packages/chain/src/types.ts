@@ -29,7 +29,7 @@ export interface ChainAdapterLogger {
   debug?(component: string, msg: string): void;
 }
 
-export type ChainProviderName = "mock" | "midnight";
+export type ChainProviderName = "mock" | "midnight" | "httpgateway";
 
 /** An on-chain reference record — what gets written to the smart contract. */
 export interface ChainReference {

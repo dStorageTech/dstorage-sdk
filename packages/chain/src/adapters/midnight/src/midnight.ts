@@ -360,7 +360,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
       }
       this.managedPaymentAdapter = new ManagedPaymentAdapter({
-        network: this.name,
+        network: "midnight",
         type: "chain",
         signingServerUrl: config.signingServerUrl,
         authToken: config.authToken,
