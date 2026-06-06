@@ -145,6 +145,22 @@ describe("parseSignTxResponse — signing server response validation", () => {
     expect(() => parseSignTxResponse(null)).toThrow();
     expect(() => parseSignTxResponse(42)).toThrow();
   });
+
+  it("strips ANSI escapes and HTML from the success:false error message (N6)", () => {
+    const malicious = {
+      ...VALID_RESPONSE,
+      success: false,
+      error: "\x1b[31mred\x1b[0m<script>alert(1)</script>",
+    };
+    let msg = "";
+    try {
+      parseSignTxResponse(malicious);
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    expect(msg).not.toMatch(/\x1b/);
+    expect(msg).not.toMatch(/<script>/i);
+  });
 });
 
 // ── Security: signing server owner-key pinning (N5) ──────────────────────────

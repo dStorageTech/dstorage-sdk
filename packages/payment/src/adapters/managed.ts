@@ -145,7 +145,7 @@ export function parseSignTxResponse(raw: unknown): SignTxResponse {
 
   if (r["success"] !== true) {
     throw new Error(
-      `[dStorage/managed-payment] Signing server reported success:false — ${JSON.stringify(r)}`,
+      `[dStorage/managed-payment] Signing server reported success:false — ${sanitiseErrorBody(JSON.stringify(r))}`,
     );
   }
 
