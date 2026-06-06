@@ -166,6 +166,27 @@ export function parseSignTxResponse(raw: unknown): SignTxResponse {
   return r as unknown as SignTxResponse;
 }
 
+/**
+ * Assert that the owner key returned by the signing server matches the key pinned
+ * out-of-band (the RSA modulus suffix of a compound auth token). When a pinned key
+ * is present, a mismatch indicates a compromised or MITM'd signing server attempting
+ * to substitute an attacker-controlled (publicKey, signature) pair — which would make
+ * the attacker the on-chain owner of the upload. A no-op when no key was pinned.
+ *
+ * Exported for unit testing — not part of the public SDK surface.
+ */
+export function assertOwnerKeyMatch(
+  responseKey: string,
+  pinnedKey: string | undefined,
+): void {
+  if (pinnedKey && responseKey !== pinnedKey) {
+    throw new Error(
+      "[dStorage/managed-payment] Signing server returned a public key that does not " +
+        "match the pinned key from the auth token — possible server compromise or MITM.",
+    );
+  }
+}
+
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
@@ -404,6 +425,11 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       txAmount: arCost,
       serviceFee,
     } = await this._sendSignTxRequest(body, instruction.network, onStatus);
+
+    // Pin check: when an expected server modulus was supplied out-of-band (in the
+    // auth token), the response's owner key must match it before we apply the
+    // signature locally.
+    assertOwnerKeyMatch(publicKey, this.ownerPublicKey);
 
     onStatus?.("Applying remote signature…");
     tx.setSignature({ id: txId, signature, owner: publicKey });

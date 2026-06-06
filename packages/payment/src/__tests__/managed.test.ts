@@ -6,6 +6,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   ManagedPaymentAdapter,
   parseSignTxResponse,
+  assertOwnerKeyMatch,
 } from "../adapters/managed.js";
 import type { PaymentQuote } from "../types.js";
 
@@ -143,6 +144,40 @@ describe("parseSignTxResponse — signing server response validation", () => {
     expect(() => parseSignTxResponse("not an object")).toThrow();
     expect(() => parseSignTxResponse(null)).toThrow();
     expect(() => parseSignTxResponse(42)).toThrow();
+  });
+});
+
+// ── Security: signing server owner-key pinning (N5) ──────────────────────────
+//
+// When the auth token carries a pinned RSA modulus (compound token
+// <credential>.<modulus>), the owner key returned by the signing server in the
+// sign-tx response must match it. Without this check a compromised or MITM'd
+// signing server could return an attacker-controlled (publicKey, signature)
+// pair, which the Arweave path would then apply via tx.setSignature({ owner }),
+// making the attacker the on-chain owner of the upload.
+
+describe("assertOwnerKeyMatch — signing server owner-key pinning", () => {
+  const PINNED = "A".repeat(683);
+
+  it("is a no-op when no key was pinned (plain auth token)", () => {
+    expect(() => assertOwnerKeyMatch("anything", undefined)).not.toThrow();
+  });
+
+  it("passes when the response key matches the pinned key", () => {
+    expect(() => assertOwnerKeyMatch(PINNED, PINNED)).not.toThrow();
+  });
+
+  it("throws when the response key differs from the pinned key", () => {
+    expect(() => assertOwnerKeyMatch("B".repeat(683), PINNED)).toThrow(
+      /does not match the pinned key/i,
+    );
+  });
+
+  it("throws on any mismatch, even a single-character difference", () => {
+    const tampered = "A".repeat(682) + "B";
+    expect(() => assertOwnerKeyMatch(tampered, PINNED)).toThrow(
+      /\[dStorage\/managed-payment\]/,
+    );
   });
 });
 
