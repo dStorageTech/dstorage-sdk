@@ -9,10 +9,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { blake3 } from "@noble/hashes/blake3.js";
 import { ArweaveStorageAdapter, ARWEAVE_MAINNET } from "../adapters/arweave.js";
 
+// ── test tx IDs — all exactly 43 base64url chars (valid Arweave format) ──────
+
+const TX_MOCK = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const TX_UNKNOWN = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+const TX_BASIC = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
+const TX_TAMPERED = "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD";
+const TX_NO_HASH = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+const TX_SKIP = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+const TX_UNINDEXED = "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG";
+const TX_HUGE = "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH";
+const TX_BIG = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII";
+const TX_BIG_SKIP = "JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
+const TX_OK = "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK";
+
 // ── arweave-js mock ───────────────────────────────────────────────────────────
 
 const mockTx = {
-  id: "mock_tx_id_abc123",
+  id: TX_MOCK,
   addTag: vi.fn(),
   data: "",
 };
@@ -105,7 +119,7 @@ describe("ArweaveStorageAdapter", () => {
     vi.clearAllMocks();
     // Reset uploader state and restore default mock implementations after clearAllMocks.
     uploaderState = { calls: 0, totalChunks: 1 };
-    mockTx.id = "mock_tx_id_abc123";
+    mockTx.id = TX_MOCK;
     mockArweave.createTransaction.mockResolvedValue(mockTx);
     mockArweave.transactions.getPrice.mockResolvedValue("1000000");
     mockArweave.transactions.sign.mockResolvedValue(undefined);
@@ -183,7 +197,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("id is the transaction id returned by arweave-js", async () => {
       const result = await nodeAdapter().upload(enc("data"));
-      expect(result.id).toBe("mock_tx_id_abc123");
+      expect(result.id).toBe(TX_MOCK);
     });
 
     it("cost contains the AR amount from the fee oracle", async () => {
@@ -193,7 +207,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("url is constructed from gateway + txId", async () => {
       const result = await nodeAdapter().upload(enc("data"));
-      expect(result.url).toBe("https://arweave.net/mock_tx_id_abc123");
+      expect(result.url).toBe(`https://arweave.net/${TX_MOCK}`);
     });
 
     it("url uses testnet gateway when configured", async () => {
@@ -243,7 +257,7 @@ describe("ArweaveStorageAdapter", () => {
         });
 
       const result = await nodeAdapter({ maxRetries: 3 }).upload(enc("data"));
-      expect(result.id).toBe("mock_tx_id_abc123");
+      expect(result.id).toBe(TX_MOCK);
       expect(mockUploader.uploadChunk).toHaveBeenCalledTimes(2);
     });
 
@@ -264,23 +278,43 @@ describe("ArweaveStorageAdapter", () => {
 
   describe("retrieve", () => {
     it("returns the data bytes from arweave-js", async () => {
-      const result = await nodeAdapter().retrieve("mock_tx_id_abc123");
+      const result = await nodeAdapter().retrieve(TX_MOCK);
       expect(result).toEqual(new TextEncoder().encode("retrieved-data"));
     });
 
     it("throws with viewblock.io link when no data is returned", async () => {
       mockArweave.transactions.getData.mockResolvedValueOnce(null);
-      await expect(nodeAdapter().retrieve("unknown_tx")).rejects.toThrow(
+      await expect(nodeAdapter().retrieve(TX_UNKNOWN)).rejects.toThrow(
         /viewblock\.io/,
       );
     });
 
     it("passes decode:true and string:false to getData", async () => {
-      await nodeAdapter().retrieve("tx_123");
-      expect(mockArweave.transactions.getData).toHaveBeenCalledWith("tx_123", {
+      await nodeAdapter().retrieve(TX_BASIC);
+      expect(mockArweave.transactions.getData).toHaveBeenCalledWith(TX_BASIC, {
         decode: true,
         string: false,
       });
+    });
+
+    it("throws before any network call when the id contains path-traversal characters", async () => {
+      const retrieveSpy = vi.spyOn(mockArweave.transactions, "get");
+      await expect(nodeAdapter().retrieve("../../etc/passwd")).rejects.toThrow(
+        /Invalid transaction ID/,
+      );
+      expect(retrieveSpy).not.toHaveBeenCalled();
+    });
+
+    it("throws for an id that is shorter than 43 characters", async () => {
+      await expect(nodeAdapter().retrieve("shortId")).rejects.toThrow(
+        /Invalid transaction ID/,
+      );
+    });
+
+    it("throws for an id that is longer than 43 characters", async () => {
+      await expect(nodeAdapter().retrieve(TX_MOCK + "A")).rejects.toThrow(
+        /Invalid transaction ID/,
+      );
     });
   });
 
@@ -324,7 +358,7 @@ describe("ArweaveStorageAdapter", () => {
       });
 
       const result = await adapter.upload(enc("data"));
-      expect(result.id).toBe("mock_tx_id_abc123");
+      expect(result.id).toBe(TX_MOCK);
       expect(mockArweave.transactions.getStatus).toHaveBeenCalledTimes(2);
     });
 
@@ -361,7 +395,7 @@ describe("ArweaveStorageAdapter", () => {
       mockArweave.transactions.get.mockResolvedValueOnce(
         makeMockTxWithTags({ "X-Content-Hash": hexOf(data) }),
       );
-      await expect(nodeAdapter().retrieve("tx_123")).resolves.toBeDefined();
+      await expect(nodeAdapter().retrieve(TX_BASIC)).resolves.toBeDefined();
     });
 
     it("retrieve throws [dStorage/arweave] with 'hash mismatch' when data is tampered", async () => {
@@ -374,7 +408,7 @@ describe("ArweaveStorageAdapter", () => {
         makeMockTxWithTags({ "X-Content-Hash": hexOf(originalData) }),
       );
       const err = await nodeAdapter()
-        .retrieve("tx_tampered")
+        .retrieve(TX_TAMPERED)
         .catch((e: unknown) => e);
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toContain("[dStorage/arweave]");
@@ -385,7 +419,7 @@ describe("ArweaveStorageAdapter", () => {
       mockArweave.transactions.get.mockResolvedValueOnce(
         makeMockTxWithTags({}),
       );
-      await expect(nodeAdapter().retrieve("tx_no_hash")).rejects.toThrow(
+      await expect(nodeAdapter().retrieve(TX_NO_HASH)).rejects.toThrow(
         "[dStorage/arweave]",
       );
     });
@@ -396,7 +430,7 @@ describe("ArweaveStorageAdapter", () => {
         enc("tampered bytes"),
       );
       const adapter = nodeAdapter({ skipIntegrityCheck: true });
-      await expect(adapter.retrieve("tx_skip")).resolves.toBeDefined();
+      await expect(adapter.retrieve(TX_SKIP)).resolves.toBeDefined();
       expect(mockArweave.transactions.get).not.toHaveBeenCalled();
     });
 
@@ -404,7 +438,7 @@ describe("ArweaveStorageAdapter", () => {
       mockArweave.transactions.get.mockRejectedValueOnce(
         new Error("tx not indexed yet"),
       );
-      await expect(nodeAdapter().retrieve("tx_unindexed")).rejects.toThrow(
+      await expect(nodeAdapter().retrieve(TX_UNINDEXED)).rejects.toThrow(
         /Could not fetch transaction metadata.*content hash cannot be verified/,
       );
     });
@@ -419,7 +453,7 @@ describe("ArweaveStorageAdapter", () => {
         makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }, "9999"),
       );
       const adapter = nodeAdapter({ maxRetrieveSizeBytes: limit });
-      await expect(adapter.retrieve("tx_huge")).rejects.toThrow(
+      await expect(adapter.retrieve(TX_HUGE)).rejects.toThrow(
         /data_size.*exceeds.*configured limit/,
       );
       // Data was NOT downloaded.
@@ -435,7 +469,7 @@ describe("ArweaveStorageAdapter", () => {
       );
       mockArweave.transactions.getData.mockResolvedValueOnce(bigData);
       const adapter = nodeAdapter({ maxRetrieveSizeBytes: 100 });
-      await expect(adapter.retrieve("tx_big")).rejects.toThrow(
+      await expect(adapter.retrieve(TX_BIG)).rejects.toThrow(
         /Downloaded.*exceeds.*configured limit/,
       );
     });
@@ -447,14 +481,14 @@ describe("ArweaveStorageAdapter", () => {
         maxRetrieveSizeBytes: 100,
         skipIntegrityCheck: true,
       });
-      await expect(adapter.retrieve("tx_big_skip")).rejects.toThrow(
+      await expect(adapter.retrieve(TX_BIG_SKIP)).rejects.toThrow(
         /Downloaded.*exceeds.*configured limit/,
       );
     });
 
     it("succeeds when data is within the limit", async () => {
       const adapter = nodeAdapter({ maxRetrieveSizeBytes: 1024 * 1024 });
-      await expect(adapter.retrieve("tx_ok")).resolves.toBeDefined();
+      await expect(adapter.retrieve(TX_OK)).resolves.toBeDefined();
     });
   });
 

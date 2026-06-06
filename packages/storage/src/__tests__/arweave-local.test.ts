@@ -19,7 +19,7 @@ import {
 
 const MOCK_JWK: Record<string, string> = { kty: "RSA", n: "mock_n", e: "AQAB" };
 const MOCK_ADDRESS = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const MOCK_TX_ID = "test_tx_id_local_001";
+const MOCK_TX_ID = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
 
 const MOCK_RETRIEVED_DATA = new TextEncoder().encode("test-retrieved-data");
 const MOCK_CONTENT_HASH = Array.from(blake3(MOCK_RETRIEVED_DATA))

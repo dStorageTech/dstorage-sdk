@@ -60,3 +60,34 @@ describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
     ).toThrow(/\[dStorage\/arweave-turbo\]/);
   });
 });
+
+// ── retrieve: transaction ID format validation ────────────────────────────────
+
+describe("ArweaveTurboStorageAdapter — retrieve ID validation", () => {
+  const TX_VALID = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; // 43 chars
+
+  function adapter() {
+    return new ArweaveTurboStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+    });
+  }
+
+  it("throws before any network call when the id contains path-traversal characters", async () => {
+    await expect(adapter().retrieve("../../etc/passwd")).rejects.toThrow(
+      /Invalid transaction ID/,
+    );
+  });
+
+  it("throws for an id shorter than 43 characters", async () => {
+    await expect(adapter().retrieve("shortId")).rejects.toThrow(
+      /Invalid transaction ID/,
+    );
+  });
+
+  it("throws for an id longer than 43 characters", async () => {
+    await expect(adapter().retrieve(TX_VALID + "A")).rejects.toThrow(
+      /Invalid transaction ID/,
+    );
+  });
+});

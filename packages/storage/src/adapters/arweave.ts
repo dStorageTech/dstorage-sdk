@@ -333,6 +333,11 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   // ── retrieve ───────────────────────────────────────────────────────────────────
 
   async retrieve(id: string): Promise<Uint8Array> {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
+      throw new Error(
+        `[dStorage/arweave] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
+      );
+    }
     const arweave = await this.getClient();
 
     // ── Pre-fetch transaction metadata ────────────────────────────────────────
