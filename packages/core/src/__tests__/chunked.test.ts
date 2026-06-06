@@ -20,7 +20,12 @@ import { MockStorageAdapter } from "@dstorage/storage";
 import type { StorageProviderName } from "@dstorage/storage";
 import { MockChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
-import { isManifest, type ChunkManifest } from "../chunked.js";
+import {
+  isManifest,
+  MAX_CHUNK_COUNT,
+  MAX_REASSEMBLY_BYTES,
+  type ChunkManifest,
+} from "../chunked.js";
 import type { DStorageConfig } from "../types.js";
 
 // Must match the mocked value above.
@@ -80,6 +85,62 @@ describe("isManifest", () => {
 
   it("returns false for null", () => {
     expect(isManifest(null)).toBe(false);
+  });
+
+  it("returns false when totalSize exceeds MAX_REASSEMBLY_BYTES (OOM guard)", () => {
+    expect(
+      isManifest({
+        v: 1,
+        type: "dstorage-chunked-manifest",
+        totalSize: MAX_REASSEMBLY_BYTES + 1,
+        chunkSize: CHUNK_SIZE,
+        chunkCount: 1,
+        provider: "mock",
+        chunks: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when chunkCount exceeds MAX_CHUNK_COUNT (iteration guard)", () => {
+    expect(
+      isManifest({
+        v: 1,
+        type: "dstorage-chunked-manifest",
+        totalSize: 0,
+        chunkSize: CHUNK_SIZE,
+        chunkCount: MAX_CHUNK_COUNT + 1,
+        provider: "mock",
+        chunks: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when totalSize is not an integer", () => {
+    expect(
+      isManifest({
+        v: 1,
+        type: "dstorage-chunked-manifest",
+        totalSize: 1.5,
+        chunkSize: CHUNK_SIZE,
+        chunkCount: 1,
+        provider: "mock",
+        chunks: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when chunkSize is zero or negative", () => {
+    expect(
+      isManifest({
+        v: 1,
+        type: "dstorage-chunked-manifest",
+        totalSize: 0,
+        chunkSize: 0,
+        chunkCount: 0,
+        provider: "mock",
+        chunks: [],
+      }),
+    ).toBe(false);
   });
 });
 
