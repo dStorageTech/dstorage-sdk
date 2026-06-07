@@ -269,32 +269,58 @@ async function uploadFile(
   const isPublic =
     visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
 
+  const replaceInput = (
+    await rl.question("  Replace an existing reference? [y/N]: ")
+  )
+    .trim()
+    .toLowerCase();
+  const isReplacing = replaceInput === "y" || replaceInput === "yes";
+
+  let replaceRefId: string | undefined;
+  if (isReplacing) {
+    replaceRefId =
+      (await rl.question("  Enter refId to replace: ")).trim() || undefined;
+  }
+
   console.log(
     `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes) [${isPublic ? "public" : "private"}]`,
   );
-  console.log(
-    `  Uploading to ${storageAdapter.name} storage and writing on-chain (${chainAdapter.name}) reference...`,
-  );
 
   try {
-    const result = await withTicker(
-      () => "Generating ZK proof and submitting reference...",
-      () => sdk.upload(fileContent, { isPublic }),
-    );
+    if (replaceRefId) {
+      console.log(
+        `  Updating reference ${replaceRefId} on ${chainAdapter.name}...`,
+      );
+      const result = await withTicker(
+        () => `Updating reference ${replaceRefId}...`,
+        () => sdk.updateUpload(replaceRefId!, fileContent, { isPublic }),
+      );
+      console.log("\n  ✓ Update complete!");
+      console.log(`  refId:     ${result.chainRefId}`);
+      console.log(`  storageId: ${result.storageId}\n`);
+    } else {
+      console.log(
+        `  Uploading to ${storageAdapter.name} storage and writing on-chain (${chainAdapter.name}) reference...`,
+      );
+      const result = await withTicker(
+        () => "Generating ZK proof and submitting reference...",
+        () => sdk.upload(fileContent, { isPublic }),
+      );
 
-    const visibility = result.encryptionScheme
-      ? "private (encrypted)"
-      : "public (unencrypted)";
-    console.log("\n  ✓ Upload complete!");
-    console.log(`  refId:            ${result.chainRefId}`);
-    console.log(`  storageId:        ${result.storageId}`);
-    console.log(`  storageProvider:  ${result.storageProvider}`);
-    console.log(`  chainProvider:    ${result.chainProvider}`);
-    console.log(`  encryptionScheme: ${result.encryptionScheme || "(none)"}`);
-    console.log(`  visibility:       ${visibility}`);
-    console.log(
-      `  uploadedAt:       ${new Date(result.uploadedAt).toISOString()}\n`,
-    );
+      const visibility = result.encryptionScheme
+        ? "private (encrypted)"
+        : "public (unencrypted)";
+      console.log("\n  ✓ Upload complete!");
+      console.log(`  refId:            ${result.chainRefId}`);
+      console.log(`  storageId:        ${result.storageId}`);
+      console.log(`  storageProvider:  ${result.storageProvider}`);
+      console.log(`  chainProvider:    ${result.chainProvider}`);
+      console.log(`  encryptionScheme: ${result.encryptionScheme || "(none)"}`);
+      console.log(`  visibility:       ${visibility}`);
+      console.log(
+        `  uploadedAt:       ${new Date(result.uploadedAt).toISOString()}\n`,
+      );
+    }
   } catch (err) {
     logError("during upload", err);
   }
