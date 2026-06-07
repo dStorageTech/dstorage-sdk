@@ -96,7 +96,7 @@ export class MockChainAdapter implements ChainAdapter {
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
-    const refId = generateRefId();
+    const refId = ref.refId ?? generateRefId();
     refs.set(refId, ref);
     if (ref.ownerSecret) {
       commitments.set(refId, await sha256(ref.ownerSecret));

@@ -14,13 +14,22 @@ import type {
   ChainAdapterLogger,
   DataReferenceSummary,
   ChainQuote,
+  WalletBalances,
 } from "../types.js";
 import { bytesToBase64url } from "@dstorage/crypto";
 
 const COMPONENT = "[dStorage/http-gateway-chain]";
 
+function generateRefId(): string {
+  const id =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `ref_${id}`;
+}
+
 export interface HttpGatewayChainAdapterConfig {
-  /** POST endpoint — receives the serialised ChainReference as a JSON body */
+  /** POST base URL — refId is appended as a path segment and the serialised ChainReference is sent as a JSON body: POST {writeUrl}/{refId} */
   writeUrl: string;
   /** GET base URL — refId is appended as a path segment: GET {readUrl}/{refId} */
   readUrl: string;
@@ -49,10 +58,12 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
     // ownerSecret is an internal ZK witness — never transmit it
     const { ownerSecret: _omit, ...payload } = ref;
+    const refId = ref.refId ?? generateRefId();
+    const url = `${this.config.writeUrl}/${encodeURIComponent(refId)}`;
 
     let res: Response;
     try {
-      res = await fetch(this.config.writeUrl, {
+      res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -67,22 +78,12 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       );
     }
 
-    const data = (await res.json()) as {
-      refId: string;
-      writtenAt?: number;
-      blockHeight?: number;
-    };
-
-    this.logger?.log(
-      COMPONENT,
-      `writeReference succeeded: refId=${data.refId}`,
-    );
+    this.logger?.log(COMPONENT, `writeReference succeeded: refId=${refId}`);
 
     return {
-      refId: data.refId,
+      refId,
       provider: "httpgateway",
-      writtenAt: data.writtenAt ?? ref.writtenAt,
-      ...(data.blockHeight !== undefined && { blockHeight: data.blockHeight }),
+      writtenAt: ref.writtenAt,
     };
   }
 

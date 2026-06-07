@@ -144,6 +144,43 @@ export interface UploadResult {
   costEstimate: CostEstimate;
 }
 
+/** Options for dStorage.registerReference() */
+export interface RegisterReferenceOptions {
+  /**
+   * Human-readable label written as `dataLabel` on-chain.
+   *
+   * **PLAINTEXT ON-CHAIN.** Do not use PII or content-revealing text.
+   */
+  label?: string;
+  /**
+   * Storage provider name recorded in the chain reference.
+   * Defaults to the configured `storageAdapter.name`.
+   */
+  storageProvider?: StorageProviderName;
+  /**
+   * Optional caller-supplied reference ID, forwarded to the chain adapter as
+   * {@link ChainReference.refId}. Adapters that control their own ID generation
+   * (e.g. mock, HTTP gateway) use this as the stored and returned identifier.
+   * Adapters where the on-chain protocol determines the ID (e.g. Midnight)
+   * ignore this field — the chain-assigned ID is returned instead.
+   */
+  refId?: string;
+}
+
+/** Result returned from dStorage.registerReference() */
+export interface RegisterReferenceResult {
+  /** The on-chain reference ID — use with retrieveByRefId(). */
+  chainRefId: string;
+}
+
+/** Result returned from dStorage.updateUpload() */
+export interface UpdateUploadResult {
+  /** Same refId as the input — updated in place. */
+  chainRefId: string;
+  /** StorageId of the newly uploaded content. */
+  storageId: string;
+}
+
 /** Result returned from dStorage.retrieve() */
 export interface RetrieveResult {
   /** The raw decrypted bytes */

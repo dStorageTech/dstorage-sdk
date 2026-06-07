@@ -60,19 +60,19 @@ describe("HttpGatewayChainAdapter", () => {
 
   describe("writeReference", () => {
     it("POSTs to writeUrl with JSON body and returns ChainWriteResult", async () => {
-      const fetchMock = mockFetch({ refId: "ref_abc123" });
+      const fetchMock = mockFetch({});
       vi.stubGlobal("fetch", fetchMock);
 
       const adapter = new HttpGatewayChainAdapter({
         writeUrl: WRITE_URL,
         readUrl: READ_URL,
       });
-      const ref = makeRef("wr1");
+      const ref: ChainReference = { ...makeRef("wr1"), refId: "ref_abc123" };
       const result = await adapter.writeReference(ref);
 
       expect(fetchMock).toHaveBeenCalledOnce();
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe(WRITE_URL);
+      expect(url).toBe(`${WRITE_URL}/ref_abc123`);
       expect(init.method).toBe("POST");
       expect((init.headers as Record<string, string>)["Content-Type"]).toBe(
         "application/json",
@@ -102,32 +102,39 @@ describe("HttpGatewayChainAdapter", () => {
       expect(sent).not.toHaveProperty("ownerSecret");
     });
 
-    it("uses writtenAt from server response when provided", async () => {
-      const serverWrittenAt = 1_800_000_000_000;
-      const fetchMock = mockFetch({
-        refId: "ref_ts",
-        writtenAt: serverWrittenAt,
-      });
-      vi.stubGlobal("fetch", fetchMock);
+    it("uses writtenAt from the ref (response body is ignored)", async () => {
+      vi.stubGlobal("fetch", mockFetch({}));
 
       const adapter = new HttpGatewayChainAdapter({
         writeUrl: WRITE_URL,
         readUrl: READ_URL,
       });
-      const result = await adapter.writeReference(makeRef("wr3"));
-      expect(result.writtenAt).toBe(serverWrittenAt);
+      const ref = makeRef("wr3");
+      const result = await adapter.writeReference(ref);
+      expect(result.writtenAt).toBe(ref.writtenAt);
     });
 
-    it("includes blockHeight when server returns it", async () => {
-      const fetchMock = mockFetch({ refId: "ref_bh", blockHeight: 42 });
-      vi.stubGlobal("fetch", fetchMock);
+    it("generates a non-empty refId when none is provided", async () => {
+      vi.stubGlobal("fetch", mockFetch({}));
+
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      const result = await adapter.writeReference(makeRef("wr_gen"));
+      expect(typeof result.refId).toBe("string");
+      expect(result.refId.length).toBeGreaterThan(0);
+    });
+
+    it("does not include blockHeight (response body is not parsed)", async () => {
+      vi.stubGlobal("fetch", mockFetch({ blockHeight: 42 }));
 
       const adapter = new HttpGatewayChainAdapter({
         writeUrl: WRITE_URL,
         readUrl: READ_URL,
       });
       const result = await adapter.writeReference(makeRef("wr4"));
-      expect(result.blockHeight).toBe(42);
+      expect(result.blockHeight).toBeUndefined();
     });
 
     it("throws with [dStorage/http-gateway-chain] prefix on non-2xx", async () => {

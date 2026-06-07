@@ -34,6 +34,14 @@ export type ChainProviderName = "mock" | "midnight" | "httpgateway";
 /** An on-chain reference record — what gets written to the smart contract. */
 export interface ChainReference {
   /**
+   * Optional caller-supplied reference ID.
+   * Adapters that control their own ID generation (e.g. mock, HTTP gateway) use
+   * this as the stored and returned identifier. Adapters where the on-chain
+   * protocol determines the ID (e.g. Midnight) ignore this field — the
+   * chain-assigned ID is always returned.
+   */
+  refId?: string;
+  /**
    * The storage content ID, base64url-encoded after client-side encryption.
    * (e.g. Arweave txId, encrypted before storage).
    * The encryption algorithm is recorded in encryptionScheme.

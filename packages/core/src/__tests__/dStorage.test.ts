@@ -616,3 +616,168 @@ describe("estimateCost", () => {
     expect(result.fileSizeBytes).toBe(data.byteLength);
   });
 });
+
+// ── registerReference ─────────────────────────────────────────────────────────
+
+describe("registerReference", () => {
+  it("returns a chainRefId", async () => {
+    const ds = await makeInitedDStorage();
+    const result = await ds.registerReference(
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
+    expect(typeof result.chainRefId).toBe("string");
+    expect(result.chainRefId.length).toBeGreaterThan(0);
+  });
+
+  it("ref appears in listReferences after registerReference", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.registerReference(
+      "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    );
+    const refs = await ds.listReferences();
+    expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
+  });
+
+  it("throws when no chain adapter is configured", async () => {
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-test-passphrase-v1!",
+          salt: "s",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await ds.init();
+    await expect(ds.registerReference("someId")).rejects.toThrow(
+      /requires a chain adapter/,
+    );
+  });
+
+  it("throws when no encryption adapters are configured", async () => {
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: new MockChainAdapter(),
+    });
+    await ds.init();
+    await expect(ds.registerReference("someId")).rejects.toThrow(
+      /requires at least one encryption adapter/,
+    );
+  });
+
+  it("forwards storageProvider option to the chain reference", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.registerReference(
+      "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      { storageProvider: "arweave" as StorageProviderName },
+    );
+
+    const refs = await chain.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.storageProvider).toBe("arweave");
+  });
+
+  it("forwards label option as dataLabel on the chain reference", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.registerReference(
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      { label: "my-label" },
+    );
+
+    // dataLabel is on the full ChainReference — read it directly from the adapter
+    const ref = await chain.readReference(chainRefId);
+    expect(ref.dataLabel).toBe("my-label");
+  });
+
+  it("uses provided refId instead of the one returned by the chain adapter", async () => {
+    const ds = await makeInitedDStorage();
+    const customRefId = "my-custom-ref-id-override";
+    const result = await ds.registerReference(
+      "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+      { refId: customRefId },
+    );
+    expect(result.chainRefId).toBe(customRefId);
+  });
+});
+
+// ── updateUpload ──────────────────────────────────────────────────────────────
+
+describe("updateUpload", () => {
+  it("returns { chainRefId, storageId }", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.upload(enc("v1 content"));
+    const result = await ds.updateUpload(refId!, enc("v2 content"));
+    expect(result.chainRefId).toBe(refId);
+    expect(typeof result.storageId).toBe("string");
+  });
+
+  it("round-trip: retrieveByRefId returns v2 bytes after update", async () => {
+    const ds = await makeInitedDStorage();
+    const v1 = enc("version one content");
+    const v2 = enc("version two content — updated");
+    const { chainRefId: refId } = await ds.upload(v1);
+    await ds.updateUpload(refId!, v2);
+    const { bytes } = await ds.retrieveByRefId(refId!);
+    expect(bytes).toEqual(v2);
+  });
+
+  it("throws when no chain adapter is configured", async () => {
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-test-passphrase-v1!",
+          salt: "s",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await ds.init();
+    await expect(ds.updateUpload("refId", enc("data"))).rejects.toThrow(
+      /requires a chain adapter/,
+    );
+  });
+
+  it("throws when the chain adapter does not support updateReference", async () => {
+    class NoUpdateChain extends MockChainAdapter {
+      override updateReference =
+        undefined as unknown as MockChainAdapter["updateReference"];
+    }
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: new NoUpdateChain(),
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-test-passphrase-v1!",
+          salt: "s",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await ds.init();
+    const { chainRefId: refId } = await ds.upload(enc("v1"));
+    await expect(ds.updateUpload(refId!, enc("v2"))).rejects.toThrow(
+      /not supported by this chain adapter/,
+    );
+  });
+
+  it("throws when no encryption adapters are configured", async () => {
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: new MockChainAdapter(),
+    });
+    await ds.init();
+    await expect(ds.updateUpload("refId", enc("data"))).rejects.toThrow(
+      /requires at least one encryption adapter/,
+    );
+  });
+});

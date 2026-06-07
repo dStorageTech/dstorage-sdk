@@ -35,7 +35,10 @@ import type {
   CostEstimate,
   DStorageConfig,
   Logger,
+  RegisterReferenceOptions,
+  RegisterReferenceResult,
   RetrieveResult,
+  UpdateUploadResult,
   UploadOptions,
   UploadProgress,
   UploadResult,
@@ -308,6 +311,159 @@ export class DStorage implements DStorageContext {
   }
 
   /**
+   * Register a pre-existing storageId as a new on-chain reference.
+   *
+   * Use this when data has already been uploaded to the storage network by
+   * other means (e.g. a third-party tool or a separate pipeline). The content
+   * is not touched — only the chain reference is created.
+   *
+   * A fresh DEK is generated solely to encrypt the storageId and derive the
+   * ownerSecret. The resulting reference round-trips through retrieveByRefId()
+   * exactly like one created by upload().
+   *
+   * Note: chunked manifests are not handled here. For large pre-existing
+   * uploads already split into chunks, register the manifest storageId.
+   */
+  async registerReference(
+    storageId: string,
+    options: RegisterReferenceOptions = {},
+  ): Promise<RegisterReferenceResult> {
+    this.assertConnected();
+    if (!this.config.chainAdapter) {
+      throw new Error("[dStorage] registerReference requires a chain adapter.");
+    }
+    if (this._encryptionProviders.length === 0) {
+      throw new Error(
+        "[dStorage] registerReference requires at least one encryption adapter.",
+      );
+    }
+
+    const dek = generateDek();
+    try {
+      const scheme = XChaChaScheme.fromKey(dek);
+      const onChainStorageId = await scheme.encryptStorageId(storageId);
+      const wrapperEntries = await Promise.all(
+        this._encryptionProviders.map(async (p) => ({
+          wrapKeyName: p.name,
+          ...(await p.wrapDek(dek)),
+        })),
+      );
+      const keyEnvelope = serializeKeyEnvelope(
+        buildKeyEnvelope(wrapperEntries),
+      );
+      const ownerSecret = await deriveOwnerSecret(
+        dek,
+        new TextEncoder().encode(storageId),
+      );
+      const chainResult = await this.config.chainAdapter.writeReference({
+        storageId: onChainStorageId,
+        encryptionScheme: "xchacha20poly1305-v1",
+        storageProvider:
+          options.storageProvider ?? this.config.storageAdapter.name,
+        ...(options.label !== undefined ? { dataLabel: options.label } : {}),
+        ...(options.refId !== undefined ? { refId: options.refId } : {}),
+        writtenAt: Date.now(),
+        keyEnvelope,
+        ownerSecret,
+      });
+      return { chainRefId: chainResult.refId };
+    } finally {
+      dek.fill(0);
+    }
+  }
+
+  /**
+   * Re-upload new content and update an existing on-chain reference in place.
+   *
+   * Ownership is proved by re-deriving the ownerSecret from the existing
+   * reference — the same mechanism used by removeReference(). A fresh DEK is
+   * generated for the new content; the old upload is not modified and remains
+   * independently decryptable if the caller retained the old storageId.
+   *
+   * Note: chunking is not applied here. For large files use upload() to get a
+   * new chunked reference, then removeReference() on the old one.
+   *
+   * @param refId            The chain reference to update (returned by a prior upload/registerReference).
+   * @param bytes            New content to encrypt and store.
+   * @param metadataOrOptions  Optional metadata tags or UploadOptions. isPublic is ignored.
+   */
+  async updateUpload(
+    refId: string,
+    bytes: Uint8Array,
+    metadataOrOptions: Record<string, string> | UploadOptions = {},
+  ): Promise<UpdateUploadResult> {
+    this.assertConnected();
+    if (!this.config.chainAdapter) {
+      throw new Error("[dStorage] updateUpload requires a chain adapter.");
+    }
+    if (typeof this.config.chainAdapter.updateReference !== "function") {
+      throw new Error(
+        "[dStorage] updateUpload is not supported by this chain adapter.",
+      );
+    }
+    if (this._encryptionProviders.length === 0) {
+      throw new Error(
+        "[dStorage] updateUpload requires at least one encryption adapter.",
+      );
+    }
+
+    // Parse metadataOrOptions exactly as upload() does.
+    let metadata: Record<string, string> = {};
+    if (
+      "onProgress" in metadataOrOptions ||
+      "isPublic" in metadataOrOptions ||
+      "metadata" in metadataOrOptions
+    ) {
+      metadata = (metadataOrOptions as UploadOptions).metadata ?? {};
+    } else {
+      metadata = metadataOrOptions as Record<string, string>;
+    }
+
+    // Re-derive ownerSecret from the existing reference (proves ownership).
+    const ownerSecret = await this._computeOwnerSecret(refId);
+
+    const dek = generateDek();
+    try {
+      const scheme = XChaChaScheme.fromKey(dek);
+      const uploadData = await scheme.encryptPayload(bytes, PAYLOAD_AAD);
+      const storageResult = await this.config.storageAdapter.upload(
+        uploadData,
+        {
+          ...metadata,
+          "Content-Type": "application/octet-stream",
+        },
+      );
+      const onChainStorageId = await scheme.encryptStorageId(storageResult.id);
+      const wrapperEntries = await Promise.all(
+        this._encryptionProviders.map(async (p) => ({
+          wrapKeyName: p.name,
+          ...(await p.wrapDek(dek)),
+        })),
+      );
+      const keyEnvelope = serializeKeyEnvelope(
+        buildKeyEnvelope(wrapperEntries),
+      );
+      await this.config.chainAdapter.updateReference(
+        refId,
+        {
+          storageId: onChainStorageId,
+          encryptionScheme: "xchacha20poly1305-v1",
+          storageProvider: storageResult.provider,
+          ...(metadata["label"] !== undefined
+            ? { dataLabel: metadata["label"] }
+            : {}),
+          writtenAt: Date.now(),
+          keyEnvelope,
+        },
+        ownerSecret,
+      );
+      return { chainRefId: refId, storageId: storageResult.id };
+    } finally {
+      dek.fill(0);
+    }
+  }
+
+  /**
    * Retrieve and decrypt data by its storageId.
    * Decryption happens locally — the SDK never sends plaintext anywhere.
    *
@@ -551,11 +707,21 @@ export class DStorage implements DStorageContext {
         `[dStorage] No on-chain reference found for refId: ${refId}`,
       );
 
-    if (ref.storageProvider !== this.config.storageAdapter.name) {
+    if (
+      ref.storageProvider &&
+      ref.storageProvider !== this.config.storageAdapter.name
+    ) {
       throw new Error(
         `[dStorage] Storage adapter mismatch: reference "${refId}" was stored on ` +
           `"${ref.storageProvider}" but the configured adapter is "${this.config.storageAdapter.name}". ` +
           `Configure a "${ref.storageProvider}" storage adapter to retrieve this reference.`,
+      );
+    }
+
+    if (!ref.storageId) {
+      throw new Error(
+        `[dStorage] readReference returned no storageId for refId: ${refId}. ` +
+          "The chain adapter response may be missing required fields.",
       );
     }
 

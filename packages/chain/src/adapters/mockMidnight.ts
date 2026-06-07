@@ -171,7 +171,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     await sleep(blockInclusionMs);
 
     mockBlockHeight += 1;
-    const refId = generateRefId();
+    const refId = ref.refId ?? generateRefId();
     refs.set(refId, ref);
 
     // Persist to localStorage
