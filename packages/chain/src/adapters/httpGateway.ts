@@ -10,6 +10,7 @@ import type {
   ChainAdapter,
   ChainProviderName,
   ChainReference,
+  ChainReferenceUpdate,
   ChainWriteResult,
   ChainAdapterLogger,
   DataReferenceSummary,
@@ -85,6 +86,33 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       provider: "httpgateway",
       writtenAt: ref.writtenAt,
     };
+  }
+
+  async updateReference(
+    refId: string,
+    update: ChainReferenceUpdate,
+    _ownerSecret?: Uint8Array,
+  ): Promise<void> {
+    const url = `${this.config.writeUrl}/${encodeURIComponent(refId)}`;
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(update),
+      });
+    } catch (err) {
+      throw new Error(`${COMPONENT} updateReference failed: ${String(err)}`);
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        `${COMPONENT} updateReference failed: HTTP ${res.status} ${res.statusText}`,
+      );
+    }
+
+    this.logger?.log(COMPONENT, `updateReference succeeded: refId=${refId}`);
   }
 
   async readReference(refId: string): Promise<ChainReference> {

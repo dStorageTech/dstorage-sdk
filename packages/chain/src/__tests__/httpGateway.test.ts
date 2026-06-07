@@ -165,6 +165,90 @@ describe("HttpGatewayChainAdapter", () => {
     });
   });
 
+  // ── updateReference ─────────────────────────────────────────────────────────
+
+  describe("updateReference", () => {
+    const makeUpdate = (): import("../types.js").ChainReferenceUpdate => ({
+      storageId: "updated_store_id",
+      encryptionScheme: "xchacha20poly1305-v1",
+      storageProvider: "mock",
+      writtenAt: 1_700_000_001_000,
+      keyEnvelope: '{"v":2}',
+    });
+
+    it("PUTs to {writeUrl}/{refId} with update as JSON body", async () => {
+      const fetchMock = mockFetch({});
+      vi.stubGlobal("fetch", fetchMock);
+
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      await adapter.updateReference("ref_123", makeUpdate());
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe(`${WRITE_URL}/ref_123`);
+      expect(init.method).toBe("POST");
+      expect((init.headers as Record<string, string>)["Content-Type"]).toBe(
+        "application/json",
+      );
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body["storageId"]).toBe("updated_store_id");
+    });
+
+    it("does not transmit ownerSecret", async () => {
+      vi.stubGlobal("fetch", mockFetch({}));
+
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      await adapter.updateReference(
+        "ref_123",
+        makeUpdate(),
+        new Uint8Array(32).fill(9),
+      );
+
+      const [, init] = (
+        vi.mocked(fetch) as unknown as {
+          mock: { calls: [string, RequestInit][] };
+        }
+      ).mock.calls[0]!;
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body).not.toHaveProperty("ownerSecret");
+    });
+
+    it("throws with [dStorage/http-gateway-chain] prefix on non-2xx", async () => {
+      vi.stubGlobal("fetch", mockFetch({}, 500));
+
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      await expect(
+        adapter.updateReference("ref_err", makeUpdate()),
+      ).rejects.toThrow(
+        "[dStorage/http-gateway-chain] updateReference failed: HTTP 500",
+      );
+    });
+
+    it("throws with [dStorage/http-gateway-chain] prefix on network error", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new Error("connection refused")),
+      );
+
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      await expect(
+        adapter.updateReference("ref_net", makeUpdate()),
+      ).rejects.toThrow("[dStorage/http-gateway-chain] updateReference failed");
+    });
+  });
+
   // ── readReference ───────────────────────────────────────────────────────────
 
   describe("readReference", () => {
