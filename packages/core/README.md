@@ -83,6 +83,41 @@ const { chainRefId } = await sdk.upload(bytes, {
 });
 ```
 
+### Arweave Local (development)
+
+[arlocal](https://github.com/textury/arlocal) is a local Arweave node for development and testing. `ArweaveLocalStorageAdapter` targets it by default (`localhost:1984`).
+
+**Path A — auto-generated test wallet** (recommended for local dev and tests):
+
+```typescript
+import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage";
+
+// Spins up a funded wallet against the running arlocal instance
+const storageAdapter = await ArweaveLocalStorageAdapter.createWithTestWallet({
+  fundAr: 10, // AR tokens to mint (default: 10)
+});
+```
+
+**Path B — existing wallet key file** (e.g. a pre-funded JWK on disk):
+
+```typescript
+import fs from "node:fs";
+import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage";
+
+const walletKey = JSON.parse(fs.readFileSync("arweave-wallet.json", "utf8"));
+const storageAdapter = new ArweaveLocalStorageAdapter({ walletKey });
+```
+
+**Path C — custom gateway host and port** (e.g. arlocal running on a different machine or port):
+
+```typescript
+import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage";
+
+const storageAdapter = new ArweaveLocalStorageAdapter({
+  gateway: { host: "192.168.1.42", port: 4000, protocol: "http" },
+});
+```
+
 ---
 
 ## Encryption Design
