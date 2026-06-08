@@ -283,22 +283,23 @@ async function uploadFile(
   const isPublic =
     visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
 
-  // Metadata prompts (only for private uploads — metadata is encrypted with the DEK)
+  // Metadata prompt (only for private uploads — metadata is encrypted with the DEK)
   let metadata: Record<string, string> | undefined;
   if (!isPublic) {
-    console.log("  Metadata (press Enter to skip each field):");
-    const name = (await rl.question("    name:     ")).trim();
-    const lastname = (await rl.question("    lastname: ")).trim();
-    const type = (await rl.question("    type:     ")).trim();
-    const age = (await rl.question("    age:      ")).trim();
-    const doctor = (await rl.question("    doctor:   ")).trim();
-    const entries: Record<string, string> = {};
-    if (name) entries["name"] = name;
-    if (lastname) entries["lastname"] = lastname;
-    if (type) entries["type"] = type;
-    if (age) entries["age"] = age;
-    if (doctor) entries["doctor"] = doctor;
-    if (Object.keys(entries).length > 0) metadata = entries;
+    const metaRaw = (
+      await rl.question(
+        "  Metadata (key1=val1,key2=val2,... or leave blank to skip): ",
+      )
+    ).trim();
+    if (metaRaw) {
+      const entries: Record<string, string> = {};
+      for (const pair of metaRaw.split(",")) {
+        const eq = pair.indexOf("=");
+        if (eq > 0)
+          entries[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
+      }
+      if (Object.keys(entries).length > 0) metadata = entries;
+    }
   }
 
   const replaceInput = (
