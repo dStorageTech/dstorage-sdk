@@ -415,6 +415,42 @@ describe("public upload and retrieve", () => {
     expect(ref.encryptionScheme).toBe("xchacha20poly1305-v1");
   });
 
+  it("private upload: bytes stored in storage are not the original plaintext", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const plaintext = enc("sensitive patient data");
+    const { storageId } = await ds.upload(plaintext);
+
+    const rawStored = storage.get(storageId)!;
+    // Raw bytes in storage must differ from the original plaintext
+    expect(rawStored).not.toEqual(plaintext);
+    // And must not contain the plaintext as a substring
+    expect(Buffer.from(rawStored).toString()).not.toContain(
+      "sensitive patient data",
+    );
+  });
+
+  it("private upload: metadata stored on-chain is not the plaintext JSON", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const meta = { name: "Alice", doctor: "Dr Smith" };
+    const { chainRefId } = await ds.upload(enc("record"), { metadata: meta });
+
+    const ref = await chain.readReference(chainRefId!);
+    // encryptedMetadata must be set and must not equal the plain JSON
+    expect(ref.encryptedMetadata).toBeDefined();
+    expect(ref.encryptedMetadata).not.toBe(JSON.stringify(meta));
+    // Must not contain the plaintext values as readable strings
+    expect(ref.encryptedMetadata).not.toContain("Alice");
+    expect(ref.encryptedMetadata).not.toContain("Dr Smith");
+  });
+
   it("two users can both retrieve the same public content by refId", async () => {
     const ds1 = await makeInitedDStorage();
     const ds2 = await makeInitedDStorage();
