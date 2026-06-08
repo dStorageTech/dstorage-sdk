@@ -451,6 +451,24 @@ describe("public upload and retrieve", () => {
     expect(ref.encryptedMetadata).not.toContain("Dr Smith");
   });
 
+  it("tampered ciphertext in storage is rejected by AEAD authentication", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId, storageId } = await ds.upload(enc("original content"));
+
+    // Flip a byte in the middle of the ciphertext — the Poly1305 auth tag will
+    // no longer match, so decryption must throw rather than return corrupt data.
+    const raw = storage.get(storageId)!;
+    const tampered = new Uint8Array(raw);
+    tampered[Math.floor(tampered.length / 2)] ^= 0xff;
+    storage.set(storageId, tampered);
+
+    await expect(ds.retrieveByRefId(chainRefId!)).rejects.toThrow();
+  });
+
   it("two users can both retrieve the same public content by refId", async () => {
     const ds1 = await makeInitedDStorage();
     const ds2 = await makeInitedDStorage();
