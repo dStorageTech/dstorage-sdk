@@ -21,7 +21,6 @@
  * Docs: https://docs.midnight.network/develop/tutorial/building-a-dapp
  */
 
-import { existsSync } from "node:fs";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
 import { hexToBytes } from "@dstorage/crypto";
@@ -299,19 +298,11 @@ export class MidnightChainAdapter implements ChainAdapter {
             >
           ).zkArtifactsPath
         : undefined;
-    if (this._zkArtifactsPath !== undefined) {
-      if (!this._zkArtifactsPath.trim()) {
-        throw new Error(
-          "[dStorage/midnight] zkArtifactsPath must not be empty — " +
-            "set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.",
-        );
-      }
-      if (!existsSync(this._zkArtifactsPath)) {
-        throw new Error(
-          `[dStorage/midnight] zkArtifactsPath does not exist: "${this._zkArtifactsPath}" — ` +
-            "check the path points to the compiled DataRegistry contract artifacts directory.",
-        );
-      }
+    if (this._zkArtifactsPath !== undefined && !this._zkArtifactsPath.trim()) {
+      throw new Error(
+        "[dStorage/midnight] zkArtifactsPath must not be empty — " +
+          "set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.",
+      );
     }
     this._zkConfigBaseUrl =
       walletMode === "connector" && "zkConfigBaseUrl" in config
@@ -467,6 +458,16 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
     const zkConfigPath = this._zkArtifactsPath;
     this.logger?.log("dStorage/midnight", `ZK artifacts path: ${zkConfigPath}`);
+
+    // Dynamic import keeps node:fs out of the static import graph so the
+    // browser bundle (connector mode) remains free of Node.js built-ins.
+    const { existsSync } = await import(/* @vite-ignore */ "node:fs");
+    if (!existsSync(zkConfigPath)) {
+      throw new Error(
+        `[dStorage/midnight] zkArtifactsPath does not exist: "${zkConfigPath}" — ` +
+          "check the path points to the compiled DataRegistry contract artifacts directory.",
+      );
+    }
 
     const { NodeZkConfigProvider } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/midnight-js-node-zk-config-provider"

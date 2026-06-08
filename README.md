@@ -11,6 +11,7 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Mission](#mission)
 - [What it does](#what-it-does)
 - [Quick Start](#quick-start)
+- [Browser Bundle](#browser-bundle)
 - [Testing](#testing)
 - [Reality Check (Current Support)](#reality-check-current-support)
 - [SDK Usage](#sdk-usage)
@@ -153,6 +154,118 @@ It will start a CLI that:
 - uses Midnight Preprod network and Arweave Local storage
 - asks for network + wallet seed/mnemonic and initializes `MidnightChainAdapter`
 - provides actions to upload files, list on-chain references, and retrieve content by `refId`
+
+---
+
+## Browser Bundle
+
+The SDK ships a pre-built, minified ESM bundle that includes all browser-safe adapters — no Node.js-only code, no `node:http` or `node:fs` dependencies.
+
+### Generating the bundle
+
+The browser bundle is produced automatically as part of the normal build:
+
+```sh
+npm run build
+```
+
+After the build, the bundle is available at:
+
+```
+packages/core/dist/browser.mjs   — minified ESM, ready to import
+packages/core/dist/browser.d.ts  — TypeScript declarations
+```
+
+### Using the bundle
+
+**Option 1 — Explicit subpath import (recommended for bundler-based projects)**
+
+Install the package, then import from the `/browser` subpath:
+
+```typescript
+import {
+  DStorage,
+  ArweaveStorageAdapter,
+  ArweavePaymentAdapter,
+  MidnightChainAdapter,
+} from "@dstorage-tech/dstorage/browser";
+```
+
+Works with Vite, webpack, rollup, esbuild, or any other bundler. Peer dependencies (`arweave`, `@midnight-ntwrk/*`, etc.) must be installed separately and will be resolved by your bundler.
+
+**Option 2 — Auto-resolution via the `"browser"` condition (zero config)**
+
+When a bundler is configured for a browser target it automatically honours the `"browser"` condition in `package.json` exports. No subpath needed — normal imports just work:
+
+```typescript
+import { DStorage } from "@dstorage-tech/dstorage";
+// bundler auto-selects the browser-safe chain entry for @dstorage/chain
+```
+
+**Option 3 — Direct `<script type="module">` or CDN**
+
+Reference `dist/browser.mjs` directly, or serve it from a CDN that supports import maps:
+
+```html
+<script type="module">
+  import {
+    DStorage,
+    ArweaveStorageAdapter,
+  } from "./vendor/dstorage/browser.mjs";
+</script>
+```
+
+### What is and is not included
+
+| Adapter                                       | Browser bundle | Reason for exclusion                                                                       |
+| --------------------------------------------- | :------------: | ------------------------------------------------------------------------------------------ |
+| `MockStorageAdapter`                          |       ✅       |                                                                                            |
+| `ArweaveStorageAdapter`                       |       ✅       |                                                                                            |
+| `ArweaveTurboStorageAdapter`                  |       ✅       |                                                                                            |
+| `AutonomiStorageAdapter`                      |       ✅       |                                                                                            |
+| `ArweaveLocalStorageAdapter`                  |       ✅       | Requires arlocal running at a browser-reachable URL — see note below                       |
+| `MockPaymentAdapter`                          |       ✅       |                                                                                            |
+| `ArweavePaymentAdapter`                       |       ✅       |                                                                                            |
+| `ManagedPaymentAdapter`                       |       ✅       |                                                                                            |
+| `MockChainAdapter`                            |       ✅       |                                                                                            |
+| `MockMidnightChainAdapter`                    |       ✅       |                                                                                            |
+| `HttpGatewayChainAdapter`                     |       ✅       |                                                                                            |
+| `MidnightChainAdapter` (connector mode)       |       ✅       | Requires Lace wallet extension; use `NETWORKS` preset for endpoint config — see note below |
+| `MidnightChainAdapter` (provider/facade mode) |       ❌       | Requires LevelDB (private state) and filesystem (ZK artifacts) — Node.js only              |
+
+**`ArweaveLocalStorageAdapter` in browsers**: arlocal sets `Access-Control-Allow-Origin: *` by default, so no extra CORS configuration is required. Start arlocal as usual (`docker run -p 1984:1984 textury/arlocal` or `npx arlocal`) and point the adapter at the arlocal URL:
+
+```typescript
+import {
+  ArweaveLocalStorageAdapter,
+  ARWEAVE_LOCAL,
+} from "@dstorage-tech/dstorage/browser";
+
+const { adapter } = await ArweaveLocalStorageAdapter.createWithTestWallet();
+// or with a custom host/port:
+const adapter2 = new ArweaveLocalStorageAdapter({
+  gateway: { host: "mydev.local", port: 1984, protocol: "http" },
+});
+```
+
+If arlocal runs on a non-localhost host, verify that your reverse proxy or network path preserves the CORS headers arlocal sets. Browsers treat `localhost` as a secure context, so HTTP connections to `localhost:1984` are not blocked even when the app is served over HTTPS.
+
+**`MidnightChainAdapter` in browsers**: only **connector mode** (`walletMode: "connector"`) is supported in the browser bundle. It connects to the Lace wallet extension, fetches ZK artifacts over HTTP (`FetchZkConfigProvider`), and stores private state in memory. Use the `NETWORKS` constant for pre-configured endpoints:
+
+```typescript
+import {
+  MidnightChainAdapter,
+  NETWORKS,
+} from "@dstorage-tech/dstorage/browser";
+
+const chain = new MidnightChainAdapter({
+  walletMode: "connector",
+  ...NETWORKS.preprod,
+  zkConfigBaseUrl: window.location.origin, // serve keys/ and zkir/ from public/
+});
+```
+
+Provider/facade mode (`walletMode: "provider"`) is Node.js-only and cannot run in a browser — it requires LevelDB for persistent private state and local filesystem access for ZK artifact files.
 
 ---
 
