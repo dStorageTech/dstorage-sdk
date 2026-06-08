@@ -278,8 +278,8 @@ describe("ArweaveStorageAdapter", () => {
 
   describe("retrieve", () => {
     it("returns the data bytes from arweave-js", async () => {
-      const result = await nodeAdapter().retrieve(TX_MOCK);
-      expect(result).toEqual(new TextEncoder().encode("retrieved-data"));
+      const { bytes } = await nodeAdapter().retrieve(TX_MOCK);
+      expect(bytes).toEqual(new TextEncoder().encode("retrieved-data"));
     });
 
     it("throws with viewblock.io link when no data is returned", async () => {

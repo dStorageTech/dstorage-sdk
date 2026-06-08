@@ -87,7 +87,9 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     };
   }
 
-  async retrieve(id: string): Promise<Uint8Array> {
+  async retrieve(
+    id: string,
+  ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     /**
      * TODO: Replace with real Autonomi retrieval:
      */
@@ -95,7 +97,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     if (!data) {
       throw new Error(`[dStorage/autonomi] No data found for id: ${id}`);
     }
-    return data;
+    return { bytes: data, tags: {} };
   }
 
   async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {

@@ -23,6 +23,8 @@ import {
   serializeKeyEnvelope,
   parseKeyEnvelope,
   deriveOwnerSecret,
+  bytesToBase64url,
+  base64urlToBytes,
 } from "@dstorage/crypto";
 
 import type { CryptoScheme } from "@dstorage/crypto";
@@ -44,7 +46,7 @@ import type {
   UploadResult,
   WalletInfo,
 } from "./types.js";
-import { PAYLOAD_AAD, MANIFEST_AAD, chunkAad } from "./types.js";
+import { PAYLOAD_AAD, MANIFEST_AAD, METADATA_AAD, chunkAad } from "./types.js";
 import { MetaTx } from "./metaTx/index.js";
 import type {
   DStorageContext,
@@ -133,35 +135,31 @@ export class DStorage implements DStorageContext {
    * Only the manifest's storageId is written on-chain.
    *
    * @param content          Uint8Array to store
-   * @param metadataOrOptions  Optional metadata or UploadOptions (with onProgress callback)
+   * @param options  Optional UploadOptions (metadata, onProgress, isPublic)
    * @returns                UploadResult containing the dataId needed to retrieve later
    */
   async upload(
     bytes: Uint8Array,
-    metadataOrOptions: Record<string, string> | UploadOptions = {},
+    options?: UploadOptions,
   ): Promise<UploadResult> {
     this.assertConnected();
 
-    // Distinguish old-style metadata object from new UploadOptions.
-    let metadata: Record<string, string>;
-    let onProgress: ((p: UploadProgress) => void) | undefined;
-    let isPublic = false;
-    if (
-      "onProgress" in metadataOrOptions ||
-      "metadata" in metadataOrOptions ||
-      "isPublic" in metadataOrOptions
-    ) {
-      const opts = metadataOrOptions as UploadOptions;
-      metadata = opts.metadata ?? {};
-      onProgress = opts.onProgress;
-      isPublic = opts.isPublic ?? false;
-    } else {
-      metadata = metadataOrOptions as Record<string, string>;
+    const {
+      tags = {},
+      metadata: rawMeta,
+      onProgress,
+      isPublic = false,
+    } = options ?? {};
+
+    if (rawMeta !== undefined && isPublic) {
+      throw new Error(
+        "[dStorage] metadata cannot be used with isPublic uploads — there is no DEK to encrypt it with.",
+      );
     }
 
     // Route large files through the chunked path.
     if (bytes.length > CHUNK_SIZE) {
-      return this._uploadChunked(bytes, metadata, onProgress, isPublic);
+      return this._uploadChunked(bytes, tags, onProgress, isPublic, rawMeta);
     }
 
     // ── Single-shot path (files ≤ 5 MB) ────────────────────────────────────
@@ -211,7 +209,7 @@ export class DStorage implements DStorageContext {
     // 2. Upload first so we have the storageId for ownerSecret derivation (if needed).
     const sdkVersion = corePackageJson.version ?? "unknown";
     const storageResult = await this.config.storageAdapter.upload(uploadData, {
-      ...metadata,
+      ...tags,
       "dStorage-version": sdkVersion,
       "Content-Type": "application/octet-stream",
     });
@@ -263,12 +261,19 @@ export class DStorage implements DStorageContext {
     // 4. Write on-chain reference — only the storage pointer, never the data.
     //    Skipped in storage-only mode (no chain adapter).
     if (this.config.chainAdapter) {
-      const dataLabel = metadata["label"];
+      const encryptedMetadata = rawMeta
+        ? bytesToBase64url(
+            await uploadScheme!.encryptPayload(
+              new TextEncoder().encode(JSON.stringify(rawMeta)),
+              METADATA_AAD,
+            ),
+          )
+        : undefined;
       const chainResult = await this.config.chainAdapter.writeReference({
         storageId: onChainStorageId,
         encryptionScheme,
         storageProvider: storageResult.provider,
-        ...(dataLabel !== undefined ? { dataLabel } : {}),
+        ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
         writtenAt: Date.now(),
         keyEnvelope,
         ownerSecret,
@@ -360,7 +365,6 @@ export class DStorage implements DStorageContext {
         encryptionScheme: "xchacha20poly1305-v1",
         storageProvider:
           options.storageProvider ?? this.config.storageAdapter.name,
-        ...(options.label !== undefined ? { dataLabel: options.label } : {}),
         ...(options.refId !== undefined ? { refId: options.refId } : {}),
         writtenAt: Date.now(),
         keyEnvelope,
@@ -385,12 +389,12 @@ export class DStorage implements DStorageContext {
    *
    * @param refId            The chain reference to update (returned by a prior upload/registerReference).
    * @param bytes            New content to encrypt and store.
-   * @param metadataOrOptions  Optional metadata tags or UploadOptions. isPublic is ignored.
+   * @param options  Optional UploadOptions. isPublic is ignored.
    */
   async updateUpload(
     refId: string,
     bytes: Uint8Array,
-    metadataOrOptions: Record<string, string> | UploadOptions = {},
+    options?: UploadOptions,
   ): Promise<UpdateUploadResult> {
     this.assertConnected();
     if (!this.config.chainAdapter) {
@@ -407,17 +411,7 @@ export class DStorage implements DStorageContext {
       );
     }
 
-    // Parse metadataOrOptions exactly as upload() does.
-    let metadata: Record<string, string> = {};
-    if (
-      "onProgress" in metadataOrOptions ||
-      "isPublic" in metadataOrOptions ||
-      "metadata" in metadataOrOptions
-    ) {
-      metadata = (metadataOrOptions as UploadOptions).metadata ?? {};
-    } else {
-      metadata = metadataOrOptions as Record<string, string>;
-    }
+    const { tags = {}, metadata: rawMeta } = options ?? {};
 
     // Re-derive ownerSecret from the existing reference (proves ownership).
     const ownerSecret = await this._computeOwnerSecret(refId);
@@ -429,7 +423,7 @@ export class DStorage implements DStorageContext {
       const storageResult = await this.config.storageAdapter.upload(
         uploadData,
         {
-          ...metadata,
+          ...tags,
           "Content-Type": "application/octet-stream",
         },
       );
@@ -443,15 +437,21 @@ export class DStorage implements DStorageContext {
       const keyEnvelope = serializeKeyEnvelope(
         buildKeyEnvelope(wrapperEntries),
       );
+      const encryptedMetadata = rawMeta
+        ? bytesToBase64url(
+            await scheme.encryptPayload(
+              new TextEncoder().encode(JSON.stringify(rawMeta)),
+              METADATA_AAD,
+            ),
+          )
+        : undefined;
       await this.config.chainAdapter.updateReference(
         refId,
         {
           storageId: onChainStorageId,
           encryptionScheme: "xchacha20poly1305-v1",
           storageProvider: storageResult.provider,
-          ...(metadata["label"] !== undefined
-            ? { dataLabel: metadata["label"] }
-            : {}),
+          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
           writtenAt: Date.now(),
           keyEnvelope,
         },
@@ -478,9 +478,10 @@ export class DStorage implements DStorageContext {
     this.assertConnected();
 
     // 1. Fetch blob from storage
-    const rawBytes = await this.config.storageAdapter.retrieve(storageId);
+    const { bytes: rawBytes, tags } =
+      await this.config.storageAdapter.retrieve(storageId);
 
-    return this._decryptAndReassemble(rawBytes, storageId, dekScheme);
+    return this._decryptAndReassemble(rawBytes, storageId, tags, dekScheme);
   }
 
   /**
@@ -605,6 +606,7 @@ export class DStorage implements DStorageContext {
   private async _decryptAndReassemble(
     rawBytes: Uint8Array,
     storageId: string,
+    tags: Record<string, string>,
     dekScheme?: CryptoScheme,
   ): Promise<RetrieveResult> {
     const scheme: CryptoScheme | null = dekScheme ?? null;
@@ -635,7 +637,7 @@ export class DStorage implements DStorageContext {
           "dStorage",
           `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
         );
-        return this._retrieveChunked(parsed, scheme);
+        return this._retrieveChunked(parsed, scheme, tags);
       }
 
       // Not a manifest — decrypt as regular payload.
@@ -650,7 +652,7 @@ export class DStorage implements DStorageContext {
         "dStorage",
         `Retrieved by refId → storageId: ${storageId}`,
       );
-      return { bytes: decryptedBytes, metadata: {} };
+      return { bytes: decryptedBytes, metadata: {}, tags };
     }
 
     // Public upload (no encryption): fall back to JSON shape detection for manifests.
@@ -661,7 +663,7 @@ export class DStorage implements DStorageContext {
           "dStorage",
           `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
         );
-        return this._retrieveChunked(parsed, null);
+        return this._retrieveChunked(parsed, null, tags);
       }
     } catch {
       // Not JSON — treat as raw content, fall through.
@@ -675,6 +677,7 @@ export class DStorage implements DStorageContext {
     return {
       bytes: rawBytes,
       metadata: {},
+      tags,
     };
   }
 
@@ -745,7 +748,21 @@ export class DStorage implements DStorageContext {
       storageId = await dekScheme.decryptStorageId(ref.storageId);
     }
 
-    return await this.retrieveByStorageId(storageId, dekScheme);
+    const result = await this.retrieveByStorageId(storageId, dekScheme);
+
+    let metadata: Record<string, string> = {};
+    if (ref.encryptedMetadata && dekScheme) {
+      const raw = await dekScheme.decryptPayload(
+        base64urlToBytes(ref.encryptedMetadata),
+        METADATA_AAD,
+      );
+      metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
+        string,
+        string
+      >;
+    }
+
+    return { ...result, metadata };
   }
 
   /**
@@ -768,12 +785,14 @@ export class DStorage implements DStorageContext {
         let decryptionError: string | undefined;
         const isPublic = !item.encryptionScheme;
 
+        let dekScheme: CryptoScheme | undefined;
+
         if (item.storageId) {
           if (isPublic) {
             storageId = item.storageId;
           } else {
             try {
-              const dekScheme = await this._getDekScheme(item.keyEnvelope);
+              dekScheme = await this._getDekScheme(item.keyEnvelope);
               storageId = await dekScheme.decryptStorageId(item.storageId);
             } catch (err) {
               decryptionError =
@@ -795,6 +814,22 @@ export class DStorage implements DStorageContext {
           }
         }
 
+        let metadata: Record<string, string> | undefined;
+        if (item.encryptedMetadata && dekScheme) {
+          try {
+            const raw = await dekScheme.decryptPayload(
+              base64urlToBytes(item.encryptedMetadata),
+              METADATA_AAD,
+            );
+            metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
+              string,
+              string
+            >;
+          } catch {
+            // Leave metadata undefined if decryption fails
+          }
+        }
+
         return {
           refId: item.refId,
           storageId,
@@ -803,6 +838,7 @@ export class DStorage implements DStorageContext {
           keyEnvelope: item.keyEnvelope,
           ownerCommitment: item.ownerCommitment,
           ...(decryptionError !== undefined ? { decryptionError } : {}),
+          ...(metadata !== undefined ? { metadata } : {}),
         };
       }),
     );
@@ -933,9 +969,10 @@ export class DStorage implements DStorageContext {
    */
   private async _uploadChunked(
     bytes: Uint8Array,
-    metadata: Record<string, string>,
+    tags: Record<string, string>,
     onProgress?: (p: UploadProgress) => void,
     isPublic = false,
+    rawMeta?: Record<string, string>,
   ): Promise<UploadResult> {
     if (this._encryptionProviders.length === 0) {
       throw new Error(
@@ -1017,7 +1054,7 @@ export class DStorage implements DStorageContext {
       });
 
       const chunkResult = await this.config.storageAdapter.upload(chunkData, {
-        ...metadata,
+        ...tags,
         "dStorage-version": sdkVersion,
         "Content-Type": "application/octet-stream",
         "dstorage-chunk-index": String(i),
@@ -1103,12 +1140,20 @@ export class DStorage implements DStorageContext {
         );
 
     if (this.config.chainAdapter) {
-      const dataLabel = metadata["label"];
+      const encryptedMetadata =
+        rawMeta && uploadScheme
+          ? bytesToBase64url(
+              await uploadScheme.encryptPayload(
+                new TextEncoder().encode(JSON.stringify(rawMeta)),
+                METADATA_AAD,
+              ),
+            )
+          : undefined;
       const chainResult = await this.config.chainAdapter.writeReference({
         storageId: onChainManifestId,
         encryptionScheme,
         storageProvider: manifestResult.provider,
-        ...(dataLabel !== undefined ? { dataLabel } : {}),
+        ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
         writtenAt: Date.now(),
         keyEnvelope,
         ownerSecret,
@@ -1168,6 +1213,7 @@ export class DStorage implements DStorageContext {
   private async _retrieveChunked(
     manifest: ChunkManifest,
     scheme: CryptoScheme | null = null,
+    tags: Record<string, string> = {},
   ): Promise<RetrieveResult> {
     // Validate manifest integrity before touching storage.
     if (manifest.chunks.length !== manifest.chunkCount) {
@@ -1188,9 +1234,8 @@ export class DStorage implements DStorageContext {
     let offset = 0;
 
     for (const entry of sorted) {
-      const rawChunkBytes = await this.config.storageAdapter.retrieve(
-        entry.storageId,
-      );
+      const { bytes: rawChunkBytes } =
+        await this.config.storageAdapter.retrieve(entry.storageId);
 
       let chunkBytes = rawChunkBytes;
       if (scheme) {
@@ -1231,6 +1276,7 @@ export class DStorage implements DStorageContext {
     return {
       bytes: result,
       metadata: {},
+      tags,
     };
   }
 

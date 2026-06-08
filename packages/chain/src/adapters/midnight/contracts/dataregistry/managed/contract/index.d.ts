@@ -3,7 +3,7 @@ import type * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
 export type ReferenceEntry = { storageId: string;
                                encryptionScheme: string;
                                storageProvider: string;
-                               dataLabel: string;
+                               metadata: string;
                                writtenAt: bigint;
                                keyEnvelope: string;
                                ownerCommitment: Uint8Array
@@ -18,7 +18,7 @@ export type ImpureCircuits<PS> = {
                  storageId_0: string,
                  encryptionScheme_0: string,
                  storageProvider_0: string,
-                 dataLabel_0: string,
+                 metadata_0: string,
                  writtenAt_0: bigint,
                  keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
@@ -28,7 +28,7 @@ export type ImpureCircuits<PS> = {
                   storageId_0: string,
                   encryptionScheme_0: string,
                   storageProvider_0: string,
-                  dataLabel_0: string,
+                  metadata_0: string,
                   writtenAt_0: bigint,
                   keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
@@ -38,7 +38,7 @@ export type ProvableCircuits<PS> = {
                  storageId_0: string,
                  encryptionScheme_0: string,
                  storageProvider_0: string,
-                 dataLabel_0: string,
+                 metadata_0: string,
                  writtenAt_0: bigint,
                  keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
@@ -48,7 +48,7 @@ export type ProvableCircuits<PS> = {
                   storageId_0: string,
                   encryptionScheme_0: string,
                   storageProvider_0: string,
-                  dataLabel_0: string,
+                  metadata_0: string,
                   writtenAt_0: bigint,
                   keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
@@ -72,7 +72,7 @@ export type Circuits<PS> = {
                  storageId_0: string,
                  encryptionScheme_0: string,
                  storageProvider_0: string,
-                 dataLabel_0: string,
+                 metadata_0: string,
                  writtenAt_0: bigint,
                  keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, Uint8Array>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
@@ -82,7 +82,7 @@ export type Circuits<PS> = {
                   storageId_0: string,
                   encryptionScheme_0: string,
                   storageProvider_0: string,
-                  dataLabel_0: string,
+                  metadata_0: string,
                   writtenAt_0: bigint,
                   keyEnvelope_0: string): __compactRuntime.CircuitResults<PS, []>;
 }

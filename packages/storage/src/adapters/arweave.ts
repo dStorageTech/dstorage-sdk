@@ -332,7 +332,9 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   // ── retrieve ───────────────────────────────────────────────────────────────────
 
-  async retrieve(id: string): Promise<Uint8Array> {
+  async retrieve(
+    id: string,
+  ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
       throw new Error(
         `[dStorage/arweave] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
@@ -345,6 +347,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // they materialise in memory, and (b) grab the X-Content-Hash tag for
     // integrity verification — both in a single round trip.
     let storedHash: string | undefined;
+    const tags: Record<string, string> = {};
     if (!this.skipIntegrityCheck) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -370,14 +373,13 @@ export class ArweaveStorageAdapter implements StorageAdapter {
             decode: true,
             string: true,
           }) as string;
-          if (name === CONTENT_HASH_TAG) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            storedHash = (tag as any).get("value", {
-              decode: true,
-              string: true,
-            }) as string;
-            break;
-          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const value = (tag as any).get("value", {
+            decode: true,
+            string: true,
+          }) as string;
+          tags[name] = value;
+          if (name === CONTENT_HASH_TAG) storedHash = value;
         }
       } catch (err) {
         if ((err as Error).message.startsWith("[dStorage/arweave]")) throw err;
@@ -426,7 +428,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     }
 
     this.logger?.log("dStorage/arweave", `Retrieved txId: ${id}`);
-    return bytes;
+    return { bytes, tags };
   }
 
   // ── estimateCost ───────────────────────────────────────────────────────────────

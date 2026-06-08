@@ -175,7 +175,6 @@ export class MetaTx {
           storageId: onChainStorageId,
           encryptionScheme: uploadCrypto.encryptionScheme,
           storageProvider: uploadResult.provider,
-          dataLabel: file.name,
           writtenAt: Date.now(),
           keyEnvelope: uploadCrypto.keyEnvelope,
           ownerSecret,

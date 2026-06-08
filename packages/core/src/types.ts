@@ -81,12 +81,15 @@ export interface UploadProgress {
 
 export interface UploadOptions {
   /**
-   * Optional key/value tags attached to the on-chain reference.
-   *
-   * The `"label"` key is written as `dataLabel` on-chain and is **publicly readable**
-   * by anyone querying the DataRegistry — do not use it for names, email addresses,
-   * medical categories, or anything that could identify a person or reveal what the
-   * encrypted content contains.
+   * Unencrypted key/value tags forwarded to the storage layer (e.g. Arweave tx tags).
+   * Never written on-chain.
+   */
+  tags?: Record<string, string>;
+  /**
+   * Encrypted key/value metadata stored on-chain alongside the key envelope.
+   * Encrypted with the content DEK — only holders of a valid KEK can read it.
+   * Returned in `RetrieveResult.metadata` after decryption.
+   * Not supported for public (`isPublic: true`) uploads.
    */
   metadata?: Record<string, string>;
   onProgress?: (progress: UploadProgress) => void;
@@ -147,12 +150,6 @@ export interface UploadResult {
 /** Options for dStorage.registerReference() */
 export interface RegisterReferenceOptions {
   /**
-   * Human-readable label written as `dataLabel` on-chain.
-   *
-   * **PLAINTEXT ON-CHAIN.** Do not use PII or content-revealing text.
-   */
-  label?: string;
-  /**
    * Storage provider name recorded in the chain reference.
    * Defaults to the configured `storageAdapter.name`.
    */
@@ -185,8 +182,10 @@ export interface UpdateUploadResult {
 export interface RetrieveResult {
   /** The raw decrypted bytes */
   bytes: Uint8Array;
-  /** Metadata attached at upload time */
+  /** Decrypted on-chain metadata (empty when none was provided at upload time or when retrieved without a chain reference) */
   metadata: Record<string, string>;
+  /** Unencrypted tags attached to the storage-layer upload (e.g. Arweave tx tags) */
+  tags: Record<string, string>;
 }
 
 // ── Protocol-level AAD constants ──────────────────────────────────────────────
@@ -206,6 +205,9 @@ export const PAYLOAD_AAD: Uint8Array = _aadEnc.encode("dstorage:payload:v1");
  * manifest detection is cryptographic, not based on JSON shape inspection.
  */
 export const MANIFEST_AAD: Uint8Array = _aadEnc.encode("dstorage:manifest:v1");
+
+/** AAD for encrypted on-chain metadata (stored in ChainReference.encryptedMetadata). */
+export const METADATA_AAD: Uint8Array = _aadEnc.encode("dstorage:metadata:v1");
 
 /**
  * Per-chunk AAD that binds a ciphertext to its position in a chunked upload.

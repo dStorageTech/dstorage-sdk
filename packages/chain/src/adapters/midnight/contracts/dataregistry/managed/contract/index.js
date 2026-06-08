@@ -16,14 +16,14 @@ class _ReferenceEntry_0 {
       storageId: _descriptor_1.fromValue(value_0),
       encryptionScheme: _descriptor_1.fromValue(value_0),
       storageProvider: _descriptor_1.fromValue(value_0),
-      dataLabel: _descriptor_1.fromValue(value_0),
+      metadata: _descriptor_1.fromValue(value_0),
       writtenAt: _descriptor_2.fromValue(value_0),
       keyEnvelope: _descriptor_1.fromValue(value_0),
       ownerCommitment: _descriptor_0.fromValue(value_0)
     }
   }
   toValue(value_0) {
-    return _descriptor_1.toValue(value_0.storageId).concat(_descriptor_1.toValue(value_0.encryptionScheme).concat(_descriptor_1.toValue(value_0.storageProvider).concat(_descriptor_1.toValue(value_0.dataLabel).concat(_descriptor_2.toValue(value_0.writtenAt).concat(_descriptor_1.toValue(value_0.keyEnvelope).concat(_descriptor_0.toValue(value_0.ownerCommitment)))))));
+    return _descriptor_1.toValue(value_0.storageId).concat(_descriptor_1.toValue(value_0.encryptionScheme).concat(_descriptor_1.toValue(value_0.storageProvider).concat(_descriptor_1.toValue(value_0.metadata).concat(_descriptor_2.toValue(value_0.writtenAt).concat(_descriptor_1.toValue(value_0.keyEnvelope).concat(_descriptor_0.toValue(value_0.ownerCommitment)))))));
   }
 }
 
@@ -104,27 +104,27 @@ export class Contract {
         const storageId_0 = args_1[1];
         const encryptionScheme_0 = args_1[2];
         const storageProvider_0 = args_1[3];
-        const dataLabel_0 = args_1[4];
+        const metadata_0 = args_1[4];
         const writtenAt_0 = args_1[5];
         const keyEnvelope_0 = args_1[6];
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 158 char 1',
+                                     'DataRegistry.compact line 159 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 5 (argument 6 as invoked from Typescript)',
-                                     'DataRegistry.compact line 158 char 1',
+                                     'DataRegistry.compact line 159 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
           input: {
-            value: _descriptor_1.toValue(storageId_0).concat(_descriptor_1.toValue(encryptionScheme_0).concat(_descriptor_1.toValue(storageProvider_0).concat(_descriptor_1.toValue(dataLabel_0).concat(_descriptor_2.toValue(writtenAt_0).concat(_descriptor_1.toValue(keyEnvelope_0)))))),
+            value: _descriptor_1.toValue(storageId_0).concat(_descriptor_1.toValue(encryptionScheme_0).concat(_descriptor_1.toValue(storageProvider_0).concat(_descriptor_1.toValue(metadata_0).concat(_descriptor_2.toValue(writtenAt_0).concat(_descriptor_1.toValue(keyEnvelope_0)))))),
             alignment: _descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_2.alignment().concat(_descriptor_1.alignment())))))
           },
           output: undefined,
@@ -136,7 +136,7 @@ export class Contract {
                                                 storageId_0,
                                                 encryptionScheme_0,
                                                 storageProvider_0,
-                                                dataLabel_0,
+                                                metadata_0,
                                                 writtenAt_0,
                                                 keyEnvelope_0);
         partialProofData.output = { value: _descriptor_0.toValue(result_0), alignment: _descriptor_0.alignment() };
@@ -151,14 +151,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 199 char 1',
+                                     'DataRegistry.compact line 200 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 199 char 1',
+                                     'DataRegistry.compact line 200 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
@@ -187,34 +187,34 @@ export class Contract {
         const storageId_0 = args_1[2];
         const encryptionScheme_0 = args_1[3];
         const storageProvider_0 = args_1[4];
-        const dataLabel_0 = args_1[5];
+        const metadata_0 = args_1[5];
         const writtenAt_0 = args_1[6];
         const keyEnvelope_0 = args_1[7];
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 222 char 1',
+                                     'DataRegistry.compact line 223 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 222 char 1',
+                                     'DataRegistry.compact line 223 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 6 (argument 7 as invoked from Typescript)',
-                                     'DataRegistry.compact line 222 char 1',
+                                     'DataRegistry.compact line 223 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
           input: {
-            value: _descriptor_0.toValue(refId_0).concat(_descriptor_1.toValue(storageId_0).concat(_descriptor_1.toValue(encryptionScheme_0).concat(_descriptor_1.toValue(storageProvider_0).concat(_descriptor_1.toValue(dataLabel_0).concat(_descriptor_2.toValue(writtenAt_0).concat(_descriptor_1.toValue(keyEnvelope_0))))))),
+            value: _descriptor_0.toValue(refId_0).concat(_descriptor_1.toValue(storageId_0).concat(_descriptor_1.toValue(encryptionScheme_0).concat(_descriptor_1.toValue(storageProvider_0).concat(_descriptor_1.toValue(metadata_0).concat(_descriptor_2.toValue(writtenAt_0).concat(_descriptor_1.toValue(keyEnvelope_0))))))),
             alignment: _descriptor_0.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_2.alignment().concat(_descriptor_1.alignment()))))))
           },
           output: undefined,
@@ -227,7 +227,7 @@ export class Contract {
                                                  storageId_0,
                                                  encryptionScheme_0,
                                                  storageProvider_0,
-                                                 dataLabel_0,
+                                                 metadata_0,
                                                  writtenAt_0,
                                                  keyEnvelope_0);
         partialProofData.output = { value: [], alignment: [] };
@@ -384,7 +384,7 @@ export class Contract {
                     storageId_0,
                     encryptionScheme_0,
                     storageProvider_0,
-                    dataLabel_0,
+                    metadata_0,
                     writtenAt_0,
                     keyEnvelope_0)
   {
@@ -401,7 +401,7 @@ export class Contract {
                                                                                                                                                                    alignment: _descriptor_11.alignment() } }] } },
                                                                                                                                         { popeq: { cached: true,
                                                                                                                                                    result: undefined } }]).value),
-                                                                             'DataRegistry.compact line 166 char 29'),
+                                                                             'DataRegistry.compact line 167 char 29'),
                                         _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                   partialProofData,
                                                                                                   [
@@ -449,7 +449,7 @@ export class Contract {
     const entry_0 = { storageId: storageId_0,
                       encryptionScheme: encryptionScheme_0,
                       storageProvider: storageProvider_0,
-                      dataLabel: dataLabel_0,
+                      metadata: metadata_0,
                       writtenAt: writtenAt_0,
                       keyEnvelope: keyEnvelope_0,
                       ownerCommitment: ownerCommitment_0 };
@@ -564,7 +564,7 @@ export class Contract {
                      storageId_0,
                      encryptionScheme_0,
                      storageProvider_0,
-                     dataLabel_0,
+                     metadata_0,
                      writtenAt_0,
                      keyEnvelope_0)
   {
@@ -624,7 +624,7 @@ export class Contract {
     const updatedEntry_0 = { storageId: storageId_0,
                              encryptionScheme: encryptionScheme_0,
                              storageProvider: storageProvider_0,
-                             dataLabel: dataLabel_0,
+                             metadata: metadata_0,
                              writtenAt: writtenAt_0,
                              keyEnvelope: keyEnvelope_0,
                              ownerCommitment: entry_0.ownerCommitment };
@@ -719,7 +719,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('member',
                                      'argument 1',
-                                     'DataRegistry.compact line 68 char 1',
+                                     'DataRegistry.compact line 69 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -748,7 +748,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('lookup',
                                      'argument 1',
-                                     'DataRegistry.compact line 68 char 1',
+                                     'DataRegistry.compact line 69 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -824,21 +824,21 @@ export const pureCircuits = {
     if (!(secret_0.buffer instanceof ArrayBuffer && secret_0.BYTES_PER_ELEMENT === 1 && secret_0.length === 32)) {
       __compactRuntime.typeError('computeOwnerCommitment',
                                  'argument 1',
-                                 'DataRegistry.compact line 120 char 1',
+                                 'DataRegistry.compact line 121 char 1',
                                  'Bytes<32>',
                                  secret_0)
     }
     if (!(nonce_0.buffer instanceof ArrayBuffer && nonce_0.BYTES_PER_ELEMENT === 1 && nonce_0.length === 32)) {
       __compactRuntime.typeError('computeOwnerCommitment',
                                  'argument 2',
-                                 'DataRegistry.compact line 120 char 1',
+                                 'DataRegistry.compact line 121 char 1',
                                  'Bytes<32>',
                                  nonce_0)
     }
     if (!(instanceSalt_0.buffer instanceof ArrayBuffer && instanceSalt_0.BYTES_PER_ELEMENT === 1 && instanceSalt_0.length === 32)) {
       __compactRuntime.typeError('computeOwnerCommitment',
                                  'argument 3',
-                                 'DataRegistry.compact line 120 char 1',
+                                 'DataRegistry.compact line 121 char 1',
                                  'Bytes<32>',
                                  instanceSalt_0)
     }
@@ -855,14 +855,14 @@ export const pureCircuits = {
     if (!(refCounter_0.buffer instanceof ArrayBuffer && refCounter_0.BYTES_PER_ELEMENT === 1 && refCounter_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 1',
-                                 'DataRegistry.compact line 139 char 1',
+                                 'DataRegistry.compact line 140 char 1',
                                  'Bytes<32>',
                                  refCounter_0)
     }
     if (!(instanceSalt_0.buffer instanceof ArrayBuffer && instanceSalt_0.BYTES_PER_ELEMENT === 1 && instanceSalt_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 2',
-                                 'DataRegistry.compact line 139 char 1',
+                                 'DataRegistry.compact line 140 char 1',
                                  'Bytes<32>',
                                  instanceSalt_0)
     }

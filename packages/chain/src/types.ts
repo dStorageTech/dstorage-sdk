@@ -55,15 +55,6 @@ export interface ChainReference {
   encryptionScheme?: EncryptionScheme;
   /** Storage network used */
   storageProvider: string;
-  /**
-   * Optional human-readable label for the referenced data (e.g. "profile", "document").
-   *
-   * **PLAINTEXT ON-CHAIN.** Despite the `Opaque<"string">` encoding in the Midnight contract,
-   * this field is publicly readable by anyone querying the DataRegistry. Do not use it for
-   * sensitive information such as names, email addresses, medical categories, or anything
-   * that could identify a person or reveal what the encrypted content contains.
-   */
-  dataLabel?: string;
   /** Timestamp of when the reference was written on-chain */
   writtenAt: number;
   /**
@@ -72,6 +63,12 @@ export interface ChainReference {
    * Any KEK holder can unwrap the key and re-derive ownerSecret = HKDF(key, rawStorageId).
    */
   keyEnvelope: string;
+  /**
+   * Encrypted on-chain metadata. Base64url-encoded ciphertext produced by encrypting
+   * `JSON.stringify(Record<string, string>)` with the content DEK and METADATA_AAD.
+   * Absent for public uploads (no DEK).
+   */
+  encryptedMetadata?: string;
   /**
    * Pre-computed owner secret for ZK witness injection.
    * Derived by the core SDK as: HKDF-SHA256(dek, rawStorageId).
@@ -130,6 +127,17 @@ export interface DataReferenceSummary {
    * has been rotated/corrupted — check the message for details.
    */
   decryptionError?: string;
+  /**
+   * Raw encrypted metadata ciphertext (base64url). Set by chain adapters when the
+   * on-chain record contains an encryptedMetadata field. Core's listReferences()
+   * decrypts this into the `metadata` field using the caller's DEK.
+   */
+  encryptedMetadata?: string;
+  /**
+   * Decrypted on-chain metadata. Populated by the core SDK when the caller owns the reference
+   * and metadata was provided at upload time. Absent if no metadata was uploaded or decryption failed.
+   */
+  metadata?: Record<string, string>;
 }
 
 /**
@@ -141,15 +149,15 @@ export interface ChainReferenceUpdate {
   storageId: string;
   encryptionScheme: EncryptionScheme;
   storageProvider: string;
-  /**
-   * Optional human-readable label for the referenced data.
-   *
-   * **PLAINTEXT ON-CHAIN.** See `ChainReference.dataLabel` for the full warning.
-   */
-  dataLabel?: string;
   writtenAt: number;
   /** JSON-encoded KeyEnvelope wrapping the DEK (private) or ownerSeed (public). Always a non-empty string. */
   keyEnvelope: string;
+  /**
+   * Encrypted on-chain metadata. Base64url-encoded ciphertext produced by encrypting
+   * `JSON.stringify(Record<string, string>)` with the content DEK and METADATA_AAD.
+   * Absent when no metadata was provided at upload time.
+   */
+  encryptedMetadata?: string;
 }
 
 /**

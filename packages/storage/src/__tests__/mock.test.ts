@@ -108,23 +108,23 @@ describe("MockStorageAdapter", () => {
       const adapter = new MockStorageAdapter();
       const data = enc("exact content match test");
       const { id } = await adapter.upload(data);
-      const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toEqual(data);
+      const { bytes } = await adapter.retrieve(id);
+      expect(bytes).toEqual(data);
     });
 
     it("retrieves arbitrary binary data unchanged", async () => {
       const adapter = new MockStorageAdapter();
       const data = new Uint8Array([0, 1, 2, 128, 255]);
       const { id } = await adapter.upload(data);
-      const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toEqual(data);
+      const { bytes } = await adapter.retrieve(id);
+      expect(bytes).toEqual(data);
     });
 
     it("retrieves empty Uint8Array correctly", async () => {
       const adapter = new MockStorageAdapter();
       const { id } = await adapter.upload(new Uint8Array(0));
-      const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toEqual(new Uint8Array(0));
+      const { bytes } = await adapter.retrieve(id);
+      expect(bytes).toEqual(new Uint8Array(0));
     });
 
     it("throws for unknown id with the correct error message", async () => {
@@ -146,9 +146,9 @@ describe("MockStorageAdapter", () => {
       const r1 = await adapter.upload(enc("content A"));
       const r2 = await adapter.upload(enc("content B"));
       const r3 = await adapter.upload(enc("content C"));
-      expect(await adapter.retrieve(r1.id)).toEqual(enc("content A"));
-      expect(await adapter.retrieve(r2.id)).toEqual(enc("content B"));
-      expect(await adapter.retrieve(r3.id)).toEqual(enc("content C"));
+      expect((await adapter.retrieve(r1.id)).bytes).toEqual(enc("content A"));
+      expect((await adapter.retrieve(r2.id)).bytes).toEqual(enc("content B"));
+      expect((await adapter.retrieve(r3.id)).bytes).toEqual(enc("content C"));
     });
 
     it("retrieve after multiple writes does not corrupt earlier entries", async () => {
@@ -156,7 +156,7 @@ describe("MockStorageAdapter", () => {
       const { id: id1 } = await adapter.upload(enc("first"));
       await adapter.upload(enc("second"));
       await adapter.upload(enc("third"));
-      expect(await adapter.retrieve(id1)).toEqual(enc("first"));
+      expect((await adapter.retrieve(id1)).bytes).toEqual(enc("first"));
     });
   });
 

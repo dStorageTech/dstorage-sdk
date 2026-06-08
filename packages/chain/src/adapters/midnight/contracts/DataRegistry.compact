@@ -45,9 +45,10 @@ export struct ReferenceEntry {
   // Empty string ("") when the data was published as public/unencrypted.
   encryptionScheme: Opaque<"string">;
   storageProvider: Opaque<"string">;
-  // Optional caller-defined label (e.g. "profile", "document").
-  // This contract does not validate allowed values.
-  dataLabel: Opaque<"string">;
+  // Encrypted metadata: base64url-encoded ciphertext of JSON-serialised
+  // Record<string,string> encrypted with the content DEK + METADATA_AAD.
+  // Empty string ("") when no metadata was provided at upload time.
+  metadata: Opaque<"string">;
   // Caller-supplied write timestamp.
   writtenAt: Uint<64>;
   // JSON-encoded key envelope containing one or more wrapped copies of the
@@ -152,14 +153,14 @@ export pure circuit deriveRefId(refCounter: Bytes<32>, instanceSalt: Bytes<32>):
 //   encryptionScheme : algorithm identifier used to encrypt storageId and file/data
 //                      (e.g. "xchacha20poly1305-v1"); empty string ("") for public/unencrypted uploads.
 //   storageProvider  : provider identifier (opaque string)
-//   dataLabel        : optional user-defined label (opaque string)
+//   metadata        : base64url-encoded encrypted metadata (empty string if none)
 //   writtenAt        : caller-provided timestamp
 //
 export circuit storeReference(
                  storageId: Opaque<"string">,
                  encryptionScheme: Opaque<"string">,
                  storageProvider: Opaque<"string">,
-                 dataLabel: Opaque<"string">,
+                 metadata: Opaque<"string">,
                  writtenAt: Uint<64>,
                  keyEnvelope: Opaque<"string">
                  ): Bytes<32> {
@@ -175,7 +176,7 @@ export circuit storeReference(
   const entry = ReferenceEntry { storageId,
                                  encryptionScheme,
                                  storageProvider,
-                                 dataLabel,
+                                 metadata,
                                  writtenAt,
                                  keyEnvelope,
                                  ownerCommitment };
@@ -216,7 +217,7 @@ export circuit removeReference(refId: Bytes<32>): [] {
 //   storageId        : new storage content identifier
 //   encryptionScheme : new encryption scheme identifier
 //   storageProvider  : new storage provider identifier
-//   dataLabel        : new user-defined label
+//   metadata        : base64url-encoded encrypted metadata (empty string if none)
 //   writtenAt        : new timestamp
 //
 export circuit updateReference(
@@ -224,7 +225,7 @@ export circuit updateReference(
                  storageId: Opaque<"string">,
                  encryptionScheme: Opaque<"string">,
                  storageProvider: Opaque<"string">,
-                 dataLabel: Opaque<"string">,
+                 metadata: Opaque<"string">,
                  writtenAt: Uint<64>,
                  keyEnvelope: Opaque<"string">
                  ): [] {
@@ -236,7 +237,7 @@ export circuit updateReference(
           ReferenceEntry { storageId,
                            encryptionScheme,
                            storageProvider,
-                           dataLabel,
+                           metadata,
                            writtenAt,
                            keyEnvelope,
                            ownerCommitment: entry.ownerCommitment };

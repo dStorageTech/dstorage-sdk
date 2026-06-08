@@ -36,7 +36,7 @@ const randomEntry = () => ({
   storageId: randomString(32),
   encryptionScheme: "xchacha20poly1305-v1",
   storageProvider: "arweave",
-  dataLabel: "document",
+  metadata: "document",
   writtenAt: randomTimestamp(),
 });
 
@@ -98,7 +98,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
       expect(simulator.getLedger().contractVersion).toBe(
@@ -131,7 +131,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -146,7 +146,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -158,7 +158,7 @@ describe("DataRegistry contract", () => {
       expect(stored.storageId).toBe(entry.storageId);
       expect(stored.encryptionScheme).toBe(entry.encryptionScheme);
       expect(stored.storageProvider).toBe(entry.storageProvider);
-      expect(stored.dataLabel).toBe(entry.dataLabel);
+      expect(stored.metadata).toBe(entry.metadata);
       expect(stored.writtenAt).toBe(entry.writtenAt);
     });
 
@@ -170,7 +170,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -195,14 +195,14 @@ describe("DataRegistry contract", () => {
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
-        entry1.dataLabel,
+        entry1.metadata,
         entry1.writtenAt,
       );
       const refId2 = simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
-        entry2.dataLabel,
+        entry2.metadata,
         entry2.writtenAt,
       );
 
@@ -217,7 +217,7 @@ describe("DataRegistry contract", () => {
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
-        entry1.dataLabel,
+        entry1.metadata,
         entry1.writtenAt,
       );
 
@@ -227,7 +227,7 @@ describe("DataRegistry contract", () => {
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
-        entry2.dataLabel,
+        entry2.metadata,
         entry2.writtenAt,
       );
 
@@ -258,7 +258,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -284,7 +284,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         "",
         owner.secretKey,
@@ -305,14 +305,14 @@ describe("DataRegistry contract", () => {
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
-        entry1.dataLabel,
+        entry1.metadata,
         entry1.writtenAt,
       );
       const refId2 = simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
-        entry2.dataLabel,
+        entry2.metadata,
         entry2.writtenAt,
       );
 
@@ -332,7 +332,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -355,7 +355,7 @@ describe("DataRegistry contract", () => {
       expect(updated.storageId).toBe(newStorageId);
       expect(updated.encryptionScheme).toBe(newEncryptionScheme);
       expect(updated.storageProvider).toBe(newProvider);
-      expect(updated.dataLabel).toBe(newLabel);
+      expect(updated.metadata).toBe(newLabel);
       expect(updated.writtenAt).toBe(newTimestamp);
     });
 
@@ -365,7 +365,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -412,7 +412,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         "",
         owner.secretKey,
@@ -441,7 +441,7 @@ describe("DataRegistry contract", () => {
         ownerEntry.storageId,
         ownerEntry.encryptionScheme,
         ownerEntry.storageProvider,
-        ownerEntry.dataLabel,
+        ownerEntry.metadata,
         ownerEntry.writtenAt,
       );
 
@@ -452,7 +452,7 @@ describe("DataRegistry contract", () => {
         otherEntry.storageId,
         otherEntry.encryptionScheme,
         otherEntry.storageProvider,
-        otherEntry.dataLabel,
+        otherEntry.metadata,
         otherEntry.writtenAt,
       );
 
@@ -490,7 +490,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -514,7 +514,7 @@ describe("DataRegistry contract", () => {
           randomString(),
           entry.encryptionScheme,
           entry.storageProvider,
-          entry.dataLabel,
+          entry.metadata,
           randomTimestamp(),
         );
 
@@ -533,7 +533,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         "",
         ownerSecret,
@@ -565,7 +565,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         "",
         ownerSecret,
@@ -578,7 +578,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         "",
         otherSecret,
@@ -619,7 +619,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         envelope,
       );
@@ -648,7 +648,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -663,7 +663,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         originalEnvelope,
       );
@@ -674,7 +674,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         newEnvelope,
       );
@@ -689,7 +689,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         '{"kdf":"scrypt","wrappedDek":"abc"}',
       );
@@ -699,7 +699,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         "",
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
         "",
       );
@@ -719,7 +719,7 @@ describe("DataRegistry contract", () => {
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
-        entry1.dataLabel,
+        entry1.metadata,
         entry1.writtenAt,
         envelope1,
       );
@@ -727,7 +727,7 @@ describe("DataRegistry contract", () => {
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
-        entry2.dataLabel,
+        entry2.metadata,
         entry2.writtenAt,
         envelope2,
       );
@@ -751,7 +751,7 @@ describe("DataRegistry contract", () => {
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
-        entry1.dataLabel,
+        entry1.metadata,
         entry1.writtenAt,
         envelope1,
       );
@@ -759,7 +759,7 @@ describe("DataRegistry contract", () => {
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
-        entry2.dataLabel,
+        entry2.metadata,
         entry2.writtenAt,
         envelope2,
       );
@@ -769,7 +769,7 @@ describe("DataRegistry contract", () => {
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
-        entry1.dataLabel,
+        entry1.metadata,
         entry1.writtenAt,
         '{"kdf":"scrypt","wrappedDek":"rotated"}',
       );
@@ -787,7 +787,7 @@ describe("DataRegistry contract", () => {
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
-        entry.dataLabel,
+        entry.metadata,
         entry.writtenAt,
       );
 
@@ -799,7 +799,7 @@ describe("DataRegistry contract", () => {
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
-        entry2.dataLabel,
+        entry2.metadata,
         entry2.writtenAt,
       );
 

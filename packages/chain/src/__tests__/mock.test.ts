@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MockChainAdapter } from "../adapters/mock.js";
+import type { ChainReferenceUpdate } from "../types.js";
 
 // Module-level refs/permissions Maps are shared within this file but fresh
 // per test file (vitest isolates module state between files).
@@ -11,6 +12,19 @@ function uniqueRef(suffix: string) {
     storageProvider: "mock",
     owner: `0xOwner_${suffix}`,
     writtenAt: Date.now(),
+  };
+}
+
+function makeUpdate(
+  partial: Partial<ChainReferenceUpdate> = {},
+): ChainReferenceUpdate {
+  return {
+    storageId: "updated-store-id",
+    encryptionScheme: "xchacha20poly1305-v1",
+    storageProvider: "mock",
+    writtenAt: Date.now(),
+    keyEnvelope: "{}",
+    ...partial,
   };
 }
 
@@ -72,12 +86,15 @@ describe("MockChainAdapter", () => {
       expect(stored.writtenAt).toBeGreaterThanOrEqual(before);
     });
 
-    it("writes a reference with optional dataLabel", async () => {
+    it("writes a reference with optional encryptedMetadata", async () => {
       const adapter = new MockChainAdapter();
-      const ref = { ...uniqueRef("wr7"), dataLabel: "insurance-card" };
+      const ref = {
+        ...uniqueRef("wr7"),
+        encryptedMetadata: "base64urlciphertext",
+      };
       const result = await adapter.writeReference(ref);
       const stored = await adapter.readReference(result.refId);
-      expect(stored.dataLabel).toBe("insurance-card");
+      expect(stored.encryptedMetadata).toBe("base64urlciphertext");
     });
   });
 
@@ -187,16 +204,22 @@ describe("MockChainAdapter", () => {
     it("updates the stored fields", async () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(uniqueRef("upd1"));
-      await adapter.updateReference!(refId, { dataLabel: "updated-label" });
+      await adapter.updateReference!(
+        refId,
+        makeUpdate({ encryptedMetadata: "updated-ciphertext" }),
+      );
       const ref = await adapter.readReference(refId);
-      expect(ref.dataLabel).toBe("updated-label");
+      expect(ref.encryptedMetadata).toBe("updated-ciphertext");
     });
 
     it("preserves fields not included in the update", async () => {
       const adapter = new MockChainAdapter();
       const original = uniqueRef("upd2");
       const { refId } = await adapter.writeReference(original);
-      await adapter.updateReference!(refId, { dataLabel: "new-label" });
+      await adapter.updateReference!(
+        refId,
+        makeUpdate({ storageId: original.storageId }),
+      );
       const ref = await adapter.readReference(refId);
       expect(ref.storageId).toBe(original.storageId);
       expect(ref.storageProvider).toBe(original.storageProvider);
@@ -205,7 +228,7 @@ describe("MockChainAdapter", () => {
     it("throws for an unknown refId", async () => {
       const adapter = new MockChainAdapter();
       await expect(
-        adapter.updateReference!("ref_nonexistent", { dataLabel: "x" }),
+        adapter.updateReference!("ref_nonexistent", makeUpdate()),
       ).rejects.toThrow(
         "[dStorage/mock-chain] No reference found for refId: ref_nonexistent",
       );
@@ -215,9 +238,12 @@ describe("MockChainAdapter", () => {
       const adapter = new MockChainAdapter();
       const { refId: id1 } = await adapter.writeReference(uniqueRef("upd4a"));
       const { refId: id2 } = await adapter.writeReference(uniqueRef("upd4b"));
-      await adapter.updateReference!(id1, { dataLabel: "changed" });
+      await adapter.updateReference!(
+        id1,
+        makeUpdate({ encryptedMetadata: "changed-ciphertext" }),
+      );
       const ref2 = await adapter.readReference(id2);
-      expect(ref2.dataLabel).not.toBe("changed");
+      expect(ref2.encryptedMetadata).not.toBe("changed-ciphertext");
     });
   });
 
@@ -265,7 +291,7 @@ describe("MockChainAdapter", () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(refWithSecret("own4"));
       await expect(
-        adapter.updateReference!(refId, { dataLabel: "updated" }, ownerSecret),
+        adapter.updateReference!(refId, makeUpdate(), ownerSecret),
       ).resolves.toBeUndefined();
     });
 
@@ -273,7 +299,7 @@ describe("MockChainAdapter", () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(refWithSecret("own5"));
       await expect(
-        adapter.updateReference!(refId, { dataLabel: "updated" }, wrongSecret),
+        adapter.updateReference!(refId, makeUpdate(), wrongSecret),
       ).rejects.toThrow("[dStorage/mock-chain] ownerSecret mismatch");
     });
 
@@ -281,7 +307,7 @@ describe("MockChainAdapter", () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(refWithSecret("own6"));
       await expect(
-        adapter.updateReference!(refId, { dataLabel: "updated" }),
+        adapter.updateReference!(refId, makeUpdate()),
       ).rejects.toThrow("[dStorage/mock-chain] ownerSecret required");
     });
 
@@ -295,7 +321,7 @@ describe("MockChainAdapter", () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(uniqueRef("own8"));
       await expect(
-        adapter.updateReference!(refId, { dataLabel: "ok" }),
+        adapter.updateReference!(refId, makeUpdate()),
       ).resolves.toBeUndefined();
     });
 

@@ -47,16 +47,16 @@ describe("AutonomiStorageAdapter", () => {
       const adapter = new AutonomiStorageAdapter();
       const data = enc("exact content match");
       const { id } = await adapter.upload(data);
-      const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toEqual(data);
+      const { bytes } = await adapter.retrieve(id);
+      expect(bytes).toEqual(data);
     });
 
     it("retrieves arbitrary binary data unchanged", async () => {
       const adapter = new AutonomiStorageAdapter();
       const data = new Uint8Array([0, 1, 2, 128, 255]);
       const { id } = await adapter.upload(data);
-      const retrieved = await adapter.retrieve(id);
-      expect(retrieved).toEqual(data);
+      const { bytes } = await adapter.retrieve(id);
+      expect(bytes).toEqual(data);
     });
 
     it("throws for unknown id", async () => {
@@ -70,8 +70,8 @@ describe("AutonomiStorageAdapter", () => {
       const adapter = new AutonomiStorageAdapter();
       const r1 = await adapter.upload(enc("content A"));
       const r2 = await adapter.upload(enc("content B"));
-      expect(await adapter.retrieve(r1.id)).toEqual(enc("content A"));
-      expect(await adapter.retrieve(r2.id)).toEqual(enc("content B"));
+      expect((await adapter.retrieve(r1.id)).bytes).toEqual(enc("content A"));
+      expect((await adapter.retrieve(r2.id)).bytes).toEqual(enc("content B"));
     });
   });
 

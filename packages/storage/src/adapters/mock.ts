@@ -149,7 +149,9 @@ export class MockStorageAdapter implements StorageAdapter {
     };
   }
 
-  async retrieve(id: string): Promise<Uint8Array> {
+  async retrieve(
+    id: string,
+  ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     const raw = storeGet(`dstorage:blob:${id}`);
 
     if (!raw) {
@@ -158,9 +160,15 @@ export class MockStorageAdapter implements StorageAdapter {
       );
     }
 
-    const entry = JSON.parse(raw) as { data: string };
+    const entry = JSON.parse(raw) as {
+      data: string;
+      metadata?: Record<string, string>;
+    };
     this.logger?.log("dStorage/mock", `Retrieved id: ${id}`);
-    return base64ToUint8Array(entry.data);
+    return {
+      bytes: base64ToUint8Array(entry.data),
+      tags: entry.metadata ?? {},
+    };
   }
 
   async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {

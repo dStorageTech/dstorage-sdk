@@ -210,7 +210,9 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
 
   // ── retrieve ───────────────────────────────────────────────────────────────────
 
-  async retrieve(id: string): Promise<Uint8Array> {
+  async retrieve(
+    id: string,
+  ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
       throw new Error(
         `[dStorage/arweave-turbo] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
@@ -218,6 +220,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     }
     // ── Pre-fetch transaction metadata ────────────────────────────────────────
     let storedHash: string | undefined;
+    const tags: Record<string, string> = {};
     if (!this.skipIntegrityCheck) {
       const metaResp = await fetch(`${this.gateway}/tx/${id}`);
       if (!metaResp.ok) {
@@ -232,10 +235,9 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       };
       for (const tag of tx.tags ?? []) {
         const name = new TextDecoder().decode(_base64urlToBytes(tag.name));
-        if (name === CONTENT_HASH_TAG) {
-          storedHash = new TextDecoder().decode(_base64urlToBytes(tag.value));
-          break;
-        }
+        const value = new TextDecoder().decode(_base64urlToBytes(tag.value));
+        tags[name] = value;
+        if (name === CONTENT_HASH_TAG) storedHash = value;
       }
       if (!storedHash) {
         throw new Error(
@@ -283,7 +285,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     }
 
     this.logger?.log("dStorage/arweave-turbo", `Retrieved txId: ${id}`);
-    return bytes;
+    return { bytes, tags };
   }
 
   // ── estimateCost ───────────────────────────────────────────────────────────────

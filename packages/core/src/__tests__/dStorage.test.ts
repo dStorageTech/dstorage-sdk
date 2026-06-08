@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import type { StorageProviderName } from "@dstorage/storage";
@@ -552,6 +552,137 @@ describe("listReferences", () => {
   });
 });
 
+// ── metadata and tags ─────────────────────────────────────────────────────────
+
+describe("upload metadata option", () => {
+  it("metadata is returned by retrieveByRefId after upload", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("with metadata"), {
+      metadata: { title: "My File", category: "test" },
+    });
+    const result = await ds.retrieveByRefId(chainRefId!);
+    expect(result.metadata).toEqual({ title: "My File", category: "test" });
+  });
+
+  it("metadata is empty object when none was provided at upload", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("no metadata"));
+    const result = await ds.retrieveByRefId(chainRefId!);
+    expect(result.metadata).toEqual({});
+  });
+
+  it("metadata is decrypted in listReferences for own uploads", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("listed with metadata"), {
+      metadata: { source: "test-suite" },
+    });
+    const refs = await ds.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.metadata).toEqual({ source: "test-suite" });
+  });
+
+  it("metadata is absent in listReferences when none was provided", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("no meta listed"));
+    const refs = await ds.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry?.metadata).toBeUndefined();
+  });
+
+  it("another user cannot decrypt metadata from listReferences", async () => {
+    const sharedStorage = new MockStorageAdapter();
+    const sharedChain = new MockChainAdapter();
+    const alice = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: sharedChain,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "alice-passphrase-meta",
+          salt: "alice-meta",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    const bob = new DStorage({
+      storageAdapter: sharedStorage,
+      chainAdapter: sharedChain,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "bob-passphrase-meta",
+          salt: "bob-meta",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await alice.init();
+    await bob.init();
+
+    const { chainRefId } = await alice.upload(enc("alice secret"), {
+      metadata: { secret: "alice-only" },
+    });
+    const refs = await bob.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    // Bob cannot decrypt Alice's metadata — field is absent
+    expect(entry?.metadata).toBeUndefined();
+  });
+
+  it("throws when metadata is used with isPublic upload", async () => {
+    const ds = await makeInitedDStorage();
+    await expect(
+      ds.upload(enc("public with meta"), {
+        metadata: { key: "val" },
+        isPublic: true,
+      }),
+    ).rejects.toThrow("[dStorage]");
+  });
+});
+
+describe("upload tags option", () => {
+  it("tags are forwarded to the storage adapter", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const uploadSpy = vi.spyOn(storage, "upload");
+    await ds.upload(enc("tagged content"), {
+      tags: { "App-Name": "dstorage-test" },
+    });
+
+    expect(uploadSpy).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.objectContaining({ "App-Name": "dstorage-test" }),
+    );
+  });
+
+  it("tags are returned in RetrieveResult.tags from retrieveByRefId", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.upload(enc("tagged"), {
+      tags: { "App-Name": "my-app" },
+    });
+    const result = await ds.retrieveByRefId(chainRefId!);
+    expect(result.tags).toMatchObject({ "App-Name": "my-app" });
+  });
+
+  it("tags and metadata can both be provided; metadata is encrypted, tags are not", async () => {
+    const config = makeConfig();
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.upload(enc("both"), {
+      tags: { "App-Name": "app" },
+      metadata: { title: "My Doc" },
+    });
+    const result = await ds.retrieveByRefId(chainRefId!);
+    expect(result.tags).toMatchObject({ "App-Name": "app" });
+    expect(result.metadata).toEqual({ title: "My Doc" });
+  });
+});
+
 // ── removeReference ───────────────────────────────────────────────────────────
 
 describe("removeReference", () => {
@@ -680,22 +811,6 @@ describe("registerReference", () => {
     const refs = await chain.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
     expect(entry?.storageProvider).toBe("arweave");
-  });
-
-  it("forwards label option as dataLabel on the chain reference", async () => {
-    const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
-    const ds = new DStorage(config);
-    await ds.init();
-
-    const { chainRefId } = await ds.registerReference(
-      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-      { label: "my-label" },
-    );
-
-    // dataLabel is on the full ChainReference — read it directly from the adapter
-    const ref = await chain.readReference(chainRefId);
-    expect(ref.dataLabel).toBe("my-label");
   });
 
   it("uses provided refId instead of the one returned by the chain adapter", async () => {

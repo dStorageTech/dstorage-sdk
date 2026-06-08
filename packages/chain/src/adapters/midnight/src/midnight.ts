@@ -811,6 +811,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           null) as EncryptionScheme | null,
         ownerCommitment: uint8ArrayToHex(entry.ownerCommitment),
         keyEnvelope: entry.keyEnvelope ?? "",
+        ...(entry.metadata ? { encryptedMetadata: entry.metadata } : {}),
       }))
       .sort((a, b) => a.refId.localeCompare(b.refId));
   }
@@ -837,7 +838,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       storageId: refEntry.storageId,
       encryptionScheme: refEntry.encryptionScheme as EncryptionScheme,
       storageProvider: refEntry.storageProvider,
-      dataLabel: refEntry.dataLabel,
+      ...(refEntry.metadata ? { encryptedMetadata: refEntry.metadata } : {}),
       writtenAt: Number(refEntry.writtenAt),
       keyEnvelope: refEntry.keyEnvelope ?? "",
     };
@@ -888,7 +889,7 @@ export class MidnightChainAdapter implements ChainAdapter {
             ref.storageId,
             ref.encryptionScheme ?? "",
             ref.storageProvider,
-            ref.dataLabel ?? "",
+            ref.encryptedMetadata ?? "",
             BigInt(ref.writtenAt),
             ref.keyEnvelope ?? "",
             ownerSecret,
@@ -981,7 +982,7 @@ export class MidnightChainAdapter implements ChainAdapter {
             update.storageId,
             update.encryptionScheme,
             update.storageProvider,
-            update.dataLabel ?? "",
+            update.encryptedMetadata ?? "",
             BigInt(update.writtenAt),
             update.keyEnvelope ?? "",
             secret,

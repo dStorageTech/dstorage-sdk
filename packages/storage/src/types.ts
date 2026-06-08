@@ -84,9 +84,11 @@ export interface StorageAdapter {
    * those encrypted bytes as-is. If plaintext bytes were stored, this returns
    * plaintext bytes as-is. Callers are responsible for decryption when needed and can
    * use the @dstorage/crypto package or public APIs for that purpose.
-   * @returns The exact bytes stored by upload()
+   * @returns The exact bytes stored by upload(), plus any unencrypted tags attached at upload time
    */
-  retrieve(id: string): Promise<Uint8Array>;
+  retrieve(
+    id: string,
+  ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }>;
 
   /**
    * Estimate the cost of storing the given data.

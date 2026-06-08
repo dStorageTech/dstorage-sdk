@@ -289,7 +289,7 @@ describe("chunked manifest fields are correct in storage", () => {
     await ds.init();
     const result = await ds.upload(bytes, { isPublic: true });
     // For public uploads storageId is the plaintext manifest storage ID.
-    const raw = await storageAdapter.retrieve(result.storageId);
+    const { bytes: raw } = await storageAdapter.retrieve(result.storageId);
     return JSON.parse(new TextDecoder().decode(raw));
   }
 
@@ -334,18 +334,10 @@ describe("chunked manifest fields are correct in storage", () => {
   });
 });
 
-// ── Backward compatibility: old-style metadata second argument ─────────────────
+// ── UploadOptions.metadata round-trip ─────────────────────────────────────────
 
-describe("upload backward compatibility", () => {
-  it("accepts old-style metadata Record as second arg", async () => {
-    const ds = await makeInitedDStorage();
-    const result = await ds.upload(new TextEncoder().encode("hello"), {
-      label: "my-label",
-    });
-    expect(result.chainRefId).toBeDefined();
-  });
-
-  it("accepts new UploadOptions with metadata", async () => {
+describe("upload with metadata option", () => {
+  it("accepts UploadOptions with metadata", async () => {
     const ds = await makeInitedDStorage();
     const result = await ds.upload(new TextEncoder().encode("hello"), {
       metadata: { label: "my-label" },

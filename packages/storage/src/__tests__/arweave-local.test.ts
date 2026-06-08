@@ -436,8 +436,8 @@ describe("ArweaveLocalStorageAdapter", () => {
 
   describe("retrieve", () => {
     it("returns the data bytes for a known txId", async () => {
-      const data = await makeAdapter().retrieve(MOCK_TX_ID);
-      expect(data).toEqual(MOCK_RETRIEVED_DATA);
+      const { bytes } = await makeAdapter().retrieve(MOCK_TX_ID);
+      expect(bytes).toEqual(MOCK_RETRIEVED_DATA);
     });
   });
 

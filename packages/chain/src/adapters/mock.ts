@@ -133,6 +133,9 @@ export class MockChainAdapter implements ChainAdapter {
         ? bytesToHex(commitments.get(refId)!)
         : "",
       keyEnvelope: ref.keyEnvelope ?? "",
+      ...(ref.encryptedMetadata
+        ? { encryptedMetadata: ref.encryptedMetadata }
+        : {}),
     }));
   }
 

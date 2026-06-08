@@ -87,7 +87,7 @@
           }
         },
         {
-          "name": "dataLabel",
+          "name": "metadata",
           "type": {
             "type-name": "Opaque",
             "tsType": "string"
@@ -166,7 +166,7 @@
           }
         },
         {
-          "name": "dataLabel",
+          "name": "metadata",
           "type": {
             "type-name": "Opaque",
             "tsType": "string"
@@ -243,7 +243,7 @@
             }
           },
           {
-            "name": "dataLabel",
+            "name": "metadata",
             "type": {
               "type-name": "Opaque",
               "tsType": "string"

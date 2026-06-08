@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MockMidnightChainAdapter } from "../adapters/mockMidnight.js";
+import type { ChainReferenceUpdate } from "../types.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -15,6 +16,19 @@ function makeRef(tag: string) {
     writtenAt: Date.now(),
     keyEnvelope:
       '{"v":1,"wrappers":[{"wrapKeyName":"test","algorithm":"xchacha20poly1305-v1","kekDerivation":"hkdf-sha256-v1","wrappedDek":"AAAA"}]}',
+  };
+}
+
+function makeUpdate(
+  partial: Partial<ChainReferenceUpdate> = {},
+): ChainReferenceUpdate {
+  return {
+    storageId: "updated-store-id",
+    encryptionScheme: "xchacha20poly1305-v1",
+    storageProvider: "mock",
+    writtenAt: Date.now(),
+    keyEnvelope: "{}",
+    ...partial,
   };
 }
 
@@ -211,12 +225,15 @@ describe("MockMidnightChainAdapter.updateReference", () => {
     await vi.runAllTimersAsync();
     const { refId } = await wp;
 
-    const up = adapter.updateReference!(refId, { dataLabel: "updated-label" });
+    const up = adapter.updateReference!(
+      refId,
+      makeUpdate({ encryptedMetadata: "updated-ciphertext" }),
+    );
     await vi.runAllTimersAsync();
     await up;
 
     const ref = await adapter.readReference(refId);
-    expect(ref.dataLabel).toBe("updated-label");
+    expect(ref.encryptedMetadata).toBe("updated-ciphertext");
   });
 
   it("preserves fields not included in the update", async () => {
@@ -231,7 +248,10 @@ describe("MockMidnightChainAdapter.updateReference", () => {
     await vi.runAllTimersAsync();
     const { refId } = await wp;
 
-    const up = adapter.updateReference!(refId, { dataLabel: "new-label" });
+    const up = adapter.updateReference!(
+      refId,
+      makeUpdate({ storageId: original.storageId }),
+    );
     await vi.runAllTimersAsync();
     await up;
 
@@ -247,7 +267,7 @@ describe("MockMidnightChainAdapter.updateReference", () => {
       proofServerMaxMs: 0,
     });
 
-    const p = adapter.updateReference!("ref_nonexistent", { dataLabel: "x" });
+    const p = adapter.updateReference!("ref_nonexistent", makeUpdate());
     const assertion = expect(p).rejects.toThrow();
     await vi.runAllTimersAsync();
     await assertion;
@@ -268,11 +288,14 @@ describe("MockMidnightChainAdapter.updateReference", () => {
     await vi.runAllTimersAsync();
     const { refId: id2 } = await wp2;
 
-    const up = adapter.updateReference!(id1, { dataLabel: "changed" });
+    const up = adapter.updateReference!(
+      id1,
+      makeUpdate({ encryptedMetadata: "changed-ciphertext" }),
+    );
     await vi.runAllTimersAsync();
     await up;
 
     const ref2 = await adapter.readReference(id2);
-    expect(ref2.dataLabel).not.toBe("changed");
+    expect(ref2.encryptedMetadata).not.toBe("changed-ciphertext");
   });
 });

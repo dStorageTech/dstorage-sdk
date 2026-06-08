@@ -15,7 +15,6 @@ import type {
   ChainAdapterLogger,
   DataReferenceSummary,
   ChainQuote,
-  WalletBalances,
 } from "../types.js";
 import { bytesToBase64url } from "@dstorage/crypto";
 
