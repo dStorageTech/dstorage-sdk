@@ -183,6 +183,20 @@ async function retrieveByRefId(sdk: DStorage, rl: Interface): Promise<void> {
       await rl.question("  Save to file (leave blank to print to console): ")
     ).trim();
 
+    // Show metadata (decrypted on-chain) if present
+    const metaEntries = Object.entries(result.metadata ?? {});
+    if (metaEntries.length > 0) {
+      console.log("  On-chain Metadata:");
+      for (const [k, v] of metaEntries) console.log(`    ${k}: ${v}`);
+    }
+
+    // Show storage tags if present
+    const tagEntries = Object.entries(result.tags ?? {});
+    if (tagEntries.length > 0) {
+      console.log("  Storage Tags:");
+      for (const [k, v] of tagEntries) console.log(`    ${k}: ${v}`);
+    }
+
     if (outputPath) {
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outputPath, result.bytes);
@@ -269,6 +283,24 @@ async function uploadFile(
   const isPublic =
     visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
 
+  // Metadata prompts (only for private uploads — metadata is encrypted with the DEK)
+  let metadata: Record<string, string> | undefined;
+  if (!isPublic) {
+    console.log("  Metadata (press Enter to skip each field):");
+    const name = (await rl.question("    name:     ")).trim();
+    const lastname = (await rl.question("    lastname: ")).trim();
+    const type = (await rl.question("    type:     ")).trim();
+    const age = (await rl.question("    age:      ")).trim();
+    const doctor = (await rl.question("    doctor:   ")).trim();
+    const entries: Record<string, string> = {};
+    if (name) entries["name"] = name;
+    if (lastname) entries["lastname"] = lastname;
+    if (type) entries["type"] = type;
+    if (age) entries["age"] = age;
+    if (doctor) entries["doctor"] = doctor;
+    if (Object.keys(entries).length > 0) metadata = entries;
+  }
+
   const replaceInput = (
     await rl.question("  Replace an existing reference? [y/N]: ")
   )
@@ -293,7 +325,8 @@ async function uploadFile(
       );
       const result = await withTicker(
         () => `Updating reference ${replaceRefId}...`,
-        () => sdk.updateUpload(replaceRefId!, fileContent, { isPublic }),
+        () =>
+          sdk.updateUpload(replaceRefId!, fileContent, { isPublic, metadata }),
       );
       console.log("\n  ✓ Update complete!");
       console.log(`  refId:     ${result.chainRefId}`);
@@ -304,7 +337,7 @@ async function uploadFile(
       );
       const result = await withTicker(
         () => "Generating ZK proof and submitting reference...",
-        () => sdk.upload(fileContent, { isPublic }),
+        () => sdk.upload(fileContent, { isPublic, metadata }),
       );
 
       const visibility = result.encryptionScheme
