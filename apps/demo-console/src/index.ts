@@ -129,6 +129,23 @@ function formatBytesForConsole(bytes: Uint8Array): string {
   ].join("\n");
 }
 
+async function promptMetadata(
+  rl: Interface,
+): Promise<Record<string, string> | undefined> {
+  const metaRaw = (
+    await rl.question(
+      "  Metadata (key1=val1,key2=val2,... or leave blank to skip): ",
+    )
+  ).trim();
+  if (!metaRaw) return undefined;
+  const entries: Record<string, string> = {};
+  for (const pair of metaRaw.split(",")) {
+    const eq = pair.indexOf("=");
+    if (eq > 0) entries[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
+  }
+  return Object.keys(entries).length > 0 ? entries : undefined;
+}
+
 // ── Action handlers ────────────────────────────────────────────────────────────
 
 async function listReferences(
@@ -284,23 +301,7 @@ async function uploadFile(
     visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
 
   // Metadata prompt (only for private uploads — metadata is encrypted with the DEK)
-  let metadata: Record<string, string> | undefined;
-  if (!isPublic) {
-    const metaRaw = (
-      await rl.question(
-        "  Metadata (key1=val1,key2=val2,... or leave blank to skip): ",
-      )
-    ).trim();
-    if (metaRaw) {
-      const entries: Record<string, string> = {};
-      for (const pair of metaRaw.split(",")) {
-        const eq = pair.indexOf("=");
-        if (eq > 0)
-          entries[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
-      }
-      if (Object.keys(entries).length > 0) metadata = entries;
-    }
-  }
+  const metadata = isPublic ? undefined : await promptMetadata(rl);
 
   const replaceInput = (
     await rl.question("  Replace an existing reference? [y/N]: ")
@@ -357,6 +358,28 @@ async function uploadFile(
     }
   } catch (err) {
     logError("during upload", err);
+  }
+}
+
+async function registerMetadataOnly(
+  sdk: DStorage,
+  rl: Interface,
+): Promise<void> {
+  const metadata = await promptMetadata(rl);
+  if (metadata === undefined) {
+    console.log("  (cancelled)\n");
+    return;
+  }
+
+  try {
+    const result = await withTicker(
+      () => "Registering metadata-only reference on-chain...",
+      () => sdk.registerReference(undefined, { metadata }),
+    );
+    console.log("\n  ✓ Metadata reference registered!");
+    console.log(`  refId: ${result.chainRefId}\n`);
+  } catch (err) {
+    logError("registering metadata", err);
   }
 }
 
@@ -701,17 +724,21 @@ async function main(): Promise<void> {
     2. List references
     3. Retrieve by refId
     4. Remove reference
-    5. Quit
+    5. Register metadata only
+    6. Quit
 `);
       const action =
-        (await rl.question("  Choice [1/2/3/4/5, default: 1]: ")).trim() || "1";
+        (await rl.question("  Choice [1/2/3/4/5/6, default: 1]: ")).trim() ||
+        "1";
 
       if (
-        action === "5" ||
+        action === "6" ||
         action.toLowerCase() === "q" ||
         action.toLowerCase() === "quit"
       ) {
         done = true;
+      } else if (action === "5" || action.toLowerCase() === "metadata") {
+        await registerMetadataOnly(sdk, rl);
       } else if (action === "2" || action.toLowerCase() === "list") {
         await listReferences(sdk, chainAdapter);
       } else if (action === "3" || action.toLowerCase() === "retrieve") {
