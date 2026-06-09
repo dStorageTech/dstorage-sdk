@@ -130,7 +130,28 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       );
     }
 
-    return (await res.json()) as ChainReference;
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(
+        `${COMPONENT} readReference failed: invalid JSON response`,
+      );
+    }
+    const d = data as Record<string, unknown>;
+    if (
+      data === null ||
+      typeof data !== "object" ||
+      Array.isArray(data) ||
+      typeof d.storageProvider !== "string" ||
+      typeof d.writtenAt !== "number" ||
+      typeof d.keyEnvelope !== "string"
+    ) {
+      throw new Error(
+        `${COMPONENT} readReference failed: invalid response shape`,
+      );
+    }
+    return data as ChainReference;
   }
 
   async listReferences(): Promise<DataReferenceSummary[]> {
@@ -153,7 +174,35 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       );
     }
 
-    return (await res.json()) as DataReferenceSummary[];
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(
+        `${COMPONENT} listReferences failed: invalid JSON response`,
+      );
+    }
+    if (!Array.isArray(data)) {
+      throw new Error(
+        `${COMPONENT} listReferences failed: expected array in response`,
+      );
+    }
+    for (const item of data) {
+      const it = item as Record<string, unknown>;
+      if (
+        item === null ||
+        typeof item !== "object" ||
+        typeof it.refId !== "string" ||
+        typeof it.storageProvider !== "string" ||
+        typeof it.keyEnvelope !== "string" ||
+        typeof it.ownerCommitment !== "string"
+      ) {
+        throw new Error(
+          `${COMPONENT} listReferences failed: invalid item shape in response`,
+        );
+      }
+    }
+    return data as DataReferenceSummary[];
   }
 
   async removeReference(

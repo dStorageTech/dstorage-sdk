@@ -294,6 +294,47 @@ describe("HttpGatewayChainAdapter", () => {
         "[dStorage/http-gateway-chain] readReference failed: HTTP 404",
       );
     });
+
+    it("throws when server returns empty object {}", async () => {
+      vi.stubGlobal("fetch", mockFetch({}));
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      await expect(adapter.readReference("ref_bad")).rejects.toThrow(
+        "[dStorage/http-gateway-chain] readReference failed: invalid response shape",
+      );
+    });
+
+    it("throws when server returns wrong-shape object", async () => {
+      vi.stubGlobal("fetch", mockFetch({ foo: "bar", count: 42 }));
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      await expect(adapter.readReference("ref_bad")).rejects.toThrow(
+        "[dStorage/http-gateway-chain] readReference failed: invalid response shape",
+      );
+    });
+
+    it("throws when server returns non-JSON body", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.reject(new SyntaxError("Unexpected token")),
+        }),
+      );
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+      });
+      await expect(adapter.readReference("ref_bad")).rejects.toThrow(
+        "[dStorage/http-gateway-chain] readReference failed: invalid JSON response",
+      );
+    });
   });
 
   // ── listReferences ──────────────────────────────────────────────────────────
@@ -345,6 +386,62 @@ describe("HttpGatewayChainAdapter", () => {
       });
       await expect(adapter.listReferences()).rejects.toThrow(
         "[dStorage/http-gateway-chain] listReferences failed: HTTP 503",
+      );
+    });
+
+    it("throws when server returns non-array (empty object)", async () => {
+      vi.stubGlobal("fetch", mockFetch({}));
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+        listUrl: LIST_URL,
+      });
+      await expect(adapter.listReferences()).rejects.toThrow(
+        "[dStorage/http-gateway-chain] listReferences failed: expected array in response",
+      );
+    });
+
+    it("throws when server returns array with empty item {}", async () => {
+      vi.stubGlobal("fetch", mockFetch([{}]));
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+        listUrl: LIST_URL,
+      });
+      await expect(adapter.listReferences()).rejects.toThrow(
+        "[dStorage/http-gateway-chain] listReferences failed: invalid item shape in response",
+      );
+    });
+
+    it("throws when server returns array with wrong-shape item", async () => {
+      vi.stubGlobal("fetch", mockFetch([{ foo: "bar", storageId: "s1" }]));
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+        listUrl: LIST_URL,
+      });
+      await expect(adapter.listReferences()).rejects.toThrow(
+        "[dStorage/http-gateway-chain] listReferences failed: invalid item shape in response",
+      );
+    });
+
+    it("throws when server returns non-JSON body", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.reject(new SyntaxError("Unexpected token")),
+        }),
+      );
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+        listUrl: LIST_URL,
+      });
+      await expect(adapter.listReferences()).rejects.toThrow(
+        "[dStorage/http-gateway-chain] listReferences failed: invalid JSON response",
       );
     });
   });
