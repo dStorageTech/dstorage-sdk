@@ -216,6 +216,16 @@ export const MANIFEST_AAD: Uint8Array = _aadEnc.encode("dstorage:manifest:v1");
 export const METADATA_AAD: Uint8Array = _aadEnc.encode("dstorage:metadata:v1");
 
 /**
+ * HKDF salt for ownerSecret derivation in metadata-only references (no storageId).
+ * Using a fixed non-empty sentinel avoids RFC 5869's empty-salt substitution
+ * (which silently substitutes zeros(32)) and creates a clear domain boundary
+ * from normal-upload ownerSecrets whose salt is the plaintext storageId.
+ */
+export const METADATA_ONLY_OWNER_SECRET_SALT: Uint8Array = _aadEnc.encode(
+  "dstorage:metadata-only:v1",
+);
+
+/**
  * Per-chunk AAD that binds a ciphertext to its position in a chunked upload.
  * A malicious gateway swapping two chunks will produce an AEAD auth failure
  * because the stored AAD won't match the expected index.

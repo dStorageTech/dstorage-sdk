@@ -46,7 +46,13 @@ import type {
   UploadResult,
   WalletInfo,
 } from "./types.js";
-import { PAYLOAD_AAD, MANIFEST_AAD, METADATA_AAD, chunkAad } from "./types.js";
+import {
+  PAYLOAD_AAD,
+  MANIFEST_AAD,
+  METADATA_AAD,
+  METADATA_ONLY_OWNER_SECRET_SALT,
+  chunkAad,
+} from "./types.js";
 import { MetaTx } from "./metaTx/index.js";
 import type {
   DStorageContext,
@@ -375,7 +381,7 @@ export class DStorage implements DStorageContext {
         dek,
         storageId !== undefined
           ? new TextEncoder().encode(storageId)
-          : new Uint8Array(0),
+          : METADATA_ONLY_OWNER_SECRET_SALT,
       );
       const chainResult = await this.config.chainAdapter.writeReference({
         ...(onChainStorageId !== undefined
@@ -615,13 +621,16 @@ export class DStorage implements DStorageContext {
 
     // Private: unwrap DEK, decrypt storageId, derive ownerSecret from DEK.
     // Deterministic: any KEK holder can reproduce this.
-    // For metadata-only references (no storageId), derive from empty buffer.
+    // For metadata-only references (no storageId), use a fixed domain sentinel
+    // as the HKDF salt — avoids RFC 5869 empty-salt substitution (zeros(32)).
     const dek = await this._unwrapDek(ref.keyEnvelope);
     const dekScheme = XChaChaScheme.fromKey(dek);
-    const rawStorageId = ref.storageId
-      ? await dekScheme.decryptStorageId(ref.storageId)
-      : "";
-    return deriveOwnerSecret(dek, new TextEncoder().encode(rawStorageId));
+    const rawStorageIdBytes = ref.storageId
+      ? new TextEncoder().encode(
+          await dekScheme.decryptStorageId(ref.storageId),
+        )
+      : METADATA_ONLY_OWNER_SECRET_SALT;
+    return deriveOwnerSecret(dek, rawStorageIdBytes);
   }
 
   // Accepts an optional pre-built CryptoScheme (unwrapped from a key envelope).
