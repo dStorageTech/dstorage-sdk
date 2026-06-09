@@ -876,6 +876,25 @@ describe("registerReference", () => {
     );
     expect(result.chainRefId).toBe(customRefId);
   });
+
+  it("metadata is returned by retrieveByRefId after registerReference with no content", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.registerReference(undefined, {
+      metadata: { type: "profile", name: "Alice" },
+    });
+    const result = await ds.retrieveByRefId(chainRefId);
+    expect(result.metadata).toEqual({ type: "profile", name: "Alice" });
+    expect(result.bytes).toEqual(new Uint8Array(0));
+    expect(result.tags).toEqual({});
+  });
+
+  it("retrieveByRefId returns empty bytes when registerReference had no storageId and no metadata", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.registerReference(undefined);
+    const result = await ds.retrieveByRefId(chainRefId);
+    expect(result.bytes).toEqual(new Uint8Array(0));
+    expect(result.metadata).toEqual({});
+  });
 });
 
 // ── updateUpload ──────────────────────────────────────────────────────────────

@@ -886,7 +886,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       const { refId, blockHeight } = await this._withProofRetry(
         () =>
           api.storeReference(
-            ref.storageId,
+            ref.storageId ?? "",
             ref.encryptionScheme ?? "",
             ref.storageProvider,
             ref.encryptedMetadata ?? "",

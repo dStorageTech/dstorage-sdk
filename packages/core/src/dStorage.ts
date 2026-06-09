@@ -330,7 +330,7 @@ export class DStorage implements DStorageContext {
    * uploads already split into chunks, register the manifest storageId.
    */
   async registerReference(
-    storageId: string,
+    storageId: string | undefined,
     options: RegisterReferenceOptions = {},
   ): Promise<RegisterReferenceResult> {
     this.assertConnected();
@@ -346,7 +346,22 @@ export class DStorage implements DStorageContext {
     const dek = generateDek();
     try {
       const scheme = XChaChaScheme.fromKey(dek);
-      const onChainStorageId = await scheme.encryptStorageId(storageId);
+
+      const { metadata: rawMeta } = options;
+      const encryptedMetadata = rawMeta
+        ? bytesToBase64url(
+            await scheme.encryptPayload(
+              new TextEncoder().encode(JSON.stringify(rawMeta)),
+              METADATA_AAD,
+            ),
+          )
+        : undefined;
+
+      const onChainStorageId =
+        storageId !== undefined
+          ? await scheme.encryptStorageId(storageId)
+          : undefined;
+
       const wrapperEntries = await Promise.all(
         this._encryptionProviders.map(async (p) => ({
           wrapKeyName: p.name,
@@ -358,14 +373,19 @@ export class DStorage implements DStorageContext {
       );
       const ownerSecret = await deriveOwnerSecret(
         dek,
-        new TextEncoder().encode(storageId),
+        storageId !== undefined
+          ? new TextEncoder().encode(storageId)
+          : new Uint8Array(0),
       );
       const chainResult = await this.config.chainAdapter.writeReference({
-        storageId: onChainStorageId,
+        ...(onChainStorageId !== undefined
+          ? { storageId: onChainStorageId }
+          : {}),
         encryptionScheme: "xchacha20poly1305-v1",
         storageProvider:
           options.storageProvider ?? this.config.storageAdapter.name,
         ...(options.refId !== undefined ? { refId: options.refId } : {}),
+        ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
         writtenAt: Date.now(),
         keyEnvelope,
         ownerSecret,
@@ -595,9 +615,12 @@ export class DStorage implements DStorageContext {
 
     // Private: unwrap DEK, decrypt storageId, derive ownerSecret from DEK.
     // Deterministic: any KEK holder can reproduce this.
+    // For metadata-only references (no storageId), derive from empty buffer.
     const dek = await this._unwrapDek(ref.keyEnvelope);
     const dekScheme = XChaChaScheme.fromKey(dek);
-    const rawStorageId = await dekScheme.decryptStorageId(ref.storageId);
+    const rawStorageId = ref.storageId
+      ? await dekScheme.decryptStorageId(ref.storageId)
+      : "";
     return deriveOwnerSecret(dek, new TextEncoder().encode(rawStorageId));
   }
 
@@ -721,21 +744,22 @@ export class DStorage implements DStorageContext {
       );
     }
 
-    if (!ref.storageId) {
-      throw new Error(
-        `[dStorage] readReference returned no storageId for refId: ${refId}. ` +
-          "The chain adapter response may be missing required fields.",
-      );
-    }
-
     const isPublic = !ref.encryptionScheme;
 
     // For private data: unwrap the DEK from the key envelope, then use it to
     // decrypt both the on-chain storageId and the stored content.
     // For public data: the storageId is already plaintext.
-    let storageId: string;
+    // For metadata-only references (no storageId): get the DEK to decrypt
+    // encryptedMetadata but skip storage retrieval entirely.
+    let storageId: string | undefined;
     let dekScheme: CryptoScheme | undefined;
-    if (isPublic) {
+
+    if (!ref.storageId) {
+      // Metadata-only reference — still need the DEK to decrypt encryptedMetadata.
+      if (!isPublic && ref.keyEnvelope) {
+        dekScheme = await this._getDekScheme(ref.keyEnvelope);
+      }
+    } else if (isPublic) {
       storageId = ref.storageId;
     } else {
       if (!ref.keyEnvelope) {
@@ -748,7 +772,16 @@ export class DStorage implements DStorageContext {
       storageId = await dekScheme.decryptStorageId(ref.storageId);
     }
 
-    const result = await this.retrieveByStorageId(storageId, dekScheme);
+    let contentBytes: Uint8Array;
+    let contentTags: Record<string, string>;
+    if (storageId !== undefined) {
+      const r = await this.retrieveByStorageId(storageId, dekScheme);
+      contentBytes = r.bytes;
+      contentTags = r.tags;
+    } else {
+      contentBytes = new Uint8Array(0);
+      contentTags = {};
+    }
 
     let metadata: Record<string, string> = {};
     if (ref.encryptedMetadata && dekScheme) {
@@ -762,7 +795,7 @@ export class DStorage implements DStorageContext {
       >;
     }
 
-    return { ...result, metadata };
+    return { bytes: contentBytes, tags: contentTags, metadata };
   }
 
   /**

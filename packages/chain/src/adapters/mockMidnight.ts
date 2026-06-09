@@ -209,7 +209,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   async listReferences(): Promise<DataReferenceSummary[]> {
     return [...refs.entries()].map(([refId, ref]) => ({
       refId,
-      storageId: ref.storageId,
+      storageId: ref.storageId ?? null,
       storageProvider: ref.storageProvider,
       encryptionScheme: ref.encryptionScheme ?? null,
       keyEnvelope: ref.keyEnvelope ?? "",

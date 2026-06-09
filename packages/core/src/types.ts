@@ -162,6 +162,12 @@ export interface RegisterReferenceOptions {
    * ignore this field — the chain-assigned ID is returned instead.
    */
   refId?: string;
+  /**
+   * Encrypted key/value metadata stored on-chain alongside the key envelope.
+   * Encrypted with the content DEK — only holders of a valid KEK can read it.
+   * Returned in `RetrieveResult.metadata` after decryption via retrieveByRefId().
+   */
+  metadata?: Record<string, string>;
 }
 
 /** Result returned from dStorage.registerReference() */

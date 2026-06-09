@@ -45,8 +45,9 @@ export interface ChainReference {
    * The storage content ID, base64url-encoded after client-side encryption.
    * (e.g. Arweave txId, encrypted before storage).
    * The encryption algorithm is recorded in encryptionScheme.
+   * Absent for metadata-only references (registered without content).
    */
-  storageId: string;
+  storageId?: string;
   /**
    * Identifies the algorithm used to encrypt storageId and content.
    * "xchacha20poly1305-v1" — encrypted with XChaCha20-Poly1305 (per-upload random DEK).
