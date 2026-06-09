@@ -16,6 +16,10 @@ function makeRef(suffix: string): ChainReference {
   };
 }
 
+function mockLogger() {
+  return { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+}
+
 function mockFetch(body: unknown, status = 200): ReturnType<typeof vi.fn> {
   return vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
@@ -401,28 +405,98 @@ describe("HttpGatewayChainAdapter", () => {
       );
     });
 
-    it("throws when server returns array with empty item {}", async () => {
+    it("skips invalid item {} and returns empty array, warns via logger", async () => {
+      vi.stubGlobal("fetch", mockFetch([{}]));
+      const logger = mockLogger();
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+        listUrl: LIST_URL,
+        logger,
+      });
+      const result = await adapter.listReferences();
+      expect(result).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledOnce();
+      expect(logger.warn.mock.calls[0]![0]).toBe(
+        "[dStorage/http-gateway-chain]",
+      );
+    });
+
+    it("skips wrong-shape item and returns empty array, warns via logger", async () => {
+      vi.stubGlobal("fetch", mockFetch([{ foo: "bar", storageId: "s1" }]));
+      const logger = mockLogger();
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+        listUrl: LIST_URL,
+        logger,
+      });
+      const result = await adapter.listReferences();
+      expect(result).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledOnce();
+    });
+
+    it("returns valid items and warns once when array has valid and invalid entries", async () => {
+      const validItem = {
+        refId: "ref_mix1",
+        storageId: "store_mix1",
+        storageProvider: "mock",
+        encryptionScheme: null,
+        keyEnvelope: "{}",
+        ownerCommitment: "aa".repeat(32),
+      };
+      const validItem2 = {
+        refId: "ref_mix2",
+        storageId: "store_mix2",
+        storageProvider: "mock",
+        encryptionScheme: null,
+        keyEnvelope: "{}",
+        ownerCommitment: "bb".repeat(32),
+      };
+      vi.stubGlobal("fetch", mockFetch([validItem, {}, validItem2]));
+      const logger = mockLogger();
+      const adapter = new HttpGatewayChainAdapter({
+        writeUrl: WRITE_URL,
+        readUrl: READ_URL,
+        listUrl: LIST_URL,
+        logger,
+      });
+      const result = await adapter.listReferences();
+      expect(result).toEqual([validItem, validItem2]);
+      expect(logger.warn).toHaveBeenCalledOnce();
+    });
+
+    it("silently skips bad items when no logger is configured", async () => {
       vi.stubGlobal("fetch", mockFetch([{}]));
       const adapter = new HttpGatewayChainAdapter({
         writeUrl: WRITE_URL,
         readUrl: READ_URL,
         listUrl: LIST_URL,
       });
-      await expect(adapter.listReferences()).rejects.toThrow(
-        "[dStorage/http-gateway-chain] listReferences failed: invalid item shape in response",
-      );
+      await expect(adapter.listReferences()).resolves.toEqual([]);
     });
 
-    it("throws when server returns array with wrong-shape item", async () => {
-      vi.stubGlobal("fetch", mockFetch([{ foo: "bar", storageId: "s1" }]));
+    it("does not warn when all items are valid", async () => {
+      const summaries = [
+        {
+          refId: "ref_ok",
+          storageId: "store_ok",
+          storageProvider: "mock",
+          encryptionScheme: null,
+          keyEnvelope: "{}",
+          ownerCommitment: "cc".repeat(32),
+        },
+      ];
+      vi.stubGlobal("fetch", mockFetch(summaries));
+      const logger = mockLogger();
       const adapter = new HttpGatewayChainAdapter({
         writeUrl: WRITE_URL,
         readUrl: READ_URL,
         listUrl: LIST_URL,
+        logger,
       });
-      await expect(adapter.listReferences()).rejects.toThrow(
-        "[dStorage/http-gateway-chain] listReferences failed: invalid item shape in response",
-      );
+      await adapter.listReferences();
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it("throws when server returns non-JSON body", async () => {

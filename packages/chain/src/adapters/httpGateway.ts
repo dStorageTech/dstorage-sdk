@@ -187,22 +187,27 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
         `${COMPONENT} listReferences failed: expected array in response`,
       );
     }
-    for (const item of data) {
+    const valid: DataReferenceSummary[] = [];
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
       const it = item as Record<string, unknown>;
       if (
         item === null ||
         typeof item !== "object" ||
-        typeof it.refId !== "string" ||
-        typeof it.storageProvider !== "string" ||
-        typeof it.keyEnvelope !== "string" ||
-        typeof it.ownerCommitment !== "string"
+        typeof it["refId"] !== "string" ||
+        typeof it["storageProvider"] !== "string" ||
+        typeof it["keyEnvelope"] !== "string" ||
+        typeof it["ownerCommitment"] !== "string"
       ) {
-        throw new Error(
-          `${COMPONENT} listReferences failed: invalid item shape in response`,
+        this.logger?.warn(
+          COMPONENT,
+          `listReferences: skipping item at index ${i} — invalid shape`,
         );
+        continue;
       }
+      valid.push(item as DataReferenceSummary);
     }
-    return data as DataReferenceSummary[];
+    return valid;
   }
 
   async removeReference(
