@@ -1,3 +1,6 @@
+import { DStorageError } from "@dstorage/crypto";
+import { StorageErrorCode } from "../errors.js";
+
 export const CONTENT_HASH_TAG = "X-Content-Hash";
 
 export async function computeBlake3Hex(bytes: Uint8Array): Promise<string> {
@@ -15,7 +18,8 @@ export async function assertContentHash(
 ): Promise<void> {
   const actual = await computeBlake3Hex(bytes);
   if (actual !== storedHash) {
-    throw new Error(
+    throw new DStorageError(
+      StorageErrorCode.CONTENT_HASH_MISMATCH,
       `[dStorage/${adapter}] Content hash mismatch for txId: ${id}.\n` +
         "The retrieved data does not match the hash recorded at upload time.\n" +
         "This may indicate data tampering by a malicious gateway.",

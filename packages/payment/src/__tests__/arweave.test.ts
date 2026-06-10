@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 import { blake3 } from "@noble/hashes/blake3.js";
 import { ArweavePaymentAdapter } from "../adapters/arweave.js";
 import type { PaymentQuote } from "../types.js";
+import { PaymentErrorCode } from "../errors.js";
 
 function makeAdapter() {
   return new ArweavePaymentAdapter();
@@ -75,16 +76,20 @@ describe("ArweavePaymentAdapter — quote TTL", () => {
   it("pay() throws when the quote has already expired", async () => {
     const adapter = makeAdapter();
     const expiredQuote = makeQuote({ expiresAt: Date.now() - 1 });
-    await expect(adapter.pay(expiredQuote)).rejects.toThrow(
-      "[dStorage/payment]",
-    );
+    await expect(adapter.pay(expiredQuote)).rejects.toMatchObject({
+      code: PaymentErrorCode.ARWEAVE_QUOTE_EXPIRED,
+      message: expect.stringContaining("[dStorage/payment]"),
+    });
   });
 
   it("pay() error message mentions expiry", async () => {
     const adapter = makeAdapter();
     const expiredAt = Date.now() - 5_000;
     const expiredQuote = makeQuote({ expiresAt: expiredAt });
-    await expect(adapter.pay(expiredQuote)).rejects.toThrow(/expir/i);
+    await expect(adapter.pay(expiredQuote)).rejects.toMatchObject({
+      code: PaymentErrorCode.ARWEAVE_QUOTE_EXPIRED,
+      message: expect.stringMatching(/expir/i),
+    });
   });
 
   it("pay() does not throw for a quote that is still valid", async () => {

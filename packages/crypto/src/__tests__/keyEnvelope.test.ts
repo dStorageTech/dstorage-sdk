@@ -11,6 +11,7 @@ import {
   findWrapper,
   type KeyWrapper,
 } from "../keyEnvelope.js";
+import { CryptoErrorCode } from "../errors.js";
 
 // Helper: create a minimal symmetric KeyWrapper for tests.
 function symWrapper(wrappedDek: string, wrapKeyName: string): KeyWrapper {
@@ -186,7 +187,15 @@ describe("buildKeyEnvelope", () => {
   });
 
   it("empty wrappers array throws", () => {
-    expect(() => buildKeyEnvelope([])).toThrow();
+    let err: unknown;
+    try {
+      buildKeyEnvelope([]);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: CryptoErrorCode.ENVELOPE_EMPTY_WRAPPERS,
+    });
   });
 });
 

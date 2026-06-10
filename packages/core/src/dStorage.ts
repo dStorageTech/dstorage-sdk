@@ -16,7 +16,7 @@
  *   await ds.removeReference(chainRefId);
  */
 
-import { XChaChaScheme } from "@dstorage/crypto";
+import { XChaChaScheme, DStorageError } from "@dstorage/crypto";
 import {
   generateDek,
   buildKeyEnvelope,
@@ -26,6 +26,7 @@ import {
   bytesToBase64url,
   base64urlToBytes,
 } from "@dstorage/crypto";
+import { CoreErrorCode } from "./errors.js";
 
 import type { CryptoScheme } from "@dstorage/crypto";
 import type { UploadCrypto } from "./metaTx/index.js";
@@ -159,7 +160,8 @@ export class DStorage implements DStorageContext {
     } = options ?? {};
 
     if (rawMeta !== undefined && isPublic) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.METADATA_WITH_PUBLIC_UPLOAD,
         "[dStorage] metadata cannot be used with isPublic uploads — there is no DEK to encrypt it with.",
       );
     }
@@ -190,7 +192,8 @@ export class DStorage implements DStorageContext {
     } else {
       // 1b. Private: requires at least one provider to wrap the DEK.
       if (this._encryptionProviders.length === 0) {
-        throw new Error(
+        throw new DStorageError(
+          CoreErrorCode.UPLOAD_NO_PROVIDERS,
           "[dStorage] No encryption providers available. Call init() before uploading.",
         );
       }
@@ -226,7 +229,8 @@ export class DStorage implements DStorageContext {
       // needed for on-chain reference management — skip in storage-only mode.
       if (this.config.chainAdapter) {
         if (this._encryptionProviders.length === 0) {
-          throw new Error(
+          throw new DStorageError(
+            CoreErrorCode.PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER,
             "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
               "Without a provider there is no owner secret, so the reference " +
               "could never be removed or updated.",
@@ -342,10 +346,14 @@ export class DStorage implements DStorageContext {
   ): Promise<RegisterReferenceResult> {
     this.assertConnected();
     if (!this.config.chainAdapter) {
-      throw new Error("[dStorage] registerReference requires a chain adapter.");
+      throw new DStorageError(
+        CoreErrorCode.REGISTER_REF_REQUIRES_CHAIN,
+        "[dStorage] registerReference requires a chain adapter.",
+      );
     }
     if (this._encryptionProviders.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.REGISTER_REF_REQUIRES_ENCRYPTION,
         "[dStorage] registerReference requires at least one encryption adapter.",
       );
     }
@@ -425,15 +433,20 @@ export class DStorage implements DStorageContext {
   ): Promise<UpdateUploadResult> {
     this.assertConnected();
     if (!this.config.chainAdapter) {
-      throw new Error("[dStorage] updateUpload requires a chain adapter.");
+      throw new DStorageError(
+        CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
+        "[dStorage] updateUpload requires a chain adapter.",
+      );
     }
     if (typeof this.config.chainAdapter.updateReference !== "function") {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
         "[dStorage] updateUpload is not supported by this chain adapter.",
       );
     }
     if (this._encryptionProviders.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.UPDATE_UPLOAD_REQUIRES_ENCRYPTION,
         "[dStorage] updateUpload requires at least one encryption adapter.",
       );
     }
@@ -521,18 +534,22 @@ export class DStorage implements DStorageContext {
    */
   private async _getDekScheme(keyEnvelope: string): Promise<CryptoScheme> {
     if (this._encryptionProviders.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.DECRYPT_NO_PROVIDERS,
         "[dStorage] Cannot decrypt: no encryption providers. Call init() before retrieving private data.",
       );
     }
     if (!keyEnvelope) {
-      throw new Error("[dStorage] Cannot decrypt: key envelope is empty.", {
-        cause: { code: "envelope_empty" },
-      });
+      throw new DStorageError(
+        CoreErrorCode.DECRYPT_ENVELOPE_EMPTY,
+        "[dStorage] Cannot decrypt: key envelope is empty.",
+        { cause: { code: "envelope_empty" } },
+      );
     }
     const envelope = parseKeyEnvelope(keyEnvelope);
     if (!envelope) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.DECRYPT_ENVELOPE_MALFORMED,
         "[dStorage] Cannot decrypt: key envelope is malformed or has an invalid structure. " +
           "The stored reference may be corrupted or tampered with.",
         { cause: { code: "envelope_malformed" } },
@@ -550,7 +567,8 @@ export class DStorage implements DStorageContext {
         // Wrapper didn't match — try the next one.
       }
     }
-    throw new Error(
+    throw new DStorageError(
+      CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
       "[dStorage] Cannot decrypt: this reference was not encrypted with any of your configured keys. " +
         "Check that you are using the correct encryption adapter, password, seed phrase, or keypair.",
       { cause: { code: "no_wrapper_matched" } },
@@ -564,18 +582,22 @@ export class DStorage implements DStorageContext {
    */
   private async _unwrapDek(keyEnvelope: string): Promise<Uint8Array> {
     if (this._encryptionProviders.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.UNWRAP_DEK_NO_PROVIDERS,
         "[dStorage] Cannot unwrap DEK: no encryption providers. Call init() first.",
       );
     }
     if (!keyEnvelope) {
-      throw new Error("[dStorage] Cannot unwrap DEK: key envelope is empty.", {
-        cause: { code: "envelope_empty" },
-      });
+      throw new DStorageError(
+        CoreErrorCode.UNWRAP_DEK_ENVELOPE_EMPTY,
+        "[dStorage] Cannot unwrap DEK: key envelope is empty.",
+        { cause: { code: "envelope_empty" } },
+      );
     }
     const envelope = parseKeyEnvelope(keyEnvelope);
     if (!envelope) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.UNWRAP_DEK_ENVELOPE_MALFORMED,
         "[dStorage] Cannot unwrap DEK: key envelope is malformed or has an invalid structure. " +
           "The stored reference may be corrupted or tampered with.",
         { cause: { code: "envelope_malformed" } },
@@ -592,7 +614,8 @@ export class DStorage implements DStorageContext {
         // Wrapper didn't match — try the next one.
       }
     }
-    throw new Error(
+    throw new DStorageError(
+      CoreErrorCode.UNWRAP_DEK_NO_WRAPPER_MATCHED,
       "[dStorage] Cannot unwrap DEK: this reference was not encrypted with any of your configured keys. " +
         "Check that you are using the correct encryption adapter, password, seed phrase, or keypair.",
       { cause: { code: "no_wrapper_matched" } },
@@ -665,7 +688,8 @@ export class DStorage implements DStorageContext {
           new TextDecoder().decode(manifestBytes),
         );
         if (!isManifest(parsed)) {
-          throw new Error(
+          throw new DStorageError(
+            CoreErrorCode.MANIFEST_INVALID_STRUCTURE,
             "[dStorage] Payload authenticated as manifest but has invalid structure",
           );
         }
@@ -681,7 +705,11 @@ export class DStorage implements DStorageContext {
       try {
         decryptedBytes = await scheme.decryptPayload(rawBytes, PAYLOAD_AAD);
       } catch (err) {
-        throw new Error(`[dStorage] Failed to decrypt payload: ${err}`);
+        throw new DStorageError(
+          CoreErrorCode.DECRYPT_PAYLOAD_FAILED,
+          `[dStorage] Failed to decrypt payload: ${err}`,
+          { cause: err },
+        );
       }
 
       this.logger?.log(
@@ -734,7 +762,8 @@ export class DStorage implements DStorageContext {
     this.assertConnected();
 
     if (!this.config.chainAdapter) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.RETRIEVE_BY_REF_ID_REQUIRES_CHAIN,
         "[dStorage] retrieveByRefId() requires a chain adapter. " +
           "Configure one in DStorageConfig or use retrieveByStorageId() instead.",
       );
@@ -742,7 +771,8 @@ export class DStorage implements DStorageContext {
 
     const ref = await this.config.chainAdapter.readReference(refId);
     if (!ref)
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.REF_NOT_FOUND,
         `[dStorage] No on-chain reference found for refId: ${refId}`,
       );
 
@@ -750,7 +780,8 @@ export class DStorage implements DStorageContext {
       ref.storageProvider &&
       ref.storageProvider !== this.config.storageAdapter.name
     ) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.STORAGE_ADAPTER_MISMATCH,
         `[dStorage] Storage adapter mismatch: reference "${refId}" was stored on ` +
           `"${ref.storageProvider}" but the configured adapter is "${this.config.storageAdapter.name}". ` +
           `Configure a "${ref.storageProvider}" storage adapter to retrieve this reference.`,
@@ -776,7 +807,8 @@ export class DStorage implements DStorageContext {
       storageId = ref.storageId;
     } else {
       if (!ref.keyEnvelope) {
-        throw new Error(
+        throw new DStorageError(
+          CoreErrorCode.RETRIEVE_BY_REF_ID_ENVELOPE_EMPTY,
           `[dStorage] Cannot decrypt refId ${refId}: key envelope is empty.`,
           { cause: { code: "envelope_empty" } },
         );
@@ -818,7 +850,10 @@ export class DStorage implements DStorageContext {
     options?: ListReferencesOptions,
   ): Promise<DataReferenceSummary[]> {
     if (!this.config.chainAdapter) {
-      throw new Error("[dStorage] listReferences() requires a chain adapter.");
+      throw new DStorageError(
+        CoreErrorCode.LIST_REFS_REQUIRES_CHAIN,
+        "[dStorage] listReferences() requires a chain adapter.",
+      );
     }
 
     type RawItem = {
@@ -855,7 +890,8 @@ export class DStorage implements DStorageContext {
       );
     } else {
       if (typeof this.config.chainAdapter.listReferences !== "function") {
-        throw new Error(
+        throw new DStorageError(
+          CoreErrorCode.LIST_REFS_NOT_SUPPORTED,
           "[dStorage] listReferences() is not supported by this chain adapter.",
         );
       }
@@ -934,10 +970,14 @@ export class DStorage implements DStorageContext {
    */
   async removeReference(refId: string): Promise<void> {
     if (!this.config.chainAdapter) {
-      throw new Error("[dStorage] removeReference() requires a chain adapter.");
+      throw new DStorageError(
+        CoreErrorCode.REMOVE_REF_REQUIRES_CHAIN,
+        "[dStorage] removeReference() requires a chain adapter.",
+      );
     }
     if (typeof this.config.chainAdapter.removeReference !== "function") {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.REMOVE_REF_NOT_SUPPORTED,
         "[dStorage] removeReference() is not supported by this chain adapter.",
       );
     }
@@ -981,7 +1021,8 @@ export class DStorage implements DStorageContext {
     this.assertConnected();
 
     if (this._encryptionProviders.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.META_TX_REQUIRES_ENCRYPTION,
         "[dStorage] executeMetaTransaction() requires at least one encryption provider.",
       );
     }
@@ -1001,7 +1042,8 @@ export class DStorage implements DStorageContext {
    */
   async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
     if (this._encryptionProviders.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.PREPARE_UPLOAD_NO_PROVIDERS,
         "[dStorage] Cannot prepare upload crypto: no encryption providers. Call init() first.",
       );
     }
@@ -1058,7 +1100,8 @@ export class DStorage implements DStorageContext {
     rawMeta?: Record<string, string>,
   ): Promise<UploadResult> {
     if (this._encryptionProviders.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.UPLOAD_NO_PROVIDERS,
         "[dStorage] No encryption providers available. Call init() before uploading.",
       );
     }
@@ -1300,14 +1343,16 @@ export class DStorage implements DStorageContext {
   ): Promise<RetrieveResult> {
     // Validate manifest integrity before touching storage.
     if (manifest.chunks.length !== manifest.chunkCount) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.MANIFEST_CHUNK_COUNT_MISMATCH,
         `[dStorage] Manifest declares ${manifest.chunkCount} chunks but contains ${manifest.chunks.length} entries`,
       );
     }
     const sorted = [...manifest.chunks].sort((a, b) => a.index - b.index);
     for (let i = 0; i < sorted.length; i++) {
       if (sorted[i]!.index !== i) {
-        throw new Error(
+        throw new DStorageError(
+          CoreErrorCode.MANIFEST_NOT_CONTIGUOUS,
           `[dStorage] Manifest chunk list is not contiguous: expected index ${i}, got ${sorted[i]!.index}`,
         );
       }
@@ -1330,14 +1375,17 @@ export class DStorage implements DStorageContext {
             chunkAad(entry.index, manifest.chunkCount),
           );
         } catch (err) {
-          throw new Error(
+          throw new DStorageError(
+            CoreErrorCode.DECRYPT_CHUNK_FAILED,
             `[dStorage] Failed to decrypt chunk ${entry.index}: ${err}`,
+            { cause: err },
           );
         }
       }
 
       if (offset + chunkBytes.length > manifest.totalSize) {
-        throw new Error(
+        throw new DStorageError(
+          CoreErrorCode.CHUNK_OVERFLOWS_TOTAL_SIZE,
           `[dStorage] Chunk ${entry.index} overflows manifest totalSize`,
         );
       }
@@ -1351,7 +1399,8 @@ export class DStorage implements DStorageContext {
     }
 
     if (offset !== manifest.totalSize) {
-      throw new Error(
+      throw new DStorageError(
+        CoreErrorCode.REASSEMBLY_SIZE_MISMATCH,
         `[dStorage] Reassembled ${offset} bytes but manifest declares totalSize ${manifest.totalSize}`,
       );
     }
@@ -1365,7 +1414,10 @@ export class DStorage implements DStorageContext {
 
   private assertConnected(): void {
     if (!this._initialized && this.wallet === null) {
-      throw new Error("[dStorage] Not connected. Call dStorage.init() first.");
+      throw new DStorageError(
+        CoreErrorCode.NOT_INITIALIZED,
+        "[dStorage] Not connected. Call dStorage.init() first.",
+      );
     }
   }
 }

@@ -14,6 +14,7 @@ import {
   ARWEAVE_LOCAL,
   arlocalGateway,
 } from "../adapters/arweave-local.js";
+import { StorageErrorCode } from "../errors.js";
 
 // ── arweave-js mock ───────────────────────────────────────────────────────────
 
@@ -252,27 +253,35 @@ describe("ArweaveLocalHelper", () => {
     // These checks must throw before making any HTTP request.
 
     it("throws when address is too short (42 chars)", async () => {
-      await expect(helper.mintTokens("a".repeat(42))).rejects.toThrow(
-        /address/i,
-      );
+      await expect(helper.mintTokens("a".repeat(42))).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_LOCAL_INVALID_ADDRESS,
+        message: expect.stringMatching(/address/i),
+      });
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it("throws when address is too long (44 chars)", async () => {
-      await expect(helper.mintTokens("a".repeat(44))).rejects.toThrow(
-        /address/i,
-      );
+      await expect(helper.mintTokens("a".repeat(44))).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_LOCAL_INVALID_ADDRESS,
+        message: expect.stringMatching(/address/i),
+      });
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it("throws when address is empty", async () => {
-      await expect(helper.mintTokens("")).rejects.toThrow(/address/i);
+      await expect(helper.mintTokens("")).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_LOCAL_INVALID_ADDRESS,
+        message: expect.stringMatching(/address/i),
+      });
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it("throws when address contains characters outside base64url alphabet", async () => {
       const invalid = "aaa!aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; // 43 chars but with !
-      await expect(helper.mintTokens(invalid)).rejects.toThrow(/address/i);
+      await expect(helper.mintTokens(invalid)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_LOCAL_INVALID_ADDRESS,
+        message: expect.stringMatching(/address/i),
+      });
       expect(mockFetch).not.toHaveBeenCalled();
     });
 

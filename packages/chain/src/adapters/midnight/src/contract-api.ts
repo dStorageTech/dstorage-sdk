@@ -30,6 +30,8 @@ import {
   type Observable,
 } from "rxjs";
 import { toHex } from "@midnight-ntwrk/midnight-js-utils";
+import { DStorageError } from "@dstorage/crypto";
+import { ChainErrorCode } from "../../../errors.js";
 
 /** @internal */
 
@@ -50,7 +52,8 @@ export function validateContractVersion(
   contractAddress: string,
 ): void {
   if (version !== SUPPORTED_CONTRACT_VERSION) {
-    throw new Error(
+    throw new DStorageError(
+      ChainErrorCode.CONTRACT_UNSUPPORTED_VERSION,
       `[dStorage/midnight] Unsupported contract version ${version} at ${contractAddress}. ` +
         `This SDK supports version ${SUPPORTED_CONTRACT_VERSION} only. ` +
         `Deploy a compatible DataRegistry contract or upgrade the SDK.`,
@@ -220,7 +223,8 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     );
     const circuitResult = (txData as any).private?.result;
     if (!(circuitResult instanceof Uint8Array)) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.CONTRACT_CIRCUIT_RESULT_MISSING,
         `[dStorage/midnight] storeReference succeeded on-chain (txHash=${txHash}) ` +
           `but the runtime did not return the circuit refId at txData.private.result ` +
           `(got ${typeof circuitResult}). ` +

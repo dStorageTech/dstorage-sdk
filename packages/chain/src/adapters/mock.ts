@@ -20,6 +20,8 @@ import type {
   ChainQuote,
 } from "../types.js";
 import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
+import { DStorageError } from "@dstorage/crypto";
+import { ChainErrorCode } from "../errors.js";
 
 // ── Storage helpers ──
 const refs = new Map<string, ChainReference>();
@@ -116,7 +118,8 @@ export class MockChainAdapter implements ChainAdapter {
   async readReference(refId: string): Promise<ChainReference> {
     const ref = refs.get(refId);
     if (!ref)
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_REF_NOT_FOUND,
         `[dStorage/mock-chain] No reference found for refId: ${refId}`,
       );
     return ref;
@@ -144,7 +147,8 @@ export class MockChainAdapter implements ChainAdapter {
     ownerSecret?: Uint8Array,
   ): Promise<void> {
     if (!refs.has(refId)) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_REF_NOT_FOUND_REMOVE,
         `[dStorage/mock-chain] No reference found for refId: ${refId}`,
       );
     }
@@ -166,7 +170,8 @@ export class MockChainAdapter implements ChainAdapter {
   ): Promise<void> {
     const existing = refs.get(refId);
     if (!existing) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_REF_NOT_FOUND_UPDATE,
         `[dStorage/mock-chain] No reference found for refId: ${refId}`,
       );
     }
@@ -189,7 +194,8 @@ export class MockChainAdapter implements ChainAdapter {
     const stored = commitments.get(refId);
     if (!stored) return;
     if (!ownerSecret) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_OWNER_SECRET_REQUIRED,
         `[dStorage/mock-chain] ownerSecret required — reference ${refId} has an ownerCommitment`,
       );
     }
@@ -198,7 +204,8 @@ export class MockChainAdapter implements ChainAdapter {
       provided.length !== stored.length ||
       !provided.every((b, i) => b === stored[i])
     ) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_OWNER_SECRET_MISMATCH,
         `[dStorage/mock-chain] ownerSecret mismatch for refId: ${refId}`,
       );
     }

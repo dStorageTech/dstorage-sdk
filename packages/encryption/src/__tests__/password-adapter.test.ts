@@ -9,6 +9,7 @@ import { scrypt } from "@noble/hashes/scrypt.js";
 import { mlkemGenerateKeypairFromSeed } from "@dstorage/crypto";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { EncryptionErrorCode } from "../errors.js";
 
 // Use the "v1-lite" preset params for all functional tests.
 // N=65536 (64 MB) matches a real-world preset and exercises the full scrypt
@@ -103,25 +104,37 @@ describe("sensitivity", () => {
 
 describe("salt validation", () => {
   it("empty string salt → throws at construction", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: GOOD_PASSWORD,
-          salt: "",
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("salt must not be empty");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: GOOD_PASSWORD,
+        salt: "",
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_EMPTY_SALT,
+      message: expect.stringContaining("salt must not be empty"),
+    });
   });
 
   it("empty Uint8Array salt → throws at construction", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: GOOD_PASSWORD,
-          salt: new Uint8Array(0),
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("salt must not be empty");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: GOOD_PASSWORD,
+        salt: new Uint8Array(0),
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_EMPTY_SALT,
+      message: expect.stringContaining("salt must not be empty"),
+    });
   });
 });
 
@@ -131,37 +144,55 @@ describe("salt validation", () => {
 
 describe("password validation", () => {
   it("password shorter than minPasswordLength → throws", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "Sh0rt!",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("too short");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "Sh0rt!",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_TOO_SHORT,
+      message: expect.stringContaining("too short"),
+    });
   });
 
   it("all-same-character password → throws regardless of length", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "aaaaaaaaaaaaaaa",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("too few distinct characters");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "aaaaaaaaaaaaaaa",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_TOO_FEW_DISTINCT,
+      message: expect.stringContaining("too few distinct characters"),
+    });
   });
 
   it("low entropy password (digits only, 12 chars) → throws", () => {
     // charset = digits (pool 10), 12 non-sequential chars → ~39.9 bits < 60
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "159753246801",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("entropy too low");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "159753246801",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_ENTROPY_TOO_LOW,
+      message: expect.stringContaining("entropy too low"),
+    });
   });
 
   it("custom minPasswordLength: 8 → accepts 8-char password and can wrapDek", async () => {
@@ -292,14 +323,20 @@ describe("KDF presets", () => {
   });
 
   it("unknown preset string → throws at construction", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: GOOD_PASSWORD,
-          salt: GOOD_SALT,
-          preset: "v99" as KdfPreset,
-        }),
-    ).toThrow('unknown preset "v99"');
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: GOOD_PASSWORD,
+        salt: GOOD_SALT,
+        preset: "v99" as KdfPreset,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_UNKNOWN_PRESET,
+      message: expect.stringContaining('unknown preset "v99"'),
+    });
   });
 });
 
@@ -385,7 +422,8 @@ describe("fromKdfParams", () => {
   });
 
   it("unsupported kdf value → throws", () => {
-    expect(() =>
+    let err: unknown;
+    try {
       PasswordEncryptionAdapter.fromKdfParams({
         password: GOOD_PASSWORD,
         salt: GOOD_SALT,
@@ -393,12 +431,19 @@ describe("fromKdfParams", () => {
         N: 65536,
         r: 8,
         p: 1,
-      }),
-    ).toThrow('unsupported kdf "argon2id"');
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_UNSUPPORTED_KDF,
+      message: expect.stringContaining('unsupported kdf "argon2id"'),
+    });
   });
 
   it("still validates password entropy", () => {
-    expect(() =>
+    let err: unknown;
+    try {
       PasswordEncryptionAdapter.fromKdfParams({
         password: "weak",
         salt: GOOD_SALT,
@@ -406,8 +451,14 @@ describe("fromKdfParams", () => {
         N: 65536,
         r: 8,
         p: 1,
-      }),
-    ).toThrow("too short");
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_TOO_SHORT,
+      message: expect.stringContaining("too short"),
+    });
   });
 });
 
@@ -417,69 +468,105 @@ describe("fromKdfParams", () => {
 
 describe("weak-pattern rejection", () => {
   it("keyboard-row walk 'qwertyuiop12' → throws", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "qwertyuiop12",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("keyboard-row pattern");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "qwertyuiop12",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_KEYBOARD_WALK,
+      message: expect.stringContaining("keyboard-row pattern"),
+    });
   });
 
   it("keyboard-row walk 'asdfghjkl123' → throws", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "asdfghjkl123",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("keyboard-row pattern");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "asdfghjkl123",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_KEYBOARD_WALK,
+      message: expect.stringContaining("keyboard-row pattern"),
+    });
   });
 
   it("keyboard-row walk reversed 'poiuytrewq1!' → throws", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "poiuytrewq1!",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("keyboard-row pattern");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "poiuytrewq1!",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_KEYBOARD_WALK,
+      message: expect.stringContaining("keyboard-row pattern"),
+    });
   });
 
   it("sequential alpha run 'abcdefghij12' → throws", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "abcdefghij12",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("sequential character run");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "abcdefghij12",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_SEQUENTIAL_RUN,
+      message: expect.stringContaining("sequential character run"),
+    });
   });
 
   it("sequential numeric run '123456789012' → throws", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "123456789012",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("sequential character run");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "123456789012",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_SEQUENTIAL_RUN,
+      message: expect.stringContaining("sequential character run"),
+    });
   });
 
   it("near-identical chars 'aaaaaaaaaaaab' → throws (too few distinct)", () => {
-    expect(
-      () =>
-        new PasswordEncryptionAdapter({
-          password: "aaaaaaaaaaaab",
-          salt: GOOD_SALT,
-          params: FAST_PARAMS,
-        }),
-    ).toThrow("too few distinct characters");
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: "aaaaaaaaaaaab",
+        salt: GOOD_SALT,
+        params: FAST_PARAMS,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_TOO_FEW_DISTINCT,
+      message: expect.stringContaining("too few distinct characters"),
+    });
   });
 
   it("long passphrase 'correcthorsebatterystaple' → construction succeeds", () => {

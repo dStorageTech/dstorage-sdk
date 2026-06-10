@@ -47,6 +47,8 @@ import type {
   TokenSymbol,
   NetworkType,
 } from "../types.js";
+import { DStorageError } from "@dstorage/crypto";
+import { PaymentErrorCode } from "../errors.js";
 
 /** Default quote validity window in milliseconds. 2 minutes is appropriate for Arweave's volatile pricing. */
 const DEFAULT_QUOTE_VALIDITY_MS = 120_000;
@@ -144,7 +146,8 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       this.arweaveClient = Arweave.init(this.gateway ?? {});
       return this.arweaveClient;
     } catch {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.ARWEAVE_NOT_INSTALLED,
         "[dStorage/arweave-payment] arweave package not installed. Run: npm install arweave",
       );
     }
@@ -158,13 +161,15 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
       return this.walletKey;
     }
     if (typeof window === "undefined") {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.ARWEAVE_WALLET_KEY_REQUIRED,
         "[dStorage/arweave-payment] Node.js usage requires a walletKey in the config.",
       );
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).arweaveWallet === "undefined") {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.ARWEAVE_CONNECT_NOT_FOUND,
         "[dStorage/arweave-payment] ArConnect extension not found. Install it from https://arconnect.io",
       );
     }
@@ -239,7 +244,8 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     if (Date.now() > instruction.expiresAt) {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.ARWEAVE_QUOTE_EXPIRED,
         `[dStorage/payment] Quote expired at ${new Date(instruction.expiresAt).toISOString()}. ` +
           "Request a fresh quote via estimateCost() before calling pay().",
       );

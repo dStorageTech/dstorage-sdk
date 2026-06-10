@@ -85,10 +85,13 @@ export interface CryptoScheme {
 
 // ── Base64url helpers ─────────────────────────────────────────────────────────
 
+import { DStorageError, CryptoErrorCode } from "./errors.js";
+
 /** Decode a base64url string to a Uint8Array. */
 export function base64urlToBytes(b64url: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]*$/.test(b64url)) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.BASE64URL_INVALID,
       `[dStorage/crypto] malformed base64url input — unexpected characters in "${b64url.slice(0, 32)}${b64url.length > 32 ? "…" : ""}"`,
     );
   }

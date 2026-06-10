@@ -8,6 +8,8 @@
  *   HKDF CryptoKey, used to wrap per-upload random DEKs.
  */
 
+import { DStorageError, CryptoErrorCode } from "./errors.js";
+
 // ── KeyDeriver ────────────────────────────────────────────────────────────────
 
 /**
@@ -19,14 +21,16 @@ export class KeyDeriver {
 
   constructor(input: { mnemonic?: string; seedHex?: string }) {
     if (!input.mnemonic && !input.seedHex) {
-      throw new Error(
+      throw new DStorageError(
+        CryptoErrorCode.MISSING_KEY_INPUT,
         "[dStorage/crypto] Either mnemonic or seedHex must be provided.",
       );
     }
     if (input.mnemonic !== undefined) {
       const wordCount = input.mnemonic.trim().split(/\s+/).length;
       if (wordCount < 24) {
-        throw new Error(
+        throw new DStorageError(
+          CryptoErrorCode.MNEMONIC_TOO_SHORT,
           `[dStorage/crypto] A 24-word BIP-39 mnemonic is required (got ${wordCount} words). ` +
             `Shorter mnemonics provide insufficient entropy for post-quantum-safe key derivation.`,
         );
@@ -48,7 +52,8 @@ export class KeyDeriver {
     if (this.input.seedHex) {
       const bytes = hexToBytes(this.input.seedHex, "seedHex");
       if (bytes.length !== 32 && bytes.length !== 64) {
-        throw new Error(
+        throw new DStorageError(
+          CryptoErrorCode.SEED_INVALID_LENGTH,
           "[dStorage/crypto] seedHex must be 32 bytes (64 hex chars) or 64 bytes (128 hex chars).",
         );
       }
@@ -58,7 +63,10 @@ export class KeyDeriver {
     // mnemonic path — validate then convert
     const bip39 = await import("bip39");
     if (!bip39.validateMnemonic(this.input.mnemonic!)) {
-      throw new Error("[dStorage/crypto] Invalid BIP-39 mnemonic phrase.");
+      throw new DStorageError(
+        CryptoErrorCode.MNEMONIC_INVALID,
+        "[dStorage/crypto] Invalid BIP-39 mnemonic phrase.",
+      );
     }
     const buf = await bip39.mnemonicToSeed(this.input.mnemonic!);
     return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -73,12 +81,14 @@ export function hexToBytes(
 ): Uint8Array<ArrayBuffer> {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   if (clean.length % 2 !== 0) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.HEX_ODD_LENGTH,
       `[dStorage/crypto] ${label} has odd length (${clean.length} chars) — each byte requires exactly 2 hex characters.`,
     );
   }
   if (!/^[0-9a-fA-F]*$/.test(clean)) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.HEX_INVALID_CHARS,
       `[dStorage/crypto] ${label} contains non-hexadecimal characters. Only 0-9 and a-f are valid.`,
     );
   }

@@ -30,6 +30,8 @@ import type {
 import { MockProofServer } from "../mockProofServer.js";
 import { ManagedPaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
 import type { PaymentAdapter } from "@dstorage/payment";
+import { DStorageError } from "@dstorage/crypto";
+import { ChainErrorCode } from "../errors.js";
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
@@ -142,7 +144,10 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     );
 
     if (!ref.keyEnvelope) {
-      throw new Error("[dStorage] keyEnvelope is required for all references");
+      throw new DStorageError(
+        ChainErrorCode.MOCK_MIDNIGHT_KEYENVELOPE_REQUIRED,
+        "[dStorage] keyEnvelope is required for all references",
+      );
     }
 
     // Step 1: Generate ZK proof via mock proof server
@@ -198,7 +203,8 @@ export class MockMidnightChainAdapter implements ChainAdapter {
   async readReference(refId: string): Promise<ChainReference> {
     const ref = refs.get(refId);
     if (!ref) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_MIDNIGHT_REF_NOT_FOUND,
         `[dStorage/mock-midnight] No reference found for refId: ${refId}`,
       );
     }
@@ -233,7 +239,8 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     await sleep(150 + Math.random() * 250);
 
     if (!refs.has(refId)) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_MIDNIGHT_REF_NOT_FOUND_REMOVE,
         `[dStorage/mock-midnight] No reference found for refId: ${refId}`,
       );
     }
@@ -266,7 +273,8 @@ export class MockMidnightChainAdapter implements ChainAdapter {
 
     const existing = refs.get(refId);
     if (!existing) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MOCK_MIDNIGHT_REF_NOT_FOUND_UPDATE,
         `[dStorage/mock-midnight] No reference found for refId: ${refId}`,
       );
     }

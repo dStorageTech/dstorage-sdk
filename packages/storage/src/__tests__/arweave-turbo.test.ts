@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ArweaveTurboStorageAdapter } from "../adapters/arweave-turbo.js";
+import { StorageErrorCode } from "../errors.js";
 
 // 512 zero-bytes encoded as base64url (all 'A's — 170 AAAA groups + AAA).
 // Used as the RSA-4096 modulus suffix in compound token test fixtures.
@@ -41,23 +42,35 @@ describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
     // A plain JWT has its signature as the last segment. RS256 produces 256 bytes
     // (344 base64url chars), not 512 — the 512-byte check rejects it at construction.
     const plainJwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.shortSignature";
-    expect(
-      () =>
-        new ArweaveTurboStorageAdapter({
-          signingServerUrl: SIGNING_URL,
-          authToken: plainJwt,
-        }),
-    ).toThrow(/\[dStorage\/arweave-turbo\]/);
+    let err: unknown;
+    try {
+      new ArweaveTurboStorageAdapter({
+        signingServerUrl: SIGNING_URL,
+        authToken: plainJwt,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_KEY,
+      message: expect.stringContaining("[dStorage/arweave-turbo]"),
+    });
   });
 
   it("throws when authToken has no dot at all", () => {
-    expect(
-      () =>
-        new ArweaveTurboStorageAdapter({
-          signingServerUrl: SIGNING_URL,
-          authToken: "nodottoken",
-        }),
-    ).toThrow(/\[dStorage\/arweave-turbo\]/);
+    let err: unknown;
+    try {
+      new ArweaveTurboStorageAdapter({
+        signingServerUrl: SIGNING_URL,
+        authToken: "nodottoken",
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_FORMAT,
+      message: expect.stringContaining("[dStorage/arweave-turbo]"),
+    });
   });
 });
 
@@ -74,20 +87,23 @@ describe("ArweaveTurboStorageAdapter — retrieve ID validation", () => {
   }
 
   it("throws before any network call when the id contains path-traversal characters", async () => {
-    await expect(adapter().retrieve("../../etc/passwd")).rejects.toThrow(
-      /Invalid transaction ID/,
-    );
+    await expect(adapter().retrieve("../../etc/passwd")).rejects.toMatchObject({
+      code: StorageErrorCode.TURBO_INVALID_TX_ID,
+      message: expect.stringContaining("Invalid transaction ID"),
+    });
   });
 
   it("throws for an id shorter than 43 characters", async () => {
-    await expect(adapter().retrieve("shortId")).rejects.toThrow(
-      /Invalid transaction ID/,
-    );
+    await expect(adapter().retrieve("shortId")).rejects.toMatchObject({
+      code: StorageErrorCode.TURBO_INVALID_TX_ID,
+      message: expect.stringContaining("Invalid transaction ID"),
+    });
   });
 
   it("throws for an id longer than 43 characters", async () => {
-    await expect(adapter().retrieve(TX_VALID + "A")).rejects.toThrow(
-      /Invalid transaction ID/,
-    );
+    await expect(adapter().retrieve(TX_VALID + "A")).rejects.toMatchObject({
+      code: StorageErrorCode.TURBO_INVALID_TX_ID,
+      message: expect.stringContaining("Invalid transaction ID"),
+    });
   });
 });

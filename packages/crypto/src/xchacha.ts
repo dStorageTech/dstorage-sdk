@@ -32,6 +32,7 @@
 
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import type { CryptoScheme } from "./types.js";
+import { DStorageError, CryptoErrorCode } from "./errors.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,8 @@ export interface XChaChaPayload {
 
 function getCrypto(): Crypto {
   if (typeof globalThis.crypto !== "undefined") return globalThis.crypto;
-  throw new Error(
+  throw new DStorageError(
+    CryptoErrorCode.WEBCRYPTO_NOT_AVAILABLE,
     "[dStorage/crypto] WebCrypto not available in this environment.",
   );
 }
@@ -220,7 +222,8 @@ export async function decryptStorageIdXChaCha(
   encryptedBytes: Uint8Array,
 ): Promise<Uint8Array> {
   if (encryptedBytes.length !== XCHACHA_STORAGE_ID_BYTES) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.XCHACHA_INVALID_STORAGE_ID_LEN,
       `[dStorage/crypto] XChaCha storageId must be ${XCHACHA_STORAGE_ID_BYTES} bytes, got ${encryptedBytes.length}`,
     );
   }
@@ -314,7 +317,8 @@ export class XChaChaScheme implements CryptoScheme {
   async decryptPayload(data: Uint8Array, aad: Uint8Array): Promise<Uint8Array> {
     const payload = deserializeXChaChaPayload(new TextDecoder().decode(data));
     if (!payload) {
-      throw new Error(
+      throw new DStorageError(
+        CryptoErrorCode.XCHACHA_PAYLOAD_MALFORMED,
         "[dStorage/crypto] XChaCha: payload is missing required fields.",
       );
     }
@@ -330,7 +334,8 @@ export class XChaChaScheme implements CryptoScheme {
   async decryptStorageId(encryptedId: string): Promise<string> {
     const payload = deserializeXChaChaPayload(encryptedId);
     if (!payload) {
-      throw new Error(
+      throw new DStorageError(
+        CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
         "[dStorage/crypto] XChaCha: storageId payload is malformed.",
       );
     }

@@ -40,6 +40,7 @@ import {
   base64urlToBytes,
   type WrappedDekResult,
 } from "./types.js";
+import { DStorageError, CryptoErrorCode } from "./errors.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -127,12 +128,14 @@ export async function wrapKey(
   kek: Uint8Array,
 ): Promise<string> {
   if (dek.length !== 32) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.DEK_INVALID_LENGTH,
       `[dStorage] wrapKey: DEK must be 32 bytes, got ${dek.length}`,
     );
   }
   if (kek.length !== 32) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.WRAP_KEK_INVALID_LENGTH,
       `[dStorage] wrapKey: KEK must be 32 bytes, got ${kek.length}`,
     );
   }
@@ -151,7 +154,8 @@ export async function unwrapKey(
   kek: Uint8Array,
 ): Promise<Uint8Array> {
   if (kek.length !== 32) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.UNWRAP_KEK_INVALID_LENGTH,
       `[dStorage] unwrapKey: KEK must be 32 bytes, got ${kek.length}`,
     );
   }
@@ -227,7 +231,8 @@ export async function deriveOwnerSecret(
  */
 export function buildKeyEnvelope(wrappers: Array<KeyWrapper>): KeyEnvelope {
   if (wrappers.length === 0) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.ENVELOPE_EMPTY_WRAPPERS,
       "[dStorage/crypto] buildKeyEnvelope: at least one wrapper is required.",
     );
   }

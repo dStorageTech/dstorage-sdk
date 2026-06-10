@@ -8,6 +8,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { blake3 } from "@noble/hashes/blake3.js";
 import { ArweaveStorageAdapter, ARWEAVE_MAINNET } from "../adapters/arweave.js";
+import { StorageErrorCode } from "../errors.js";
+import { PaymentErrorCode } from "@dstorage/payment";
 
 // ── test tx IDs — all exactly 43 base64url chars (valid Arweave format) ──────
 
@@ -246,7 +248,10 @@ describe("ArweaveStorageAdapter", () => {
 
     it("throws if Node.js walletKey is empty", async () => {
       const adapter = new ArweaveStorageAdapter({ walletKey: {} });
-      await expect(adapter.upload(enc("data"))).rejects.toThrow(/walletKey/);
+      await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+        code: PaymentErrorCode.ARWEAVE_WALLET_KEY_REQUIRED,
+        message: expect.stringContaining("walletKey"),
+      });
     });
 
     it("retries a failed chunk and succeeds on second attempt", async () => {
@@ -267,9 +272,10 @@ describe("ArweaveStorageAdapter", () => {
       );
 
       const adapter = nodeAdapter({ maxRetries: 2 });
-      await expect(adapter.upload(enc("data"))).rejects.toThrow(
-        /failed after 2 attempts/,
-      );
+      await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_CHUNK_UPLOAD_FAILED,
+        message: expect.stringContaining("failed after 2 attempts"),
+      });
       expect(mockUploader.uploadChunk).toHaveBeenCalledTimes(2);
     });
   });
@@ -284,9 +290,10 @@ describe("ArweaveStorageAdapter", () => {
 
     it("throws with viewblock.io link when no data is returned", async () => {
       mockArweave.transactions.getData.mockResolvedValueOnce(null);
-      await expect(nodeAdapter().retrieve(TX_UNKNOWN)).rejects.toThrow(
-        /viewblock\.io/,
-      );
+      await expect(nodeAdapter().retrieve(TX_UNKNOWN)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_NO_DATA_RETURNED,
+        message: expect.stringContaining("viewblock.io"),
+      });
     });
 
     it("passes decode:true and string:false to getData", async () => {
@@ -299,21 +306,28 @@ describe("ArweaveStorageAdapter", () => {
 
     it("throws before any network call when the id contains path-traversal characters", async () => {
       const retrieveSpy = vi.spyOn(mockArweave.transactions, "get");
-      await expect(nodeAdapter().retrieve("../../etc/passwd")).rejects.toThrow(
-        /Invalid transaction ID/,
-      );
+      await expect(
+        nodeAdapter().retrieve("../../etc/passwd"),
+      ).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_INVALID_TX_ID,
+        message: expect.stringContaining("Invalid transaction ID"),
+      });
       expect(retrieveSpy).not.toHaveBeenCalled();
     });
 
     it("throws for an id that is shorter than 43 characters", async () => {
-      await expect(nodeAdapter().retrieve("shortId")).rejects.toThrow(
-        /Invalid transaction ID/,
-      );
+      await expect(nodeAdapter().retrieve("shortId")).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_INVALID_TX_ID,
+        message: expect.stringContaining("Invalid transaction ID"),
+      });
     });
 
     it("throws for an id that is longer than 43 characters", async () => {
-      await expect(nodeAdapter().retrieve(TX_MOCK + "A")).rejects.toThrow(
-        /Invalid transaction ID/,
+      await expect(nodeAdapter().retrieve(TX_MOCK + "A")).rejects.toMatchObject(
+        {
+          code: StorageErrorCode.ARWEAVE_INVALID_TX_ID,
+          message: expect.stringContaining("Invalid transaction ID"),
+        },
       );
     });
   });
@@ -371,7 +385,10 @@ describe("ArweaveStorageAdapter", () => {
         confirmationTimeoutMs: 10, // expire immediately
       });
 
-      await expect(adapter.upload(enc("data"))).rejects.toThrow(/timeout/i);
+      await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_CONFIRM_TIMEOUT,
+        message: expect.stringMatching(/timeout/i),
+      });
     }, 10_000);
   });
 
@@ -410,18 +427,20 @@ describe("ArweaveStorageAdapter", () => {
       const err = await nodeAdapter()
         .retrieve(TX_TAMPERED)
         .catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(Error);
-      expect((err as Error).message).toContain("[dStorage/arweave]");
-      expect((err as Error).message).toMatch(/hash mismatch/i);
+      expect(err).toMatchObject({
+        code: StorageErrorCode.CONTENT_HASH_MISMATCH,
+        message: expect.stringMatching(/hash mismatch/i),
+      });
     });
 
     it("retrieve throws when X-Content-Hash tag is absent", async () => {
       mockArweave.transactions.get.mockResolvedValueOnce(
         makeMockTxWithTags({}),
       );
-      await expect(nodeAdapter().retrieve(TX_NO_HASH)).rejects.toThrow(
-        "[dStorage/arweave]",
-      );
+      await expect(nodeAdapter().retrieve(TX_NO_HASH)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_HASH_TAG_MISSING,
+        message: expect.stringContaining("[dStorage/arweave]"),
+      });
     });
 
     it("retrieve skips hash verification when skipIntegrityCheck is true", async () => {
@@ -438,9 +457,12 @@ describe("ArweaveStorageAdapter", () => {
       mockArweave.transactions.get.mockRejectedValueOnce(
         new Error("tx not indexed yet"),
       );
-      await expect(nodeAdapter().retrieve(TX_UNINDEXED)).rejects.toThrow(
-        /Could not fetch transaction metadata.*content hash cannot be verified/,
-      );
+      await expect(nodeAdapter().retrieve(TX_UNINDEXED)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_TX_METADATA_FAILED,
+        message: expect.stringMatching(
+          /Could not fetch transaction metadata.*content hash cannot be verified/,
+        ),
+      });
     });
   });
 
@@ -453,9 +475,10 @@ describe("ArweaveStorageAdapter", () => {
         makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }, "9999"),
       );
       const adapter = nodeAdapter({ maxRetrieveSizeBytes: limit });
-      await expect(adapter.retrieve(TX_HUGE)).rejects.toThrow(
-        /data_size.*exceeds.*configured limit/,
-      );
+      await expect(adapter.retrieve(TX_HUGE)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_TX_TOO_LARGE,
+        message: expect.stringMatching(/data_size.*exceeds.*configured limit/),
+      });
       // Data was NOT downloaded.
       expect(mockArweave.transactions.getData).not.toHaveBeenCalled();
     });
@@ -469,9 +492,10 @@ describe("ArweaveStorageAdapter", () => {
       );
       mockArweave.transactions.getData.mockResolvedValueOnce(bigData);
       const adapter = nodeAdapter({ maxRetrieveSizeBytes: 100 });
-      await expect(adapter.retrieve(TX_BIG)).rejects.toThrow(
-        /Downloaded.*exceeds.*configured limit/,
-      );
+      await expect(adapter.retrieve(TX_BIG)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_SIZE_MISMATCH,
+        message: expect.stringMatching(/Downloaded.*exceeds.*configured limit/),
+      });
     });
 
     it("post-load guard applies even when skipIntegrityCheck is true", async () => {
@@ -481,9 +505,10 @@ describe("ArweaveStorageAdapter", () => {
         maxRetrieveSizeBytes: 100,
         skipIntegrityCheck: true,
       });
-      await expect(adapter.retrieve(TX_BIG_SKIP)).rejects.toThrow(
-        /Downloaded.*exceeds.*configured limit/,
-      );
+      await expect(adapter.retrieve(TX_BIG_SKIP)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_SIZE_MISMATCH,
+        message: expect.stringMatching(/Downloaded.*exceeds.*configured limit/),
+      });
     });
 
     it("succeeds when data is within the limit", async () => {
@@ -505,7 +530,10 @@ describe("ArweaveStorageAdapter", () => {
       win["window"] = {}; // simulate bare browser window
 
       try {
-        await expect(adapter.upload(enc("data"))).rejects.toThrow(/ArConnect/);
+        await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+          code: PaymentErrorCode.ARWEAVE_CONNECT_NOT_FOUND,
+          message: expect.stringContaining("ArConnect"),
+        });
       } finally {
         win["window"] = original;
       }

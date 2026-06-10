@@ -1,3 +1,4 @@
+export * from "./errors.js";
 export * from "./types.js";
 export * from "./keys.js";
 export * from "./xchacha.js";

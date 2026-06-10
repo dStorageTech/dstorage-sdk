@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MockStorageAdapter } from "../adapters/mock.js";
+import { StorageErrorCode } from "../errors.js";
 
 // Each test uses a fresh adapter instance.
 // The module-level memoryStore is shared within this file but tests use
@@ -129,16 +130,22 @@ describe("MockStorageAdapter", () => {
 
     it("throws for unknown id with the correct error message", async () => {
       const adapter = new MockStorageAdapter();
-      await expect(adapter.retrieve("mock_nonexistent_id")).rejects.toThrow(
-        "[dStorage/mock] No data found for id: mock_nonexistent_id. Was it uploaded in this session?",
-      );
+      await expect(
+        adapter.retrieve("mock_nonexistent_id"),
+      ).rejects.toMatchObject({
+        code: StorageErrorCode.MOCK_DATA_NOT_FOUND,
+        message: expect.stringContaining(
+          "No data found for id: mock_nonexistent_id",
+        ),
+      });
     });
 
     it("throws for completely invalid id", async () => {
       const adapter = new MockStorageAdapter();
-      await expect(adapter.retrieve("garbage")).rejects.toThrow(
-        "[dStorage/mock]",
-      );
+      await expect(adapter.retrieve("garbage")).rejects.toMatchObject({
+        code: StorageErrorCode.MOCK_DATA_NOT_FOUND,
+        message: expect.stringContaining("[dStorage/mock]"),
+      });
     });
 
     it("multiple items: each id retrieves its own data", async () => {

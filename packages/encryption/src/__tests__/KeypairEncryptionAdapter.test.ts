@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { KeypairEncryptionAdapter } from "../KeypairEncryptionAdapter.js";
 import type { MLKemVariant } from "../KeypairEncryptionAdapter.js";
+import { EncryptionErrorCode } from "../errors.js";
+import { CryptoErrorCode } from "@dstorage/crypto";
 
 const VARIANTS: MLKemVariant[] = ["mlkem512", "mlkem768", "mlkem1024"];
 const TEST_DEK = globalThis.crypto.getRandomValues(new Uint8Array(32));
@@ -68,9 +70,10 @@ describe("wrapDek / unwrapDek roundtrip", () => {
     const { publicKey } = KeypairEncryptionAdapter.generateKeypair(CTX);
     const uploadOnly = KeypairEncryptionAdapter.fromPublicKey(publicKey, CTX);
     const wrapped = await uploadOnly.wrapDek(TEST_DEK);
-    await expect(uploadOnly.unwrapDek(wrapped)).rejects.toThrow(
-      "no Secret Key",
-    );
+    await expect(uploadOnly.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: EncryptionErrorCode.KEYPAIR_MISSING_SECRET_KEY,
+      message: expect.stringContaining("no Secret Key"),
+    });
   });
 
   it("upload-only wraps can be unwrapped by a provider holding the SK", async () => {
@@ -151,7 +154,10 @@ describe("cross-variant unwrap (variant auto-detected from key envelope)", () =>
 
     await expect(
       reader.unwrapDek({ ...wrapped, algorithm: "xchacha20poly1305-v1" }),
-    ).rejects.toThrow("unrecognised algorithm");
+    ).rejects.toMatchObject({
+      code: CryptoErrorCode.MLKEM_UNKNOWN_ALGORITHM,
+      message: expect.stringContaining("unrecognised algorithm"),
+    });
   });
 
   it("unknown variant prefix → throws with clear message", async () => {
@@ -169,7 +175,10 @@ describe("cross-variant unwrap (variant auto-detected from key envelope)", () =>
         ...wrapped,
         algorithm: "mlkem9999-xchacha20poly1305-v1",
       }),
-    ).rejects.toThrow("unknown ML-KEM variant");
+    ).rejects.toMatchObject({
+      code: CryptoErrorCode.MLKEM_UNKNOWN_VARIANT,
+      message: expect.stringContaining("unknown ML-KEM variant"),
+    });
   });
 });
 

@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./errors.js";
 export * from "./adapters/mock.js";
 export * from "./adapters/mockMidnight.js";
 export * from "./adapters/httpGateway.js";

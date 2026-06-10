@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { MockChainAdapter } from "../adapters/mock.js";
 import type { ChainReferenceUpdate } from "../types.js";
+import { ChainErrorCode } from "../errors.js";
 
 // Module-level refs/permissions Maps are shared within this file but fresh
 // per test file (vitest isolates module state between files).
@@ -113,9 +114,14 @@ describe("MockChainAdapter", () => {
 
     it("throws for unknown refId with descriptive message", async () => {
       const adapter = new MockChainAdapter();
-      await expect(adapter.readReference("ref_nonexistent")).rejects.toThrow(
-        "[dStorage/mock-chain] No reference found for refId: ref_nonexistent",
-      );
+      await expect(
+        adapter.readReference("ref_nonexistent"),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+        message: expect.stringContaining(
+          "No reference found for refId: ref_nonexistent",
+        ),
+      });
     });
 
     it("returns the exact reference data (no mutation)", async () => {
@@ -175,9 +181,14 @@ describe("MockChainAdapter", () => {
 
     it("throws for an unknown refId", async () => {
       const adapter = new MockChainAdapter();
-      await expect(adapter.removeReference!("ref_nonexistent")).rejects.toThrow(
-        "[dStorage/mock-chain] No reference found for refId: ref_nonexistent",
-      );
+      await expect(
+        adapter.removeReference!("ref_nonexistent"),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_REF_NOT_FOUND_REMOVE,
+        message: expect.stringContaining(
+          "No reference found for refId: ref_nonexistent",
+        ),
+      });
     });
 
     it("does not affect other references", async () => {
@@ -229,9 +240,12 @@ describe("MockChainAdapter", () => {
       const adapter = new MockChainAdapter();
       await expect(
         adapter.updateReference!("ref_nonexistent", makeUpdate()),
-      ).rejects.toThrow(
-        "[dStorage/mock-chain] No reference found for refId: ref_nonexistent",
-      );
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_REF_NOT_FOUND_UPDATE,
+        message: expect.stringContaining(
+          "No reference found for refId: ref_nonexistent",
+        ),
+      });
     });
 
     it("does not affect other references", async () => {
@@ -276,15 +290,23 @@ describe("MockChainAdapter", () => {
       const { refId } = await adapter.writeReference(refWithSecret("own2"));
       await expect(
         adapter.removeReference!(refId, wrongSecret),
-      ).rejects.toThrow("[dStorage/mock-chain] ownerSecret mismatch");
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_OWNER_SECRET_MISMATCH,
+        message: expect.stringContaining(
+          "[dStorage/mock-chain] ownerSecret mismatch",
+        ),
+      });
     });
 
     it("removeReference rejects missing ownerSecret when commitment exists", async () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(refWithSecret("own3"));
-      await expect(adapter.removeReference!(refId)).rejects.toThrow(
-        "[dStorage/mock-chain] ownerSecret required",
-      );
+      await expect(adapter.removeReference!(refId)).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_OWNER_SECRET_REQUIRED,
+        message: expect.stringContaining(
+          "[dStorage/mock-chain] ownerSecret required",
+        ),
+      });
     });
 
     it("updateReference succeeds with correct ownerSecret", async () => {
@@ -300,7 +322,12 @@ describe("MockChainAdapter", () => {
       const { refId } = await adapter.writeReference(refWithSecret("own5"));
       await expect(
         adapter.updateReference!(refId, makeUpdate(), wrongSecret),
-      ).rejects.toThrow("[dStorage/mock-chain] ownerSecret mismatch");
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_OWNER_SECRET_MISMATCH,
+        message: expect.stringContaining(
+          "[dStorage/mock-chain] ownerSecret mismatch",
+        ),
+      });
     });
 
     it("updateReference rejects missing ownerSecret when commitment exists", async () => {
@@ -308,7 +335,12 @@ describe("MockChainAdapter", () => {
       const { refId } = await adapter.writeReference(refWithSecret("own6"));
       await expect(
         adapter.updateReference!(refId, makeUpdate()),
-      ).rejects.toThrow("[dStorage/mock-chain] ownerSecret required");
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_OWNER_SECRET_REQUIRED,
+        message: expect.stringContaining(
+          "[dStorage/mock-chain] ownerSecret required",
+        ),
+      });
     });
 
     it("public reference (no ownerSecret) can be removed without a secret", async () => {

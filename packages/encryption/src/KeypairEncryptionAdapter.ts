@@ -1,3 +1,6 @@
+import { DStorageError } from "@dstorage/crypto";
+import { EncryptionErrorCode } from "./errors.js";
+
 /**
  * @dstorage/encryption — KeypairEncryptionAdapter
  *
@@ -185,7 +188,8 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
 
   async unwrapDek(data: WrappedDekResult): Promise<Uint8Array> {
     if (!this.secretKey) {
-      throw new Error(
+      throw new DStorageError(
+        EncryptionErrorCode.KEYPAIR_MISSING_SECRET_KEY,
         `[dStorage] KeypairEncryptionAdapter(${this.variant}): cannot unwrapDek — ` +
           "no Secret Key is available. Use fromKeypair() or fromPassword() to create an adapter with a SK.",
       );

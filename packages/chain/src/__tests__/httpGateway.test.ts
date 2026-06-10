@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { HttpGatewayChainAdapter } from "../adapters/httpGateway.js";
 import type { ChainReference } from "../types.js";
+import { ChainErrorCode } from "../errors.js";
 
 const BASE_URL = "https://example.com";
 const WRITE_PATH = "/chain/write";
@@ -136,9 +137,14 @@ describe("HttpGatewayChainAdapter", () => {
       vi.stubGlobal("fetch", mockFetch({}, 500));
 
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.writeReference(makeRef("wr5"))).rejects.toThrow(
-        "[dStorage/http-gateway-chain] writeReference failed: HTTP 500",
-      );
+      await expect(
+        adapter.writeReference(makeRef("wr5")),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_WRITE_HTTP_ERROR,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] writeReference failed: HTTP 500",
+        ),
+      });
     });
 
     it("throws with [dStorage/http-gateway-chain] prefix on network error", async () => {
@@ -148,9 +154,14 @@ describe("HttpGatewayChainAdapter", () => {
       );
 
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.writeReference(makeRef("wr6"))).rejects.toThrow(
-        "[dStorage/http-gateway-chain] writeReference failed",
-      );
+      await expect(
+        adapter.writeReference(makeRef("wr6")),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_WRITE_FAILED,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] writeReference failed",
+        ),
+      });
     });
   });
 
@@ -208,9 +219,12 @@ describe("HttpGatewayChainAdapter", () => {
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
       await expect(
         adapter.updateReference("ref_err", makeUpdate()),
-      ).rejects.toThrow(
-        "[dStorage/http-gateway-chain] updateReference failed: HTTP 500",
-      );
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_UPDATE_HTTP_ERROR,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] updateReference failed: HTTP 500",
+        ),
+      });
     });
 
     it("throws with [dStorage/http-gateway-chain] prefix on network error", async () => {
@@ -222,7 +236,12 @@ describe("HttpGatewayChainAdapter", () => {
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
       await expect(
         adapter.updateReference("ref_net", makeUpdate()),
-      ).rejects.toThrow("[dStorage/http-gateway-chain] updateReference failed");
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_UPDATE_FAILED,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] updateReference failed",
+        ),
+      });
     });
   });
 
@@ -258,25 +277,34 @@ describe("HttpGatewayChainAdapter", () => {
       vi.stubGlobal("fetch", mockFetch({}, 404));
 
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.readReference("ref_missing")).rejects.toThrow(
-        "[dStorage/http-gateway-chain] readReference failed: HTTP 404",
-      );
+      await expect(adapter.readReference("ref_missing")).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_READ_HTTP_ERROR,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] readReference failed: HTTP 404",
+        ),
+      });
     });
 
     it("throws when server returns empty object {}", async () => {
       vi.stubGlobal("fetch", mockFetch({}));
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.readReference("ref_bad")).rejects.toThrow(
-        "[dStorage/http-gateway-chain] readReference failed: invalid response shape",
-      );
+      await expect(adapter.readReference("ref_bad")).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_READ_INVALID_SHAPE,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] readReference failed: invalid response shape",
+        ),
+      });
     });
 
     it("throws when server returns wrong-shape object", async () => {
       vi.stubGlobal("fetch", mockFetch({ foo: "bar", count: 42 }));
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.readReference("ref_bad")).rejects.toThrow(
-        "[dStorage/http-gateway-chain] readReference failed: invalid response shape",
-      );
+      await expect(adapter.readReference("ref_bad")).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_READ_INVALID_SHAPE,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] readReference failed: invalid response shape",
+        ),
+      });
     });
 
     it("throws when server returns non-JSON body", async () => {
@@ -290,9 +318,12 @@ describe("HttpGatewayChainAdapter", () => {
         }),
       );
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.readReference("ref_bad")).rejects.toThrow(
-        "[dStorage/http-gateway-chain] readReference failed: invalid JSON response",
-      );
+      await expect(adapter.readReference("ref_bad")).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_READ_INVALID_JSON,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] readReference failed: invalid JSON response",
+        ),
+      });
     });
   });
 
@@ -325,17 +356,23 @@ describe("HttpGatewayChainAdapter", () => {
       vi.stubGlobal("fetch", mockFetch({}, 503));
 
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.listReferences()).rejects.toThrow(
-        "[dStorage/http-gateway-chain] listReferences failed: HTTP 503",
-      );
+      await expect(adapter.listReferences()).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_LIST_HTTP_ERROR,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] listReferences failed: HTTP 503",
+        ),
+      });
     });
 
     it("throws when server returns non-array (empty object)", async () => {
       vi.stubGlobal("fetch", mockFetch({}));
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.listReferences()).rejects.toThrow(
-        "[dStorage/http-gateway-chain] listReferences failed: expected array in response",
-      );
+      await expect(adapter.listReferences()).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_LIST_NOT_ARRAY,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] listReferences failed: expected array in response",
+        ),
+      });
     });
 
     it("skips invalid item {} and returns empty array, warns via logger", async () => {
@@ -419,9 +456,12 @@ describe("HttpGatewayChainAdapter", () => {
         }),
       );
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.listReferences()).rejects.toThrow(
-        "[dStorage/http-gateway-chain] listReferences failed: invalid JSON response",
-      );
+      await expect(adapter.listReferences()).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_LIST_INVALID_JSON,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] listReferences failed: invalid JSON response",
+        ),
+      });
     });
   });
 
@@ -460,9 +500,12 @@ describe("HttpGatewayChainAdapter", () => {
       vi.stubGlobal("fetch", mockFetch({}, 403));
 
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
-      await expect(adapter.removeReference("ref_del4")).rejects.toThrow(
-        "[dStorage/http-gateway-chain] removeReference failed: HTTP 403",
-      );
+      await expect(adapter.removeReference("ref_del4")).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_REMOVE_HTTP_ERROR,
+        message: expect.stringContaining(
+          "[dStorage/http-gateway-chain] removeReference failed: HTTP 403",
+        ),
+      });
     });
   });
 });

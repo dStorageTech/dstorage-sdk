@@ -57,8 +57,9 @@ import type {
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
-import { hexToBytes } from "@dstorage/crypto";
+import { hexToBytes, DStorageError } from "@dstorage/crypto";
 import { sanitiseErrorBody } from "../utils.js";
+import { PaymentErrorCode } from "../errors.js";
 
 // Shared API endpoint for all network payment flows on the dStorage signing server.
 const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
@@ -137,14 +138,16 @@ interface SignTxResponse {
  */
 export function parseSignTxResponse(raw: unknown): SignTxResponse {
   if (typeof raw !== "object" || raw === null) {
-    throw new Error(
+    throw new DStorageError(
+      PaymentErrorCode.MANAGED_NON_OBJECT_RESPONSE,
       "[dStorage/managed-payment] Signing server returned a non-object response.",
     );
   }
   const r = raw as Record<string, unknown>;
 
   if (r["success"] !== true) {
-    throw new Error(
+    throw new DStorageError(
+      PaymentErrorCode.MANAGED_SERVER_FAILURE,
       `[dStorage/managed-payment] Signing server reported success:false — ${sanitiseErrorBody(JSON.stringify(r))}`,
     );
   }
@@ -157,7 +160,8 @@ export function parseSignTxResponse(raw: unknown): SignTxResponse {
     "serviceFee",
   ] as const) {
     if (typeof r[field] !== "string") {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_MISSING_FIELD,
         `[dStorage/managed-payment] Signing server response missing or invalid field: ${field}`,
       );
     }
@@ -180,7 +184,8 @@ export function assertOwnerKeyMatch(
   pinnedKey: string | undefined,
 ): void {
   if (pinnedKey && responseKey !== pinnedKey) {
-    throw new Error(
+    throw new DStorageError(
+      PaymentErrorCode.MANAGED_PUBLIC_KEY_MISMATCH,
       "[dStorage/managed-payment] Signing server returned a public key that does not " +
         "match the pinned key from the auth token — possible server compromise or MITM.",
     );
@@ -233,7 +238,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     });
     this.signingServerUrl = config.signingServerUrl.replace(/\/$/, "");
     if (!config.authToken || config.authToken.trim() === "") {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_TOKEN_REQUIRED,
         "[dStorage/managed-payment] authToken is required and must not be empty or whitespace.",
       );
     }
@@ -287,7 +293,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     if (Date.now() > instruction.expiresAt) {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_QUOTE_EXPIRED,
         `[dStorage/payment] Quote expired at ${new Date(instruction.expiresAt).toISOString()}. ` +
           "Request a fresh quote via estimateCost() before calling pay().",
       );
@@ -349,7 +356,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         });
         onReceipt?.(receipt);
         if (!receipt.signedTx) {
-          throw new Error(
+          throw new DStorageError(
+            PaymentErrorCode.MANAGED_UNBALANCED_TX,
             "[dStorage/payment] Midnight managed payment server did not return a balanced transaction.",
           );
         }
@@ -615,12 +623,15 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         },
       );
     } catch (err) {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_SERVER_UNREACHABLE,
         `[dStorage/managed-payment] Could not reach signing server: ${err}`,
+        { cause: err },
       );
     }
     if (signResp.status === 409) {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_KEY_CHANGED,
         "[dStorage/managed-payment] Signing server key has changed — " +
           "re-issue your API token to obtain the updated public key.",
       );
@@ -628,7 +639,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     if (!signResp.ok) {
       const rawBody = await signResp.text().catch(() => "");
       const body = sanitiseErrorBody(rawBody);
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_SIGN_HTTP_ERROR,
         `[dStorage/managed-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
       );
     }
@@ -637,7 +649,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     try {
       parsed = await signResp.json();
     } catch {
-      throw new Error(
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_NON_JSON_RESPONSE,
         `[dStorage/managed-payment] Managed payment service returned a non-JSON response — ` +
           `check that the service URL is correct and reachable: ${this.signingServerUrl}${POST_SIGN_TX_API_PATH}`,
       );

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AutonomiStorageAdapter } from "../adapters/autonomi.js";
+import { StorageErrorCode } from "../errors.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -61,9 +62,12 @@ describe("AutonomiStorageAdapter", () => {
 
     it("throws for unknown id", async () => {
       const adapter = new AutonomiStorageAdapter();
-      await expect(adapter.retrieve("autonomi_nonexistent")).rejects.toThrow(
-        "[dStorage/autonomi]",
-      );
+      await expect(
+        adapter.retrieve("autonomi_nonexistent"),
+      ).rejects.toMatchObject({
+        code: StorageErrorCode.AUTONOMI_DATA_NOT_FOUND,
+        message: expect.stringContaining("[dStorage/autonomi]"),
+      });
     });
 
     it("multiple items: each id retrieves its own data", async () => {

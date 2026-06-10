@@ -9,6 +9,7 @@ import {
   assertOwnerKeyMatch,
 } from "../adapters/managed.js";
 import type { PaymentQuote } from "../types.js";
+import { PaymentErrorCode } from "../errors.js";
 
 const BASE_CONFIG = {
   signingServerUrl: "https://signing.example.com",
@@ -47,22 +48,43 @@ describe("ManagedPaymentAdapter — authToken validation", () => {
   });
 
   it("throws at construction when authToken is missing", () => {
-    expect(
-      // @ts-expect-error — intentionally omitting required authToken to test runtime guard
-      () => new ManagedPaymentAdapter({ ...BASE_CONFIG }),
-    ).toThrow(/authToken/i);
+    let err: unknown;
+    // @ts-expect-error — intentionally omitting required authToken to test runtime guard
+    try {
+      new ManagedPaymentAdapter({ ...BASE_CONFIG });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_TOKEN_REQUIRED,
+      message: expect.stringMatching(/authToken/i),
+    });
   });
 
   it("throws at construction when authToken is an empty string", () => {
-    expect(
-      () => new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "" }),
-    ).toThrow(/authToken/i);
+    let err: unknown;
+    try {
+      new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "" });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_TOKEN_REQUIRED,
+      message: expect.stringMatching(/authToken/i),
+    });
   });
 
   it("throws at construction when authToken is whitespace only", () => {
-    expect(
-      () => new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "   " }),
-    ).toThrow(/authToken/i);
+    let err: unknown;
+    try {
+      new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "   " });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_TOKEN_REQUIRED,
+      message: expect.stringMatching(/authToken/i),
+    });
   });
 
   it("accepts a compound token whose credential part is a JWT (dots in credential)", () => {
@@ -104,46 +126,129 @@ describe("parseSignTxResponse — signing server response validation", () => {
   });
 
   it("throws when success is false", () => {
-    expect(() =>
-      parseSignTxResponse({ ...VALID_RESPONSE, success: false }),
-    ).toThrow(/success/i);
+    let err: unknown;
+    try {
+      parseSignTxResponse({ ...VALID_RESPONSE, success: false });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_SERVER_FAILURE,
+      message: expect.stringMatching(/success/i),
+    });
   });
 
   it("throws when txId is missing", () => {
     const { txId: _, ...rest } = VALID_RESPONSE;
-    expect(() => parseSignTxResponse(rest)).toThrow(/txId/i);
+    let err: unknown;
+    try {
+      parseSignTxResponse(rest);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_MISSING_FIELD,
+      message: expect.stringMatching(/txId/i),
+    });
   });
 
   it("throws when txId is not a string", () => {
-    expect(() =>
-      parseSignTxResponse({ ...VALID_RESPONSE, txId: 12345 }),
-    ).toThrow(/txId/i);
+    let err: unknown;
+    try {
+      parseSignTxResponse({ ...VALID_RESPONSE, txId: 12345 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_MISSING_FIELD,
+      message: expect.stringMatching(/txId/i),
+    });
   });
 
   it("throws when signature is missing", () => {
     const { signature: _, ...rest } = VALID_RESPONSE;
-    expect(() => parseSignTxResponse(rest)).toThrow(/signature/i);
+    let err: unknown;
+    try {
+      parseSignTxResponse(rest);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_MISSING_FIELD,
+      message: expect.stringMatching(/signature/i),
+    });
   });
 
   it("throws when publicKey is missing", () => {
     const { publicKey: _, ...rest } = VALID_RESPONSE;
-    expect(() => parseSignTxResponse(rest)).toThrow(/publicKey/i);
+    let err: unknown;
+    try {
+      parseSignTxResponse(rest);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_MISSING_FIELD,
+      message: expect.stringMatching(/publicKey/i),
+    });
   });
 
   it("throws when txAmount is missing", () => {
     const { txAmount: _, ...rest } = VALID_RESPONSE;
-    expect(() => parseSignTxResponse(rest)).toThrow(/txAmount/i);
+    let err: unknown;
+    try {
+      parseSignTxResponse(rest);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_MISSING_FIELD,
+      message: expect.stringMatching(/txAmount/i),
+    });
   });
 
   it("throws when serviceFee is missing", () => {
     const { serviceFee: _, ...rest } = VALID_RESPONSE;
-    expect(() => parseSignTxResponse(rest)).toThrow(/serviceFee/i);
+    let err: unknown;
+    try {
+      parseSignTxResponse(rest);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_MISSING_FIELD,
+      message: expect.stringMatching(/serviceFee/i),
+    });
   });
 
   it("throws when the response is not an object", () => {
-    expect(() => parseSignTxResponse("not an object")).toThrow();
-    expect(() => parseSignTxResponse(null)).toThrow();
-    expect(() => parseSignTxResponse(42)).toThrow();
+    let err1: unknown;
+    try {
+      parseSignTxResponse("not an object");
+    } catch (e) {
+      err1 = e;
+    }
+    let err2: unknown;
+    try {
+      parseSignTxResponse(null);
+    } catch (e) {
+      err2 = e;
+    }
+    let err3: unknown;
+    try {
+      parseSignTxResponse(42);
+    } catch (e) {
+      err3 = e;
+    }
+    expect(err1).toMatchObject({
+      code: PaymentErrorCode.MANAGED_NON_OBJECT_RESPONSE,
+    });
+    expect(err2).toMatchObject({
+      code: PaymentErrorCode.MANAGED_NON_OBJECT_RESPONSE,
+    });
+    expect(err3).toMatchObject({
+      code: PaymentErrorCode.MANAGED_NON_OBJECT_RESPONSE,
+    });
   });
 
   it("strips ANSI escapes and HTML from the success:false error message (N6)", () => {
@@ -184,16 +289,30 @@ describe("assertOwnerKeyMatch — signing server owner-key pinning", () => {
   });
 
   it("throws when the response key differs from the pinned key", () => {
-    expect(() => assertOwnerKeyMatch("B".repeat(683), PINNED)).toThrow(
-      /does not match the pinned key/i,
-    );
+    let err: unknown;
+    try {
+      assertOwnerKeyMatch("B".repeat(683), PINNED);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_PUBLIC_KEY_MISMATCH,
+      message: expect.stringMatching(/does not match the pinned key/i),
+    });
   });
 
   it("throws on any mismatch, even a single-character difference", () => {
     const tampered = "A".repeat(682) + "B";
-    expect(() => assertOwnerKeyMatch(tampered, PINNED)).toThrow(
-      /\[dStorage\/managed-payment\]/,
-    );
+    let err: unknown;
+    try {
+      assertOwnerKeyMatch(tampered, PINNED);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: PaymentErrorCode.MANAGED_PUBLIC_KEY_MISMATCH,
+      message: expect.stringMatching(/\[dStorage\/managed-payment\]/),
+    });
   });
 });
 
@@ -366,15 +485,19 @@ describe("ManagedPaymentAdapter — quote TTL", () => {
   it("pay() throws when the quote has already expired", async () => {
     const adapter = makeAdapter();
     const expiredQuote = makeQuote({ expiresAt: Date.now() - 1 });
-    await expect(adapter.pay(expiredQuote)).rejects.toThrow(
-      "[dStorage/payment]",
-    );
+    await expect(adapter.pay(expiredQuote)).rejects.toMatchObject({
+      code: PaymentErrorCode.MANAGED_QUOTE_EXPIRED,
+      message: expect.stringContaining("[dStorage/payment]"),
+    });
   });
 
   it("pay() error message mentions expiry", async () => {
     const adapter = makeAdapter();
     const expiredQuote = makeQuote({ expiresAt: Date.now() - 5_000 });
-    await expect(adapter.pay(expiredQuote)).rejects.toThrow(/expir/i);
+    await expect(adapter.pay(expiredQuote)).rejects.toMatchObject({
+      code: PaymentErrorCode.MANAGED_QUOTE_EXPIRED,
+      message: expect.stringMatching(/expir/i),
+    });
   });
 
   it("pay() does not throw an expiry error for a valid quote", async () => {

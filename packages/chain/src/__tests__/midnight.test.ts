@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MidnightChainAdapter } from "../adapters/midnight/src/midnight.js";
+import { ChainErrorCode } from "../errors.js";
 
 const MOCK_WALLET_PROVIDER = { wallet: {} } as any;
 const MOCK_PRIVATE_STATE_PASSWORD = "Aa1!mockseedfortest";
@@ -29,42 +30,66 @@ describe("MidnightChainAdapter", () => {
     });
 
     it("throws for empty contractAddress", () => {
-      expect(
-        () =>
-          new MidnightChainAdapter({
-            contractAddress: "",
-            network: MOCK_NETWORK,
-            walletMode: "provider",
-            walletProvider: MOCK_WALLET_PROVIDER,
-            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
-          }),
-      ).toThrow("[dStorage/midnight] Invalid contract address");
+      let err: unknown;
+      try {
+        new MidnightChainAdapter({
+          contractAddress: "",
+          network: MOCK_NETWORK,
+          walletMode: "provider",
+          walletProvider: MOCK_WALLET_PROVIDER,
+          privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_INVALID_CONTRACT_ADDRESS,
+        message: expect.stringContaining(
+          "[dStorage/midnight] Invalid contract address",
+        ),
+      });
     });
 
     it("throws for contractAddress with wrong format (not 64-char hex)", () => {
-      expect(
-        () =>
-          new MidnightChainAdapter({
-            contractAddress: "0xNotHex",
-            network: MOCK_NETWORK,
-            walletMode: "provider",
-            walletProvider: MOCK_WALLET_PROVIDER,
-            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
-          }),
-      ).toThrow("Expected a 64-character lowercase hex string");
+      let err: unknown;
+      try {
+        new MidnightChainAdapter({
+          contractAddress: "0xNotHex",
+          network: MOCK_NETWORK,
+          walletMode: "provider",
+          walletProvider: MOCK_WALLET_PROVIDER,
+          privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_INVALID_CONTRACT_ADDRESS,
+        message: expect.stringContaining(
+          "Expected a 64-character lowercase hex string",
+        ),
+      });
     });
 
     it("throws if network is not provided (undefined)", () => {
-      expect(
+      let err: unknown;
+      try {
         // @ts-expect-error — intentional: testing runtime validation
-        () =>
-          new MidnightChainAdapter({
-            contractAddress: VALID_ADDR,
-            walletMode: "provider",
-            walletProvider: MOCK_WALLET_PROVIDER,
-            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
-          }),
-      ).toThrow("[dStorage/midnight] network is required");
+        new MidnightChainAdapter({
+          contractAddress: VALID_ADDR,
+          walletMode: "provider",
+          walletProvider: MOCK_WALLET_PROVIDER,
+          privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_NETWORK_REQUIRED,
+        message: expect.stringContaining(
+          "[dStorage/midnight] network is required",
+        ),
+      });
     });
 
     it("does not throw when credentials are missing in connector mode", () => {
@@ -119,33 +144,45 @@ describe("MidnightChainAdapter", () => {
 
   describe('walletMode: "provider"', () => {
     it("throws if walletProvider is missing", () => {
-      expect(
+      let err: unknown;
+      try {
         // @ts-expect-error — intentional: testing runtime validation
-        () =>
-          new MidnightChainAdapter({
-            contractAddress: VALID_ADDR,
-            network: MOCK_NETWORK,
-            walletMode: "provider",
-            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
-          }),
-      ).toThrow(
-        '[dStorage/midnight] walletProvider is required (walletMode: "provider")',
-      );
+        new MidnightChainAdapter({
+          contractAddress: VALID_ADDR,
+          network: MOCK_NETWORK,
+          walletMode: "provider",
+          privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_WALLET_PROVIDER_REQUIRED,
+        message: expect.stringContaining(
+          '[dStorage/midnight] walletProvider is required (walletMode: "provider")',
+        ),
+      });
     });
 
     it("throws if privateStatePassword is missing", () => {
-      expect(
+      let err: unknown;
+      try {
         // @ts-expect-error — intentional: testing runtime validation
-        () =>
-          new MidnightChainAdapter({
-            contractAddress: VALID_ADDR,
-            network: MOCK_NETWORK,
-            walletMode: "provider",
-            walletProvider: MOCK_WALLET_PROVIDER,
-          }),
-      ).toThrow(
-        '[dStorage/midnight] privateStatePassword is required (walletMode: "provider")',
-      );
+        new MidnightChainAdapter({
+          contractAddress: VALID_ADDR,
+          network: MOCK_NETWORK,
+          walletMode: "provider",
+          walletProvider: MOCK_WALLET_PROVIDER,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_PRIVATE_STATE_PASSWORD_REQUIRED,
+        message: expect.stringContaining(
+          '[dStorage/midnight] privateStatePassword is required (walletMode: "provider")',
+        ),
+      });
     });
   });
 
@@ -213,7 +250,10 @@ describe("MidnightChainAdapter", () => {
           owner: "0xOwner",
           writtenAt: Date.now(),
         }),
-      ).rejects.toThrow("init()");
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_NOT_INITIALIZED,
+        message: expect.stringContaining("init()"),
+      });
     });
 
     it("writeReference throws about wallet not initialized (connector mode)", async () => {
@@ -230,7 +270,10 @@ describe("MidnightChainAdapter", () => {
           owner: "0xOwner",
           writtenAt: Date.now(),
         }),
-      ).rejects.toThrow("init()");
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_NOT_INITIALIZED,
+        message: expect.stringContaining("init()"),
+      });
     });
   });
 
@@ -256,9 +299,18 @@ describe("MidnightChainAdapter", () => {
         walletProvider: MOCK_WALLET_PROVIDER,
         privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
       });
-      expect(() => adapter.setContractAddress("0xNotValid")).toThrow(
-        "[dStorage/midnight] Invalid contract address",
-      );
+      let err: unknown;
+      try {
+        adapter.setContractAddress("0xNotValid");
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_INVALID_CONTRACT_ADDRESS,
+        message: expect.stringContaining(
+          "[dStorage/midnight] Invalid contract address",
+        ),
+      });
     });
 
     it("throws for an empty address", () => {
@@ -269,9 +321,18 @@ describe("MidnightChainAdapter", () => {
         walletProvider: MOCK_WALLET_PROVIDER,
         privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
       });
-      expect(() => adapter.setContractAddress("")).toThrow(
-        "[dStorage/midnight] Invalid contract address",
-      );
+      let err: unknown;
+      try {
+        adapter.setContractAddress("");
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_INVALID_CONTRACT_ADDRESS,
+        message: expect.stringContaining(
+          "[dStorage/midnight] Invalid contract address",
+        ),
+      });
     });
   });
 });

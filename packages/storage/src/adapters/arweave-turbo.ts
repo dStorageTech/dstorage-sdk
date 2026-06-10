@@ -54,6 +54,8 @@ import {
   computeBlake3Hex,
   assertContentHash,
 } from "./integrity.js";
+import { DStorageError } from "@dstorage/crypto";
+import { StorageErrorCode } from "../errors.js";
 
 const ARWEAVE_GATEWAY_URL = "https://turbo-gateway.com";
 
@@ -146,7 +148,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     // funded Arweave wallet and returns the signature.
     if (config.signingServerUrl) {
       if (!config.authToken?.trim()) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.TURBO_AUTH_TOKEN_REQUIRED,
           "[dStorage/arweave-turbo] authToken is required when signingServerUrl is provided.",
         );
       }
@@ -161,7 +164,10 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     } else {
-      throw new Error("Local Arweave Turbo Adapter not supported yet");
+      throw new DStorageError(
+        StorageErrorCode.TURBO_LOCAL_NOT_SUPPORTED,
+        "[dStorage/arweave-turbo] Local Arweave Turbo Adapter not supported yet.",
+      );
     }
   }
 
@@ -214,7 +220,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     id: string,
   ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_INVALID_TX_ID,
         `[dStorage/arweave-turbo] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
       );
     }
@@ -224,7 +231,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (!this.skipIntegrityCheck) {
       const metaResp = await fetch(`${this.gateway}/tx/${id}`);
       if (!metaResp.ok) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.TURBO_TX_METADATA_FAILED,
           `[dStorage/arweave-turbo] Could not fetch transaction metadata for txId: ${id} — ` +
             "content hash cannot be verified. " +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
@@ -240,7 +248,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
         if (name === CONTENT_HASH_TAG) storedHash = value;
       }
       if (!storedHash) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.TURBO_HASH_TAG_MISSING,
           `[dStorage/arweave-turbo] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
@@ -250,7 +259,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     // ── Download data ─────────────────────────────────────────────────────────
     const resp = await fetch(`${this.gateway}/${id}`);
     if (!resp.ok) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_RETRIEVE_HTTP_ERROR,
         `[dStorage/arweave-turbo] Failed to retrieve txId=${id}: HTTP ${resp.status}\n` +
           `Check: https://viewblock.io/arweave/tx/${id}`,
       );
@@ -262,7 +272,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (contentLength !== null) {
       const size = parseInt(contentLength, 10);
       if (!isNaN(size) && size > this.maxRetrieveSizeBytes) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.TURBO_SIZE_LIMIT_EXCEEDED,
           `[dStorage/arweave-turbo] Content-Length (${size} bytes) exceeds ` +
             `the configured limit of ${this.maxRetrieveSizeBytes} bytes for txId: ${id}.`,
         );
@@ -273,7 +284,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
 
     // Post-load size guard — defense-in-depth; catches missing or incorrect Content-Length.
     if (bytes.byteLength > this.maxRetrieveSizeBytes) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_SIZE_MISMATCH,
         `[dStorage/arweave-turbo] Downloaded ${bytes.byteLength} bytes for txId: ${id}, ` +
           `which exceeds the configured limit of ${this.maxRetrieveSizeBytes} bytes.`,
       );
@@ -297,13 +309,16 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     try {
       costs = await turbo.getUploadCosts({ bytes: [dataSizeBytes] });
     } catch (err) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_COST_ESTIMATE_FAILED,
         `[dStorage/arweave-turbo] Failed to fetch upload cost estimate from Turbo: ${err}`,
+        { cause: err },
       );
     }
     const cost = costs[0];
     if (!cost) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_NO_COST_ESTIMATE,
         "[dStorage/arweave-turbo] Turbo returned no cost estimate for the given data size.",
       );
     }
@@ -368,7 +383,8 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     });
 
     if (!paymentReceipt.signedTx) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_INVALID_SIGN_TX_RESPONSE,
         "[dStorage/arweave-turbo] Signing server returned an invalid sign-tx response for Arweave Turbo payment.",
       );
     }
@@ -387,14 +403,16 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   private static _parseToken(token: string): Uint8Array {
     const dot = token.lastIndexOf(".");
     if (dot === -1) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_FORMAT,
         "[dStorage/arweave-turbo] authToken must be in the format " +
           "<credential>.<base64url_public_key> — re-issue your token from the signing server.",
       );
     }
     const ownerBytes = _base64urlToBytes(token.slice(dot + 1));
     if (ownerBytes.length !== 512) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_KEY,
         `[dStorage/arweave-turbo] authToken public key must be 512 bytes (RSA-4096 modulus), ` +
           `got ${ownerBytes.length} — re-issue your token.`,
       );
@@ -423,15 +441,18 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
         signal: AbortSignal.timeout(10_000),
       });
       if (!result.id) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.TURBO_NO_TX_ID_RETURNED,
           "[dStorage/arweave-turbo] Arweave Turbo did not return a transaction id.",
         );
       }
 
       return { txId: result.id, dataCaches: result.dataCaches };
     } catch (err) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.TURBO_UPLOAD_FAILED,
         `[dStorage/arweave-turbo] Upload to Arweave Turbo failed: ${err}`,
+        { cause: err },
       );
     }
   }

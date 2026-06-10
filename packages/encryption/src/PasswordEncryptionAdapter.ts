@@ -68,8 +68,9 @@
  */
 
 import { scrypt } from "@noble/hashes/scrypt.js";
-import { deriveKek, wrapKey, unwrapKey } from "@dstorage/crypto";
+import { deriveKek, wrapKey, unwrapKey, DStorageError } from "@dstorage/crypto";
 import type { EncryptionAdapter, WrappedDekResult } from "./types.js";
+import { EncryptionErrorCode } from "./errors.js";
 
 // ---------------------------------------------------------------------------
 // KDF presets — convenience shorthands for input only, never stored
@@ -268,7 +269,8 @@ export class PasswordEncryptionAdapter implements EncryptionAdapter {
    */
   static fromKdfParams(config: FromKdfParamsConfig): PasswordEncryptionAdapter {
     if (config.kdf !== "scrypt") {
-      throw new Error(
+      throw new DStorageError(
+        EncryptionErrorCode.PASSWORD_UNSUPPORTED_KDF,
         `[dStorage] PasswordEncryptionAdapter.fromKdfParams: unsupported kdf "${config.kdf}". ` +
           'Only "scrypt" is supported.',
       );
@@ -382,7 +384,8 @@ function resolveSalt(salt: string | Uint8Array): Uint8Array {
   const bytes =
     typeof salt === "string" ? new TextEncoder().encode(salt) : salt;
   if (bytes.length === 0) {
-    throw new Error(
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_EMPTY_SALT,
       "[dStorage] PasswordEncryptionAdapter: salt must not be empty. " +
         'Provide an app-specific domain label, e.g. "myapp:v1:alice@example.com".',
     );
@@ -396,7 +399,8 @@ function resolveParams(
 ): ScryptParams {
   if (preset !== undefined) {
     if (!(preset in KDF_PRESETS)) {
-      throw new Error(
+      throw new DStorageError(
+        EncryptionErrorCode.PASSWORD_UNKNOWN_PRESET,
         `[dStorage] PasswordEncryptionAdapter: unknown preset "${preset}". ` +
           `Valid presets: ${Object.keys(KDF_PRESETS).join(", ")}.`,
       );
@@ -492,33 +496,38 @@ function validatePassword(
   additionalValidators?: Array<(password: string) => void>,
 ): void {
   if (password.length < minLength) {
-    throw new Error(
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_TOO_SHORT,
       `[dStorage] Password too short: ${password.length} character(s) (minimum ${minLength}). ` +
         "Use a longer passphrase.",
     );
   }
 
   if (new Set(password).size < 3) {
-    throw new Error(
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_TOO_FEW_DISTINCT,
       "[dStorage] Password is too weak: too few distinct characters.",
     );
   }
 
   if (hasSequentialRun(password)) {
-    throw new Error(
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_SEQUENTIAL_RUN,
       "[dStorage] Password is too weak: contains a sequential character run (e.g. abcde, 12345).",
     );
   }
 
   if (hasKeyboardWalk(password)) {
-    throw new Error(
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_KEYBOARD_WALK,
       "[dStorage] Password is too weak: contains a keyboard-row pattern (e.g. qwerty, asdfg).",
     );
   }
 
   const entropy = estimateEntropyBits(password);
   if (entropy < minEntropyBits) {
-    throw new Error(
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_ENTROPY_TOO_LOW,
       `[dStorage] Password entropy too low: ~${Math.round(entropy)} bits ` +
         `(minimum ${minEntropyBits} bits). ` +
         "Use a longer password with a mix of uppercase, lowercase, digits, and symbols.",

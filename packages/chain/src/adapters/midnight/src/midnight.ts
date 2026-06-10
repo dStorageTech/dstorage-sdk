@@ -23,7 +23,8 @@
 
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
-import { hexToBytes } from "@dstorage/crypto";
+import { hexToBytes, DStorageError } from "@dstorage/crypto";
+import { ChainErrorCode } from "../../../errors.js";
 import { type WalletProvider } from "@midnight-ntwrk/midnight-js-types";
 
 import type {
@@ -252,7 +253,10 @@ export class MidnightChainAdapter implements ChainAdapter {
       MidnightChainAdapter._validateContractAddress(config.contractAddress);
     }
     if (!config.network) {
-      throw new Error("[dStorage/midnight] network is required.");
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_NETWORK_REQUIRED,
+        "[dStorage/midnight] network is required.",
+      );
     }
 
     // Determine wallet mode and validate required fields
@@ -263,12 +267,14 @@ export class MidnightChainAdapter implements ChainAdapter {
         { walletMode: "provider" }
       >;
       if (!providerConfig.walletProvider) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_WALLET_PROVIDER_REQUIRED,
           '[dStorage/midnight] walletProvider is required (walletMode: "provider").',
         );
       }
       if (!providerConfig.privateStatePassword) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_PRIVATE_STATE_PASSWORD_REQUIRED,
           '[dStorage/midnight] privateStatePassword is required (walletMode: "provider").',
         );
       }
@@ -299,7 +305,8 @@ export class MidnightChainAdapter implements ChainAdapter {
           ).zkArtifactsPath
         : undefined;
     if (this._zkArtifactsPath !== undefined && !this._zkArtifactsPath.trim()) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_ZK_ARTIFACTS_PATH_EMPTY,
         "[dStorage/midnight] zkArtifactsPath must not be empty — " +
           "set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.",
       );
@@ -314,7 +321,8 @@ export class MidnightChainAdapter implements ChainAdapter {
           ).zkConfigBaseUrl
         : undefined;
     if (this._zkConfigBaseUrl !== undefined && !this._zkConfigBaseUrl.trim()) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_ZK_CONFIG_BASE_URL_EMPTY,
         "[dStorage/midnight] zkConfigBaseUrl must not be empty — " +
           "set it to the base URL where keys/ and zkir/ are served (e.g. window.location.origin).",
       );
@@ -329,8 +337,9 @@ export class MidnightChainAdapter implements ChainAdapter {
         config.nodeWsEndpoint === undefined ||
         config.proofServerEndpoint === undefined)
     ) {
-      throw new Error(
-        `Unsupported network: "${config.network}". Supported networks: ${Object.keys(NETWORKS).join(", ")}. ` +
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_UNSUPPORTED_NETWORK,
+        `[dStorage/midnight] Unsupported network: "${config.network}". Supported networks: ${Object.keys(NETWORKS).join(", ")}. ` +
           `For custom networks, provide all endpoint options explicitly.`,
       );
     }
@@ -346,7 +355,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     if (config.signingServerUrl) {
       if (!config.authToken?.trim()) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_AUTH_TOKEN_REQUIRED,
           "[dStorage/midnight] authToken is required when signingServerUrl is provided.",
         );
       }
@@ -428,7 +438,8 @@ export class MidnightChainAdapter implements ChainAdapter {
         this._zkConfigBaseUrl ??
         (typeof window !== "undefined" ? window.location.origin : "");
       if (!baseUrl) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_ZK_CONFIG_BASE_URL_REQUIRED,
           "[dStorage/midnight] zkConfigBaseUrl is required in connector mode.\n" +
             "  Set it to the base URL where keys/ and zkir/ are served.\n" +
             "  In a Vite app: copy compiled keys/ and zkir/ to public/, then set\n" +
@@ -450,7 +461,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Facade mode: read ZK artifact files from the local filesystem.
     if (!this._zkArtifactsPath) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_ZK_ARTIFACTS_PATH_REQUIRED,
         "[dStorage/midnight] zkArtifactsPath is required in facade mode.\n" +
           "  Set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.\n" +
           "  Example: zkArtifactsPath: path.resolve(__dirname, '../packages/chain/src/adapters/midnight/contracts/dataregistry/managed')",
@@ -463,7 +475,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     // browser bundle (connector mode) remains free of Node.js built-ins.
     const { existsSync } = await import(/* @vite-ignore */ "node:fs");
     if (!existsSync(zkConfigPath)) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_ZK_ARTIFACTS_PATH_NOT_FOUND,
         `[dStorage/midnight] zkArtifactsPath does not exist: "${zkConfigPath}" — ` +
           "check the path points to the compiled DataRegistry contract artifacts directory.",
       );
@@ -541,7 +554,8 @@ export class MidnightChainAdapter implements ChainAdapter {
    */
   private async _buildConnectorProviders(): Promise<DataRegistryProviders> {
     if (!this.connectorAPI) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_CONNECTOR_NOT_INITIALIZED,
         "[dStorage/midnight] Connector not initialized. Call await chain.init() first.",
       );
     }
@@ -565,14 +579,16 @@ export class MidnightChainAdapter implements ChainAdapter {
     // computeOwnerCommitment() to receive an empty Uint8Array — ownership-gated
     // operations silently misbehave rather than failing loudly.
     if (!coinPublicKey) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_COIN_PUBLIC_KEY_MISSING,
         "[dStorage/midnight] Coin public key not available from wallet. " +
           "getShieldedAddresses() did not return shieldedCoinPublicKey. " +
           "Check that your Lace wallet is unlocked and connected to the target network.",
       );
     }
     if (!encPublicKey) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_ENC_PUBLIC_KEY_MISSING,
         "[dStorage/midnight] Encryption public key not available from wallet. " +
           "getShieldedAddresses() did not return shieldedEncryptionPublicKey. " +
           "Check that your Lace wallet is unlocked and connected to the target network.",
@@ -587,7 +603,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     // supplied in the adapter config — every provider call would silently use
     // "" as the URL, producing fetch errors with no useful diagnosis.
     if (!indexerHttp) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INDEXER_HTTP_NOT_SET,
         "[dStorage/midnight] Indexer HTTP endpoint is not set. " +
           "getConfiguration() did not return indexerUri and no indexerEndpoint " +
           "was supplied in the adapter config. " +
@@ -595,7 +612,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
     if (!indexerWs) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INDEXER_WS_NOT_SET,
         "[dStorage/midnight] Indexer WebSocket endpoint is not set. " +
           "getConfiguration() did not return indexerWsUri and no indexerWsEndpoint " +
           "was supplied in the adapter config. " +
@@ -603,7 +621,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
     if (!proofServer) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
         "[dStorage/midnight] Proof server endpoint is not set. " +
           "getConfiguration() did not return proverServerUri and no proofServerEndpoint " +
           "was supplied in the adapter config.",
@@ -726,7 +745,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Guard: must call init() before any operation that needs the API.
     if (!this._initialized) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_NOT_INITIALIZED,
         "[dStorage/midnight] Not initialized. Call await chain.init() first.",
       );
     }
@@ -767,7 +787,8 @@ export class MidnightChainAdapter implements ChainAdapter {
   /** Midnight contract addresses are 32 bytes encoded as 64 lowercase hex chars. */
   private static _validateContractAddress(address: string): void {
     if (!/^[0-9a-f]{64}$/.test(address)) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INVALID_CONTRACT_ADDRESS,
         `[dStorage/midnight] Invalid contract address "${address}". ` +
           "Expected a 64-character lowercase hex string (32 bytes).",
       );
@@ -829,7 +850,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     const refEntry = state.references.get(refId);
     if (!refEntry) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
         `[dStorage/midnight] No reference found for refId: ${refId}`,
       );
     }
@@ -872,12 +894,14 @@ export class MidnightChainAdapter implements ChainAdapter {
         `Storing reference for storageId: ${ref.storageId}`,
       );
       if (!ref.keyEnvelope) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_KEYENVELOPE_REQUIRED,
           "[dStorage] keyEnvelope is required for all references",
         );
       }
       if (!ref.ownerSecret) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_OWNER_SECRET_REQUIRED_WRITE,
           "[dStorage/midnight] ownerSecret is required for writeReference. " +
             "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling writeReference.",
         );
@@ -930,7 +954,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       `removeReference() called — refId: ${refId}`,
     );
     if (!ownerSecret) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_OWNER_SECRET_REQUIRED_REMOVE,
         "[dStorage/midnight] ownerSecret is required for removeReference. " +
           "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling removeReference.",
       );
@@ -967,7 +992,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       `updateReference() called — refId: ${refId}`,
     );
     if (!ownerSecret) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_OWNER_SECRET_REQUIRED_UPDATE,
         "[dStorage/midnight] ownerSecret is required for updateReference. " +
           "The core SDK must derive ownerSecret = HKDF(dek, rawStorageId) before calling updateReference.",
       );
@@ -1048,7 +1074,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     const midnightObj = windowAny?.midnight;
 
     if (!midnightObj || typeof midnightObj !== "object") {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_WALLET_NOT_FOUND,
         "[dStorage/midnight] window.midnight is not available.\n" +
           "  No Midnight wallet extension detected. Install Midnight Lace or another compatible wallet.",
       );
@@ -1072,7 +1099,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       }));
 
     if (availableWallets.length === 0) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_NO_WALLETS_FOUND,
         "[dStorage/midnight] No compatible wallets found at window.midnight.\n" +
           "  Install a Midnight-compatible wallet extension (e.g., Midnight Lace).",
       );
@@ -1110,9 +1138,11 @@ export class MidnightChainAdapter implements ChainAdapter {
       connectedAPI = await selected.wallet.connect(this.config.networkId);
       this.connectorAPI = connectedAPI;
     } catch (err) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_WALLET_CONNECT_FAILED,
         `[dStorage/midnight] Failed to connect to wallet "${selected.id}": ` +
           (err instanceof Error ? err.message : String(err)),
+        { cause: err },
       );
     }
 
@@ -1188,7 +1218,10 @@ export class MidnightChainAdapter implements ChainAdapter {
       }
 
       if (!shieldedAddr && !unshieldedAddr && !dustAddr) {
-        throw new Error("No addresses available from wallet");
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_NO_ADDRESSES,
+          "[dStorage/midnight] No addresses available from wallet",
+        );
       }
 
       this.addresses = {
@@ -1203,9 +1236,11 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
       return this.addresses;
     } catch (err) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_EXTRACT_ADDRESSES_FAILED,
         `[dStorage/midnight] Failed to extract addresses from wallet: ` +
           (err instanceof Error ? err.message : String(err)),
+        { cause: err },
       );
     }
   }
@@ -1216,7 +1251,8 @@ export class MidnightChainAdapter implements ChainAdapter {
    */
   getAddresses(): WalletAddresses {
     if (!this.addresses) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_GET_ADDRESSES_NOT_INITIALIZED,
         "[dStorage/midnight] getAddresses() called before init().",
       );
     }
@@ -1232,7 +1268,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
     if (this.walletMode === "provider") {
       if (!this.facade) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_GET_BALANCES_NOT_INITIALIZED,
           "[dStorage/midnight] getBalances() called before init().",
         );
       }
@@ -1246,7 +1283,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       };
     } else {
       if (!this.connectorAPI) {
-        throw new Error(
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_GET_BALANCES_NOT_INITIALIZED,
           "[dStorage/midnight] getBalances() called before init().",
         );
       }

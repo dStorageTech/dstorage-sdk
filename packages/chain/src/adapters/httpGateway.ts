@@ -16,7 +16,8 @@ import type {
   DataReferenceSummary,
   ChainQuote,
 } from "../types.js";
-import { bytesToBase64url } from "@dstorage/crypto";
+import { bytesToBase64url, DStorageError } from "@dstorage/crypto";
+import { ChainErrorCode } from "../errors.js";
 
 const COMPONENT = "[dStorage/http-gateway-chain]";
 
@@ -82,11 +83,16 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
         body: JSON.stringify(payload),
       });
     } catch (err) {
-      throw new Error(`${COMPONENT} writeReference failed: ${String(err)}`);
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_WRITE_FAILED,
+        `${COMPONENT} writeReference failed: ${String(err)}`,
+        { cause: err },
+      );
     }
 
     if (!res.ok) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_WRITE_HTTP_ERROR,
         `${COMPONENT} writeReference failed: HTTP ${res.status} ${res.statusText}`,
       );
     }
@@ -116,11 +122,16 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
         body: JSON.stringify(update),
       });
     } catch (err) {
-      throw new Error(`${COMPONENT} updateReference failed: ${String(err)}`);
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_UPDATE_FAILED,
+        `${COMPONENT} updateReference failed: ${String(err)}`,
+        { cause: err },
+      );
     }
 
     if (!res.ok) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_UPDATE_HTTP_ERROR,
         `${COMPONENT} updateReference failed: HTTP ${res.status} ${res.statusText}`,
       );
     }
@@ -135,11 +146,16 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     try {
       res = await this.fetchFn(url);
     } catch (err) {
-      throw new Error(`${COMPONENT} readReference failed: ${String(err)}`);
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_READ_FAILED,
+        `${COMPONENT} readReference failed: ${String(err)}`,
+        { cause: err },
+      );
     }
 
     if (!res.ok) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_READ_HTTP_ERROR,
         `${COMPONENT} readReference failed: HTTP ${res.status} ${res.statusText}`,
       );
     }
@@ -148,7 +164,8 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     try {
       data = await res.json();
     } catch {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_READ_INVALID_JSON,
         `${COMPONENT} readReference failed: invalid JSON response`,
       );
     }
@@ -161,7 +178,8 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       typeof d.writtenAt !== "number" ||
       typeof d.keyEnvelope !== "string"
     ) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_READ_INVALID_SHAPE,
         `${COMPONENT} readReference failed: invalid response shape`,
       );
     }
@@ -173,11 +191,16 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     try {
       res = await this.fetchFn(this.listUrl);
     } catch (err) {
-      throw new Error(`${COMPONENT} listReferences failed: ${String(err)}`);
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_LIST_FAILED,
+        `${COMPONENT} listReferences failed: ${String(err)}`,
+        { cause: err },
+      );
     }
 
     if (!res.ok) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_LIST_HTTP_ERROR,
         `${COMPONENT} listReferences failed: HTTP ${res.status} ${res.statusText}`,
       );
     }
@@ -186,12 +209,14 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     try {
       data = await res.json();
     } catch {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_LIST_INVALID_JSON,
         `${COMPONENT} listReferences failed: invalid JSON response`,
       );
     }
     if (!Array.isArray(data)) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_LIST_NOT_ARRAY,
         `${COMPONENT} listReferences failed: expected array in response`,
       );
     }
@@ -235,11 +260,16 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
         body: JSON.stringify(body),
       });
     } catch (err) {
-      throw new Error(`${COMPONENT} removeReference failed: ${String(err)}`);
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_REMOVE_FAILED,
+        `${COMPONENT} removeReference failed: ${String(err)}`,
+        { cause: err },
+      );
     }
 
     if (!res.ok) {
-      throw new Error(
+      throw new DStorageError(
+        ChainErrorCode.GATEWAY_REMOVE_HTTP_ERROR,
         `${COMPONENT} removeReference failed: HTTP ${res.status} ${res.statusText}`,
       );
     }

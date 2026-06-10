@@ -30,6 +30,7 @@ import {
   type WrappedDekResult,
 } from "./types.js";
 import { wrapKey, unwrapKey } from "./keyEnvelope.js";
+import { DStorageError, CryptoErrorCode } from "./errors.js";
 
 export type MLKemVariant = "mlkem512" | "mlkem768" | "mlkem1024";
 
@@ -39,7 +40,8 @@ const MLKEM_ALGO_SUFFIX = "-xchacha20poly1305-v1";
 
 function parseVariantFromAlgorithm(algorithm: string): MLKemVariant {
   if (!algorithm.endsWith(MLKEM_ALGO_SUFFIX)) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.MLKEM_UNKNOWN_ALGORITHM,
       `[dStorage] mlkemUnwrapDek: unrecognised algorithm "${algorithm}". ` +
         `Expected format: "<variant>-xchacha20poly1305-v1".`,
     );
@@ -50,7 +52,8 @@ function parseVariantFromAlgorithm(algorithm: string): MLKemVariant {
     prefix !== "mlkem768" &&
     prefix !== "mlkem1024"
   ) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.MLKEM_UNKNOWN_VARIANT,
       `[dStorage] mlkemUnwrapDek: unknown ML-KEM variant "${prefix}" in algorithm "${algorithm}".`,
     );
   }
@@ -118,7 +121,8 @@ export function mlkemGenerateKeypairFromSeed(
   variant: MLKemVariant = DEFAULT_VARIANT,
 ): { pk: Uint8Array; sk: Uint8Array } {
   if (seed64.length !== 64) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.MLKEM_SEED_INVALID_LENGTH,
       `[dStorage] mlkemGenerateKeypairFromSeed: expected 64-byte seed, got ${seed64.length} bytes.`,
     );
   }
@@ -170,7 +174,8 @@ export async function mlkemUnwrapDek(
   context: string,
 ): Promise<Uint8Array> {
   if (!data.kemCiphertext) {
-    throw new Error(
+    throw new DStorageError(
+      CryptoErrorCode.MLKEM_MISSING_CIPHERTEXT,
       "[dStorage] mlkemUnwrapDek: kemCiphertext is missing from the wrapper — cannot decapsulate.",
     );
   }

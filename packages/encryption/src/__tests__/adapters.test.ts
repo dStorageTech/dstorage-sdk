@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MnemonicEncryptionAdapter } from "../MnemonicEncryptionAdapter.js";
+import { EncryptionErrorCode } from "../errors.js";
 
 // ---------------------------------------------------------------------------
 // MnemonicEncryptionAdapter
@@ -34,13 +35,19 @@ describe("MnemonicEncryptionAdapter", () => {
   });
 
   it("12-word mnemonic → throws at construction", () => {
-    expect(
-      () =>
-        new MnemonicEncryptionAdapter({
-          mnemonic:
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-        }),
-    ).toThrow("24-word BIP-39 mnemonic is required");
+    let err: unknown;
+    try {
+      new MnemonicEncryptionAdapter({
+        mnemonic:
+          "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.MNEMONIC_TOO_SHORT,
+      message: expect.stringContaining("24-word BIP-39 mnemonic is required"),
+    });
   });
 
   it("different mnemonic → cannot unwrap (different key)", async () => {

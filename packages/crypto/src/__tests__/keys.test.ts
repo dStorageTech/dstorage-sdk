@@ -1,13 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { KeyDeriver } from "../keys.js";
+import { CryptoErrorCode } from "../errors.js";
 
 // ── KeyDeriver ────────────────────────────────────────────────────────────────
 
 describe("KeyDeriver", () => {
   it("throws if neither mnemonic nor seedHex is provided", () => {
-    expect(() => new KeyDeriver({})).toThrow(
-      "[dStorage/crypto] Either mnemonic or seedHex must be provided.",
-    );
+    let err: unknown;
+    try {
+      new KeyDeriver({});
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: CryptoErrorCode.MISSING_KEY_INPUT,
+      message: "[dStorage/crypto] Either mnemonic or seedHex must be provided.",
+    });
   });
 
   it("getSeed() returns a Uint8Array from a 32-byte hex seed", async () => {
@@ -34,9 +42,12 @@ describe("KeyDeriver", () => {
     // fails validateMnemonic inside getSeed().
     const invalid24 = Array(24).fill("notaword").join(" ");
     const deriver = new KeyDeriver({ mnemonic: invalid24 });
-    await expect(deriver.getSeed()).rejects.toThrow(
-      "[dStorage/crypto] Invalid BIP-39 mnemonic phrase.",
-    );
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.MNEMONIC_INVALID,
+      message: expect.stringContaining(
+        "[dStorage/crypto] Invalid BIP-39 mnemonic phrase.",
+      ),
+    });
   });
 
   // ── Security: mnemonic word-count enforcement ────────────────────────────────
@@ -53,16 +64,26 @@ describe("KeyDeriver", () => {
     // rejected because of insufficient entropy for post-quantum security.
     const mnemonic12 =
       "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    expect(() => new KeyDeriver({ mnemonic: mnemonic12 })).toThrow(
-      /24.word|mnemonic/i,
-    );
+    let err: unknown;
+    try {
+      new KeyDeriver({ mnemonic: mnemonic12 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({ code: CryptoErrorCode.MNEMONIC_TOO_SHORT });
+    expect((err as Error).message).toMatch(/24.word|mnemonic/i);
   });
 
   it("throws at construction when mnemonic has exactly 23 words", () => {
     const mnemonic23 = Array(23).fill("abandon").join(" ");
-    expect(() => new KeyDeriver({ mnemonic: mnemonic23 })).toThrow(
-      /24.word|mnemonic/i,
-    );
+    let err: unknown;
+    try {
+      new KeyDeriver({ mnemonic: mnemonic23 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({ code: CryptoErrorCode.MNEMONIC_TOO_SHORT });
+    expect((err as Error).message).toMatch(/24.word|mnemonic/i);
   });
 
   it("accepts a mnemonic with exactly 24 words", () => {
@@ -72,21 +93,30 @@ describe("KeyDeriver", () => {
 
   it("rejects a seedHex that is not 32 or 64 bytes", async () => {
     const deriver = new KeyDeriver({ seedHex: "deadbeef" }); // 4 bytes
-    await expect(deriver.getSeed()).rejects.toThrow(
-      "[dStorage/crypto] seedHex must be 32 bytes",
-    );
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.SEED_INVALID_LENGTH,
+      message: expect.stringContaining(
+        "[dStorage/crypto] seedHex must be 32 bytes",
+      ),
+    });
   });
 
   it("rejects a seedHex containing non-hex characters", async () => {
     const invalid = "G".repeat(64); // valid length, invalid chars
     const deriver = new KeyDeriver({ seedHex: invalid });
-    await expect(deriver.getSeed()).rejects.toThrow("[dStorage/crypto]");
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.HEX_INVALID_CHARS,
+      message: expect.stringContaining("[dStorage/crypto]"),
+    });
   });
 
   it("rejects a seedHex with odd length", async () => {
     const oddLength = "a".repeat(63); // odd number of chars
     const deriver = new KeyDeriver({ seedHex: oddLength });
-    await expect(deriver.getSeed()).rejects.toThrow("[dStorage/crypto]");
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.HEX_ODD_LENGTH,
+      message: expect.stringContaining("[dStorage/crypto]"),
+    });
   });
 
   it("does not silently produce an all-zero seed for invalid hex input", async () => {

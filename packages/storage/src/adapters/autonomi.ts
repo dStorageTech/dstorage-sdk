@@ -18,6 +18,8 @@ import type {
   StorageQuote,
 } from "../types.js";
 import { MockPaymentAdapter, PaymentAdapter } from "@dstorage/payment";
+import { DStorageError } from "@dstorage/crypto";
+import { StorageErrorCode } from "../errors.js";
 
 export interface AutonomiAdapterConfig {
   /**
@@ -95,7 +97,10 @@ export class AutonomiStorageAdapter implements StorageAdapter {
      */
     const data = this.store.get(id);
     if (!data) {
-      throw new Error(`[dStorage/autonomi] No data found for id: ${id}`);
+      throw new DStorageError(
+        StorageErrorCode.AUTONOMI_DATA_NOT_FOUND,
+        `[dStorage/autonomi] No data found for id: ${id}`,
+      );
     }
     return { bytes: data, tags: {} };
   }

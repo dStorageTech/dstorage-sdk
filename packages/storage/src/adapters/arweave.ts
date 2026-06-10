@@ -55,6 +55,8 @@ import type {
   SignedArweaveUpload,
 } from "@dstorage/payment";
 import { CONTENT_HASH_TAG, assertContentHash } from "./integrity.js";
+import { DStorageError } from "@dstorage/crypto";
+import { StorageErrorCode } from "../errors.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -207,7 +209,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // funded Arweave wallet and returns the signature.
     if (config.signingServerUrl) {
       if (!config.authToken?.trim()) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.ARWEAVE_AUTH_TOKEN_REQUIRED,
           "[dStorage/arweave] authToken is required when signingServerUrl is provided.",
         );
       }
@@ -249,7 +252,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       this.arweaveClient = Arweave.init(this.gateway);
       return this.arweaveClient;
     } catch {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_NOT_INSTALLED,
         "[dStorage/arweave] arweave package not found.\n" +
           "Install it with: npm install arweave",
       );
@@ -292,7 +296,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       });
       signed = arwPayment.consumeSignedUpload();
       if (!signed) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.ARWEAVE_NO_SIGNED_TX,
           "[dStorage/arweave] Payment adapter did not produce a signed transaction.",
         );
       }
@@ -336,7 +341,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     id: string,
   ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_INVALID_TX_ID,
         `[dStorage/arweave] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
       );
     }
@@ -360,7 +366,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           10,
         );
         if (!isNaN(dataSize) && dataSize > this.maxRetrieveSizeBytes) {
-          throw new Error(
+          throw new DStorageError(
+            StorageErrorCode.ARWEAVE_TX_TOO_LARGE,
             `[dStorage/arweave] Transaction data_size (${dataSize} bytes) exceeds ` +
               `the configured limit of ${this.maxRetrieveSizeBytes} bytes for txId: ${id}.`,
           );
@@ -383,7 +390,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         }
       } catch (err) {
         if ((err as Error).message.startsWith("[dStorage/arweave]")) throw err;
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.ARWEAVE_TX_METADATA_FAILED,
           `[dStorage/arweave] Could not fetch transaction metadata for txId: ${id} — ` +
             "content hash cannot be verified. " +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
@@ -399,7 +407,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     });
 
     if (!raw) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_NO_DATA_RETURNED,
         `[dStorage/arweave] No data returned for txId: ${id}\n` +
           "The transaction may still be pending — Arweave can take a few minutes to confirm.\n" +
           `Check status at: https://viewblock.io/arweave/tx/${id}`,
@@ -410,7 +419,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     // Post-load size guard — defense-in-depth and covers the skipIntegrityCheck path.
     if (bytes.byteLength > this.maxRetrieveSizeBytes) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_SIZE_MISMATCH,
         `[dStorage/arweave] Downloaded ${bytes.byteLength} bytes for txId: ${id}, ` +
           `which exceeds the configured limit of ${this.maxRetrieveSizeBytes} bytes.`,
       );
@@ -419,7 +429,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // ── Content hash verification ─────────────────────────────────────────────
     if (!this.skipIntegrityCheck) {
       if (!storedHash) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.ARWEAVE_HASH_TAG_MISSING,
           `[dStorage/arweave] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
@@ -481,8 +492,10 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       } catch {
         /* ignore diagnostic failures */
       }
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_UPLOADER_INIT_FAILED,
         `[dStorage/arweave] Failed to initialise transaction uploader: ${err}`,
+        { cause: err },
       );
     }
 
@@ -514,8 +527,10 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           `chunk upload failed — HTTP ${status} — ${body}`,
         );
         if (chunkAttempt >= this.maxRetries) {
-          throw new Error(
+          throw new DStorageError(
+            StorageErrorCode.ARWEAVE_CHUNK_UPLOAD_FAILED,
             `[dStorage/arweave] Chunk upload failed after ${this.maxRetries} attempts — HTTP ${status}: ${body}`,
+            { cause: err },
           );
         }
         this.logger?.warn(
@@ -555,7 +570,8 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       );
     }
 
-    throw new Error(
+    throw new DStorageError(
+      StorageErrorCode.ARWEAVE_CONFIRM_TIMEOUT,
       `[dStorage/arweave] Confirmation timeout for txId: ${txId}.\n` +
         "The transaction may still be processed eventually — track it at:\n" +
         `  https://viewblock.io/arweave/tx/${txId}`,

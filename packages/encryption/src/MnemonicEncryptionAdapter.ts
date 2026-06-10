@@ -9,9 +9,15 @@
  * JS-accessible heap variable.
  */
 
-import { KeyDeriver, wrapKey, unwrapKey } from "@dstorage/crypto";
+import {
+  KeyDeriver,
+  wrapKey,
+  unwrapKey,
+  DStorageError,
+} from "@dstorage/crypto";
 import { deriveKek } from "@dstorage/crypto";
 import type { EncryptionAdapter, WrappedDekResult } from "./types.js";
+import { EncryptionErrorCode } from "./errors.js";
 
 export class MnemonicEncryptionAdapter implements EncryptionAdapter {
   readonly name = "mnemonic";
@@ -25,7 +31,8 @@ export class MnemonicEncryptionAdapter implements EncryptionAdapter {
     if (input.mnemonic !== undefined) {
       const wordCount = input.mnemonic.trim().split(/\s+/).length;
       if (wordCount < 24) {
-        throw new Error(
+        throw new DStorageError(
+          EncryptionErrorCode.MNEMONIC_TOO_SHORT,
           `[dStorage] MnemonicEncryptionAdapter: a 24-word BIP-39 mnemonic is required ` +
             `(${wordCount} word${wordCount === 1 ? "" : "s"} provided). ` +
             `Shorter mnemonics provide insufficient entropy for post-quantum-safe key derivation — ` +

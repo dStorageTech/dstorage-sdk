@@ -41,6 +41,8 @@
 import { ArweaveStorageAdapter } from "./arweave.js";
 import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from "./arweave.js";
 import type { StorageProviderName, StorageUploadResult } from "../types.js";
+import { DStorageError } from "@dstorage/crypto";
+import { StorageErrorCode } from "../errors.js";
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 
@@ -130,7 +132,8 @@ export class ArweaveLocalHelper {
     winstons: bigint | number = 1_000_000_000_000n,
   ): Promise<void> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(address)) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_LOCAL_INVALID_ADDRESS,
         `[dStorage/arweave-local] Invalid Arweave address: expected 43 base64url characters, got "${address.slice(0, 60)}${address.length > 60 ? "…" : ""}"`,
       );
     }
@@ -473,7 +476,8 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
           ? mod.default
           : (mod.default as any)?.default;
     } catch {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_LOCAL_NOT_INSTALLED,
         "[dStorage/arweave-local] arweave package not found.\n" +
           "Install it with: npm install arweave",
       );

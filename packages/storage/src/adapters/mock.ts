@@ -19,6 +19,8 @@ import {
   ManagedPaymentAdapter,
   PaymentAdapter,
 } from "@dstorage/payment";
+import { DStorageError } from "@dstorage/crypto";
+import { StorageErrorCode } from "../errors.js";
 
 export interface MockStorageAdapterConfig {
   logger?: StorageAdapterLogger;
@@ -100,7 +102,8 @@ export class MockStorageAdapter implements StorageAdapter {
     this.logger = config.logger;
     if (config.signingServerUrl) {
       if (!config.authToken?.trim()) {
-        throw new Error(
+        throw new DStorageError(
+          StorageErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
           "[dStorage/mock-storage] authToken is required when signingServerUrl is provided.",
         );
       }
@@ -155,7 +158,8 @@ export class MockStorageAdapter implements StorageAdapter {
     const raw = storeGet(`dstorage:blob:${id}`);
 
     if (!raw) {
-      throw new Error(
+      throw new DStorageError(
+        StorageErrorCode.MOCK_DATA_NOT_FOUND,
         `[dStorage/mock] No data found for id: ${id}. Was it uploaded in this session?`,
       );
     }

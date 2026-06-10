@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MockMidnightChainAdapter } from "../adapters/mockMidnight.js";
+import { ChainErrorCode } from "../errors.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -137,9 +138,14 @@ describe("MockMidnightChainAdapter", () => {
 
     it("throws for unknown refId", async () => {
       const adapter = makeAdapter();
-      await expect(adapter.readReference("ref_does_not_exist")).rejects.toThrow(
-        "[dStorage/mock-midnight] No reference found for refId: ref_does_not_exist",
-      );
+      await expect(
+        adapter.readReference("ref_does_not_exist"),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_MIDNIGHT_REF_NOT_FOUND,
+        message: expect.stringContaining(
+          "[dStorage/mock-midnight] No reference found for refId: ref_does_not_exist",
+        ),
+      });
     });
   });
 

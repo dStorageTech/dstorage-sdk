@@ -27,6 +27,8 @@ import type {
 } from "./types.js";
 import { buildInitialSteps, readFileAsBytes, truncateId } from "./utils.js";
 import { PAYLOAD_AAD } from "../types.js";
+import { DStorageError } from "@dstorage/crypto";
+import { CoreErrorCode } from "../errors.js";
 
 export class MetaTx {
   private sdk: DStorageContext;
@@ -281,7 +283,11 @@ export class MetaTx {
 
   private getStep(id: MetaTxStepId): MetaTxStepState {
     const step = this.steps.find((s) => s.id === id);
-    if (!step) throw new Error(`Unknown step: ${id}`);
+    if (!step)
+      throw new DStorageError(
+        CoreErrorCode.META_TX_UNKNOWN_STEP,
+        `[dStorage] Unknown meta-transaction step: ${id}`,
+      );
     return step;
   }
 

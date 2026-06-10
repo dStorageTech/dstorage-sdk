@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import type { StorageProviderName } from "@dstorage/storage";
-import { MockChainAdapter } from "@dstorage/chain";
+import { MockChainAdapter, ChainErrorCode } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
+import { CoreErrorCode } from "../errors.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -91,16 +92,18 @@ describe("init / disconnect", () => {
 describe("operations before init() throw", () => {
   it("upload() throws when not connected", async () => {
     const ds = new DStorage(makeConfig());
-    await expect(ds.upload(enc("hello"))).rejects.toThrow(
-      "[dStorage] Not connected",
-    );
+    await expect(ds.upload(enc("hello"))).rejects.toMatchObject({
+      code: CoreErrorCode.NOT_INITIALIZED,
+      message: expect.stringContaining("[dStorage] Not connected"),
+    });
   });
 
   it("retrieveByRefId() throws when not connected", async () => {
     const ds = new DStorage(makeConfig());
-    await expect(ds.retrieveByRefId("any::ref")).rejects.toThrow(
-      "[dStorage] Not connected",
-    );
+    await expect(ds.retrieveByRefId("any::ref")).rejects.toMatchObject({
+      code: CoreErrorCode.NOT_INITIALIZED,
+      message: expect.stringContaining("[dStorage] Not connected"),
+    });
   });
 });
 
@@ -202,9 +205,12 @@ describe("retrieveByRefId", () => {
 
   it("throws when the chainRefId is not found in storage", async () => {
     const ds = await makeInitedDStorage();
-    await expect(ds.retrieveByRefId("::ref_abc")).rejects.toThrow(
-      "[dStorage/mock-chain] No reference found for refId: ::ref_abc",
-    );
+    await expect(ds.retrieveByRefId("::ref_abc")).rejects.toMatchObject({
+      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+      message: expect.stringContaining(
+        "No reference found for refId: ::ref_abc",
+      ),
+    });
   });
 
   it("throws a descriptive error when the configured storage adapter does not match the reference's storageProvider", async () => {
@@ -240,9 +246,10 @@ describe("retrieveByRefId", () => {
     });
     await ds2.init();
 
-    await expect(ds2.retrieveByRefId(chainRefId)).rejects.toThrow(
-      /storage adapter mismatch|mock.*arweave|arweave.*mock/i,
-    );
+    await expect(ds2.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.STORAGE_ADAPTER_MISMATCH,
+      message: expect.stringContaining("storage adapter"),
+    });
   });
 });
 
@@ -293,6 +300,9 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
     const { ds, chainRefId } = await makeWithTamperedEnvelope("");
     const err = await ds.retrieveByRefId(chainRefId).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
+    expect(
+      (err as Error & { code?: number; cause?: { code?: string } }).code,
+    ).toBe(CoreErrorCode.RETRIEVE_BY_REF_ID_ENVELOPE_EMPTY);
     expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
       "envelope_empty",
     );
@@ -302,6 +312,9 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
     const { ds, chainRefId } = await makeWithTamperedEnvelope("not-valid-json");
     const err = await ds.retrieveByRefId(chainRefId).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
+    expect(
+      (err as Error & { code?: number; cause?: { code?: string } }).code,
+    ).toBe(CoreErrorCode.DECRYPT_ENVELOPE_MALFORMED);
     expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
       "envelope_malformed",
     );
@@ -313,6 +326,9 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
     );
     const err = await ds.retrieveByRefId(chainRefId).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
+    expect(
+      (err as Error & { code?: number; cause?: { code?: string } }).code,
+    ).toBe(CoreErrorCode.DECRYPT_ENVELOPE_MALFORMED);
     expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
       "envelope_malformed",
     );
@@ -347,6 +363,9 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
     const { chainRefId } = await alice.upload(enc("alice secret ec"));
     const err = await bob.retrieveByRefId(chainRefId).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
+    expect(
+      (err as Error & { code?: number; cause?: { code?: string } }).code,
+    ).toBe(CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED);
     expect((err as Error & { cause?: { code?: string } }).cause?.code).toBe(
       "no_wrapper_matched",
     );
@@ -375,9 +394,12 @@ describe("public upload and retrieve", () => {
     await ds.init();
     await expect(
       ds.upload(enc("public data"), { isPublic: true }),
-    ).rejects.toThrow(
-      "[dStorage] Cannot upload public data without at least one encryption seed provider.",
-    );
+    ).rejects.toMatchObject({
+      code: CoreErrorCode.PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER,
+      message: expect.stringContaining(
+        "[dStorage] Cannot upload public data without at least one encryption seed provider.",
+      ),
+    });
   });
 
   it("retrieves the original content via refId for public upload", async () => {
@@ -687,7 +709,10 @@ describe("upload metadata option", () => {
         metadata: { key: "val" },
         isPublic: true,
       }),
-    ).rejects.toThrow("[dStorage]");
+    ).rejects.toMatchObject({
+      code: CoreErrorCode.METADATA_WITH_PUBLIC_UPLOAD,
+      message: expect.stringContaining("[dStorage]"),
+    });
   });
 
   it("refIds filter returns only the requested reference", async () => {
@@ -857,9 +882,10 @@ describe("registerReference", () => {
       ],
     });
     await ds.init();
-    await expect(ds.registerReference("someId")).rejects.toThrow(
-      /requires a chain adapter/,
-    );
+    await expect(ds.registerReference("someId")).rejects.toMatchObject({
+      code: CoreErrorCode.REGISTER_REF_REQUIRES_CHAIN,
+      message: expect.stringContaining("requires a chain adapter"),
+    });
   });
 
   it("throws when no encryption adapters are configured", async () => {
@@ -868,9 +894,12 @@ describe("registerReference", () => {
       chainAdapter: new MockChainAdapter(),
     });
     await ds.init();
-    await expect(ds.registerReference("someId")).rejects.toThrow(
-      /requires at least one encryption adapter/,
-    );
+    await expect(ds.registerReference("someId")).rejects.toMatchObject({
+      code: CoreErrorCode.REGISTER_REF_REQUIRES_ENCRYPTION,
+      message: expect.stringContaining(
+        "requires at least one encryption adapter",
+      ),
+    });
   });
 
   it("forwards storageProvider option to the chain reference", async () => {
@@ -952,9 +981,10 @@ describe("updateUpload", () => {
       ],
     });
     await ds.init();
-    await expect(ds.updateUpload("refId", enc("data"))).rejects.toThrow(
-      /requires a chain adapter/,
-    );
+    await expect(ds.updateUpload("refId", enc("data"))).rejects.toMatchObject({
+      code: CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
+      message: expect.stringContaining("requires a chain adapter"),
+    });
   });
 
   it("throws when the chain adapter does not support updateReference", async () => {
@@ -975,9 +1005,10 @@ describe("updateUpload", () => {
     });
     await ds.init();
     const { chainRefId: refId } = await ds.upload(enc("v1"));
-    await expect(ds.updateUpload(refId!, enc("v2"))).rejects.toThrow(
-      /not supported by this chain adapter/,
-    );
+    await expect(ds.updateUpload(refId!, enc("v2"))).rejects.toMatchObject({
+      code: CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
+      message: expect.stringContaining("not supported by this chain adapter"),
+    });
   });
 
   it("throws when no encryption adapters are configured", async () => {
@@ -986,9 +1017,12 @@ describe("updateUpload", () => {
       chainAdapter: new MockChainAdapter(),
     });
     await ds.init();
-    await expect(ds.updateUpload("refId", enc("data"))).rejects.toThrow(
-      /requires at least one encryption adapter/,
-    );
+    await expect(ds.updateUpload("refId", enc("data"))).rejects.toMatchObject({
+      code: CoreErrorCode.UPDATE_UPLOAD_REQUIRES_ENCRYPTION,
+      message: expect.stringContaining(
+        "requires at least one encryption adapter",
+      ),
+    });
   });
 
   it("removeReference succeeds after updateUpload", async () => {
