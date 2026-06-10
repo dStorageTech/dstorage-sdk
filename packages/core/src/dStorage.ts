@@ -471,6 +471,8 @@ export class DStorage implements DStorageContext {
             ),
           )
         : undefined;
+      const rawNewStorageId = new TextEncoder().encode(storageResult.id);
+      const newOwnerSecret = await deriveOwnerSecret(dek, rawNewStorageId);
       await this.config.chainAdapter.updateReference(
         refId,
         {
@@ -482,6 +484,7 @@ export class DStorage implements DStorageContext {
           keyEnvelope,
         },
         ownerSecret,
+        newOwnerSecret,
       );
       return { chainRefId: refId, storageId: storageResult.id };
     } finally {

@@ -968,4 +968,20 @@ describe("updateUpload", () => {
       /requires at least one encryption adapter/,
     );
   });
+
+  it("removeReference succeeds after updateUpload", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("v1 content"));
+    await ds.updateUpload(chainRefId!, enc("v2 content"));
+    await expect(ds.removeReference(chainRefId!)).resolves.toBeUndefined();
+  });
+
+  it("second updateUpload succeeds after first updateUpload", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.upload(enc("v1 content"));
+    await ds.updateUpload(chainRefId!, enc("v2 content"));
+    await ds.updateUpload(chainRefId!, enc("v3 content"));
+    const { bytes } = await ds.retrieveByRefId(chainRefId!);
+    expect(bytes).toEqual(enc("v3 content"));
+  });
 });

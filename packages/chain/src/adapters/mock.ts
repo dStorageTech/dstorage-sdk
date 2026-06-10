@@ -162,6 +162,7 @@ export class MockChainAdapter implements ChainAdapter {
     refId: string,
     update: ChainReferenceUpdate,
     ownerSecret?: Uint8Array,
+    newOwnerSecret?: Uint8Array,
   ): Promise<void> {
     const existing = refs.get(refId);
     if (!existing) {
@@ -171,6 +172,9 @@ export class MockChainAdapter implements ChainAdapter {
     }
     await this._checkOwnerSecret(refId, ownerSecret);
     refs.set(refId, { ...existing, ...update });
+    if (newOwnerSecret) {
+      commitments.set(refId, await sha256(newOwnerSecret));
+    }
     persist("dstorage:chain:refs", Object.fromEntries(refs));
     this.logger?.log(
       "dStorage/mock-chain",

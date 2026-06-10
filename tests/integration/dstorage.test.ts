@@ -100,6 +100,24 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     const refs = await sdk.listReferences();
     expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
   });
+
+  it("registers a metadata-only reference and retrieves metadata by refId", async () => {
+    const meta = { type: "profile", name: "Alice" };
+    const { chainRefId } = await sdk.registerReference(undefined, {
+      metadata: meta,
+    });
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.metadata).toEqual(meta);
+    expect(result.bytes).toEqual(new Uint8Array(0));
+    expect(result.tags).toEqual({});
+  });
+
+  it("metadata-only reference with no metadata returns empty metadata and empty bytes", async () => {
+    const { chainRefId } = await sdk.registerReference(undefined);
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.metadata).toEqual({});
+    expect(result.bytes).toEqual(new Uint8Array(0));
+  });
 });
 
 // ── Suite 2: full stack — Midnight + arlocal ───────────────────────────────────
@@ -217,5 +235,56 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     // ownerCommitment stored on-chain, and the ZK circuit must reject the transaction.
     const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
     await expect(sdkBob.removeReference(chainRefId)).rejects.toThrow();
+  });
+
+  it("registers a metadata-only reference and retrieves metadata by refId", async () => {
+    const meta = { type: "profile", name: "Alice" };
+    const { chainRefId } = await sdk.registerReference(undefined, {
+      metadata: meta,
+    });
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.metadata).toEqual(meta);
+    expect(result.bytes).toEqual(new Uint8Array(0));
+    expect(result.tags).toEqual({});
+  });
+
+  it("wallet isolation: Bob cannot read metadata from Alice's metadata-only reference", async () => {
+    const { chainRefId } = await sdk.registerReference(undefined, {
+      metadata: { secret: "alice-only" },
+    });
+    await expect(sdkBob.retrieveByRefId(chainRefId)).rejects.toThrow();
+  });
+
+  it("metadata-only removeReference succeeds and reference no longer appears in list", async () => {
+    const { chainRefId } = await sdk.registerReference(undefined, {
+      metadata: { temp: "true" },
+    });
+    await sdk.removeReference(chainRefId);
+    const refs = await sdk.listReferences();
+    expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
+  });
+
+  it("updateUpload over a metadata-only reference promotes to full content ref with storageId-based ownerSecret", async () => {
+    // Register with no storageId — ownerSecret is sentinel-based (METADATA_ONLY_OWNER_SECRET_SALT).
+    const { chainRefId } = await sdk.registerReference(undefined, {
+      metadata: { version: "1" },
+    });
+
+    // updateUpload must pass the current sentinel-derived ownerSecret to the ZK circuit,
+    // then commit a new ownerSecret derived from the fresh storageId.
+    const UPDATED = new TextEncoder().encode("promoted content");
+    const { storageId } = await sdk.updateUpload(chainRefId, UPDATED, {
+      metadata: { version: "2" },
+    });
+    expect(storageId).toBeTruthy();
+
+    // Both content and metadata must reflect the update.
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.bytes).toEqual(UPDATED);
+    expect(result.metadata).toEqual({ version: "2" });
+
+    // removeReference must succeed — proves the new storageId-based ownerSecret was
+    // correctly committed by updateUpload and matches what _computeOwnerSecret re-derives.
+    await expect(sdk.removeReference(chainRefId)).resolves.toBeUndefined();
   });
 });

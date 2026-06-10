@@ -251,6 +251,7 @@ export class MockMidnightChainAdapter implements ChainAdapter {
     refId: string,
     update: ChainReferenceUpdate,
     _ownerSecret?: Uint8Array,
+    _newOwnerSecret?: Uint8Array,
   ): Promise<void> {
     this.logger?.log(
       "dStorage/mock-midnight",

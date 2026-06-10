@@ -10,18 +10,20 @@ export * from "../dataregistry/managed/contract/index.js";
 
 /**
  * Private state for the DataRegistry contract.
- * ownerSecret is set transiently by the SDK before each proof-generating circuit call
- * (storeReference, removeReference, updateReference) and cleared immediately after.
- * It is derived by the SDK as: HKDF-SHA256(dek, rawStorageId).
+ * ownerSecret and newOwnerSecret are set transiently by the SDK before each proof-generating
+ * circuit call and cleared immediately after.
+ * ownerSecret is derived as HKDF-SHA256(dek, rawStorageId) for the CURRENT ref state.
+ * newOwnerSecret is only used during updateReference when content changes produce a new DEK.
  */
 export type DataRegistryPrivateState = {
   ownerSecret?: Uint8Array;
+  newOwnerSecret?: Uint8Array;
 };
 
 /**
- * Witness implementation: reads the ownerSecret placed in private state by the SDK.
- * The contract calls ownerSecret() during proof generation to obtain the private input.
- * Throws if the SDK forgot to set it — this is a programming error, not a user error.
+ * Witness implementations: read secrets placed in private state by the SDK before proof generation.
+ * Throws on missing ownerSecret — always required for ownership-proving circuits.
+ * newOwnerSecret defaults to zeros (sentinel for "no commitment update") when absent.
  */
 export const witnesses: Witnesses<DataRegistryPrivateState> = {
   ownerSecret: (
@@ -34,8 +36,13 @@ export const witnesses: Witnesses<DataRegistryPrivateState> = {
           "The SDK must call privateStateProvider.set() with ownerSecret before proof generation.",
       );
     }
-    // Return the private state unchanged alongside the ownerSecret bytes.
     return [privateState, privateState.ownerSecret];
+  },
+  newOwnerSecret: (
+    context: WitnessContext<Ledger, DataRegistryPrivateState>,
+  ): [DataRegistryPrivateState, Uint8Array] => {
+    const privateState = context.privateState as DataRegistryPrivateState;
+    return [privateState, privateState.newOwnerSecret ?? new Uint8Array(32)];
   },
 };
 

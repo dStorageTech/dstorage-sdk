@@ -203,6 +203,15 @@
         "type-name": "Bytes",
         "length": 32
       }
+    },
+    {
+      "name": "newOwnerSecret",
+      "arguments": [
+      ],
+      "result type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
     }
   ],
   "contracts": [

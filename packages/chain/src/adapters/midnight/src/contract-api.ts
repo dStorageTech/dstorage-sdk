@@ -288,6 +288,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     writtenAt: bigint,
     keyEnvelope: string,
     ownerSecret: Uint8Array,
+    newOwnerSecret?: Uint8Array,
   ): Promise<{ txHash: string; blockHeight: number }> {
     this.logger?.log(
       "dStorage/midnight",
@@ -295,6 +296,9 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     );
     await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
       ownerSecret,
+      // When no new secret is provided, pass the old one so the circuit recomputes the same
+      // commitment and the stored value is preserved unchanged.
+      newOwnerSecret: newOwnerSecret ?? ownerSecret,
     });
     let txData;
     try {

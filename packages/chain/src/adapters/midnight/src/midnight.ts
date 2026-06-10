@@ -960,6 +960,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     refId: string,
     update: ChainReferenceUpdate,
     ownerSecret?: Uint8Array,
+    newOwnerSecret?: Uint8Array,
   ): Promise<void> {
     this.logger?.log(
       "dStorage/midnight",
@@ -986,6 +987,7 @@ export class MidnightChainAdapter implements ChainAdapter {
             BigInt(update.writtenAt),
             update.keyEnvelope ?? "",
             secret,
+            newOwnerSecret,
           ),
         "updateReference",
       );

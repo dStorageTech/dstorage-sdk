@@ -91,6 +91,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     refId: string,
     update: ChainReferenceUpdate,
     _ownerSecret?: Uint8Array,
+    _newOwnerSecret?: Uint8Array,
   ): Promise<void> {
     const url = `${this.config.writeUrl}/${encodeURIComponent(refId)}`;
 

@@ -143,8 +143,7 @@ export interface DataReferenceSummary {
 
 /**
  * Fields that can be updated in an existing reference.
- * All fields are optional — only the provided fields will override the stored values.
- * ownerCommitment is intentionally excluded; ownership cannot be transferred.
+ * The ownerCommitment is updated separately via the newOwnerSecret parameter on updateReference.
  */
 export interface ChainReferenceUpdate {
   storageId: string;
@@ -236,13 +235,16 @@ export interface ChainAdapter {
   /**
    * Update the mutable fields of an existing reference.
    * Only the owner can successfully call this — the chain enforces ownership via ZK proof.
-   * Ownership (ownerCommitment) is preserved and cannot be changed.
-   * ownerSecret: the HKDF-derived witness secret computed by the core SDK.
+   * ownerSecret: the HKDF-derived witness secret for the CURRENT ref (authorizes the update).
+   * newOwnerSecret: when provided, each adapter computes and stores a new ownerCommitment from
+   * it — required when content changes produce a new DEK/storageId (and thus a new ownerSecret).
+   * If omitted, the existing ownerCommitment is preserved unchanged.
    * Optional — adapters that do not support updates can omit this method.
    */
   updateReference?(
     refId: string,
     update: ChainReferenceUpdate,
     ownerSecret?: Uint8Array,
+    newOwnerSecret?: Uint8Array,
   ): Promise<void>;
 }

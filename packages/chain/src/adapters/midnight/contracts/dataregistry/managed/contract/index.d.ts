@@ -11,6 +11,7 @@ export type ReferenceEntry = { storageId: string;
 
 export type Witnesses<PS> = {
   ownerSecret(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, Uint8Array];
+  newOwnerSecret(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, Uint8Array];
 }
 
 export type ImpureCircuits<PS> = {
