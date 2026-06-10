@@ -29,19 +29,16 @@ function generateRefId(): string {
 }
 
 export interface HttpGatewayChainAdapterConfig {
-  /** POST base URL — refId is appended as a path segment and the serialised ChainReference is sent as a JSON body: POST {writeUrl}/{refId} */
-  writeUrl: string;
-  /** GET base URL — refId is appended as a path segment: GET {readUrl}/{refId} */
-  readUrl: string;
-  /** Optional GET endpoint for listReferences. Throws if absent when called. */
-  listUrl?: string;
-  /**
-   * Optional DELETE endpoint for removeReference.
-   * DELETE {deleteUrl}/{refId} is called with a JSON body containing the
-   * base64url-encoded ownerSecret (if provided).
-   * Throws if absent when called.
-   */
-  deleteUrl?: string;
+  /** Scheme + host (+ optional port) shared by all endpoints. e.g. "http://localhost:3200" */
+  baseUrl: string;
+  /** Path appended to baseUrl for write (POST /{refId}) and update operations. e.g. "/api/refs" */
+  writePath: string;
+  /** Path appended to baseUrl for read (GET /{refId}) operations. */
+  readPath: string;
+  /** Path appended to baseUrl for listReferences (GET) operations. */
+  listPath: string;
+  /** Path appended to baseUrl for removeReference (DELETE /{refId}) operations. */
+  deletePath: string;
   logger?: ChainAdapterLogger;
 }
 
@@ -50,16 +47,24 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   readonly providerName = "HTTP-Gateway-Chain-Adapter";
 
   private readonly logger: ChainAdapterLogger | undefined;
+  private readonly writeUrl: string;
+  private readonly readUrl: string;
+  private readonly listUrl: string;
+  private readonly deleteUrl: string;
 
-  constructor(private readonly config: HttpGatewayChainAdapterConfig) {
+  constructor(config: HttpGatewayChainAdapterConfig) {
     this.logger = config.logger;
+    this.writeUrl = `${config.baseUrl}${config.writePath}`;
+    this.readUrl = `${config.baseUrl}${config.readPath}`;
+    this.listUrl = `${config.baseUrl}${config.listPath}`;
+    this.deleteUrl = `${config.baseUrl}${config.deletePath}`;
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
     // ownerSecret is an internal ZK witness — never transmit it
     const { ownerSecret: _omit, ...payload } = ref;
     const refId = ref.refId ?? generateRefId();
-    const url = `${this.config.writeUrl}/${encodeURIComponent(refId)}`;
+    const url = `${this.writeUrl}/${encodeURIComponent(refId)}`;
 
     let res: Response;
     try {
@@ -93,7 +98,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     _ownerSecret?: Uint8Array,
     _newOwnerSecret?: Uint8Array,
   ): Promise<void> {
-    const url = `${this.config.writeUrl}/${encodeURIComponent(refId)}`;
+    const url = `${this.writeUrl}/${encodeURIComponent(refId)}`;
 
     let res: Response;
     try {
@@ -116,7 +121,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   }
 
   async readReference(refId: string): Promise<ChainReference> {
-    const url = `${this.config.readUrl}/${encodeURIComponent(refId)}`;
+    const url = `${this.readUrl}/${encodeURIComponent(refId)}`;
 
     let res: Response;
     try {
@@ -156,15 +161,9 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   }
 
   async listReferences(): Promise<DataReferenceSummary[]> {
-    if (!this.config.listUrl) {
-      throw new Error(
-        `${COMPONENT} listReferences failed: listUrl is missing from config`,
-      );
-    }
-
     let res: Response;
     try {
-      res = await fetch(this.config.listUrl);
+      res = await fetch(this.listUrl);
     } catch (err) {
       throw new Error(`${COMPONENT} listReferences failed: ${String(err)}`);
     }
@@ -201,7 +200,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       ) {
         this.logger?.warn(
           COMPONENT,
-          `listReferences: skipping item at index ${i} — invalid shape`,
+          `listReferences: skipping item at index ${i} — invalid shape (refId=${typeof it["refId"]}, storageProvider=${typeof it["storageProvider"]}, keyEnvelope=${typeof it["keyEnvelope"]})`,
         );
         continue;
       }
@@ -214,13 +213,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     refId: string,
     ownerSecret?: Uint8Array,
   ): Promise<void> {
-    if (!this.config.deleteUrl) {
-      throw new Error(
-        `${COMPONENT} removeReference failed: deleteUrl is missing from config`,
-      );
-    }
-
-    const url = `${this.config.deleteUrl}/${encodeURIComponent(refId)}`;
+    const url = `${this.deleteUrl}/${encodeURIComponent(refId)}`;
     const body: { ownerSecret?: string } =
       ownerSecret !== undefined
         ? { ownerSecret: bytesToBase64url(ownerSecret) }
@@ -245,7 +238,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   }
 
   getContractAddress(): string {
-    return this.config.writeUrl;
+    return this.writeUrl;
   }
 
   async estimateCost(): Promise<ChainQuote> {
