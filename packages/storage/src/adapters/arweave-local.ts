@@ -368,13 +368,17 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         walletKey as any,
       );
+      this.logger?.log(
+        "dStorage/arweave-local",
+        `Minting 10 AR to wallet ${address} on arlocal via ${gateway.protocol}://${gateway.host}:${gateway.port}…`,
+      );
       await this.testnet.mintTokens(address, 10_000_000_000_000n); // 10 AR
       this.logger?.log(
         "dStorage/arweave-local",
-        `Minted 10 AR to wallet ${address} on arlocal`,
+        `Minted 10 AR to wallet ${address} on arlocal via ${gateway.host}:${gateway.port}`,
       );
       if (managedOwnerKey) {
-        await this._mintToOwnerKey(arweave, managedOwnerKey);
+        await this._mintToOwnerKey(arweave, managedOwnerKey, gateway);
       }
     } catch (err) {
       this.logger?.warn(
@@ -395,7 +399,11 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
         typeof (_m.default as any)?.init === "function"
           ? _m.default
           : (_m.default as any)?.default;
-      await this._mintToOwnerKey(Arweave.init(gateway), managedOwnerKey);
+      await this._mintToOwnerKey(
+        Arweave.init(gateway),
+        managedOwnerKey,
+        gateway,
+      );
     } catch (err) {
       this.logger?.warn(
         "dStorage/arweave-local",
@@ -405,15 +413,23 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async _mintToOwnerKey(arweave: any, ownerKey: string): Promise<void> {
+  private async _mintToOwnerKey(
+    arweave: any,
+    ownerKey: string,
+    gateway: ArweaveGatewayConfig,
+  ): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const serverAddress: string = await arweave.wallets.jwkToAddress({
       n: ownerKey,
     } as any);
+    this.logger?.log(
+      "dStorage/arweave-local",
+      `Minting 10 AR to managed payment server wallet ${serverAddress} on arlocal via ${gateway.protocol}://${gateway.host}:${gateway.port}…`,
+    );
     await this.testnet.mintTokens(serverAddress, 10_000_000_000_000n); // 10 AR
     this.logger?.log(
       "dStorage/arweave-local",
-      `Minted 10 AR to managed payment server wallet ${serverAddress} on arlocal`,
+      `Minted 10 AR to managed payment server wallet ${serverAddress} on arlocal via ${gateway.host}:${gateway.port}`,
     );
   }
 
