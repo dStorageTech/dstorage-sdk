@@ -37,6 +37,7 @@ import type {
   CostEstimate,
   DStorageConfig,
   Logger,
+  ListReferencesOptions,
   RegisterReferenceOptions,
   RegisterReferenceResult,
   RetrieveResult,
@@ -60,7 +61,7 @@ import type {
   MetaTxProgress,
   MetaTxReceipt,
 } from "./metaTx/index.js";
-import type { DataReferenceSummary } from "@dstorage/chain";
+import type { DataReferenceSummary, EncryptionScheme } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
 export class DStorage implements DStorageContext {
@@ -813,19 +814,56 @@ export class DStorage implements DStorageContext {
   /**
    * List references currently available from the configured chain adapter.
    */
-  async listReferences(): Promise<DataReferenceSummary[]> {
+  async listReferences(
+    options?: ListReferencesOptions,
+  ): Promise<DataReferenceSummary[]> {
     if (!this.config.chainAdapter) {
       throw new Error("[dStorage] listReferences() requires a chain adapter.");
     }
-    if (typeof this.config.chainAdapter.listReferences !== "function") {
-      throw new Error(
-        "[dStorage] listReferences() is not supported by this chain adapter.",
+
+    type RawItem = {
+      refId: string;
+      storageId?: string | null;
+      encryptionScheme?: EncryptionScheme | null;
+      keyEnvelope: string;
+      storageProvider: string;
+      ownerCommitment: string;
+      encryptedMetadata?: string;
+    };
+
+    let rawItems: RawItem[];
+
+    if (options?.refIds && options.refIds.length > 0) {
+      // Fetch each requested ref directly — avoids retrieving the full list.
+      // ownerCommitment is not available from readReference; callers that need it
+      // should use the no-filter path.
+      rawItems = await Promise.all(
+        options.refIds.map(async (refId) => {
+          const ref = await this.config.chainAdapter!.readReference(refId);
+          return {
+            refId,
+            storageId: ref.storageId ?? null,
+            encryptionScheme: ref.encryptionScheme ?? null,
+            keyEnvelope: ref.keyEnvelope,
+            storageProvider: ref.storageProvider,
+            ownerCommitment: "",
+            ...(ref.encryptedMetadata !== undefined
+              ? { encryptedMetadata: ref.encryptedMetadata }
+              : {}),
+          };
+        }),
       );
+    } else {
+      if (typeof this.config.chainAdapter.listReferences !== "function") {
+        throw new Error(
+          "[dStorage] listReferences() is not supported by this chain adapter.",
+        );
+      }
+      rawItems = await this.config.chainAdapter.listReferences();
     }
 
-    const refs = await this.config.chainAdapter.listReferences();
     return Promise.all(
-      refs.map(async (item) => {
+      rawItems.map(async (item) => {
         let storageId: string | null = null;
         let decryptionError: string | undefined;
         const isPublic = !item.encryptionScheme;
@@ -879,7 +917,7 @@ export class DStorage implements DStorageContext {
           refId: item.refId,
           storageId,
           storageProvider: item.storageProvider,
-          encryptionScheme: item.encryptionScheme,
+          encryptionScheme: item.encryptionScheme ?? null,
           keyEnvelope: item.keyEnvelope,
           ownerCommitment: item.ownerCommitment,
           ...(decryptionError !== undefined ? { decryptionError } : {}),

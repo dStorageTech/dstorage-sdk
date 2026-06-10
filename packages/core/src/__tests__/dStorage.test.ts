@@ -689,6 +689,28 @@ describe("upload metadata option", () => {
       }),
     ).rejects.toThrow("[dStorage]");
   });
+
+  it("refIds filter returns only the requested reference", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: id1 } = await ds.upload(enc("ref-one"));
+    const { chainRefId: id2 } = await ds.upload(enc("ref-two"));
+    const refs = await ds.listReferences({ refIds: [id1!] });
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.refId).toBe(id1);
+    expect(refs.some((r) => r.refId === id2)).toBe(false);
+  });
+
+  it("refIds filter with multiple ids returns only matched references", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: id1 } = await ds.upload(enc("multi-one"));
+    const { chainRefId: id2 } = await ds.upload(enc("multi-two"));
+    const { chainRefId: id3 } = await ds.upload(enc("multi-three"));
+    const refs = await ds.listReferences({ refIds: [id1!, id3!] });
+    expect(refs).toHaveLength(2);
+    expect(refs.some((r) => r.refId === id1)).toBe(true);
+    expect(refs.some((r) => r.refId === id3)).toBe(true);
+    expect(refs.some((r) => r.refId === id2)).toBe(false);
+  });
 });
 
 describe("upload tags option", () => {

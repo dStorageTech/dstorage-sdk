@@ -147,6 +147,12 @@ export interface UploadResult {
   costEstimate: CostEstimate;
 }
 
+/** Options for dStorage.listReferences() */
+export interface ListReferencesOptions {
+  /** When provided, only references whose refId appears in this array are returned. */
+  refIds?: string[];
+}
+
 /** Options for dStorage.registerReference() */
 export interface RegisterReferenceOptions {
   /**
