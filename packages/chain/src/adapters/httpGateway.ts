@@ -39,6 +39,12 @@ export interface HttpGatewayChainAdapterConfig {
   listPath: string;
   /** Path appended to baseUrl for removeReference (DELETE /{refId}) operations. */
   deletePath: string;
+  /**
+   * Optional custom fetch implementation. Useful when the gateway uses a custom CA
+   * or client certificate: supply an undici Agent configured with the appropriate
+   * `ca`, `cert`, and `key` options. Defaults to the global `fetch` when omitted.
+   */
+  customFetch?: typeof fetch;
   logger?: ChainAdapterLogger;
 }
 
@@ -47,6 +53,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   readonly providerName = "HTTP-Gateway-Chain-Adapter";
 
   private readonly logger: ChainAdapterLogger | undefined;
+  private readonly fetchFn: typeof fetch;
   private readonly writeUrl: string;
   private readonly readUrl: string;
   private readonly listUrl: string;
@@ -54,6 +61,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
   constructor(config: HttpGatewayChainAdapterConfig) {
     this.logger = config.logger;
+    this.fetchFn = config.customFetch ?? fetch;
     this.writeUrl = `${config.baseUrl}${config.writePath}`;
     this.readUrl = `${config.baseUrl}${config.readPath}`;
     this.listUrl = `${config.baseUrl}${config.listPath}`;
@@ -68,7 +76,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.fetchFn(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -102,7 +110,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.fetchFn(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(update),
@@ -125,7 +133,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await fetch(url);
+      res = await this.fetchFn(url);
     } catch (err) {
       throw new Error(`${COMPONENT} readReference failed: ${String(err)}`);
     }
@@ -163,7 +171,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   async listReferences(): Promise<DataReferenceSummary[]> {
     let res: Response;
     try {
-      res = await fetch(this.listUrl);
+      res = await this.fetchFn(this.listUrl);
     } catch (err) {
       throw new Error(`${COMPONENT} listReferences failed: ${String(err)}`);
     }
@@ -221,7 +229,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.fetchFn(url, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
