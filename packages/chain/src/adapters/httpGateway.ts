@@ -197,8 +197,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
         typeof item !== "object" ||
         typeof it["refId"] !== "string" ||
         typeof it["storageProvider"] !== "string" ||
-        typeof it["keyEnvelope"] !== "string" ||
-        typeof it["ownerCommitment"] !== "string"
+        typeof it["keyEnvelope"] !== "string"
       ) {
         this.logger?.warn(
           COMPONENT,
