@@ -55,6 +55,9 @@ export const CoreErrorCode = {
 
   // MetaTx — 10200-10209
   META_TX_UNKNOWN_STEP: 10200,
+
+  // generic catch-all — 10999
+  UNKNOWN_ERROR: 10999,
 } as const;
 
 export type CoreErrorCode = (typeof CoreErrorCode)[keyof typeof CoreErrorCode];

@@ -120,6 +120,39 @@ const storageAdapter = new ArweaveLocalStorageAdapter({
 
 ---
 
+## Error Handling
+
+Every error thrown by the SDK is a `DStorageError` — a subclass of `Error` that always carries a numeric `.code`. Use the `isDStorageError` type guard to distinguish SDK errors from unexpected runtime failures:
+
+```typescript
+import { isDStorageError } from "@dstorage-tech/dstorage";
+
+try {
+  await sdk.upload(bytes);
+} catch (err) {
+  if (isDStorageError(err)) {
+    console.error(`SDK error (code ${err.code}): ${err.message}`);
+  } else {
+    throw err; // should not happen — all SDK errors are DStorageError
+  }
+}
+```
+
+Error codes are namespaced by package:
+
+| Range       | Package                |
+| ----------- | ---------------------- |
+| 10000–10999 | `@dstorage/core`       |
+| 11000–11999 | `@dstorage/chain`      |
+| 12000–12999 | `@dstorage/crypto`     |
+| 13000–13999 | `@dstorage/encryption` |
+| 14000–14999 | `@dstorage/payment`    |
+| 15000–15999 | `@dstorage/storage`    |
+
+Code `10999` (`UNKNOWN_ERROR`) is a catch-all — it means an error escaped without an explicit code. If you see it, it is a bug worth reporting.
+
+---
+
 ## Encryption Design
 
 ### Encryption scheme

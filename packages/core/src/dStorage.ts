@@ -16,7 +16,11 @@
  *   await ds.removeReference(chainRefId);
  */
 
-import { XChaChaScheme, DStorageError } from "@dstorage/crypto";
+import {
+  XChaChaScheme,
+  DStorageError,
+  isDStorageError,
+} from "@dstorage/crypto";
 import {
   generateDek,
   buildKeyEnvelope,
@@ -65,6 +69,15 @@ import type {
 import type { DataReferenceSummary, EncryptionScheme } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
+function wrapError(err: unknown): never {
+  if (isDStorageError(err)) throw err;
+  throw new DStorageError(
+    CoreErrorCode.UNKNOWN_ERROR,
+    `[dStorage] Unexpected error: ${err instanceof Error ? err.message : String(err)}`,
+    { cause: err },
+  );
+}
+
 export class DStorage implements DStorageContext {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
@@ -101,16 +114,20 @@ export class DStorage implements DStorageContext {
    * Call this instead of connect() when using MidnightChainAdapter directly.
    */
   async init() {
-    // 1. Initialize chain adapter wallet (syncs wallet, etc.)
-    if (this.config.chainAdapter?.init) {
-      await this.config.chainAdapter.init();
+    try {
+      // 1. Initialize chain adapter wallet (syncs wallet, etc.)
+      if (this.config.chainAdapter?.init) {
+        await this.config.chainAdapter.init();
+      }
+
+      // 2. Store encryption adapters — they wrap/unwrap DEKs on demand.
+      this._encryptionProviders = this.config.encryptionAdapters ?? [];
+
+      this._initialized = true;
+      return this.config.chainAdapter?.getContractAddress();
+    } catch (err) {
+      wrapError(err);
     }
-
-    // 2. Store encryption adapters — they wrap/unwrap DEKs on demand.
-    this._encryptionProviders = this.config.encryptionAdapters ?? [];
-
-    this._initialized = true;
-    return this.config.chainAdapter?.getContractAddress();
   }
 
   /** Disconnect and clear the in-memory encryption providers. */
@@ -150,180 +167,191 @@ export class DStorage implements DStorageContext {
     bytes: Uint8Array,
     options?: UploadOptions,
   ): Promise<UploadResult> {
-    this.assertConnected();
+    try {
+      this.assertConnected();
 
-    const {
-      tags = {},
-      metadata: rawMeta,
-      onProgress,
-      isPublic = false,
-    } = options ?? {};
+      const {
+        tags = {},
+        metadata: rawMeta,
+        onProgress,
+        isPublic = false,
+      } = options ?? {};
 
-    if (rawMeta !== undefined && isPublic) {
-      throw new DStorageError(
-        CoreErrorCode.METADATA_WITH_PUBLIC_UPLOAD,
-        "[dStorage] metadata cannot be used with isPublic uploads — there is no DEK to encrypt it with.",
-      );
-    }
-
-    // Route large files through the chunked path.
-    if (bytes.length > CHUNK_SIZE) {
-      return this._uploadChunked(bytes, tags, onProgress, isPublic, rawMeta);
-    }
-
-    // ── Single-shot path (files ≤ 5 MB) ────────────────────────────────────
-
-    let uploadData: Uint8Array;
-    let onChainStorageId: string;
-    const encryptionScheme = isPublic
-      ? ("" as const)
-      : ("xchacha20poly1305-v1" as const);
-
-    // Per-upload scheme: for private uploads this holds an XChaChaScheme
-    // built from a fresh random DEK (not the seed-derived key).
-    let uploadScheme: CryptoScheme | null = null;
-    let keyEnvelope: string = "";
-    let dek: Uint8Array | null = null;
-    let ownerSecret: Uint8Array = new Uint8Array(0);
-
-    if (isPublic) {
-      // 1a. Public: store raw bytes, write storageId as plaintext on-chain.
-      uploadData = bytes;
-    } else {
-      // 1b. Private: requires at least one provider to wrap the DEK.
-      if (this._encryptionProviders.length === 0) {
+      if (rawMeta !== undefined && isPublic) {
         throw new DStorageError(
-          CoreErrorCode.UPLOAD_NO_PROVIDERS,
-          "[dStorage] No encryption providers available. Call init() before uploading.",
+          CoreErrorCode.METADATA_WITH_PUBLIC_UPLOAD,
+          "[dStorage] metadata cannot be used with isPublic uploads — there is no DEK to encrypt it with.",
         );
       }
-      // Generate a fresh random DEK for this upload.
-      dek = generateDek();
-      uploadScheme = XChaChaScheme.fromKey(dek);
-      this.logger?.log(
-        "dStorage",
-        `Encrypting content using scheme: ${encryptionScheme}`,
-      );
-      uploadData = await uploadScheme.encryptPayload(bytes, PAYLOAD_AAD);
 
-      // Wrap DEK under every provider (enables decryption and ownerSecret re-derivation).
-      const wrapperEntries = await Promise.all(
-        this._encryptionProviders.map(async (provider) => ({
-          wrapKeyName: provider.name,
-          ...(await provider.wrapDek(dek!)),
-        })),
-      );
-      keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
-    }
+      // Route large files through the chunked path.
+      if (bytes.length > CHUNK_SIZE) {
+        return this._uploadChunked(bytes, tags, onProgress, isPublic, rawMeta);
+      }
 
-    // 2. Upload first so we have the storageId for ownerSecret derivation (if needed).
-    const sdkVersion = corePackageJson.version ?? "unknown";
-    const storageResult = await this.config.storageAdapter.upload(uploadData, {
-      ...tags,
-      "dStorage-version": sdkVersion,
-      "Content-Type": "application/octet-stream",
-    });
+      // ── Single-shot path (files ≤ 5 MB) ────────────────────────────────────
 
-    if (isPublic) {
-      // 3a. Public: no content DEK needed. Key envelope and ownerSecret are only
-      // needed for on-chain reference management — skip in storage-only mode.
-      if (this.config.chainAdapter) {
+      let uploadData: Uint8Array;
+      let onChainStorageId: string;
+      const encryptionScheme = isPublic
+        ? ("" as const)
+        : ("xchacha20poly1305-v1" as const);
+
+      // Per-upload scheme: for private uploads this holds an XChaChaScheme
+      // built from a fresh random DEK (not the seed-derived key).
+      let uploadScheme: CryptoScheme | null = null;
+      let keyEnvelope: string = "";
+      let dek: Uint8Array | null = null;
+      let ownerSecret: Uint8Array = new Uint8Array(0);
+
+      if (isPublic) {
+        // 1a. Public: store raw bytes, write storageId as plaintext on-chain.
+        uploadData = bytes;
+      } else {
+        // 1b. Private: requires at least one provider to wrap the DEK.
         if (this._encryptionProviders.length === 0) {
           throw new DStorageError(
-            CoreErrorCode.PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER,
-            "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
-              "Without a provider there is no owner secret, so the reference " +
-              "could never be removed or updated.",
+            CoreErrorCode.UPLOAD_NO_PROVIDERS,
+            "[dStorage] No encryption providers available. Call init() before uploading.",
           );
         }
-        const ownerSeed = generateDek();
-        const ownerSeedWrappers = await Promise.all(
+        // Generate a fresh random DEK for this upload.
+        dek = generateDek();
+        uploadScheme = XChaChaScheme.fromKey(dek);
+        this.logger?.log(
+          "dStorage",
+          `Encrypting content using scheme: ${encryptionScheme}`,
+        );
+        uploadData = await uploadScheme.encryptPayload(bytes, PAYLOAD_AAD);
+
+        // Wrap DEK under every provider (enables decryption and ownerSecret re-derivation).
+        const wrapperEntries = await Promise.all(
           this._encryptionProviders.map(async (provider) => ({
             wrapKeyName: provider.name,
-            ...(await provider.wrapDek(ownerSeed)),
+            ...(await provider.wrapDek(dek!)),
           })),
         );
-        keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(ownerSeedWrappers));
+        keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
+      }
+
+      // 2. Upload first so we have the storageId for ownerSecret derivation (if needed).
+      const sdkVersion = corePackageJson.version ?? "unknown";
+      const storageResult = await this.config.storageAdapter.upload(
+        uploadData,
+        {
+          ...tags,
+          "dStorage-version": sdkVersion,
+          "Content-Type": "application/octet-stream",
+        },
+      );
+
+      if (isPublic) {
+        // 3a. Public: no content DEK needed. Key envelope and ownerSecret are only
+        // needed for on-chain reference management — skip in storage-only mode.
+        if (this.config.chainAdapter) {
+          if (this._encryptionProviders.length === 0) {
+            throw new DStorageError(
+              CoreErrorCode.PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER,
+              "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
+                "Without a provider there is no owner secret, so the reference " +
+                "could never be removed or updated.",
+            );
+          }
+          const ownerSeed = generateDek();
+          const ownerSeedWrappers = await Promise.all(
+            this._encryptionProviders.map(async (provider) => ({
+              wrapKeyName: provider.name,
+              ...(await provider.wrapDek(ownerSeed)),
+            })),
+          );
+          keyEnvelope = serializeKeyEnvelope(
+            buildKeyEnvelope(ownerSeedWrappers),
+          );
+          ownerSecret = await deriveOwnerSecret(
+            ownerSeed,
+            new TextEncoder().encode(storageResult.id),
+            "dstorage:owner-secret:public:v1",
+          );
+        }
+        // Write storageId as-is on-chain.
+        onChainStorageId = storageResult.id;
+      } else {
+        // 3b. Private: encrypt the storageId with the same per-upload DEK scheme.
+        onChainStorageId = await uploadScheme!.encryptStorageId(
+          storageResult.id,
+        );
+
+        // Derive ownerSecret = HKDF-SHA256(dek, rawStorageId).
+        // Deterministic: any KEK holder can unwrap the DEK and re-derive this.
         ownerSecret = await deriveOwnerSecret(
-          ownerSeed,
+          dek!,
           new TextEncoder().encode(storageResult.id),
-          "dstorage:owner-secret:public:v1",
         );
       }
-      // Write storageId as-is on-chain.
-      onChainStorageId = storageResult.id;
-    } else {
-      // 3b. Private: encrypt the storageId with the same per-upload DEK scheme.
-      onChainStorageId = await uploadScheme!.encryptStorageId(storageResult.id);
 
-      // Derive ownerSecret = HKDF-SHA256(dek, rawStorageId).
-      // Deterministic: any KEK holder can unwrap the DEK and re-derive this.
-      ownerSecret = await deriveOwnerSecret(
-        dek!,
-        new TextEncoder().encode(storageResult.id),
+      const storageCost = {
+        amount: storageResult.cost?.amount ?? "unknown",
+        token: storageResult.cost?.token ?? "AR",
+      };
+
+      // 4. Write on-chain reference — only the storage pointer, never the data.
+      //    Skipped in storage-only mode (no chain adapter).
+      if (this.config.chainAdapter) {
+        const encryptedMetadata = rawMeta
+          ? bytesToBase64url(
+              await uploadScheme!.encryptPayload(
+                new TextEncoder().encode(JSON.stringify(rawMeta)),
+                METADATA_AAD,
+              ),
+            )
+          : undefined;
+        const chainResult = await this.config.chainAdapter.writeReference({
+          storageId: onChainStorageId,
+          encryptionScheme,
+          storageProvider: storageResult.provider,
+          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+          writtenAt: Date.now(),
+          keyEnvelope,
+          ownerSecret,
+        });
+
+        const refId = chainResult.refId;
+        this.logger?.log("dStorage", `Upload complete → refId: ${refId}`);
+
+        return {
+          chainRefId: refId,
+          storageId: storageResult.id,
+          storageProvider: storageResult.provider,
+          chainProvider: chainResult.provider,
+          uploadedAt: storageResult.uploadedAt,
+          encryptionScheme,
+          costEstimate: {
+            storageCost,
+            chainCost: {
+              amount: chainResult.paymentReceipt?.amount ?? "unknown",
+              token: chainResult.paymentReceipt?.token ?? "DUST",
+            },
+            fileSizeBytes: uploadData.length,
+          },
+        };
+      }
+
+      // Storage-only mode: return result without chain fields.
+      this.logger?.log(
+        "dStorage",
+        `Upload complete (storage-only) → storageId: ${storageResult.id}`,
       );
-    }
-
-    const storageCost = {
-      amount: storageResult.cost?.amount ?? "unknown",
-      token: storageResult.cost?.token ?? "AR",
-    };
-
-    // 4. Write on-chain reference — only the storage pointer, never the data.
-    //    Skipped in storage-only mode (no chain adapter).
-    if (this.config.chainAdapter) {
-      const encryptedMetadata = rawMeta
-        ? bytesToBase64url(
-            await uploadScheme!.encryptPayload(
-              new TextEncoder().encode(JSON.stringify(rawMeta)),
-              METADATA_AAD,
-            ),
-          )
-        : undefined;
-      const chainResult = await this.config.chainAdapter.writeReference({
-        storageId: onChainStorageId,
-        encryptionScheme,
-        storageProvider: storageResult.provider,
-        ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-        writtenAt: Date.now(),
-        keyEnvelope,
-        ownerSecret,
-      });
-
-      const refId = chainResult.refId;
-      this.logger?.log("dStorage", `Upload complete → refId: ${refId}`);
-
       return {
-        chainRefId: refId,
         storageId: storageResult.id,
         storageProvider: storageResult.provider,
-        chainProvider: chainResult.provider,
         uploadedAt: storageResult.uploadedAt,
         encryptionScheme,
-        costEstimate: {
-          storageCost,
-          chainCost: {
-            amount: chainResult.paymentReceipt?.amount ?? "unknown",
-            token: chainResult.paymentReceipt?.token ?? "DUST",
-          },
-          fileSizeBytes: uploadData.length,
-        },
+        ...(uploadScheme ? { cryptoScheme: uploadScheme } : {}),
+        costEstimate: { storageCost, fileSizeBytes: uploadData.length },
       };
+    } catch (err) {
+      wrapError(err);
     }
-
-    // Storage-only mode: return result without chain fields.
-    this.logger?.log(
-      "dStorage",
-      `Upload complete (storage-only) → storageId: ${storageResult.id}`,
-    );
-    return {
-      storageId: storageResult.id,
-      storageProvider: storageResult.provider,
-      uploadedAt: storageResult.uploadedAt,
-      encryptionScheme,
-      ...(uploadScheme ? { cryptoScheme: uploadScheme } : {}),
-      costEstimate: { storageCost, fileSizeBytes: uploadData.length },
-    };
   }
 
   /**
@@ -344,70 +372,74 @@ export class DStorage implements DStorageContext {
     storageId: string | undefined,
     options: RegisterReferenceOptions = {},
   ): Promise<RegisterReferenceResult> {
-    this.assertConnected();
-    if (!this.config.chainAdapter) {
-      throw new DStorageError(
-        CoreErrorCode.REGISTER_REF_REQUIRES_CHAIN,
-        "[dStorage] registerReference requires a chain adapter.",
-      );
-    }
-    if (this._encryptionProviders.length === 0) {
-      throw new DStorageError(
-        CoreErrorCode.REGISTER_REF_REQUIRES_ENCRYPTION,
-        "[dStorage] registerReference requires at least one encryption adapter.",
-      );
-    }
-
-    const dek = generateDek();
     try {
-      const scheme = XChaChaScheme.fromKey(dek);
+      this.assertConnected();
+      if (!this.config.chainAdapter) {
+        throw new DStorageError(
+          CoreErrorCode.REGISTER_REF_REQUIRES_CHAIN,
+          "[dStorage] registerReference requires a chain adapter.",
+        );
+      }
+      if (this._encryptionProviders.length === 0) {
+        throw new DStorageError(
+          CoreErrorCode.REGISTER_REF_REQUIRES_ENCRYPTION,
+          "[dStorage] registerReference requires at least one encryption adapter.",
+        );
+      }
 
-      const { metadata: rawMeta } = options;
-      const encryptedMetadata = rawMeta
-        ? bytesToBase64url(
-            await scheme.encryptPayload(
-              new TextEncoder().encode(JSON.stringify(rawMeta)),
-              METADATA_AAD,
-            ),
-          )
-        : undefined;
+      const dek = generateDek();
+      try {
+        const scheme = XChaChaScheme.fromKey(dek);
 
-      const onChainStorageId =
-        storageId !== undefined
-          ? await scheme.encryptStorageId(storageId)
+        const { metadata: rawMeta } = options;
+        const encryptedMetadata = rawMeta
+          ? bytesToBase64url(
+              await scheme.encryptPayload(
+                new TextEncoder().encode(JSON.stringify(rawMeta)),
+                METADATA_AAD,
+              ),
+            )
           : undefined;
 
-      const wrapperEntries = await Promise.all(
-        this._encryptionProviders.map(async (p) => ({
-          wrapKeyName: p.name,
-          ...(await p.wrapDek(dek)),
-        })),
-      );
-      const keyEnvelope = serializeKeyEnvelope(
-        buildKeyEnvelope(wrapperEntries),
-      );
-      const ownerSecret = await deriveOwnerSecret(
-        dek,
-        storageId !== undefined
-          ? new TextEncoder().encode(storageId)
-          : METADATA_ONLY_OWNER_SECRET_SALT,
-      );
-      const chainResult = await this.config.chainAdapter.writeReference({
-        ...(onChainStorageId !== undefined
-          ? { storageId: onChainStorageId }
-          : {}),
-        encryptionScheme: "xchacha20poly1305-v1",
-        storageProvider:
-          options.storageProvider ?? this.config.storageAdapter.name,
-        ...(options.refId !== undefined ? { refId: options.refId } : {}),
-        ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-        writtenAt: Date.now(),
-        keyEnvelope,
-        ownerSecret,
-      });
-      return { chainRefId: chainResult.refId };
-    } finally {
-      dek.fill(0);
+        const onChainStorageId =
+          storageId !== undefined
+            ? await scheme.encryptStorageId(storageId)
+            : undefined;
+
+        const wrapperEntries = await Promise.all(
+          this._encryptionProviders.map(async (p) => ({
+            wrapKeyName: p.name,
+            ...(await p.wrapDek(dek)),
+          })),
+        );
+        const keyEnvelope = serializeKeyEnvelope(
+          buildKeyEnvelope(wrapperEntries),
+        );
+        const ownerSecret = await deriveOwnerSecret(
+          dek,
+          storageId !== undefined
+            ? new TextEncoder().encode(storageId)
+            : METADATA_ONLY_OWNER_SECRET_SALT,
+        );
+        const chainResult = await this.config.chainAdapter.writeReference({
+          ...(onChainStorageId !== undefined
+            ? { storageId: onChainStorageId }
+            : {}),
+          encryptionScheme: "xchacha20poly1305-v1",
+          storageProvider:
+            options.storageProvider ?? this.config.storageAdapter.name,
+          ...(options.refId !== undefined ? { refId: options.refId } : {}),
+          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+          writtenAt: Date.now(),
+          keyEnvelope,
+          ownerSecret,
+        });
+        return { chainRefId: chainResult.refId };
+      } finally {
+        dek.fill(0);
+      }
+    } catch (err) {
+      wrapError(err);
     }
   }
 
@@ -431,78 +463,84 @@ export class DStorage implements DStorageContext {
     bytes: Uint8Array,
     options?: UploadOptions,
   ): Promise<UpdateUploadResult> {
-    this.assertConnected();
-    if (!this.config.chainAdapter) {
-      throw new DStorageError(
-        CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
-        "[dStorage] updateUpload requires a chain adapter.",
-      );
-    }
-    if (typeof this.config.chainAdapter.updateReference !== "function") {
-      throw new DStorageError(
-        CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
-        "[dStorage] updateUpload is not supported by this chain adapter.",
-      );
-    }
-    if (this._encryptionProviders.length === 0) {
-      throw new DStorageError(
-        CoreErrorCode.UPDATE_UPLOAD_REQUIRES_ENCRYPTION,
-        "[dStorage] updateUpload requires at least one encryption adapter.",
-      );
-    }
-
-    const { tags = {}, metadata: rawMeta } = options ?? {};
-
-    // Re-derive ownerSecret from the existing reference (proves ownership).
-    const ownerSecret = await this._computeOwnerSecret(refId);
-
-    const dek = generateDek();
     try {
-      const scheme = XChaChaScheme.fromKey(dek);
-      const uploadData = await scheme.encryptPayload(bytes, PAYLOAD_AAD);
-      const storageResult = await this.config.storageAdapter.upload(
-        uploadData,
-        {
-          ...tags,
-          "Content-Type": "application/octet-stream",
-        },
-      );
-      const onChainStorageId = await scheme.encryptStorageId(storageResult.id);
-      const wrapperEntries = await Promise.all(
-        this._encryptionProviders.map(async (p) => ({
-          wrapKeyName: p.name,
-          ...(await p.wrapDek(dek)),
-        })),
-      );
-      const keyEnvelope = serializeKeyEnvelope(
-        buildKeyEnvelope(wrapperEntries),
-      );
-      const encryptedMetadata = rawMeta
-        ? bytesToBase64url(
-            await scheme.encryptPayload(
-              new TextEncoder().encode(JSON.stringify(rawMeta)),
-              METADATA_AAD,
-            ),
-          )
-        : undefined;
-      const rawNewStorageId = new TextEncoder().encode(storageResult.id);
-      const newOwnerSecret = await deriveOwnerSecret(dek, rawNewStorageId);
-      await this.config.chainAdapter.updateReference(
-        refId,
-        {
-          storageId: onChainStorageId,
-          encryptionScheme: "xchacha20poly1305-v1",
-          storageProvider: storageResult.provider,
-          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-          writtenAt: Date.now(),
-          keyEnvelope,
-        },
-        ownerSecret,
-        newOwnerSecret,
-      );
-      return { chainRefId: refId, storageId: storageResult.id };
-    } finally {
-      dek.fill(0);
+      this.assertConnected();
+      if (!this.config.chainAdapter) {
+        throw new DStorageError(
+          CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
+          "[dStorage] updateUpload requires a chain adapter.",
+        );
+      }
+      if (typeof this.config.chainAdapter.updateReference !== "function") {
+        throw new DStorageError(
+          CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
+          "[dStorage] updateUpload is not supported by this chain adapter.",
+        );
+      }
+      if (this._encryptionProviders.length === 0) {
+        throw new DStorageError(
+          CoreErrorCode.UPDATE_UPLOAD_REQUIRES_ENCRYPTION,
+          "[dStorage] updateUpload requires at least one encryption adapter.",
+        );
+      }
+
+      const { tags = {}, metadata: rawMeta } = options ?? {};
+
+      // Re-derive ownerSecret from the existing reference (proves ownership).
+      const ownerSecret = await this._computeOwnerSecret(refId);
+
+      const dek = generateDek();
+      try {
+        const scheme = XChaChaScheme.fromKey(dek);
+        const uploadData = await scheme.encryptPayload(bytes, PAYLOAD_AAD);
+        const storageResult = await this.config.storageAdapter.upload(
+          uploadData,
+          {
+            ...tags,
+            "Content-Type": "application/octet-stream",
+          },
+        );
+        const onChainStorageId = await scheme.encryptStorageId(
+          storageResult.id,
+        );
+        const wrapperEntries = await Promise.all(
+          this._encryptionProviders.map(async (p) => ({
+            wrapKeyName: p.name,
+            ...(await p.wrapDek(dek)),
+          })),
+        );
+        const keyEnvelope = serializeKeyEnvelope(
+          buildKeyEnvelope(wrapperEntries),
+        );
+        const encryptedMetadata = rawMeta
+          ? bytesToBase64url(
+              await scheme.encryptPayload(
+                new TextEncoder().encode(JSON.stringify(rawMeta)),
+                METADATA_AAD,
+              ),
+            )
+          : undefined;
+        const rawNewStorageId = new TextEncoder().encode(storageResult.id);
+        const newOwnerSecret = await deriveOwnerSecret(dek, rawNewStorageId);
+        await this.config.chainAdapter.updateReference(
+          refId,
+          {
+            storageId: onChainStorageId,
+            encryptionScheme: "xchacha20poly1305-v1",
+            storageProvider: storageResult.provider,
+            ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+            writtenAt: Date.now(),
+            keyEnvelope,
+          },
+          ownerSecret,
+          newOwnerSecret,
+        );
+        return { chainRefId: refId, storageId: storageResult.id };
+      } finally {
+        dek.fill(0);
+      }
+    } catch (err) {
+      wrapError(err);
     }
   }
 
@@ -518,13 +556,17 @@ export class DStorage implements DStorageContext {
     storageId: string,
     dekScheme?: CryptoScheme,
   ): Promise<RetrieveResult> {
-    this.assertConnected();
+    try {
+      this.assertConnected();
 
-    // 1. Fetch blob from storage
-    const { bytes: rawBytes, tags } =
-      await this.config.storageAdapter.retrieve(storageId);
+      // 1. Fetch blob from storage
+      const { bytes: rawBytes, tags } =
+        await this.config.storageAdapter.retrieve(storageId);
 
-    return this._decryptAndReassemble(rawBytes, storageId, tags, dekScheme);
+      return this._decryptAndReassemble(rawBytes, storageId, tags, dekScheme);
+    } catch (err) {
+      wrapError(err);
+    }
   }
 
   /**
@@ -759,88 +801,92 @@ export class DStorage implements DStorageContext {
    * @param refId  The refId returned from upload()
    */
   async retrieveByRefId(refId: string): Promise<RetrieveResult> {
-    this.assertConnected();
+    try {
+      this.assertConnected();
 
-    if (!this.config.chainAdapter) {
-      throw new DStorageError(
-        CoreErrorCode.RETRIEVE_BY_REF_ID_REQUIRES_CHAIN,
-        "[dStorage] retrieveByRefId() requires a chain adapter. " +
-          "Configure one in DStorageConfig or use retrieveByStorageId() instead.",
-      );
-    }
-
-    const ref = await this.config.chainAdapter.readReference(refId);
-    if (!ref)
-      throw new DStorageError(
-        CoreErrorCode.REF_NOT_FOUND,
-        `[dStorage] No on-chain reference found for refId: ${refId}`,
-      );
-
-    if (
-      ref.storageProvider &&
-      ref.storageProvider !== this.config.storageAdapter.name
-    ) {
-      throw new DStorageError(
-        CoreErrorCode.STORAGE_ADAPTER_MISMATCH,
-        `[dStorage] Storage adapter mismatch: reference "${refId}" was stored on ` +
-          `"${ref.storageProvider}" but the configured adapter is "${this.config.storageAdapter.name}". ` +
-          `Configure a "${ref.storageProvider}" storage adapter to retrieve this reference.`,
-      );
-    }
-
-    const isPublic = !ref.encryptionScheme;
-
-    // For private data: unwrap the DEK from the key envelope, then use it to
-    // decrypt both the on-chain storageId and the stored content.
-    // For public data: the storageId is already plaintext.
-    // For metadata-only references (no storageId): get the DEK to decrypt
-    // encryptedMetadata but skip storage retrieval entirely.
-    let storageId: string | undefined;
-    let dekScheme: CryptoScheme | undefined;
-
-    if (!ref.storageId) {
-      // Metadata-only reference — still need the DEK to decrypt encryptedMetadata.
-      if (!isPublic && ref.keyEnvelope) {
-        dekScheme = await this._getDekScheme(ref.keyEnvelope);
-      }
-    } else if (isPublic) {
-      storageId = ref.storageId;
-    } else {
-      if (!ref.keyEnvelope) {
+      if (!this.config.chainAdapter) {
         throw new DStorageError(
-          CoreErrorCode.RETRIEVE_BY_REF_ID_ENVELOPE_EMPTY,
-          `[dStorage] Cannot decrypt refId ${refId}: key envelope is empty.`,
-          { cause: { code: "envelope_empty" } },
+          CoreErrorCode.RETRIEVE_BY_REF_ID_REQUIRES_CHAIN,
+          "[dStorage] retrieveByRefId() requires a chain adapter. " +
+            "Configure one in DStorageConfig or use retrieveByStorageId() instead.",
         );
       }
-      dekScheme = await this._getDekScheme(ref.keyEnvelope);
-      storageId = await dekScheme.decryptStorageId(ref.storageId);
-    }
 
-    let contentBytes: Uint8Array;
-    let contentTags: Record<string, string>;
-    if (storageId !== undefined) {
-      const r = await this.retrieveByStorageId(storageId, dekScheme);
-      contentBytes = r.bytes;
-      contentTags = r.tags;
-    } else {
-      contentBytes = new Uint8Array(0);
-      contentTags = {};
-    }
+      const ref = await this.config.chainAdapter.readReference(refId);
+      if (!ref)
+        throw new DStorageError(
+          CoreErrorCode.REF_NOT_FOUND,
+          `[dStorage] No on-chain reference found for refId: ${refId}`,
+        );
 
-    let metadata: Record<string, string> = {};
-    if (ref.encryptedMetadata && dekScheme) {
-      const raw = await dekScheme.decryptPayload(
-        base64urlToBytes(ref.encryptedMetadata),
-        METADATA_AAD,
-      );
-      metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
-        string,
-        string
-      >;
-    }
+      if (
+        ref.storageProvider &&
+        ref.storageProvider !== this.config.storageAdapter.name
+      ) {
+        throw new DStorageError(
+          CoreErrorCode.STORAGE_ADAPTER_MISMATCH,
+          `[dStorage] Storage adapter mismatch: reference "${refId}" was stored on ` +
+            `"${ref.storageProvider}" but the configured adapter is "${this.config.storageAdapter.name}". ` +
+            `Configure a "${ref.storageProvider}" storage adapter to retrieve this reference.`,
+        );
+      }
 
-    return { bytes: contentBytes, tags: contentTags, metadata };
+      const isPublic = !ref.encryptionScheme;
+
+      // For private data: unwrap the DEK from the key envelope, then use it to
+      // decrypt both the on-chain storageId and the stored content.
+      // For public data: the storageId is already plaintext.
+      // For metadata-only references (no storageId): get the DEK to decrypt
+      // encryptedMetadata but skip storage retrieval entirely.
+      let storageId: string | undefined;
+      let dekScheme: CryptoScheme | undefined;
+
+      if (!ref.storageId) {
+        // Metadata-only reference — still need the DEK to decrypt encryptedMetadata.
+        if (!isPublic && ref.keyEnvelope) {
+          dekScheme = await this._getDekScheme(ref.keyEnvelope);
+        }
+      } else if (isPublic) {
+        storageId = ref.storageId;
+      } else {
+        if (!ref.keyEnvelope) {
+          throw new DStorageError(
+            CoreErrorCode.RETRIEVE_BY_REF_ID_ENVELOPE_EMPTY,
+            `[dStorage] Cannot decrypt refId ${refId}: key envelope is empty.`,
+            { cause: { code: "envelope_empty" } },
+          );
+        }
+        dekScheme = await this._getDekScheme(ref.keyEnvelope);
+        storageId = await dekScheme.decryptStorageId(ref.storageId);
+      }
+
+      let contentBytes: Uint8Array;
+      let contentTags: Record<string, string>;
+      if (storageId !== undefined) {
+        const r = await this.retrieveByStorageId(storageId, dekScheme);
+        contentBytes = r.bytes;
+        contentTags = r.tags;
+      } else {
+        contentBytes = new Uint8Array(0);
+        contentTags = {};
+      }
+
+      let metadata: Record<string, string> = {};
+      if (ref.encryptedMetadata && dekScheme) {
+        const raw = await dekScheme.decryptPayload(
+          base64urlToBytes(ref.encryptedMetadata),
+          METADATA_AAD,
+        );
+        metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
+          string,
+          string
+        >;
+      }
+
+      return { bytes: contentBytes, tags: contentTags, metadata };
+    } catch (err) {
+      wrapError(err);
+    }
   }
 
   /**
@@ -849,118 +895,122 @@ export class DStorage implements DStorageContext {
   async listReferences(
     options?: ListReferencesOptions,
   ): Promise<DataReferenceSummary[]> {
-    if (!this.config.chainAdapter) {
-      throw new DStorageError(
-        CoreErrorCode.LIST_REFS_REQUIRES_CHAIN,
-        "[dStorage] listReferences() requires a chain adapter.",
-      );
-    }
+    try {
+      if (!this.config.chainAdapter) {
+        throw new DStorageError(
+          CoreErrorCode.LIST_REFS_REQUIRES_CHAIN,
+          "[dStorage] listReferences() requires a chain adapter.",
+        );
+      }
 
-    type RawItem = {
-      refId: string;
-      storageId?: string | null;
-      encryptionScheme?: EncryptionScheme | null;
-      keyEnvelope: string;
-      storageProvider: string;
-      ownerCommitment: string;
-      encryptedMetadata?: string;
-    };
+      type RawItem = {
+        refId: string;
+        storageId?: string | null;
+        encryptionScheme?: EncryptionScheme | null;
+        keyEnvelope: string;
+        storageProvider: string;
+        ownerCommitment: string;
+        encryptedMetadata?: string;
+      };
 
-    let rawItems: RawItem[];
+      let rawItems: RawItem[];
 
-    if (options?.refIds && options.refIds.length > 0) {
-      // Fetch each requested ref directly — avoids retrieving the full list.
-      // ownerCommitment is not available from readReference; callers that need it
-      // should use the no-filter path.
-      rawItems = await Promise.all(
-        options.refIds.map(async (refId) => {
-          const ref = await this.config.chainAdapter!.readReference(refId);
+      if (options?.refIds && options.refIds.length > 0) {
+        // Fetch each requested ref directly — avoids retrieving the full list.
+        // ownerCommitment is not available from readReference; callers that need it
+        // should use the no-filter path.
+        rawItems = await Promise.all(
+          options.refIds.map(async (refId) => {
+            const ref = await this.config.chainAdapter!.readReference(refId);
+            return {
+              refId,
+              storageId: ref.storageId ?? null,
+              encryptionScheme: ref.encryptionScheme ?? null,
+              keyEnvelope: ref.keyEnvelope,
+              storageProvider: ref.storageProvider,
+              ownerCommitment: "",
+              ...(ref.encryptedMetadata !== undefined
+                ? { encryptedMetadata: ref.encryptedMetadata }
+                : {}),
+            };
+          }),
+        );
+      } else {
+        if (typeof this.config.chainAdapter.listReferences !== "function") {
+          throw new DStorageError(
+            CoreErrorCode.LIST_REFS_NOT_SUPPORTED,
+            "[dStorage] listReferences() is not supported by this chain adapter.",
+          );
+        }
+        rawItems = await this.config.chainAdapter.listReferences();
+      }
+
+      return Promise.all(
+        rawItems.map(async (item) => {
+          let storageId: string | null = null;
+          let decryptionError: string | undefined;
+          const isPublic = !item.encryptionScheme;
+
+          let dekScheme: CryptoScheme | undefined;
+
+          if (item.storageId) {
+            if (isPublic) {
+              storageId = item.storageId;
+            } else {
+              try {
+                dekScheme = await this._getDekScheme(item.keyEnvelope);
+                storageId = await dekScheme.decryptStorageId(item.storageId);
+              } catch (err) {
+                decryptionError =
+                  err instanceof Error ? err.message : String(err);
+              }
+            }
+          }
+
+          if (!decryptionError) {
+            // For public uploads verify the ownerSeed can be unwrapped; for private
+            // this is implicit — if _getDekScheme succeeded above, so would _unwrapDek.
+            if (isPublic) {
+              try {
+                await this._unwrapDek(item.keyEnvelope);
+              } catch (err) {
+                decryptionError =
+                  err instanceof Error ? err.message : String(err);
+              }
+            }
+          }
+
+          let metadata: Record<string, string> | undefined;
+          if (item.encryptedMetadata && dekScheme) {
+            try {
+              const raw = await dekScheme.decryptPayload(
+                base64urlToBytes(item.encryptedMetadata),
+                METADATA_AAD,
+              );
+              metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
+                string,
+                string
+              >;
+            } catch {
+              // Leave metadata undefined if decryption fails
+            }
+          }
+
           return {
-            refId,
-            storageId: ref.storageId ?? null,
-            encryptionScheme: ref.encryptionScheme ?? null,
-            keyEnvelope: ref.keyEnvelope,
-            storageProvider: ref.storageProvider,
-            ownerCommitment: "",
-            ...(ref.encryptedMetadata !== undefined
-              ? { encryptedMetadata: ref.encryptedMetadata }
-              : {}),
+            refId: item.refId,
+            storageId,
+            storageProvider: item.storageProvider,
+            encryptionScheme: item.encryptionScheme ?? null,
+            keyEnvelope: item.keyEnvelope,
+            ownerCommitment: item.ownerCommitment,
+            ...(decryptionError !== undefined ? { decryptionError } : {}),
+            ...(metadata !== undefined ? { metadata } : {}),
           };
         }),
       );
-    } else {
-      if (typeof this.config.chainAdapter.listReferences !== "function") {
-        throw new DStorageError(
-          CoreErrorCode.LIST_REFS_NOT_SUPPORTED,
-          "[dStorage] listReferences() is not supported by this chain adapter.",
-        );
-      }
-      rawItems = await this.config.chainAdapter.listReferences();
+    } catch (err) {
+      wrapError(err);
     }
-
-    return Promise.all(
-      rawItems.map(async (item) => {
-        let storageId: string | null = null;
-        let decryptionError: string | undefined;
-        const isPublic = !item.encryptionScheme;
-
-        let dekScheme: CryptoScheme | undefined;
-
-        if (item.storageId) {
-          if (isPublic) {
-            storageId = item.storageId;
-          } else {
-            try {
-              dekScheme = await this._getDekScheme(item.keyEnvelope);
-              storageId = await dekScheme.decryptStorageId(item.storageId);
-            } catch (err) {
-              decryptionError =
-                err instanceof Error ? err.message : String(err);
-            }
-          }
-        }
-
-        if (!decryptionError) {
-          // For public uploads verify the ownerSeed can be unwrapped; for private
-          // this is implicit — if _getDekScheme succeeded above, so would _unwrapDek.
-          if (isPublic) {
-            try {
-              await this._unwrapDek(item.keyEnvelope);
-            } catch (err) {
-              decryptionError =
-                err instanceof Error ? err.message : String(err);
-            }
-          }
-        }
-
-        let metadata: Record<string, string> | undefined;
-        if (item.encryptedMetadata && dekScheme) {
-          try {
-            const raw = await dekScheme.decryptPayload(
-              base64urlToBytes(item.encryptedMetadata),
-              METADATA_AAD,
-            );
-            metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
-              string,
-              string
-            >;
-          } catch {
-            // Leave metadata undefined if decryption fails
-          }
-        }
-
-        return {
-          refId: item.refId,
-          storageId,
-          storageProvider: item.storageProvider,
-          encryptionScheme: item.encryptionScheme ?? null,
-          keyEnvelope: item.keyEnvelope,
-          ownerCommitment: item.ownerCommitment,
-          ...(decryptionError !== undefined ? { decryptionError } : {}),
-          ...(metadata !== undefined ? { metadata } : {}),
-        };
-      }),
-    );
   }
 
   /**
@@ -969,38 +1019,48 @@ export class DStorage implements DStorageContext {
    * enforces ownership via ZK proof using the witness-derived ownerSecret.
    */
   async removeReference(refId: string): Promise<void> {
-    if (!this.config.chainAdapter) {
-      throw new DStorageError(
-        CoreErrorCode.REMOVE_REF_REQUIRES_CHAIN,
-        "[dStorage] removeReference() requires a chain adapter.",
-      );
+    try {
+      if (!this.config.chainAdapter) {
+        throw new DStorageError(
+          CoreErrorCode.REMOVE_REF_REQUIRES_CHAIN,
+          "[dStorage] removeReference() requires a chain adapter.",
+        );
+      }
+      if (typeof this.config.chainAdapter.removeReference !== "function") {
+        throw new DStorageError(
+          CoreErrorCode.REMOVE_REF_NOT_SUPPORTED,
+          "[dStorage] removeReference() is not supported by this chain adapter.",
+        );
+      }
+      const ownerSecret = await this._computeOwnerSecret(refId);
+      await this.config.chainAdapter.removeReference(refId, ownerSecret);
+    } catch (err) {
+      wrapError(err);
     }
-    if (typeof this.config.chainAdapter.removeReference !== "function") {
-      throw new DStorageError(
-        CoreErrorCode.REMOVE_REF_NOT_SUPPORTED,
-        "[dStorage] removeReference() is not supported by this chain adapter.",
-      );
-    }
-    const ownerSecret = await this._computeOwnerSecret(refId);
-    await this.config.chainAdapter.removeReference(refId, ownerSecret);
   }
 
   /**
    * Estimate the full cost (storage + chain) for a given payload size before committing.
    */
   async estimateCost(sizeBytes: number): Promise<CostEstimate> {
-    const [storageQuote, chainQuote] = await Promise.all([
-      this.config.storageAdapter.estimateCost(sizeBytes),
-      this.config.chainAdapter?.estimateCost(),
-    ]);
+    try {
+      const [storageQuote, chainQuote] = await Promise.all([
+        this.config.storageAdapter.estimateCost(sizeBytes),
+        this.config.chainAdapter?.estimateCost(),
+      ]);
 
-    return {
-      storageCost: { amount: storageQuote.amount, token: storageQuote.token },
-      ...(chainQuote
-        ? { chainCost: { amount: chainQuote.amount, token: chainQuote.token } }
-        : {}),
-      fileSizeBytes: sizeBytes,
-    };
+      return {
+        storageCost: { amount: storageQuote.amount, token: storageQuote.token },
+        ...(chainQuote
+          ? {
+              chainCost: { amount: chainQuote.amount, token: chainQuote.token },
+            }
+          : {}),
+        fileSizeBytes: sizeBytes,
+      };
+    } catch (err) {
+      wrapError(err);
+    }
   }
 
   /**
@@ -1018,18 +1078,22 @@ export class DStorage implements DStorageContext {
     onProgress: (progress: MetaTxProgress) => void,
     config: MetaTxConfig = {},
   ): Promise<MetaTxReceipt> {
-    this.assertConnected();
+    try {
+      this.assertConnected();
 
-    if (this._encryptionProviders.length === 0) {
-      throw new DStorageError(
-        CoreErrorCode.META_TX_REQUIRES_ENCRYPTION,
-        "[dStorage] executeMetaTransaction() requires at least one encryption provider.",
-      );
+      if (this._encryptionProviders.length === 0) {
+        throw new DStorageError(
+          CoreErrorCode.META_TX_REQUIRES_ENCRYPTION,
+          "[dStorage] executeMetaTransaction() requires at least one encryption provider.",
+        );
+      }
+
+      const metaTx = new MetaTx(this);
+      metaTx.onProgress(onProgress);
+      return metaTx.execute(file, config);
+    } catch (err) {
+      wrapError(err);
     }
-
-    const metaTx = new MetaTx(this);
-    metaTx.onProgress(onProgress);
-    return metaTx.execute(file, config);
   }
 
   /**
@@ -1041,48 +1105,54 @@ export class DStorage implements DStorageContext {
    * For public uploads: a random ownerSeed is generated and wrapped under all KEKs (same pattern).
    */
   async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
-    if (this._encryptionProviders.length === 0) {
-      throw new DStorageError(
-        CoreErrorCode.PREPARE_UPLOAD_NO_PROVIDERS,
-        "[dStorage] Cannot prepare upload crypto: no encryption providers. Call init() first.",
-      );
-    }
+    try {
+      if (this._encryptionProviders.length === 0) {
+        throw new DStorageError(
+          CoreErrorCode.PREPARE_UPLOAD_NO_PROVIDERS,
+          "[dStorage] Cannot prepare upload crypto: no encryption providers. Call init() first.",
+        );
+      }
 
-    if (isPublic) {
-      const ownerSeed = generateDek();
-      const ownerSeedWrappers = await Promise.all(
+      if (isPublic) {
+        const ownerSeed = generateDek();
+        const ownerSeedWrappers = await Promise.all(
+          this._encryptionProviders.map(async (provider) => ({
+            wrapKeyName: provider.name,
+            ...(await provider.wrapDek(ownerSeed)),
+          })),
+        );
+        const keyEnvelope = serializeKeyEnvelope(
+          buildKeyEnvelope(ownerSeedWrappers),
+        );
+        return {
+          uploadScheme: null,
+          keyEnvelope,
+          encryptionScheme: "",
+          ownerSeed,
+        };
+      }
+
+      // Private: generate a fresh DEK for this upload.
+      const dek = generateDek();
+      const uploadScheme = XChaChaScheme.fromKey(dek);
+      const wrapperEntries = await Promise.all(
         this._encryptionProviders.map(async (provider) => ({
           wrapKeyName: provider.name,
-          ...(await provider.wrapDek(ownerSeed)),
+          ...(await provider.wrapDek(dek)),
         })),
       );
       const keyEnvelope = serializeKeyEnvelope(
-        buildKeyEnvelope(ownerSeedWrappers),
+        buildKeyEnvelope(wrapperEntries),
       );
       return {
-        uploadScheme: null,
+        uploadScheme,
         keyEnvelope,
-        encryptionScheme: "",
-        ownerSeed,
+        encryptionScheme: "xchacha20poly1305-v1",
+        dek,
       };
+    } catch (err) {
+      wrapError(err);
     }
-
-    // Private: generate a fresh DEK for this upload.
-    const dek = generateDek();
-    const uploadScheme = XChaChaScheme.fromKey(dek);
-    const wrapperEntries = await Promise.all(
-      this._encryptionProviders.map(async (provider) => ({
-        wrapKeyName: provider.name,
-        ...(await provider.wrapDek(dek)),
-      })),
-    );
-    const keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
-    return {
-      uploadScheme,
-      keyEnvelope,
-      encryptionScheme: "xchacha20poly1305-v1",
-      dek,
-    };
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
