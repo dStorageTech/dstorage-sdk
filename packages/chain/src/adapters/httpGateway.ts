@@ -43,7 +43,7 @@ export interface HttpGatewayChainAdapterConfig {
   /**
    * Optional custom fetch implementation. Useful when the gateway uses a custom CA
    * or client certificate: supply an undici Agent configured with the appropriate
-   * `ca`, `cert`, and `key` options. Defaults to the global `fetch` when omitted.
+   * `ca`, `cert`, and `key` options. Defaults to `globalThis.fetch` when omitted.
    */
   customFetch?: typeof fetch;
   logger?: ChainAdapterLogger;
@@ -62,7 +62,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
   constructor(config: HttpGatewayChainAdapterConfig) {
     this.logger = config.logger;
-    this.fetchFn = config.customFetch ?? fetch;
+    this.fetchFn = config.customFetch ?? globalThis.fetch.bind(globalThis);
     this.writeUrl = `${config.baseUrl}${config.writePath}`;
     this.readUrl = `${config.baseUrl}${config.readPath}`;
     this.listUrl = `${config.baseUrl}${config.listPath}`;
