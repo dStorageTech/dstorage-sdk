@@ -296,6 +296,15 @@ describe("ArweaveStorageAdapter", () => {
       });
     });
 
+    it("throws ARWEAVE_GET_DATA_FAILED when getData rejects", async () => {
+      mockArweave.transactions.getData.mockRejectedValueOnce(
+        new Error("data was not found!"),
+      );
+      await expect(nodeAdapter().retrieve(TX_MOCK)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_GET_DATA_FAILED,
+      });
+    });
+
     it("passes decode:true and string:false to getData", async () => {
       await nodeAdapter().retrieve(TX_BASIC);
       expect(mockArweave.transactions.getData).toHaveBeenCalledWith(TX_BASIC, {
