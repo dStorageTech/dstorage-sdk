@@ -35,6 +35,7 @@ import { config as loadEnv } from "dotenv";
 
 import {
   DStorage,
+  isDStorageError,
   type Logger as DStorageLogger,
   MnemonicEncryptionAdapter,
   PasswordEncryptionAdapter,
@@ -469,6 +470,7 @@ main()
   })
   .catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`\n[Midnight Console Demo] ${message}\n`);
+    const code = isDStorageError(error) ? ` (code: ${error.code})` : "";
+    console.error(`\n[Midnight Console Demo] ${message}${code}\n`);
     process.exit(1);
   });

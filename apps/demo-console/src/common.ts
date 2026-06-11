@@ -1,5 +1,6 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface, type Interface } from "node:readline/promises";
+import { isDStorageError } from "@dstorage-tech/dstorage";
 
 export async function withTicker<T>(
   statusLine: () => string,
@@ -19,7 +20,8 @@ export async function withTicker<T>(
 
 export function logError(label: string, err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
-  console.log(`\n  Error ${label}: ${msg}\n`);
+  const code = isDStorageError(err) ? ` (code: ${err.code})` : "";
+  console.log(`\n  Error ${label}: ${msg}${code}\n`);
 }
 
 export function formatBytesForConsole(bytes: Uint8Array): string {
