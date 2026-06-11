@@ -27,9 +27,8 @@ globalThis.WebSocket = WebSocket;
 
 import { randomBytes } from "node:crypto";
 import { stdin as input, stdout as output } from "node:process";
-import { createInterface, type Interface } from "node:readline/promises";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import fs from "fs";
 import { config as loadEnv } from "dotenv";
@@ -42,10 +41,7 @@ import {
   MockMidnightChainAdapter,
   MockStorageAdapter,
 } from "@dstorage-tech/dstorage";
-import {
-  ArweaveLocalStorageAdapter,
-  //ArweaveStorageAdapter,
-} from "@dstorage/storage";
+import { ArweaveLocalStorageAdapter } from "@dstorage/storage";
 import { MidnightChainAdapter, NETWORKS } from "@dstorage/chain";
 import {
   type EnvironmentConfiguration,
@@ -53,6 +49,13 @@ import {
   derivePrivateStatePassword,
   initWallet,
 } from "./wallet/index.js";
+
+import { withTicker, promptSecret } from "./common.js";
+import { listReferences } from "./actions/list-references.js";
+import { retrieveByRefId } from "./actions/retrieve.js";
+import { removeReference } from "./actions/remove-reference.js";
+import { uploadFile } from "./actions/upload.js";
+import { registerMetadataOnly } from "./actions/register-metadata.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,308 +83,6 @@ const DATA_REGISTRY_ZK_PATH = path.resolve(
 
 // ── Network default endpoints ──────────────────────────────────────────────────
 type NetworkName = keyof typeof NETWORKS;
-
-// ── Progress ticker ────────────────────────────────────────────────────────────
-
-async function withTicker<T>(
-  statusLine: () => string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const start = Date.now();
-  const id = setInterval(() => {
-    const elapsed = Math.round((Date.now() - start) / 1000);
-    console.log(`  ${statusLine()} (${elapsed}s)`);
-  }, 3000);
-  try {
-    return await fn();
-  } finally {
-    clearInterval(id);
-  }
-}
-
-// ── Shared helpers ─────────────────────────────────────────────────────────────
-
-function logError(label: string, err: unknown): void {
-  const msg = err instanceof Error ? err.message : String(err);
-  console.log(`\n  Error ${label}: ${msg}\n`);
-}
-
-function formatBytesForConsole(bytes: Uint8Array): string {
-  const looksLikeBinary = bytes.some((b) => b < 9 || (b > 13 && b < 32));
-  if (looksLikeBinary) {
-    const preview = Buffer.from(bytes.slice(0, 64)).toString("hex");
-    const ellipsis = bytes.byteLength > 64 ? "…" : "";
-    return [
-      `\n  ✓ Retrieved (binary, ${bytes.byteLength} bytes)`,
-      `  Hex preview (first 64 bytes): ${preview}${ellipsis}`,
-      "",
-    ].join("\n");
-  }
-  const decoded = new TextDecoder().decode(bytes);
-  const preview = decoded.slice(0, 512);
-  const truncated = decoded.length > 512 ? "…" : "";
-  return [
-    `\n  ✓ Retrieved (${bytes.byteLength} bytes):`,
-    "  ─────────────────────────────────────",
-    `  ${preview}${truncated}`,
-    "  ─────────────────────────────────────",
-    "",
-  ].join("\n");
-}
-
-async function promptMetadata(
-  rl: Interface,
-): Promise<Record<string, string> | undefined> {
-  const metaRaw = (
-    await rl.question(
-      "  Metadata (key1=val1,key2=val2,... or leave blank to skip): ",
-    )
-  ).trim();
-  if (!metaRaw) return undefined;
-  const entries: Record<string, string> = {};
-  for (const pair of metaRaw.split(",")) {
-    const eq = pair.indexOf("=");
-    if (eq > 0) entries[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
-  }
-  return Object.keys(entries).length > 0 ? entries : undefined;
-}
-
-// ── Action handlers ────────────────────────────────────────────────────────────
-
-async function listReferences(
-  sdk: DStorage,
-  chainAdapter: MidnightChainAdapter,
-): Promise<void> {
-  try {
-    const refs = await sdk.listReferences();
-    console.log(
-      `\n  Stored references on contract ${chainAdapter.getContractAddress()}: ${refs.length}`,
-    );
-    if (refs.length === 0) {
-      console.log("  (none)\n");
-      return;
-    }
-    for (let i = 0; i < refs.length; i += 1) {
-      const ref = refs[i]!;
-      const scheme = ref.encryptionScheme || null;
-      console.log(`  [${i + 1}] refId = ${ref.refId}`);
-      console.log(`      storageProvider  = ${ref.storageProvider}`);
-      console.log(
-        `      encryptionScheme = ${scheme ?? "(public/unencrypted)"}`,
-      );
-      console.log(
-        `      storageId        = ${ref.storageId ?? "(cannot decrypt)"}`,
-      );
-      console.log(
-        `      owned            = ${ref.decryptionError === undefined ? "Yes" : `No (${ref.decryptionError})`}`,
-      );
-    }
-    console.log("");
-  } catch (err) {
-    logError("listing references", err);
-  }
-}
-
-async function retrieveByRefId(sdk: DStorage, rl: Interface): Promise<void> {
-  const refId = (await rl.question("  Enter refId to retrieve: ")).trim();
-  if (!refId) {
-    console.log("  (cancelled)\n");
-    return;
-  }
-
-  try {
-    console.log(`\n  Resolving on-chain reference for refId: ${refId}`);
-    const result = await withTicker(
-      () => "Fetching reference from chain and retrieving from storage...",
-      () => sdk.retrieveByRefId(refId),
-    );
-
-    const outputPath = (
-      await rl.question("  Save to file (leave blank to print to console): ")
-    ).trim();
-
-    // Show metadata (decrypted on-chain) if present
-    const metaEntries = Object.entries(result.metadata ?? {});
-    if (metaEntries.length > 0) {
-      console.log("  On-chain Metadata:");
-      for (const [k, v] of metaEntries) console.log(`    ${k}: ${v}`);
-    }
-
-    // Show storage tags if present
-    const tagEntries = Object.entries(result.tags ?? {});
-    if (tagEntries.length > 0) {
-      console.log("  Storage Tags:");
-      for (const [k, v] of tagEntries) console.log(`    ${k}: ${v}`);
-    }
-
-    if (outputPath) {
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(outputPath, result.bytes);
-      console.log(`\n  ✓ Retrieved and saved to: ${outputPath}`);
-      console.log(`  Size: ${result.bytes.byteLength} bytes\n`);
-    } else {
-      console.log(formatBytesForConsole(result.bytes));
-    }
-  } catch (err) {
-    logError("during retrieve", err);
-  }
-}
-
-async function removeReference(
-  sdk: DStorage,
-  chainAdapter: MidnightChainAdapter,
-  rl: Interface,
-): Promise<void> {
-  const refId = (
-    await rl.question("  Enter refId to remove (or leave blank to cancel): ")
-  ).trim();
-  if (!refId) {
-    console.log("  (cancelled)\n");
-    return;
-  }
-
-  try {
-    console.log(`\n  Looking up reference ${refId}…`);
-    const ref = await chainAdapter.readReference(refId);
-    console.log(`     refId:         ${refId}`);
-    console.log(`  storageProvider:  ${ref.storageProvider}`);
-    console.log(
-      `  encryptionScheme: ${ref.encryptionScheme ?? "(public/unencrypted)"}`,
-    );
-    console.log(`  storageId:        ${ref.storageId}`);
-    console.log(`  writtenAt:        ${new Date(ref.writtenAt).toISOString()}`);
-  } catch (err) {
-    logError("reading reference", err);
-    return;
-  }
-
-  const confirmInput = (await rl.question("  Remove this reference? [y/N]: "))
-    .trim()
-    .toLowerCase();
-  if (confirmInput !== "y" && confirmInput !== "yes") {
-    console.log("  (cancelled)\n");
-    return;
-  }
-
-  try {
-    await withTicker(
-      () => "Submitting remove reference transaction…",
-      () => sdk.removeReference(refId),
-    );
-    console.log("\n  ✓ Reference removed.\n");
-  } catch (err) {
-    logError("removing reference", err);
-  }
-}
-
-async function uploadFile(
-  sdk: DStorage,
-  storageAdapter: ArweaveLocalStorageAdapter,
-  chainAdapter: MidnightChainAdapter,
-  rl: Interface,
-): Promise<void> {
-  const filePath = (
-    await rl.question("File path to upload (or leave blank to cancel): ")
-  ).trim();
-  if (!filePath) return;
-
-  let fileContent: Uint8Array;
-  try {
-    const buf = await readFile(filePath);
-    fileContent = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-  } catch (err) {
-    logError("reading file", err);
-    return;
-  }
-
-  const visibilityInput = (
-    await rl.question("  Upload as [1=private (default), 2=public]: ")
-  ).trim();
-  const isPublic =
-    visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
-
-  // Metadata prompt (only for private uploads — metadata is encrypted with the DEK)
-  const metadata = isPublic ? undefined : await promptMetadata(rl);
-
-  const replaceInput = (
-    await rl.question("  Replace an existing reference? [y/N]: ")
-  )
-    .trim()
-    .toLowerCase();
-  const isReplacing = replaceInput === "y" || replaceInput === "yes";
-
-  let replaceRefId: string | undefined;
-  if (isReplacing) {
-    replaceRefId =
-      (await rl.question("  Enter refId to replace: ")).trim() || undefined;
-  }
-
-  console.log(
-    `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes) [${isPublic ? "public" : "private"}]`,
-  );
-
-  try {
-    if (replaceRefId) {
-      console.log(
-        `  Updating reference ${replaceRefId} on ${chainAdapter.name}...`,
-      );
-      const result = await withTicker(
-        () => `Updating reference ${replaceRefId}...`,
-        () =>
-          sdk.updateUpload(replaceRefId!, fileContent, { isPublic, metadata }),
-      );
-      console.log("\n  ✓ Update complete!");
-      console.log(`  refId:     ${result.chainRefId}`);
-      console.log(`  storageId: ${result.storageId}\n`);
-    } else {
-      console.log(
-        `  Uploading to ${storageAdapter.name} storage and writing on-chain (${chainAdapter.name}) reference...`,
-      );
-      const result = await withTicker(
-        () => "Generating ZK proof and submitting reference...",
-        () => sdk.upload(fileContent, { isPublic, metadata }),
-      );
-
-      const visibility = result.encryptionScheme
-        ? "private (encrypted)"
-        : "public (unencrypted)";
-      console.log("\n  ✓ Upload complete!");
-      console.log(`  refId:            ${result.chainRefId}`);
-      console.log(`  storageId:        ${result.storageId}`);
-      console.log(`  storageProvider:  ${result.storageProvider}`);
-      console.log(`  chainProvider:    ${result.chainProvider}`);
-      console.log(`  encryptionScheme: ${result.encryptionScheme || "(none)"}`);
-      console.log(`  visibility:       ${visibility}`);
-      console.log(
-        `  uploadedAt:       ${new Date(result.uploadedAt).toISOString()}\n`,
-      );
-    }
-  } catch (err) {
-    logError("during upload", err);
-  }
-}
-
-async function registerMetadataOnly(
-  sdk: DStorage,
-  rl: Interface,
-): Promise<void> {
-  const metadata = await promptMetadata(rl);
-  if (metadata === undefined) {
-    console.log("  (cancelled)\n");
-    return;
-  }
-
-  try {
-    const result = await withTicker(
-      () => "Registering metadata-only reference on-chain...",
-      () => sdk.registerReference(undefined, { metadata }),
-    );
-    console.log("\n  ✓ Metadata reference registered!");
-    console.log(`  refId: ${result.chainRefId}\n`);
-  } catch (err) {
-    logError("registering metadata", err);
-  }
-}
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
@@ -758,66 +459,6 @@ async function main(): Promise<void> {
       //await chain.stop();
     }
   }
-}
-
-// ── Masked input ───────────────────────────────────────────────────────────────
-
-async function promptSecret(prompt: string): Promise<string> {
-  if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== "function") {
-    const fallback = createInterface({ input, output });
-    try {
-      return (await fallback.question(prompt)).trim();
-    } finally {
-      fallback.close();
-    }
-  }
-
-  return new Promise<string>((resolve, reject) => {
-    const stdin = process.stdin;
-    const out = process.stdout;
-
-    out.write(prompt);
-
-    let value = "";
-
-    const onData = (chunk: Buffer): void => {
-      const str = chunk.toString("utf8");
-
-      if (str === "\r" || str === "\n") {
-        cleanup();
-        out.write("\n");
-        resolve(value);
-        return;
-      }
-
-      if (str === "\u0003") {
-        cleanup();
-        reject(new Error("Input cancelled."));
-        return;
-      }
-
-      if (str === "\u007f" || str === "\b") {
-        if (value.length > 0) {
-          value = value.slice(0, -1);
-          out.write("\b \b");
-        }
-        return;
-      }
-
-      value += str;
-      out.write("*".repeat(str.length));
-    };
-
-    const cleanup = (): void => {
-      stdin.setRawMode(false);
-      stdin.pause();
-      stdin.removeListener("data", onData);
-    };
-
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.on("data", onData);
-  });
 }
 
 // ── Entry ──────────────────────────────────────────────────────────────────────
