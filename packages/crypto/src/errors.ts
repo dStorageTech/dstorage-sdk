@@ -9,7 +9,12 @@ export class DStorageError extends Error {
 }
 
 export function isDStorageError(err: unknown): err is DStorageError {
-  return err instanceof DStorageError;
+  return (
+    err instanceof Error &&
+    err.name === "DStorageError" &&
+    "code" in err &&
+    typeof (err as { code: unknown }).code === "number"
+  );
 }
 
 export const CryptoErrorCode = {

@@ -41,6 +41,9 @@
     "build": "tsup",
     "prepublishOnly": "npm run build"
   },
+  "dependencies": {
+    "@dstorage/crypto": "*"
+  },
   "peerDependencies": {
     "@dstorage/chain": "^0.1.0"
   },
