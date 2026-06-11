@@ -401,10 +401,19 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     }
 
     // ── Download data ─────────────────────────────────────────────────────────
-    const raw = await arweave.transactions.getData(id, {
-      decode: true,
-      string: false,
-    });
+    let raw: unknown;
+    try {
+      raw = await arweave.transactions.getData(id, {
+        decode: true,
+        string: false,
+      });
+    } catch (err) {
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_GET_DATA_FAILED,
+        `[dStorage/arweave] Failed to download data for txId: ${id} — ${String(err)}`,
+        { cause: err },
+      );
+    }
 
     if (!raw) {
       throw new DStorageError(
