@@ -71,12 +71,34 @@ export interface DStorageConfig {
   logger?: Logger;
 }
 
+/**
+ * Payload included in both `StorePartialError.recovery` and the `"stored"`
+ * phase of `StoreProgress`. Contains enough information to retry a failed
+ * chain write via `registerReference()` without re-uploading.
+ *
+ * `keyEnvelope` is the DEK encrypted under the user's KEK — safe to persist
+ * (e.g. in localStorage or a database). It is `undefined` for public uploads
+ * since their on-chain reference does not depend on a content DEK.
+ */
+export interface StoreRecovery {
+  storageId: string;
+  /** Storage provider that holds the content — required by registerReference(). */
+  storageProvider: StorageProviderName;
+  keyEnvelope: string | undefined;
+}
+
 export interface StoreProgress {
-  phase: "encrypting" | "uploading" | "finalizing";
+  phase: "encrypting" | "uploading" | "stored" | "finalizing";
   chunksUploaded: number;
   totalChunks: number;
   bytesUploaded: number;
   totalBytes: number;
+  /**
+   * Present when `phase === "stored"`. Fired after the storage write succeeds
+   * and before the chain write begins — persist this to recover from a partial
+   * failure without re-uploading.
+   */
+  recovery?: StoreRecovery;
 }
 
 export interface StoreOptions {
@@ -174,6 +196,14 @@ export interface RegisterReferenceOptions {
    * Returned in `RetrieveResult.metadata` after decryption via retrieveByRefId().
    */
   metadata?: Record<string, string>;
+  /**
+   * Recovery: the `keyEnvelope` from a `StorePartialError` (or from the
+   * `"stored"` phase of `onProgress`). When provided, the DEK is unwrapped
+   * from this envelope and used to encrypt the storageId and derive the
+   * ownerSecret — producing a reference identical to what `store()` would have
+   * written, without requiring a re-upload.
+   */
+  keyEnvelope?: string;
 }
 
 /** Result returned from dStorage.registerReference() */

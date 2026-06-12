@@ -30,7 +30,7 @@ import {
   bytesToBase64url,
   base64urlToBytes,
 } from "@dstorage/crypto";
-import { CoreErrorCode } from "./errors.js";
+import { CoreErrorCode, StorePartialError } from "./errors.js";
 
 import type { CryptoScheme } from "@dstorage/crypto";
 import type { UploadCrypto } from "./metaTx/index.js";
@@ -46,6 +46,7 @@ import type {
   RegisterReferenceOptions,
   RegisterReferenceResult,
   RetrieveResult,
+  StoreRecovery,
   UpdateResult,
   StoreOptions,
   StoreProgress,
@@ -70,7 +71,7 @@ import type { DataReferenceSummary, EncryptionScheme } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
 function wrapError(err: unknown): never {
-  if (isDStorageError(err)) throw err;
+  if (err instanceof DStorageError) throw err;
   throw new DStorageError(
     CoreErrorCode.UNKNOWN_ERROR,
     `[dStorage] Unexpected error: ${err instanceof Error ? err.message : String(err)}`,
@@ -291,6 +292,22 @@ export class DStorage implements DStorageContext {
       // 4. Write on-chain reference — only the storage pointer, never the data.
       //    Skipped in storage-only mode (no chain adapter).
       if (this.config.chainAdapter) {
+        // Emit "stored" before the chain write so callers can persist recovery
+        // info proactively (in case the chain write fails or the process crashes).
+        const storeRecovery: StoreRecovery = {
+          storageId: storageResult.id,
+          storageProvider: storageResult.provider,
+          keyEnvelope: isPublic ? undefined : keyEnvelope,
+        };
+        onProgress?.({
+          phase: "stored",
+          chunksUploaded: 1,
+          totalChunks: 1,
+          bytesUploaded: bytes.length,
+          totalBytes: bytes.length,
+          recovery: storeRecovery,
+        });
+
         const encryptedMetadata = rawMeta
           ? bytesToBase64url(
               await uploadScheme!.encryptPayload(
@@ -299,35 +316,39 @@ export class DStorage implements DStorageContext {
               ),
             )
           : undefined;
-        const chainResult = await this.config.chainAdapter.writeReference({
-          storageId: onChainStorageId,
-          encryptionScheme,
-          storageProvider: storageResult.provider,
-          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-          writtenAt: Date.now(),
-          keyEnvelope,
-          ownerSecret,
-        });
+        try {
+          const chainResult = await this.config.chainAdapter.writeReference({
+            storageId: onChainStorageId,
+            encryptionScheme,
+            storageProvider: storageResult.provider,
+            ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+            writtenAt: Date.now(),
+            keyEnvelope,
+            ownerSecret,
+          });
 
-        const refId = chainResult.refId;
-        this.logger?.log("dStorage", `Upload complete → refId: ${refId}`);
+          const refId = chainResult.refId;
+          this.logger?.log("dStorage", `Upload complete → refId: ${refId}`);
 
-        return {
-          chainRefId: refId,
-          storageId: storageResult.id,
-          storageProvider: storageResult.provider,
-          chainProvider: chainResult.provider,
-          uploadedAt: storageResult.uploadedAt,
-          encryptionScheme,
-          costEstimate: {
-            storageCost,
-            chainCost: {
-              amount: chainResult.paymentReceipt?.amount ?? "unknown",
-              token: chainResult.paymentReceipt?.token ?? "DUST",
+          return {
+            chainRefId: refId,
+            storageId: storageResult.id,
+            storageProvider: storageResult.provider,
+            chainProvider: chainResult.provider,
+            uploadedAt: storageResult.uploadedAt,
+            encryptionScheme,
+            costEstimate: {
+              storageCost,
+              chainCost: {
+                amount: chainResult.paymentReceipt?.amount ?? "unknown",
+                token: chainResult.paymentReceipt?.token ?? "DUST",
+              },
+              fileSizeBytes: uploadData.length,
             },
-            fileSizeBytes: uploadData.length,
-          },
-        };
+          };
+        } catch (chainErr) {
+          throw new StorePartialError(storeRecovery);
+        }
       }
 
       // Storage-only mode: return result without chain fields.
@@ -381,7 +402,17 @@ export class DStorage implements DStorageContext {
         );
       }
 
-      const dek = generateDek();
+      // Recovery path: unwrap the existing DEK from the provided envelope so the
+      // new chain reference is encrypted with the same key as the original store().
+      // Normal path: generate a fresh random DEK.
+      let dek: Uint8Array;
+      const recoveryEnvelope = options.keyEnvelope;
+      if (recoveryEnvelope) {
+        dek = await this._unwrapDek(recoveryEnvelope);
+      } else {
+        dek = generateDek();
+      }
+
       try {
         const scheme = XChaChaScheme.fromKey(dek);
 
@@ -400,15 +431,19 @@ export class DStorage implements DStorageContext {
             ? await scheme.encryptStorageId(storageId)
             : undefined;
 
-        const wrapperEntries = await Promise.all(
-          this._encryptionProviders.map(async (p) => ({
-            wrapKeyName: p.name,
-            ...(await p.wrapDek(dek)),
-          })),
-        );
-        const keyEnvelope = serializeKeyEnvelope(
-          buildKeyEnvelope(wrapperEntries),
-        );
+        let keyEnvelope: string;
+        if (recoveryEnvelope !== undefined) {
+          keyEnvelope = recoveryEnvelope; // re-use original — already wrapped under the user's KEK(s)
+        } else {
+          const wrapperEntries = await Promise.all(
+            this._encryptionProviders.map(async (p) => ({
+              wrapKeyName: p.name,
+              ...(await p.wrapDek(dek)),
+            })),
+          );
+          keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(wrapperEntries));
+        }
+
         const ownerSecret = await deriveOwnerSecret(
           dek,
           storageId !== undefined
@@ -1330,6 +1365,22 @@ export class DStorage implements DStorageContext {
         );
 
     if (this.config.chainAdapter) {
+      // Emit "stored" before the chain write so callers can persist recovery
+      // info proactively (in case the chain write fails or the process crashes).
+      const storeRecovery: StoreRecovery = {
+        storageId: manifestResult.id,
+        storageProvider: manifestResult.provider,
+        keyEnvelope: isPublic ? undefined : keyEnvelope,
+      };
+      onProgress?.({
+        phase: "stored",
+        chunksUploaded: totalChunks,
+        totalChunks,
+        bytesUploaded: bytes.length,
+        totalBytes: bytes.length,
+        recovery: storeRecovery,
+      });
+
       const encryptedMetadata =
         rawMeta && uploadScheme
           ? bytesToBase64url(
@@ -1339,41 +1390,45 @@ export class DStorage implements DStorageContext {
               ),
             )
           : undefined;
-      const chainResult = await this.config.chainAdapter.writeReference({
-        storageId: onChainManifestId,
-        encryptionScheme,
-        storageProvider: manifestResult.provider,
-        ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-        writtenAt: Date.now(),
-        keyEnvelope,
-        ownerSecret,
-      });
+      try {
+        const chainResult = await this.config.chainAdapter.writeReference({
+          storageId: onChainManifestId,
+          encryptionScheme,
+          storageProvider: manifestResult.provider,
+          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+          writtenAt: Date.now(),
+          keyEnvelope,
+          ownerSecret,
+        });
 
-      const refId = chainResult.refId;
-      this.logger?.log(
-        "dStorage",
-        `Chunked upload complete → ${totalChunks} chunks + manifest, refId: ${refId}`,
-      );
+        const refId = chainResult.refId;
+        this.logger?.log(
+          "dStorage",
+          `Chunked upload complete → ${totalChunks} chunks + manifest, refId: ${refId}`,
+        );
 
-      return {
-        chainRefId: refId,
-        storageId: manifestResult.id,
-        storageProvider: manifestResult.provider,
-        chainProvider: chainResult.provider,
-        uploadedAt: manifestResult.uploadedAt,
-        encryptionScheme,
-        costEstimate: {
-          storageCost: {
-            amount: manifestResult.cost?.amount ?? "unknown",
-            token: manifestResult.cost?.token ?? "AR",
+        return {
+          chainRefId: refId,
+          storageId: manifestResult.id,
+          storageProvider: manifestResult.provider,
+          chainProvider: chainResult.provider,
+          uploadedAt: manifestResult.uploadedAt,
+          encryptionScheme,
+          costEstimate: {
+            storageCost: {
+              amount: manifestResult.cost?.amount ?? "unknown",
+              token: manifestResult.cost?.token ?? "AR",
+            },
+            chainCost: {
+              amount: chainResult.paymentReceipt?.amount ?? "unknown",
+              token: chainResult.paymentReceipt?.token ?? "DUST",
+            },
+            fileSizeBytes: bytes.length,
           },
-          chainCost: {
-            amount: chainResult.paymentReceipt?.amount ?? "unknown",
-            token: chainResult.paymentReceipt?.token ?? "DUST",
-          },
-          fileSizeBytes: bytes.length,
-        },
-      };
+        };
+      } catch (chainErr) {
+        throw new StorePartialError(storeRecovery);
+      }
     }
 
     this.logger?.log(

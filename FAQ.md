@@ -136,6 +136,59 @@ function handleLogout() {
 
 `destroy()` does not delete any on-chain data or stored content — it only clears the local key material. You can call `init()` again on the same instance to reinitialise if needed.
 
+**What happens if `store()` succeeds at the storage layer but fails to write the on-chain reference?**
+
+`store()` is not atomic: the content is uploaded first, then the chain reference is written. If the chain write fails (network error, timeout, insufficient DUST), the content is permanently on the storage network — paid for — but has no on-chain record, making it unretrievable via `retrieveByRefId()`.
+
+`store()` throws a `StorePartialError` (a `DStorageError` subclass) that includes a `recovery` object with the information needed to retry only the chain write, without re-uploading:
+
+```typescript
+import { isStorePartialError } from "@dstorage-tech/dstorage";
+
+// Reactive recovery — catch the error:
+try {
+  const result = await sdk.store(bytes);
+} catch (err) {
+  if (isStorePartialError(err)) {
+    const { storageId, storageProvider, keyEnvelope } = err.recovery;
+    // Persist recovery to localStorage or DB — keyEnvelope is safe to store
+    localStorage.setItem("pending-store", JSON.stringify(err.recovery));
+    // Retry the chain write:
+    const { chainRefId } = await sdk.registerReference(storageId, {
+      storageProvider,
+      keyEnvelope,
+    });
+  }
+}
+```
+
+For extra resilience, use the proactive path: `onProgress` fires a `"stored"` phase event after the storage write succeeds and **before** the chain write begins. Persist the recovery payload at that point — it covers crashes and page reloads before the chain write completes:
+
+```typescript
+await sdk.store(bytes, {
+  onProgress(p) {
+    if (p.phase === "stored" && p.recovery) {
+      // Safe to persist — keyEnvelope is the DEK encrypted under your KEK
+      localStorage.setItem("pending-store", JSON.stringify(p.recovery));
+    }
+  },
+});
+localStorage.removeItem("pending-store"); // clear on success
+```
+
+On app startup, check for a pending recovery:
+
+```typescript
+const pending = localStorage.getItem("pending-store");
+if (pending) {
+  const { storageId, storageProvider, keyEnvelope } = JSON.parse(pending);
+  await sdk.registerReference(storageId, { storageProvider, keyEnvelope });
+  localStorage.removeItem("pending-store");
+}
+```
+
+`keyEnvelope` is the DEK already encrypted under your KEK — it is safe to persist to localStorage or a database. The raw DEK is never exposed. For public uploads, `keyEnvelope` is `undefined` and the content remains publicly accessible via `retrieveByStorageId(recovery.storageId)`.
+
 **How do I preserve a deployed contract address across runs?**
 
 `init()` returns the `contractAddress` of the deployed (or joined) `DataRegistry` contract. Save it and pass it as `contractAddress` to `MidnightChainAdapter` on subsequent runs to reconnect instead of deploying a new one each time.

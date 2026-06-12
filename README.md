@@ -441,6 +441,41 @@ Error codes are namespaced by package:
 
 Code `10999` (`UNKNOWN_ERROR`) is a catch-all — it means an error escaped without an explicit code. If you see it, it is a bug worth reporting.
 
+### Handling partial failures
+
+`store()` uploads content first, then writes the on-chain reference. If the chain write fails after a successful storage upload, `store()` throws a `StorePartialError` — a `DStorageError` subclass with a `recovery` payload. Use it with `registerReference()` to retry only the chain write without re-uploading:
+
+```typescript
+import { isStorePartialError } from "@dstorage-tech/dstorage";
+
+try {
+  await sdk.store(bytes);
+} catch (err) {
+  if (isStorePartialError(err)) {
+    const { storageId, storageProvider, keyEnvelope } = err.recovery;
+    const { chainRefId } = await sdk.registerReference(storageId, {
+      storageProvider,
+      keyEnvelope,
+    });
+  }
+}
+```
+
+For resilience against crashes before the chain write, persist the recovery payload from the `"stored"` progress phase:
+
+```typescript
+await sdk.store(bytes, {
+  onProgress(p) {
+    if (p.phase === "stored" && p.recovery) {
+      localStorage.setItem("pending-store", JSON.stringify(p.recovery));
+    }
+  },
+});
+localStorage.removeItem("pending-store"); // clear on success
+```
+
+`keyEnvelope` is the DEK already wrapped under your KEK — safe to persist. The raw DEK is never exposed.
+
 ---
 
 ## Payments

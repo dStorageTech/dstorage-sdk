@@ -23,8 +23,17 @@ import WebSocket from "ws";
 // @ts-expect-error — ws types don't perfectly match DOM WebSocket
 globalThis.WebSocket = WebSocket;
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { DStorage } from "@dstorage/core";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  afterEach,
+  vi,
+} from "vitest";
+import { DStorage, isStorePartialError } from "@dstorage/core";
+import type { StoreRecovery } from "@dstorage/core";
 import { MockMidnightChainAdapter } from "@dstorage/chain";
 import {
   MnemonicEncryptionAdapter,
@@ -288,3 +297,88 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     await expect(sdk.removeReference(chainRefId)).resolves.toBeUndefined();
   });
 });
+
+// ── Suite 3: StorePartialError recovery — arlocal + mock chain ─────────────────
+//
+// Verifies that a failed chain write (simulated with a mock spy) produces a
+// StorePartialError whose recovery payload can be used with registerReference()
+// to create a valid on-chain reference — without re-uploading the content.
+
+describe.skipIf(!arlocalOk)(
+  "StorePartialError recovery — arlocal storage + mock chain",
+  () => {
+    let sdk: DStorage;
+    let mockChain: MockMidnightChainAdapter;
+
+    beforeAll(async () => {
+      const { adapter } = await createStorageAdapter(env.arlocalUrl);
+      mockChain = new MockMidnightChainAdapter({ logger: console });
+      sdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter: mockChain,
+        encryptionAdapters: [
+          new PasswordEncryptionAdapter({
+            password: "dstorage-recovery-integration-test!",
+            salt: "dstorage:recovery:integration:v1",
+            params: { N: 1024, r: 8, p: 1 },
+          }),
+        ],
+      });
+      await sdk.init();
+    });
+
+    it("reactive recovery: StorePartialError → registerReference → retrieveByRefId decrypts correctly", async () => {
+      vi.spyOn(mockChain, "writeReference").mockRejectedValueOnce(
+        new Error("simulated chain outage"),
+      );
+
+      const content = new TextEncoder().encode(
+        "reactive recovery integration test",
+      );
+      const err = await sdk.store(content).catch((e: unknown) => e);
+      expect(isStorePartialError(err)).toBe(true);
+
+      const { storageId, storageProvider, keyEnvelope } = (
+        err as import("@dstorage/core").StorePartialError
+      ).recovery;
+
+      const { chainRefId } = await sdk.registerReference(storageId, {
+        storageProvider,
+        keyEnvelope,
+      });
+      const { bytes } = await sdk.retrieveByRefId(chainRefId);
+      expect(bytes).toEqual(content);
+    });
+
+    it("proactive recovery: onProgress 'stored' event → simulated failure → registerReference → retrieveByRefId", async () => {
+      let capturedRecovery: StoreRecovery | undefined;
+
+      vi.spyOn(mockChain, "writeReference").mockRejectedValueOnce(
+        new Error("simulated chain outage"),
+      );
+
+      const content = new TextEncoder().encode(
+        "proactive recovery integration test",
+      );
+      await sdk
+        .store(content, {
+          onProgress: (p) => {
+            if (p.phase === "stored") capturedRecovery = p.recovery;
+          },
+        })
+        .catch(() => {});
+
+      expect(capturedRecovery).toBeDefined();
+
+      const { chainRefId } = await sdk.registerReference(
+        capturedRecovery!.storageId,
+        {
+          storageProvider: capturedRecovery!.storageProvider,
+          keyEnvelope: capturedRecovery!.keyEnvelope,
+        },
+      );
+      const { bytes } = await sdk.retrieveByRefId(chainRefId);
+      expect(bytes).toEqual(content);
+    });
+  },
+);

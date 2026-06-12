@@ -5,7 +5,11 @@ import type { StorageProviderName } from "@dstorage/storage";
 import { MockChainAdapter, ChainErrorCode } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
-import { CoreErrorCode } from "../errors.js";
+import {
+  CoreErrorCode,
+  StorePartialError,
+  isStorePartialError,
+} from "../errors.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -1039,5 +1043,238 @@ describe("update", () => {
     await ds.update(chainRefId!, enc("v3 content"));
     const { bytes } = await ds.retrieveByRefId(chainRefId!);
     expect(bytes).toEqual(enc("v3 content"));
+  });
+});
+
+// ── StorePartialError recovery ─────────────────────────────────────────────────
+
+describe("StorePartialError recovery", () => {
+  // ── reactive path (catch the error) ─────────────────────────────────────────
+
+  it("store() throws StorePartialError (not generic DStorageError) when chain write fails", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("chain down"),
+    );
+    await expect(ds.store(enc("hello"))).rejects.toBeInstanceOf(
+      StorePartialError,
+    );
+  });
+
+  it("StorePartialError has code CHAIN_WRITE_FAILED", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("timeout"),
+    );
+    const err = await ds.store(enc("hello")).catch((e: unknown) => e);
+    expect((err as StorePartialError).code).toBe(
+      CoreErrorCode.CHAIN_WRITE_FAILED,
+    );
+  });
+
+  it("StorePartialError.recovery.storageId is a non-empty string", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+    const err = await ds.store(enc("content")).catch((e: unknown) => e);
+    expect(typeof (err as StorePartialError).recovery.storageId).toBe("string");
+    expect(
+      (err as StorePartialError).recovery.storageId.length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("StorePartialError.recovery.storageProvider matches the configured adapter", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+    const err = await ds.store(enc("content")).catch((e: unknown) => e);
+    expect((err as StorePartialError).recovery.storageProvider).toBe("mock");
+  });
+
+  it("StorePartialError.recovery.keyEnvelope is a non-empty string for private uploads", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+    const err = await ds.store(enc("private")).catch((e: unknown) => e);
+    const recovery = (err as StorePartialError).recovery;
+    expect(typeof recovery.keyEnvelope).toBe("string");
+    expect((recovery.keyEnvelope as string).length).toBeGreaterThan(0);
+  });
+
+  it("StorePartialError.recovery.keyEnvelope is undefined for public uploads", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+    const err = await ds
+      .store(enc("public"), { isPublic: true })
+      .catch((e: unknown) => e);
+    expect((err as StorePartialError).recovery.keyEnvelope).toBeUndefined();
+  });
+
+  it("isStorePartialError() returns true for StorePartialError", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+    const err = await ds.store(enc("x")).catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+  });
+
+  it("isStorePartialError() returns false for plain Error", () => {
+    expect(isStorePartialError(new Error("plain"))).toBe(false);
+  });
+
+  it("full round-trip: chain write fails → StorePartialError → registerReference → retrieveByRefId", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("chain temporarily down"),
+    );
+
+    const content = "recovery round-trip test";
+    const err = await ds.store(enc(content)).catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+
+    const { storageId, storageProvider, keyEnvelope } = (
+      err as StorePartialError
+    ).recovery;
+
+    const { chainRefId } = await ds.registerReference(storageId, {
+      storageProvider,
+      keyEnvelope,
+    });
+    const { bytes } = await ds.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe(content);
+  });
+
+  // ── proactive path (onProgress "stored" phase) ───────────────────────────────
+
+  it("onProgress receives a 'stored' phase event after storage but before chain write", async () => {
+    const ds = await makeInitedDStorage();
+    const phases: string[] = [];
+    let storedFiredBeforeChain = false;
+
+    const originalWrite = ds.chainAdapter!.writeReference.bind(
+      ds.chainAdapter!,
+    );
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockImplementation(
+      async (...args) => {
+        storedFiredBeforeChain = phases.includes("stored");
+        return originalWrite(...args);
+      },
+    );
+
+    await ds.store(enc("progress test"), {
+      onProgress: (p) => phases.push(p.phase),
+    });
+
+    expect(phases).toContain("stored");
+    expect(storedFiredBeforeChain).toBe(true);
+  });
+
+  it("onProgress 'stored' event includes recovery with storageId, storageProvider and keyEnvelope", async () => {
+    const ds = await makeInitedDStorage();
+    let capturedRecovery: import("../types.js").StoreRecovery | undefined;
+
+    await ds.store(enc("proactive"), {
+      onProgress: (p) => {
+        if (p.phase === "stored") capturedRecovery = p.recovery;
+      },
+    });
+
+    expect(capturedRecovery).toBeDefined();
+    expect(typeof capturedRecovery!.storageId).toBe("string");
+    expect(capturedRecovery!.storageProvider).toBe("mock");
+    expect(typeof capturedRecovery!.keyEnvelope).toBe("string");
+    expect((capturedRecovery!.keyEnvelope as string).length).toBeGreaterThan(0);
+  });
+
+  it("onProgress 'stored' recovery.keyEnvelope is undefined for public uploads", async () => {
+    const ds = await makeInitedDStorage();
+    let capturedRecovery: import("../types.js").StoreRecovery | undefined;
+
+    await ds.store(enc("public proactive"), {
+      isPublic: true,
+      onProgress: (p) => {
+        if (p.phase === "stored") capturedRecovery = p.recovery;
+      },
+    });
+
+    expect(capturedRecovery).toBeDefined();
+    expect(capturedRecovery!.keyEnvelope).toBeUndefined();
+  });
+
+  it("recovery from onProgress 'stored' event works with registerReference", async () => {
+    const ds = await makeInitedDStorage();
+    let capturedRecovery: import("../types.js").StoreRecovery | undefined;
+
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("chain down"),
+    );
+
+    await ds
+      .store(enc("proactive recovery"), {
+        onProgress: (p) => {
+          if (p.phase === "stored") capturedRecovery = p.recovery;
+        },
+      })
+      .catch(() => {});
+
+    expect(capturedRecovery).toBeDefined();
+
+    const { chainRefId } = await ds.registerReference(
+      capturedRecovery!.storageId,
+      {
+        storageProvider: capturedRecovery!.storageProvider,
+        keyEnvelope: capturedRecovery!.keyEnvelope,
+      },
+    );
+    const { bytes } = await ds.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe("proactive recovery");
+  });
+
+  // ── registerReference() with keyEnvelope ─────────────────────────────────────
+
+  it("registerReference() with keyEnvelope returns a chainRefId", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+
+    const err = await ds
+      .store(enc("ref-with-envelope"))
+      .catch((e: unknown) => e);
+    const { storageId, storageProvider, keyEnvelope } = (
+      err as StorePartialError
+    ).recovery;
+
+    const result = await ds.registerReference(storageId, {
+      storageProvider,
+      keyEnvelope,
+    });
+    expect(typeof result.chainRefId).toBe("string");
+  });
+
+  it("registerReference() with keyEnvelope produces a reference that decrypts correctly", async () => {
+    const ds = await makeInitedDStorage();
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+
+    const content = "encrypt-verify";
+    const err = await ds.store(enc(content)).catch((e: unknown) => e);
+    const { storageId, storageProvider, keyEnvelope } = (
+      err as StorePartialError
+    ).recovery;
+
+    const { chainRefId } = await ds.registerReference(storageId, {
+      storageProvider,
+      keyEnvelope,
+    });
+    const { bytes } = await ds.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe(content);
   });
 });

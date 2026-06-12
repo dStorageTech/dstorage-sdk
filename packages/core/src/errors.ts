@@ -1,8 +1,12 @@
+import { DStorageError } from "@dstorage/crypto";
+import type { StoreRecovery } from "./types.js";
+
 export const CoreErrorCode = {
   // store — 10001-10009
   METADATA_WITH_PUBLIC_UPLOAD: 10001,
   UPLOAD_NO_PROVIDERS: 10002,
   PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER: 10003,
+  CHAIN_WRITE_FAILED: 10004,
 
   // registerReference — 10010-10019
   REGISTER_REF_REQUIRES_CHAIN: 10010,
@@ -61,3 +65,26 @@ export const CoreErrorCode = {
 } as const;
 
 export type CoreErrorCode = (typeof CoreErrorCode)[keyof typeof CoreErrorCode];
+
+/**
+ * Thrown when `store()` succeeds at the storage layer but fails to write the
+ * on-chain reference. The content is permanently on the storage network — use
+ * `err.recovery` with `registerReference()` to retry only the chain write.
+ */
+export class StorePartialError extends DStorageError {
+  readonly recovery: StoreRecovery;
+
+  constructor(recovery: StoreRecovery) {
+    super(
+      CoreErrorCode.CHAIN_WRITE_FAILED,
+      `[dStorage] Content stored (storageId: ${recovery.storageId}) but the on-chain reference write failed. ` +
+        `Use err.recovery with registerReference() to retry without re-uploading.`,
+    );
+    this.name = "StorePartialError";
+    this.recovery = recovery;
+  }
+}
+
+export function isStorePartialError(err: unknown): err is StorePartialError {
+  return err instanceof StorePartialError;
+}
