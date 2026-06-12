@@ -219,8 +219,8 @@ describe("upload → list → remove lifecycle", () => {
 
 // ── Disconnect / re-init ──────────────────────────────────────────────────────
 
-describe("disconnect and reconnect", () => {
-  it("uploads before disconnect are still retrievable after re-init", async () => {
+describe("destroy and reconnect", () => {
+  it("stores before destroy are still retrievable after re-init", async () => {
     const sharedStorage = new MockStorageAdapter();
     const makeDs = () =>
       new DStorage({
@@ -233,7 +233,7 @@ describe("disconnect and reconnect", () => {
     await ds.init();
 
     const { chainRefId } = await ds.store(enc("persistent data"));
-    ds.disconnect();
+    ds.destroy();
 
     // Re-init with the same seed provider (same address → same key)
     await ds.init();

@@ -298,7 +298,7 @@ export default function App() {
 
   const handleChainAdapterChange = (next: ChainAdapterKey) => {
     if (next === chainAdapterKey) return;
-    dstorage?.disconnect();
+    dstorage?.destroy();
     setChainAdapterKey(next);
     setDStorage(null);
     setExistingReferences([]);
@@ -306,7 +306,7 @@ export default function App() {
 
   const handleStorageAdapterChange = (next: StorageAdapterKey) => {
     if (next === storageAdapterKey) return;
-    dstorage?.disconnect();
+    dstorage?.destroy();
     setStorageAdapterKey(next);
     setDStorage(null);
     setExistingReferences([]);
@@ -314,7 +314,7 @@ export default function App() {
 
   const handlePaymentAdapterChange = (next: PaymentAdapterKey) => {
     if (next === paymentAdapterKey) return;
-    dstorage?.disconnect();
+    dstorage?.destroy();
     setPaymentAdapterKey(next);
     setDStorage(null);
   };
@@ -322,7 +322,7 @@ export default function App() {
   const handleManagedAuthTokenChange = (nextToken: string) => {
     setManagedAuthToken(nextToken);
     if (paymentAdapterKey === "managed") {
-      dstorage?.disconnect();
+      dstorage?.destroy();
       setDStorage(null);
     }
   };
@@ -379,7 +379,7 @@ export default function App() {
   };
 
   const handleReset = async () => {
-    dstorage?.disconnect();
+    dstorage?.destroy();
     setDStorage(null);
     setStep("connect");
     setRecord(null);

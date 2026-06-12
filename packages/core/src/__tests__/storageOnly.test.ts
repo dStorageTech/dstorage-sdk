@@ -29,18 +29,18 @@ async function makeInited() {
   return ds;
 }
 
-// ── init / disconnect ─────────────────────────────────────────────────────────
+// ── init / destroy ─────────────────────────────────────────────────────────
 
-describe("storage-only: init / disconnect", () => {
+describe("storage-only: init / destroy", () => {
   it("init() succeeds without a chain adapter", async () => {
     const ds = new DStorage(makeConfig());
     await ds.init();
     expect(ds.isConnected).toBe(true);
   });
 
-  it("disconnect() sets isConnected to false", async () => {
+  it("destroy() sets isConnected to false", async () => {
     const ds = await makeInited();
-    ds.disconnect();
+    ds.destroy();
     expect(ds.isConnected).toBe(false);
   });
 });

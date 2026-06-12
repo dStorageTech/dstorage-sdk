@@ -51,9 +51,9 @@ describe("DStorage constructor", () => {
   });
 });
 
-// ── init / disconnect ─────────────────────────────────────────────────────────
+// ── init / destroy ─────────────────────────────────────────────────────────
 
-describe("init / disconnect", () => {
+describe("init / destroy", () => {
   it("isConnected is true after init()", async () => {
     const ds = new DStorage(makeConfig());
     await ds.init();
@@ -66,22 +66,22 @@ describe("init / disconnect", () => {
     expect(ds.connectedAddress).toBeNull();
   });
 
-  it("isConnected is false after disconnect()", async () => {
+  it("isConnected is false after destroy()", async () => {
     const ds = await makeInitedDStorage();
-    ds.disconnect();
+    ds.destroy();
     expect(ds.isConnected).toBe(false);
   });
 
-  it("connectedAddress is null after disconnect()", async () => {
+  it("connectedAddress is null after destroy()", async () => {
     const ds = await makeInitedDStorage();
-    ds.disconnect();
+    ds.destroy();
     expect(ds.connectedAddress).toBeNull();
   });
 
-  it("can re-init after disconnect", async () => {
+  it("can re-init after destroy", async () => {
     const ds = new DStorage(makeConfig("0xAlice_ds2"));
     await ds.init();
-    ds.disconnect();
+    ds.destroy();
     await ds.init();
     expect(ds.isConnected).toBe(true);
   });

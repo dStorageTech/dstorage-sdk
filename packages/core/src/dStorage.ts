@@ -130,14 +130,14 @@ export class DStorage implements DStorageContext {
     }
   }
 
-  /** Disconnect and clear the in-memory encryption providers. */
-  disconnect(): void {
+  /** Tear down active state and clear all in-memory key material. */
+  destroy(): void {
     this.wallet = null;
     this._encryptionProviders = [];
     this._initialized = false;
     this.logger?.log(
       "dStorage",
-      "Disconnected — encryption key cleared from memory.",
+      "Destroyed — encryption key cleared from memory.",
     );
   }
 
