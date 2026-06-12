@@ -1,5 +1,5 @@
 /**
- * @dstorage/core — chunked upload / retrieve tests
+ * @dstorage/core — chunked store / retrieve tests
  *
  * CHUNK_SIZE is mocked to 512 bytes so round-trip tests run fast without
  * hitting real encryption on tens of megabytes. The logic under test is
@@ -146,11 +146,11 @@ describe("isManifest", () => {
 
 // ── Small files — single-shot path unchanged ─────────────────────────────────
 
-describe("upload small file (≤ CHUNK_SIZE)", () => {
-  it("single-shot path: upload returns a storageId, retrieve round-trips", async () => {
+describe("store small file (≤ CHUNK_SIZE)", () => {
+  it("single-shot path: store returns a storageId, retrieve round-trips", async () => {
     const ds = await makeInitedDStorage();
     const content = "small file content";
-    const { chainRefId } = await ds.upload(new TextEncoder().encode(content));
+    const { chainRefId } = await ds.store(new TextEncoder().encode(content));
     const { bytes } = await ds.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(bytes)).toBe(content);
   });
@@ -158,50 +158,50 @@ describe("upload small file (≤ CHUNK_SIZE)", () => {
   it("file exactly CHUNK_SIZE bytes uses single-shot path (1 storage entry)", async () => {
     const config = makeConfig();
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
-    const uploadSpy = vi.spyOn(storageAdapter, "upload");
+    const storeSpy = vi.spyOn(storageAdapter, "store");
 
     const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE); // exactly at threshold → single-shot
-    await ds.upload(bytes);
+    await ds.store(bytes);
 
-    expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(storeSpy).toHaveBeenCalledTimes(1);
   });
 });
 
 // ── Large files — chunked path ────────────────────────────────────────────────
 
-describe("upload large file (> CHUNK_SIZE)", () => {
-  it("splits into ceil(size/CHUNK_SIZE) chunks + 1 manifest upload", async () => {
+describe("store large file (> CHUNK_SIZE)", () => {
+  it("splits into ceil(size/CHUNK_SIZE) chunks + 1 manifest store", async () => {
     const config = makeConfig();
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
-    const uploadSpy = vi.spyOn(storageAdapter, "upload");
+    const storeSpy = vi.spyOn(storageAdapter, "store");
 
     const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE + 1); // 2 chunks
-    await ds.upload(bytes);
+    await ds.store(bytes);
 
     // 2 chunk uploads + 1 manifest upload = 3 total
-    expect(uploadSpy).toHaveBeenCalledTimes(3);
+    expect(storeSpy).toHaveBeenCalledTimes(3);
   });
 
   it("chunk count is ceil(size / CHUNK_SIZE)", async () => {
     const config = makeConfig();
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
-    const uploadSpy = vi.spyOn(storageAdapter, "upload");
+    const storeSpy = vi.spyOn(storageAdapter, "store");
 
     const ds = await makeInitedDStorage(config);
     const chunkCount = 4;
     const bytes = makeBytes(CHUNK_SIZE * chunkCount);
-    await ds.upload(bytes);
+    await ds.store(bytes);
 
     // 4 chunks + 1 manifest
-    expect(uploadSpy).toHaveBeenCalledTimes(chunkCount + 1);
+    expect(storeSpy).toHaveBeenCalledTimes(chunkCount + 1);
   });
 
   it("round-trip: retrieve reassembles original bytes (2 chunks)", async () => {
     const ds = await makeInitedDStorage();
     const bytes = makeBytes(CHUNK_SIZE + 100);
-    const { chainRefId } = await ds.upload(bytes);
+    const { chainRefId } = await ds.store(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
   });
@@ -209,18 +209,18 @@ describe("upload large file (> CHUNK_SIZE)", () => {
   it("round-trip works for 3 chunks (2.5× CHUNK_SIZE)", async () => {
     const ds = await makeInitedDStorage();
     const bytes = makeBytes(Math.floor(CHUNK_SIZE * 2.5));
-    const { chainRefId } = await ds.upload(bytes);
+    const { chainRefId } = await ds.store(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
   });
 
-  it("UploadResult.storageId is the manifest's storageId", async () => {
+  it("StoreResult.storageId is the manifest's storageId", async () => {
     const config = makeConfig();
     const storageAdapter = config.storageAdapter as MockStorageAdapter;
 
     const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE + 1);
-    const result = await ds.upload(bytes);
+    const result = await ds.store(bytes);
 
     const allIds = storageAdapter.listAll();
     expect(allIds).toContain(result.storageId);
@@ -231,7 +231,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const bytes = makeBytes(CHUNK_SIZE * 3);
 
     const progressEvents: number[] = [];
-    await ds.upload(bytes, {
+    await ds.store(bytes, {
       onProgress: (p) => {
         if (p.phase === "uploading") progressEvents.push(p.chunksUploaded);
       },
@@ -246,7 +246,7 @@ describe("upload large file (> CHUNK_SIZE)", () => {
     const bytes = makeBytes(CHUNK_SIZE + 1);
 
     let finalizingCount = 0;
-    await ds.upload(bytes, {
+    await ds.store(bytes, {
       onProgress: (p) => {
         if (p.phase === "finalizing") finalizingCount++;
       },
@@ -287,7 +287,7 @@ describe("chunked manifest fields are correct in storage", () => {
       ],
     });
     await ds.init();
-    const result = await ds.upload(bytes, { isPublic: true });
+    const result = await ds.store(bytes, { isPublic: true });
     // For public uploads storageId is the plaintext manifest storage ID.
     const { bytes: raw } = await storageAdapter.retrieve(result.storageId);
     return JSON.parse(new TextDecoder().decode(raw));
@@ -334,12 +334,12 @@ describe("chunked manifest fields are correct in storage", () => {
   });
 });
 
-// ── UploadOptions.metadata round-trip ─────────────────────────────────────────
+// ── StoreOptions.metadata round-trip ─────────────────────────────────────────
 
-describe("upload with metadata option", () => {
-  it("accepts UploadOptions with metadata", async () => {
+describe("store with metadata option", () => {
+  it("accepts StoreOptions with metadata", async () => {
     const ds = await makeInitedDStorage();
-    const result = await ds.upload(new TextEncoder().encode("hello"), {
+    const result = await ds.store(new TextEncoder().encode("hello"), {
       metadata: { label: "my-label" },
     });
     expect(result.chainRefId).toBeDefined();
@@ -348,12 +348,12 @@ describe("upload with metadata option", () => {
 
 // ── Encrypted chunked flow ─────────────────────────────────────────────────────
 
-describe("chunked upload via init() with encryptionSeedProvider", () => {
+describe("chunked store via init() with encryptionSeedProvider", () => {
   it("round-trips chunked content using XChaCha20 encryption via init()", async () => {
     const ds = await makeInitedDStorage();
 
     const bytes = makeBytes(CHUNK_SIZE + 50);
-    const { chainRefId } = await ds.upload(bytes);
+    const { chainRefId } = await ds.store(bytes);
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
   });
@@ -373,16 +373,16 @@ describe("security: chunk AAD binding catches gateway swap", () => {
 
     // Spy on upload to record IDs in upload order (chunks first, manifest last).
     const uploadedIds: string[] = [];
-    const origUpload = storage.upload.bind(storage);
-    vi.spyOn(storage, "upload").mockImplementation(async (data, meta) => {
-      const result = await origUpload(data, meta);
+    const origStore = storage.store.bind(storage);
+    vi.spyOn(storage, "store").mockImplementation(async (data, meta) => {
+      const result = await origStore(data, meta);
       uploadedIds.push(result.id);
       return result;
     });
 
     const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE * 3); // 3 chunks + 1 manifest
-    await ds.upload(bytes);
+    await ds.store(bytes);
 
     // uploadedIds = [chunk0, chunk1, chunk2, manifest]
     // Swap chunk0 and chunk1 bytes — same DEK, wrong position.
@@ -429,7 +429,7 @@ describe("security: manifest structural validation", () => {
     // Public upload — manifest stored as plaintext, easy to tamper.
     const bytes = makeBytes(CHUNK_SIZE * 2 + 10);
     // storageId is the manifest's storageId (the on-chain pointer).
-    const { chainRefId, storageId } = await ds.upload(bytes, {
+    const { chainRefId, storageId } = await ds.store(bytes, {
       isPublic: true,
     });
 
@@ -514,7 +514,7 @@ describe("security: manifest shape in user content is not misinterpreted", () =>
 
     // Upload a file whose plaintext looks exactly like a manifest.
     const payload = craftedManifestBytes("attacker-controlled-id");
-    const { chainRefId } = await ds.upload(payload);
+    const { chainRefId } = await ds.store(payload);
 
     // Retrieval must return the original bytes, not attempt chunk reassembly.
     const { bytes: retrieved } = await ds.retrieveByRefId(chainRefId);
@@ -528,7 +528,7 @@ describe("security: manifest shape in user content is not misinterpreted", () =>
 
     const sentinelId = "attacker-controlled-id-sentinel";
     const payload = craftedManifestBytes(sentinelId);
-    const { chainRefId } = await ds.upload(payload);
+    const { chainRefId } = await ds.store(payload);
 
     const retrieveSpy = vi.spyOn(storage, "retrieve");
     await ds.retrieveByRefId(chainRefId);

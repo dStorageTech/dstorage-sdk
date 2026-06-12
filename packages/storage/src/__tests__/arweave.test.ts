@@ -184,7 +184,7 @@ describe("ArweaveStorageAdapter", () => {
   describe("upload", () => {
     it("returns an UploadResult with all required fields", async () => {
       const adapter = nodeAdapter();
-      const result = await adapter.upload(enc("hello arweave"));
+      const result = await adapter.store(enc("hello arweave"));
 
       expect(result).toHaveProperty("id");
       expect(result).toHaveProperty("provider");
@@ -193,22 +193,22 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it('provider is "arweave"', async () => {
-      const result = await nodeAdapter().upload(enc("data"));
+      const result = await nodeAdapter().store(enc("data"));
       expect(result.provider).toBe("arweave");
     });
 
     it("id is the transaction id returned by arweave-js", async () => {
-      const result = await nodeAdapter().upload(enc("data"));
+      const result = await nodeAdapter().store(enc("data"));
       expect(result.id).toBe(TX_MOCK);
     });
 
     it("cost contains the AR amount from the fee oracle", async () => {
-      const result = await nodeAdapter().upload(enc("data"));
+      const result = await nodeAdapter().store(enc("data"));
       expect(result.cost).toMatchObject({ token: "AR", amount: "0.000001" });
     });
 
     it("url is constructed from gateway + txId", async () => {
-      const result = await nodeAdapter().upload(enc("data"));
+      const result = await nodeAdapter().store(enc("data"));
       expect(result.url).toBe(`https://arweave.net/${TX_MOCK}`);
     });
 
@@ -216,20 +216,20 @@ describe("ArweaveStorageAdapter", () => {
       const adapter = nodeAdapter({
         gateway: { host: "arweave.dev", port: 443, protocol: "https" },
       });
-      const result = await adapter.upload(enc("data"));
+      const result = await adapter.store(enc("data"));
       expect(result.url).toContain("arweave.dev");
     });
 
     it("uploadedAt is a recent timestamp", async () => {
       const before = Date.now();
-      const result = await nodeAdapter().upload(enc("data"));
+      const result = await nodeAdapter().store(enc("data"));
       const after = Date.now();
       expect(result.uploadedAt).toBeGreaterThanOrEqual(before);
       expect(result.uploadedAt).toBeLessThanOrEqual(after);
     });
 
     it("adds caller-supplied metadata as tags", async () => {
-      await nodeAdapter().upload(enc("data"), {
+      await nodeAdapter().store(enc("data"), {
         "dstorage-owner": "0xABC",
         label: "test",
       });
@@ -238,7 +238,7 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it("signs the transaction before uploading", async () => {
-      await nodeAdapter().upload(enc("data"));
+      await nodeAdapter().store(enc("data"));
       const signOrder =
         mockArweave.transactions.sign.mock.invocationCallOrder[0];
       const uploaderOrder =
@@ -248,7 +248,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("throws if Node.js walletKey is empty", async () => {
       const adapter = new ArweaveStorageAdapter({ walletKey: {} });
-      await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+      await expect(adapter.store(enc("data"))).rejects.toMatchObject({
         code: PaymentErrorCode.ARWEAVE_WALLET_KEY_REQUIRED,
         message: expect.stringContaining("walletKey"),
       });
@@ -261,7 +261,7 @@ describe("ArweaveStorageAdapter", () => {
           uploaderState.calls++;
         });
 
-      const result = await nodeAdapter({ maxRetries: 3 }).upload(enc("data"));
+      const result = await nodeAdapter({ maxRetries: 3 }).store(enc("data"));
       expect(result.id).toBe(TX_MOCK);
       expect(mockUploader.uploadChunk).toHaveBeenCalledTimes(2);
     });
@@ -272,7 +272,7 @@ describe("ArweaveStorageAdapter", () => {
       );
 
       const adapter = nodeAdapter({ maxRetries: 2 });
-      await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+      await expect(adapter.store(enc("data"))).rejects.toMatchObject({
         code: StorageErrorCode.ARWEAVE_CHUNK_UPLOAD_FAILED,
         message: expect.stringContaining("failed after 2 attempts"),
       });
@@ -380,7 +380,7 @@ describe("ArweaveStorageAdapter", () => {
         confirmationTimeoutMs: 5_000,
       });
 
-      const result = await adapter.upload(enc("data"));
+      const result = await adapter.store(enc("data"));
       expect(result.id).toBe(TX_MOCK);
       expect(mockArweave.transactions.getStatus).toHaveBeenCalledTimes(2);
     });
@@ -394,7 +394,7 @@ describe("ArweaveStorageAdapter", () => {
         confirmationTimeoutMs: 10, // expire immediately
       });
 
-      await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+      await expect(adapter.store(enc("data"))).rejects.toMatchObject({
         code: StorageErrorCode.ARWEAVE_CONFIRM_TIMEOUT,
         message: expect.stringMatching(/timeout/i),
       });
@@ -412,7 +412,7 @@ describe("ArweaveStorageAdapter", () => {
   describe("content integrity", () => {
     it("upload adds X-Content-Hash tag matching blake3 of the data", async () => {
       const data = enc("integrity test payload");
-      await nodeAdapter().upload(data);
+      await nodeAdapter().store(data);
       expect(mockTx.addTag).toHaveBeenCalledWith("X-Content-Hash", hexOf(data));
     });
 
@@ -539,7 +539,7 @@ describe("ArweaveStorageAdapter", () => {
       win["window"] = {}; // simulate bare browser window
 
       try {
-        await expect(adapter.upload(enc("data"))).rejects.toMatchObject({
+        await expect(adapter.store(enc("data"))).rejects.toMatchObject({
           code: PaymentErrorCode.ARWEAVE_CONNECT_NOT_FOUND,
           message: expect.stringContaining("ArConnect"),
         });

@@ -416,14 +416,14 @@ describe("ArweaveLocalStorageAdapter", () => {
 
   describe("upload", () => {
     beforeEach(() => {
-      // mine() inside upload() calls fetch("/mine") — provide a mock response
+      // mine() inside store() calls fetch("/mine") — provide a mock response
       mockFetch.mockResolvedValue(okResponse());
     });
 
     const enc = (s: string) => new TextEncoder().encode(s);
 
     it("returns an UploadResult with all required fields", async () => {
-      const result = await makeAdapter().upload(enc("local test data"));
+      const result = await makeAdapter().store(enc("local test data"));
       expect(result).toHaveProperty("id");
       expect(result).toHaveProperty("provider", "arweave");
       expect(result).toHaveProperty("cost");
@@ -431,12 +431,12 @@ describe("ArweaveLocalStorageAdapter", () => {
     });
 
     it("url contains localhost (testnet gateway)", async () => {
-      const result = await makeAdapter().upload(enc("data"));
+      const result = await makeAdapter().store(enc("data"));
       expect(result.url).toContain("localhost");
     });
 
     it("tx id matches the mocked transaction id", async () => {
-      const result = await makeAdapter().upload(enc("data"));
+      const result = await makeAdapter().store(enc("data"));
       expect(result.id).toBe(MOCK_TX_ID);
     });
   });
@@ -489,7 +489,7 @@ describe("ArweaveLocalStorageAdapter", () => {
     it("the returned adapter can upload data", async () => {
       const { adapter } =
         await ArweaveLocalStorageAdapter.createWithTestWallet();
-      const result = await adapter.upload(
+      const result = await adapter.store(
         new TextEncoder().encode("factory test"),
       );
       expect(result.id).toBe(MOCK_TX_ID);

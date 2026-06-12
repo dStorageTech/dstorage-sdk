@@ -66,25 +66,25 @@ export interface StorageAdapter {
   readonly paymentAdapter: PaymentAdapter;
 
   /**
-   * Upload bytes to the storage network.
+   * Store bytes on the storage network.
    * Storage adapters do not encrypt data. If the caller chose private storage, `data`
    * must already be encrypted before calling this function. If the caller chose
    * public storage, `data` is expected to be plaintext/unencrypted. The SDK provides
-   * the @dstorage/crypto package and public APIs for performing encryption before upload.
+   * the @dstorage/crypto package and public APIs for performing encryption before storing.
    * @returns StorageUploadResult containing the content ID needed to retrieve later
    */
-  upload(
+  store(
     data: Uint8Array,
     metadata?: Record<string, string>,
   ): Promise<StorageUploadResult>;
 
   /**
-   * Retrieve bytes by the content ID returned from upload().
+   * Retrieve bytes by the content ID returned from store().
    * Storage adapters do not decrypt data. If encrypted bytes were stored, this returns
    * those encrypted bytes as-is. If plaintext bytes were stored, this returns
    * plaintext bytes as-is. Callers are responsible for decryption when needed and can
    * use the @dstorage/crypto package or public APIs for that purpose.
-   * @returns The exact bytes stored by upload(), plus any unencrypted tags attached at upload time
+   * @returns The exact bytes stored by store(), plus any unencrypted tags attached at store time
    */
   retrieve(
     id: string,

@@ -10,7 +10,7 @@
  * Developer API:
  *   const ds = new DStorage(config);
  *   await ds.init();
- *   const { chainRefId, storageId } = await ds.upload(new TextEncoder().encode("hello"));
+ *   const { chainRefId, storageId } = await ds.store(new TextEncoder().encode("hello"));
  *   const { bytes } = await ds.retrieveByRefId(chainRefId);
  *   await ds.listReferences();
  *   await ds.removeReference(chainRefId);
@@ -46,10 +46,10 @@ import type {
   RegisterReferenceOptions,
   RegisterReferenceResult,
   RetrieveResult,
-  UpdateUploadResult,
-  UploadOptions,
-  UploadProgress,
-  UploadResult,
+  UpdateResult,
+  StoreOptions,
+  StoreProgress,
+  StoreResult,
   WalletInfo,
 } from "./types.js";
 import {
@@ -152,21 +152,18 @@ export class DStorage implements DStorageContext {
   // ── Core operations ───────────────────────────────────────────────────────
 
   /**
-   * Encrypt content client-side, upload to decentralised storage,
+   * Encrypt content client-side, store to decentralised storage,
    * and write a cryptographic reference on-chain.
    *
    * Files larger than CHUNK_SIZE (5 MB) are automatically split into chunks,
-   * each encrypted and uploaded independently. A manifest file ties them together.
+   * each encrypted and stored independently. A manifest file ties them together.
    * Only the manifest's storageId is written on-chain.
    *
-   * @param content          Uint8Array to store
-   * @param options  Optional UploadOptions (metadata, onProgress, isPublic)
-   * @returns                UploadResult containing the dataId needed to retrieve later
+   * @param content  Uint8Array to store
+   * @param options  Optional StoreOptions (metadata, onProgress, isPublic)
+   * @returns        StoreResult containing the dataId needed to retrieve later
    */
-  async upload(
-    bytes: Uint8Array,
-    options?: UploadOptions,
-  ): Promise<UploadResult> {
+  async store(bytes: Uint8Array, options?: StoreOptions): Promise<StoreResult> {
     try {
       this.assertConnected();
 
@@ -236,14 +233,11 @@ export class DStorage implements DStorageContext {
 
       // 2. Upload first so we have the storageId for ownerSecret derivation (if needed).
       const sdkVersion = corePackageJson.version ?? "unknown";
-      const storageResult = await this.config.storageAdapter.upload(
-        uploadData,
-        {
-          ...tags,
-          "dStorage-version": sdkVersion,
-          "Content-Type": "application/octet-stream",
-        },
-      );
+      const storageResult = await this.config.storageAdapter.store(uploadData, {
+        ...tags,
+        "dStorage-version": sdkVersion,
+        "Content-Type": "application/octet-stream",
+      });
 
       if (isPublic) {
         // 3a. Public: no content DEK needed. Key envelope and ownerSecret are only
@@ -252,7 +246,7 @@ export class DStorage implements DStorageContext {
           if (this._encryptionProviders.length === 0) {
             throw new DStorageError(
               CoreErrorCode.PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER,
-              "[dStorage] Cannot upload public data without at least one encryption seed provider. " +
+              "[dStorage] Cannot store public data without at least one encryption seed provider. " +
                 "Without a provider there is no owner secret, so the reference " +
                 "could never be removed or updated.",
             );
@@ -363,7 +357,7 @@ export class DStorage implements DStorageContext {
    *
    * A fresh DEK is generated solely to encrypt the storageId and derive the
    * ownerSecret. The resulting reference round-trips through retrieveByRefId()
-   * exactly like one created by upload().
+   * exactly like one created by store().
    *
    * Note: chunked manifests are not handled here. For large pre-existing
    * uploads already split into chunks, register the manifest storageId.
@@ -444,43 +438,43 @@ export class DStorage implements DStorageContext {
   }
 
   /**
-   * Re-upload new content and update an existing on-chain reference in place.
+   * Store new content and update an existing on-chain reference in place.
    *
    * Ownership is proved by re-deriving the ownerSecret from the existing
    * reference — the same mechanism used by removeReference(). A fresh DEK is
-   * generated for the new content; the old upload is not modified and remains
+   * generated for the new content; the previous version is not modified and remains
    * independently decryptable if the caller retained the old storageId.
    *
-   * Note: chunking is not applied here. For large files use upload() to get a
+   * Note: chunking is not applied here. For large files use store() to get a
    * new chunked reference, then removeReference() on the old one.
    *
-   * @param refId            The chain reference to update (returned by a prior upload/registerReference).
-   * @param bytes            New content to encrypt and store.
-   * @param options  Optional UploadOptions. isPublic is ignored.
+   * @param refId    The chain reference to update (returned by a prior store/registerReference).
+   * @param bytes    New content to encrypt and store.
+   * @param options  Optional StoreOptions. isPublic is ignored.
    */
-  async updateUpload(
+  async update(
     refId: string,
     bytes: Uint8Array,
-    options?: UploadOptions,
-  ): Promise<UpdateUploadResult> {
+    options?: StoreOptions,
+  ): Promise<UpdateResult> {
     try {
       this.assertConnected();
       if (!this.config.chainAdapter) {
         throw new DStorageError(
           CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
-          "[dStorage] updateUpload requires a chain adapter.",
+          "[dStorage] update requires a chain adapter.",
         );
       }
       if (typeof this.config.chainAdapter.updateReference !== "function") {
         throw new DStorageError(
           CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
-          "[dStorage] updateUpload is not supported by this chain adapter.",
+          "[dStorage] update is not supported by this chain adapter.",
         );
       }
       if (this._encryptionProviders.length === 0) {
         throw new DStorageError(
           CoreErrorCode.UPDATE_UPLOAD_REQUIRES_ENCRYPTION,
-          "[dStorage] updateUpload requires at least one encryption adapter.",
+          "[dStorage] update requires at least one encryption adapter.",
         );
       }
 
@@ -493,7 +487,7 @@ export class DStorage implements DStorageContext {
       try {
         const scheme = XChaChaScheme.fromKey(dek);
         const uploadData = await scheme.encryptPayload(bytes, PAYLOAD_AAD);
-        const storageResult = await this.config.storageAdapter.upload(
+        const storageResult = await this.config.storageAdapter.store(
           uploadData,
           {
             ...tags,
@@ -1097,12 +1091,12 @@ export class DStorage implements DStorageContext {
   }
 
   /**
-   * Generate a fresh random DEK, wrap it under the KEK(s), and return the upload
-   * crypto materials needed by MetaTx to encrypt payload and storageId.
+   * Generate a fresh random DEK, wrap it under the KEK(s), and return the crypto
+   * materials needed by MetaTx to encrypt payload and storageId.
    *
-   * For private uploads: the DEK is wrapped under every available KEK. The ownerSecret
+   * For private stores: the DEK is wrapped under every available KEK. The ownerSecret
    * can later be re-derived as HKDF(dek, rawStorageId) by any KEK holder.
-   * For public uploads: a random ownerSeed is generated and wrapped under all KEKs (same pattern).
+   * For public stores: a random ownerSeed is generated and wrapped under all KEKs (same pattern).
    */
   async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
     try {
@@ -1165,10 +1159,10 @@ export class DStorage implements DStorageContext {
   private async _uploadChunked(
     bytes: Uint8Array,
     tags: Record<string, string>,
-    onProgress?: (p: UploadProgress) => void,
+    onProgress?: (p: StoreProgress) => void,
     isPublic = false,
     rawMeta?: Record<string, string>,
-  ): Promise<UploadResult> {
+  ): Promise<StoreResult> {
     if (this._encryptionProviders.length === 0) {
       throw new DStorageError(
         CoreErrorCode.UPLOAD_NO_PROVIDERS,
@@ -1249,7 +1243,7 @@ export class DStorage implements DStorageContext {
         totalBytes: bytes.length,
       });
 
-      const chunkResult = await this.config.storageAdapter.upload(chunkData, {
+      const chunkResult = await this.config.storageAdapter.store(chunkData, {
         ...tags,
         "dStorage-version": sdkVersion,
         "Content-Type": "application/octet-stream",
@@ -1303,7 +1297,7 @@ export class DStorage implements DStorageContext {
       );
     }
 
-    const manifestResult = await this.config.storageAdapter.upload(
+    const manifestResult = await this.config.storageAdapter.store(
       manifestData,
       {
         "dStorage-version": sdkVersion,

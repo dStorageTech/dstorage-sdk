@@ -42,7 +42,7 @@
  *     pay(instruction, onStatus)          ← routes by instruction.network, creates tx,
  *                                           sends JSON to server, applies signature
  *
- *   ArweaveStorageAdapter.upload():
+ *   ArweaveStorageAdapter.store():
  *     consumeSignedUpload()              ← picks up the pre-signed tx
  *     postWithRetry(arweave, tx)         ← broadcasts to Arweave network
  */

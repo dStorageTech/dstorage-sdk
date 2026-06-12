@@ -46,7 +46,7 @@ async function makeUser(address: string): Promise<DStorage> {
 describe("upload → retrieveByRefId round-trip", () => {
   it("Alice uploads and retrieves her own plaintext", async () => {
     const alice = await makeUser("0xAlice_i1");
-    const { chainRefId } = await alice.upload(enc("Alice private record"));
+    const { chainRefId } = await alice.store(enc("Alice private record"));
     const { bytes } = await alice.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(bytes)).toBe("Alice private record");
   });
@@ -56,7 +56,7 @@ describe("upload → retrieveByRefId round-trip", () => {
     const records = ["Record A", "Record B", "Record C"];
     const ids: string[] = [];
     for (const r of records) {
-      const { chainRefId } = await alice.upload(enc(r));
+      const { chainRefId } = await alice.store(enc(r));
       ids.push(chainRefId);
     }
     for (let i = 0; i < records.length; i++) {
@@ -68,7 +68,7 @@ describe("upload → retrieveByRefId round-trip", () => {
   it("binary Uint8Array content is preserved through encrypt/decrypt cycle", async () => {
     const alice = await makeUser("0xAlice_i3");
     const bytes = new Uint8Array([0, 1, 2, 255, 128, 64]);
-    const { chainRefId } = await alice.upload(bytes);
+    const { chainRefId } = await alice.store(bytes);
     const { bytes: retrieved } = await alice.retrieveByRefId(chainRefId);
     expect(retrieved).toEqual(bytes);
   });
@@ -78,7 +78,7 @@ describe("upload → retrieveByRefId round-trip", () => {
     // The low-level upload() accepts any string including empty
     const alice = await makeUser("0xAlice_i4");
     // Non-empty string to avoid edge cases with encryption
-    const { chainRefId } = await alice.upload(enc("."));
+    const { chainRefId } = await alice.store(enc("."));
     const { bytes } = await alice.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(bytes)).toBe(".");
   });
@@ -86,7 +86,7 @@ describe("upload → retrieveByRefId round-trip", () => {
   it("large content (100KB text) round-trips correctly", async () => {
     const alice = await makeUser("0xAlice_i5");
     const bigContent = "x".repeat(100 * 1024);
-    const { chainRefId } = await alice.upload(enc(bigContent));
+    const { chainRefId } = await alice.store(enc(bigContent));
     const { bytes } = await alice.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(bytes)).toBe(bigContent);
   });
@@ -112,7 +112,7 @@ describe("wallet isolation", () => {
     await bob.init();
 
     // Bob uploads something
-    const { storageId, chainRefId } = await bob.upload(enc("Bob private"));
+    const { storageId, chainRefId } = await bob.store(enc("Bob private"));
     // Reconstruct Bob's refId for Alice to try to retrieveByRefId
     const refId = `${storageId}::${chainRefId}`;
 
@@ -137,7 +137,7 @@ describe("wallet isolation", () => {
     await ds2.init();
 
     // Upload with ds1
-    const { chainRefId } = await ds1.upload(enc("Shared key test"));
+    const { chainRefId } = await ds1.store(enc("Shared key test"));
 
     // Retrieve with ds2 (same address → same key)
     const { bytes } = await ds2.retrieveByRefId(chainRefId);
@@ -158,7 +158,7 @@ describe("multi-record scenarios", () => {
     const ids: Record<string, string> = {};
 
     for (const [key, content] of Object.entries(records)) {
-      const { chainRefId } = await alice.upload(enc(content));
+      const { chainRefId } = await alice.store(enc(content));
       ids[key] = chainRefId;
     }
 
@@ -174,7 +174,7 @@ describe("multi-record scenarios", () => {
 describe("upload → list → remove lifecycle", () => {
   it("uploaded ref appears in listReferences then disappears after removeReference", async () => {
     const alice = await makeUser("0xAlice_lifecycle1");
-    const { chainRefId } = await alice.upload(enc("to be removed"));
+    const { chainRefId } = await alice.store(enc("to be removed"));
 
     const before = await alice.listReferences();
     expect(before.some((r) => r.refId === chainRefId)).toBe(true);
@@ -201,7 +201,7 @@ describe("upload → list → remove lifecycle", () => {
     await alice.init();
     await bob.init();
 
-    const { chainRefId, storageId: aliceStorageId } = await alice.upload(
+    const { chainRefId, storageId: aliceStorageId } = await alice.store(
       enc("Alice only"),
     );
 
@@ -232,7 +232,7 @@ describe("disconnect and reconnect", () => {
     const ds = makeDs();
     await ds.init();
 
-    const { chainRefId } = await ds.upload(enc("persistent data"));
+    const { chainRefId } = await ds.store(enc("persistent data"));
     ds.disconnect();
 
     // Re-init with the same seed provider (same address → same key)

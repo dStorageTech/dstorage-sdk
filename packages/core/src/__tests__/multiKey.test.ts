@@ -60,7 +60,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     await uploader.init();
 
     const content = "secret health record";
-    const { chainRefId } = await uploader.upload(enc(content));
+    const { chainRefId } = await uploader.store(enc(content));
 
     // Retrieve using only the PasswordEncryptionAdapter.
     const passwordSdk = new DStorage({
@@ -89,7 +89,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     });
     await uploader.init();
 
-    const { chainRefId } = await uploader.upload(enc("envelope check"));
+    const { chainRefId } = await uploader.store(enc("envelope check"));
 
     const ref = await adapters.chainAdapter.readReference(chainRefId);
     expect(ref).not.toBeNull();
@@ -111,7 +111,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     });
     await uploader.init();
 
-    const { chainRefId } = await uploader.upload(enc("private content"));
+    const { chainRefId } = await uploader.store(enc("private content"));
 
     const unrelatedSdk = new DStorage({
       ...adapters,
@@ -137,7 +137,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     await uploader.init();
 
     const content = "identical content check";
-    const { chainRefId } = await uploader.upload(enc(content));
+    const { chainRefId } = await uploader.store(enc(content));
 
     const passwordSdk = new DStorage({
       ...adapters,
@@ -167,7 +167,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     await sdk.init();
 
     const content = "single key content";
-    const { chainRefId } = await sdk.upload(enc(content));
+    const { chainRefId } = await sdk.store(enc(content));
     const { bytes } = await sdk.retrieveByRefId(chainRefId);
     expect(dec(bytes)).toBe(content);
   });
@@ -181,7 +181,7 @@ describe("multi-key wrapping — upload with two providers", () => {
     });
     await passwordSdk.init();
 
-    const { chainRefId } = await passwordSdk.upload(enc("password-only"));
+    const { chainRefId } = await passwordSdk.store(enc("password-only"));
 
     const mnemonicSdk = new DStorage({
       ...adapters,
@@ -200,8 +200,8 @@ describe("multi-key wrapping — upload with two providers", () => {
     });
     await uploader.init();
 
-    const { chainRefId: ref1 } = await uploader.upload(enc("upload one"));
-    const { chainRefId: ref2 } = await uploader.upload(enc("upload two"));
+    const { chainRefId: ref1 } = await uploader.store(enc("upload one"));
+    const { chainRefId: ref2 } = await uploader.store(enc("upload two"));
 
     const r1 = await adapters.chainAdapter.readReference(ref1);
     const r2 = await adapters.chainAdapter.readReference(ref2);
@@ -222,7 +222,7 @@ describe("public upload — ownerSeed envelope", () => {
     });
     await sdk.init();
 
-    const { chainRefId } = await sdk.upload(enc("public content"), {
+    const { chainRefId } = await sdk.store(enc("public content"), {
       isPublic: true,
     });
     const ref = await adapters.chainAdapter.readReference(chainRefId);
@@ -243,7 +243,7 @@ describe("public upload — ownerSeed envelope", () => {
     });
     await sdk.init();
 
-    const { chainRefId } = await sdk.upload(enc("multi-kek public"), {
+    const { chainRefId } = await sdk.store(enc("multi-kek public"), {
       isPublic: true,
     });
     const ref = await adapters.chainAdapter.readReference(chainRefId);
@@ -262,10 +262,10 @@ describe("public upload — ownerSeed envelope", () => {
     });
     await sdk.init();
 
-    const { chainRefId: ref1 } = await sdk.upload(enc("public one"), {
+    const { chainRefId: ref1 } = await sdk.store(enc("public one"), {
       isPublic: true,
     });
-    const { chainRefId: ref2 } = await sdk.upload(enc("public two"), {
+    const { chainRefId: ref2 } = await sdk.store(enc("public two"), {
       isPublic: true,
     });
 
@@ -281,7 +281,7 @@ describe("public upload — ownerSeed envelope", () => {
       encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
-    const { chainRefId } = await uploader.upload(enc("public removable"), {
+    const { chainRefId } = await uploader.store(enc("public removable"), {
       isPublic: true,
     });
 
@@ -305,7 +305,7 @@ describe("public upload — ownerSeed envelope", () => {
       encryptionAdapters: [passwordProvider(), mnemonicProvider()],
     });
     await uploader.init();
-    const { chainRefId } = await uploader.upload(enc("public removable 2"), {
+    const { chainRefId } = await uploader.store(enc("public removable 2"), {
       isPublic: true,
     });
 
@@ -333,7 +333,7 @@ describe("removeReference via any available KEK", () => {
     });
     await uploader.init();
 
-    const { chainRefId } = await uploader.upload(enc("removable by password"));
+    const { chainRefId } = await uploader.store(enc("removable by password"));
 
     const passwordSdk = new DStorage({
       ...adapters,
@@ -359,7 +359,7 @@ describe("removeReference via any available KEK", () => {
     });
     await uploader.init();
 
-    const { chainRefId } = await uploader.upload(enc("removable by mnemonic"));
+    const { chainRefId } = await uploader.store(enc("removable by mnemonic"));
 
     const mnemonicSdk = new DStorage({
       ...adapters,

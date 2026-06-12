@@ -90,9 +90,9 @@ describe("init / disconnect", () => {
 // ── assertConnected guard ─────────────────────────────────────────────────────
 
 describe("operations before init() throw", () => {
-  it("upload() throws when not connected", async () => {
+  it("store() throws when not connected", async () => {
     const ds = new DStorage(makeConfig());
-    await expect(ds.upload(enc("hello"))).rejects.toMatchObject({
+    await expect(ds.store(enc("hello"))).rejects.toMatchObject({
       code: CoreErrorCode.NOT_INITIALIZED,
       message: expect.stringContaining("[dStorage] Not connected"),
     });
@@ -109,44 +109,44 @@ describe("operations before init() throw", () => {
 
 // ── upload ────────────────────────────────────────────────────────────────────
 
-describe("upload", () => {
-  it("returns an UploadResult with chainRefId and storageId", async () => {
+describe("store", () => {
+  it("returns a StoreResult with chainRefId and storageId", async () => {
     const ds = await makeInitedDStorage();
-    const result = await ds.upload(enc("hello world"));
+    const result = await ds.store(enc("hello world"));
     expect(result).toHaveProperty("chainRefId");
     expect(result).toHaveProperty("storageId");
   });
 
   it('storageProvider is "mock"', async () => {
     const ds = await makeInitedDStorage();
-    const result = await ds.upload(enc("hello world"));
+    const result = await ds.store(enc("hello world"));
     expect(result.storageProvider).toBe("mock");
   });
 
   it('chainProvider is "mock"', async () => {
     const ds = await makeInitedDStorage();
-    const result = await ds.upload(enc("hello world"));
+    const result = await ds.store(enc("hello world"));
     expect(result.chainProvider).toBe("mock");
   });
 
   it("uploadedAt is a recent timestamp", async () => {
     const before = Date.now();
     const ds = await makeInitedDStorage();
-    const result = await ds.upload(enc("hello world"));
+    const result = await ds.store(enc("hello world"));
     expect(result.uploadedAt).toBeGreaterThan(before - 1000);
   });
 
   it("accepts Uint8Array as content", async () => {
     const ds = await makeInitedDStorage();
     const bytes = new Uint8Array([104, 101, 108, 108, 111]); // "hello"
-    const result = await ds.upload(bytes);
+    const result = await ds.store(bytes);
     expect(result.chainRefId).toBeDefined();
   });
 
   it("two uploads of the same content produce different dataIds", async () => {
     const ds = await makeInitedDStorage();
-    const r1 = await ds.upload(enc("same content"));
-    const r2 = await ds.upload(enc("same content"));
+    const r1 = await ds.store(enc("same content"));
+    const r2 = await ds.store(enc("same content"));
     expect(r1.chainRefId).not.toBe(r2.chainRefId);
   });
 });
@@ -154,10 +154,10 @@ describe("upload", () => {
 // ── retrieveByRefId ──────────────────────────────────────────────────────────────────
 
 describe("retrieveByRefId", () => {
-  it("returns the original plaintext after upload + retrieveByRefId", async () => {
+  it("returns the original plaintext after store + retrieveByRefId", async () => {
     const ds = await makeInitedDStorage();
     const content = "Hello, private world!";
-    const { chainRefId } = await ds.upload(enc(content));
+    const { chainRefId } = await ds.store(enc(content));
     const result = await ds.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(result.bytes)).toBe(content);
   });
@@ -165,14 +165,14 @@ describe("retrieveByRefId", () => {
   it("returns bytes matching the original UTF-8 encoding", async () => {
     const ds = await makeInitedDStorage();
     const content = "test bytes";
-    const { chainRefId } = await ds.upload(enc(content));
+    const { chainRefId } = await ds.store(enc(content));
     const result = await ds.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(new TextEncoder().encode(content));
   });
 
   it("returns metadata as an object (possibly empty)", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("meta test"));
+    const { chainRefId } = await ds.store(enc("meta test"));
     const result = await ds.retrieveByRefId(chainRefId);
     expect(typeof result.metadata).toBe("object");
   });
@@ -183,8 +183,8 @@ describe("retrieveByRefId", () => {
     await ds1.init();
     await ds2.init();
 
-    const { storageId: id1 } = await ds1.upload(enc("same text"));
-    const { storageId: id2 } = await ds2.upload(enc("same text"));
+    const { storageId: id1 } = await ds1.store(enc("same text"));
+    const { storageId: id2 } = await ds2.store(enc("same text"));
 
     expect(id1).not.toBe(id2);
   });
@@ -194,7 +194,7 @@ describe("retrieveByRefId", () => {
     const pairs: Array<[string, string]> = [];
     for (let i = 0; i < 5; i++) {
       const content = `record-${i}`;
-      const { chainRefId } = await ds.upload(enc(content));
+      const { chainRefId } = await ds.store(enc(content));
       pairs.push([chainRefId, content]);
     }
     for (const [chainRefId, expected] of pairs) {
@@ -236,7 +236,7 @@ describe("retrieveByRefId", () => {
       encryptionAdapters: [encryption],
     });
     await ds1.init();
-    const { chainRefId } = await ds1.upload(enc("hello"));
+    const { chainRefId } = await ds1.store(enc("hello"));
 
     // Try to retrieve via "arweave" adapter against the same chain.
     const ds2 = new DStorage({
@@ -292,7 +292,7 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
       ],
     });
     await uploader.init();
-    const { chainRefId } = await uploader.upload(enc("tamper test"));
+    const { chainRefId } = await uploader.store(enc("tamper test"));
     return { ds: uploader, chainRefId };
   }
 
@@ -360,7 +360,7 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
     });
     await alice.init();
     await bob.init();
-    const { chainRefId } = await alice.upload(enc("alice secret ec"));
+    const { chainRefId } = await alice.store(enc("alice secret ec"));
     const err = await bob.retrieveByRefId(chainRefId).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
     expect(
@@ -382,8 +382,8 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
 
 // ── public (isPublic: true) upload / retrieve ─────────────────────────────────
 
-describe("public upload and retrieve", () => {
-  it("throws when attempting a public upload without any seed provider", async () => {
+describe("public store and retrieve", () => {
+  it("throws when attempting a public store without any seed provider", async () => {
     // Public uploads require at least one seed provider to derive a deterministic
     // ownerSecret. Without it the reference could never be removed or updated.
     const ds = new DStorage({
@@ -393,34 +393,34 @@ describe("public upload and retrieve", () => {
     });
     await ds.init();
     await expect(
-      ds.upload(enc("public data"), { isPublic: true }),
+      ds.store(enc("public data"), { isPublic: true }),
     ).rejects.toMatchObject({
       code: CoreErrorCode.PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER,
       message: expect.stringContaining(
-        "[dStorage] Cannot upload public data without at least one encryption seed provider.",
+        "[dStorage] Cannot store public data without at least one encryption seed provider.",
       ),
     });
   });
 
-  it("retrieves the original content via refId for public upload", async () => {
+  it("retrieves the original content via refId for public store", async () => {
     const ds = await makeInitedDStorage();
     const content = "hello, public world!";
-    const { chainRefId } = await ds.upload(enc(content), { isPublic: true });
+    const { chainRefId } = await ds.store(enc(content), { isPublic: true });
     const result = await ds.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(result.bytes)).toBe(content);
   });
 
-  it("retrieves the original bytes via refId for public upload", async () => {
+  it("retrieves the original bytes via refId for public store", async () => {
     const ds = await makeInitedDStorage();
     const content = "public bytes";
-    const { chainRefId } = await ds.upload(enc(content), { isPublic: true });
+    const { chainRefId } = await ds.store(enc(content), { isPublic: true });
     const result = await ds.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(new TextEncoder().encode(content));
   });
 
   it("public storageId on-chain matches the raw storage id", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId, storageId } = await ds.upload(enc("public"), {
+    const { chainRefId, storageId } = await ds.store(enc("public"), {
       isPublic: true,
     });
     const ref = await ds.chainAdapter.readReference(chainRefId);
@@ -429,22 +429,22 @@ describe("public upload and retrieve", () => {
     expect(ref.encryptionScheme).toBe("");
   });
 
-  it("private upload stores an encrypted (different) storageId on-chain", async () => {
+  it("private store stores an encrypted (different) storageId on-chain", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId, storageId } = await ds.upload(enc("private"));
+    const { chainRefId, storageId } = await ds.store(enc("private"));
     const ref = await ds.chainAdapter.readReference(chainRefId);
     expect(ref.storageId).not.toBe(storageId);
     expect(ref.encryptionScheme).toBe("xchacha20poly1305-v1");
   });
 
-  it("private upload: bytes stored in storage are not the original plaintext", async () => {
+  it("private store: bytes stored in storage are not the original plaintext", async () => {
     const config = makeConfig();
     const storage = config.storageAdapter as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
     const plaintext = enc("sensitive patient data");
-    const { storageId } = await ds.upload(plaintext);
+    const { storageId } = await ds.store(plaintext);
 
     const rawStored = storage.get(storageId)!;
     // Raw bytes in storage must differ from the original plaintext
@@ -455,14 +455,14 @@ describe("public upload and retrieve", () => {
     );
   });
 
-  it("private upload: metadata stored on-chain is not the plaintext JSON", async () => {
+  it("private store: metadata stored on-chain is not the plaintext JSON", async () => {
     const config = makeConfig();
     const chain = config.chainAdapter as MockChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
     const meta = { name: "Alice", doctor: "Dr Smith" };
-    const { chainRefId } = await ds.upload(enc("record"), { metadata: meta });
+    const { chainRefId } = await ds.store(enc("record"), { metadata: meta });
 
     const ref = await chain.readReference(chainRefId!);
     // encryptedMetadata must be set and must not equal the plain JSON
@@ -479,7 +479,7 @@ describe("public upload and retrieve", () => {
     const ds = new DStorage(config);
     await ds.init();
 
-    const { chainRefId, storageId } = await ds.upload(enc("original content"));
+    const { chainRefId, storageId } = await ds.store(enc("original content"));
 
     // Flip a byte in the middle of the ciphertext — the Poly1305 auth tag will
     // no longer match, so decryption must throw rather than return corrupt data.
@@ -495,7 +495,7 @@ describe("public upload and retrieve", () => {
     const ds1 = await makeInitedDStorage();
     const ds2 = await makeInitedDStorage();
     const content = "shared public content";
-    const { chainRefId } = await ds1.upload(enc(content), { isPublic: true });
+    const { chainRefId } = await ds1.store(enc(content), { isPublic: true });
     const result = await ds2.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(result.bytes)).toBe(content);
   });
@@ -504,16 +504,16 @@ describe("public upload and retrieve", () => {
 // ── listReferences ────────────────────────────────────────────────────────────
 
 describe("listReferences", () => {
-  it("returns an array containing the ref after a private upload", async () => {
+  it("returns an array containing the ref after a private store", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("list me"));
+    const { chainRefId } = await ds.store(enc("list me"));
     const refs = await ds.listReferences();
     expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
   });
 
-  it("own private upload: storageId matches upload result and decryptionError is absent", async () => {
+  it("own private store: storageId matches upload result and decryptionError is absent", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId, storageId: uploadedStorageId } = await ds.upload(
+    const { chainRefId, storageId: uploadedStorageId } = await ds.store(
       enc("mine"),
     );
     const refs = await ds.listReferences();
@@ -522,7 +522,7 @@ describe("listReferences", () => {
     expect(entry?.decryptionError).toBeUndefined();
   });
 
-  it("private upload by another user: storageId is null and decryptionError is set", async () => {
+  it("private store by another user: storageId is null and decryptionError is set", async () => {
     const sharedStorage = new MockStorageAdapter();
     const sharedChain = new MockChainAdapter();
     const alice = new DStorage({
@@ -550,7 +550,7 @@ describe("listReferences", () => {
     await alice.init();
     await bob.init();
 
-    const { chainRefId, storageId: aliceStorageId } = await alice.upload(
+    const { chainRefId, storageId: aliceStorageId } = await alice.store(
       enc("Alice's secret"),
     );
     const refs = await bob.listReferences();
@@ -562,9 +562,9 @@ describe("listReferences", () => {
     expect(entry?.storageId).not.toBe(aliceStorageId);
   });
 
-  it("own public upload: storageId matches upload result and decryptionError is absent", async () => {
+  it("own public store: storageId matches upload result and decryptionError is absent", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId, storageId: uploadedStorageId } = await ds.upload(
+    const { chainRefId, storageId: uploadedStorageId } = await ds.store(
       enc("public"),
       { isPublic: true },
     );
@@ -574,7 +574,7 @@ describe("listReferences", () => {
     expect(entry?.decryptionError).toBeUndefined();
   });
 
-  it("public upload by another user: storageId is visible but decryptionError is set", async () => {
+  it("public store by another user: storageId is visible but decryptionError is set", async () => {
     const adapters = {
       storageAdapter: new MockStorageAdapter(),
       chainAdapter: new MockChainAdapter(),
@@ -602,7 +602,7 @@ describe("listReferences", () => {
     await alice.init();
     await bob.init();
 
-    const { chainRefId, storageId: aliceStorageId } = await alice.upload(
+    const { chainRefId, storageId: aliceStorageId } = await alice.store(
       enc("alice public"),
       { isPublic: true },
     );
@@ -615,8 +615,8 @@ describe("listReferences", () => {
 
   it("keyEnvelope is always a non-empty string for every entry in listReferences", async () => {
     const ds = await makeInitedDStorage();
-    await ds.upload(enc("private ref"));
-    await ds.upload(enc("public ref"), { isPublic: true });
+    await ds.store(enc("private ref"));
+    await ds.store(enc("public ref"), { isPublic: true });
 
     const refs = await ds.listReferences();
     expect(refs.length).toBeGreaterThanOrEqual(2);
@@ -630,26 +630,26 @@ describe("listReferences", () => {
 
 // ── metadata and tags ─────────────────────────────────────────────────────────
 
-describe("upload metadata option", () => {
-  it("metadata is returned by retrieveByRefId after upload", async () => {
+describe("store metadata option", () => {
+  it("metadata is returned by retrieveByRefId after store", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("with metadata"), {
+    const { chainRefId } = await ds.store(enc("with metadata"), {
       metadata: { title: "My File", category: "test" },
     });
     const result = await ds.retrieveByRefId(chainRefId!);
     expect(result.metadata).toEqual({ title: "My File", category: "test" });
   });
 
-  it("metadata is empty object when none was provided at upload", async () => {
+  it("metadata is empty object when none was provided at store", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("no metadata"));
+    const { chainRefId } = await ds.store(enc("no metadata"));
     const result = await ds.retrieveByRefId(chainRefId!);
     expect(result.metadata).toEqual({});
   });
 
   it("metadata is decrypted in listReferences for own uploads", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("listed with metadata"), {
+    const { chainRefId } = await ds.store(enc("listed with metadata"), {
       metadata: { source: "test-suite" },
     });
     const refs = await ds.listReferences();
@@ -659,7 +659,7 @@ describe("upload metadata option", () => {
 
   it("metadata is absent in listReferences when none was provided", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("no meta listed"));
+    const { chainRefId } = await ds.store(enc("no meta listed"));
     const refs = await ds.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
     expect(entry?.metadata).toBeUndefined();
@@ -693,7 +693,7 @@ describe("upload metadata option", () => {
     await alice.init();
     await bob.init();
 
-    const { chainRefId } = await alice.upload(enc("alice secret"), {
+    const { chainRefId } = await alice.store(enc("alice secret"), {
       metadata: { secret: "alice-only" },
     });
     const refs = await bob.listReferences();
@@ -702,10 +702,10 @@ describe("upload metadata option", () => {
     expect(entry?.metadata).toBeUndefined();
   });
 
-  it("throws when metadata is used with isPublic upload", async () => {
+  it("throws when metadata is used with isPublic store", async () => {
     const ds = await makeInitedDStorage();
     await expect(
-      ds.upload(enc("public with meta"), {
+      ds.store(enc("public with meta"), {
         metadata: { key: "val" },
         isPublic: true,
       }),
@@ -717,8 +717,8 @@ describe("upload metadata option", () => {
 
   it("refIds filter returns only the requested reference", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId: id1 } = await ds.upload(enc("ref-one"));
-    const { chainRefId: id2 } = await ds.upload(enc("ref-two"));
+    const { chainRefId: id1 } = await ds.store(enc("ref-one"));
+    const { chainRefId: id2 } = await ds.store(enc("ref-two"));
     const refs = await ds.listReferences({ refIds: [id1!] });
     expect(refs).toHaveLength(1);
     expect(refs[0]?.refId).toBe(id1);
@@ -727,9 +727,9 @@ describe("upload metadata option", () => {
 
   it("refIds filter with multiple ids returns only matched references", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId: id1 } = await ds.upload(enc("multi-one"));
-    const { chainRefId: id2 } = await ds.upload(enc("multi-two"));
-    const { chainRefId: id3 } = await ds.upload(enc("multi-three"));
+    const { chainRefId: id1 } = await ds.store(enc("multi-one"));
+    const { chainRefId: id2 } = await ds.store(enc("multi-two"));
+    const { chainRefId: id3 } = await ds.store(enc("multi-three"));
     const refs = await ds.listReferences({ refIds: [id1!, id3!] });
     expect(refs).toHaveLength(2);
     expect(refs.some((r) => r.refId === id1)).toBe(true);
@@ -738,19 +738,19 @@ describe("upload metadata option", () => {
   });
 });
 
-describe("upload tags option", () => {
+describe("store tags option", () => {
   it("tags are forwarded to the storage adapter", async () => {
     const config = makeConfig();
     const storage = config.storageAdapter as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
-    const uploadSpy = vi.spyOn(storage, "upload");
-    await ds.upload(enc("tagged content"), {
+    const storeSpy = vi.spyOn(storage, "store");
+    await ds.store(enc("tagged content"), {
       tags: { "App-Name": "dstorage-test" },
     });
 
-    expect(uploadSpy).toHaveBeenCalledWith(
+    expect(storeSpy).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       expect.objectContaining({ "App-Name": "dstorage-test" }),
     );
@@ -762,7 +762,7 @@ describe("upload tags option", () => {
     const ds = new DStorage(config);
     await ds.init();
 
-    const { chainRefId } = await ds.upload(enc("tagged"), {
+    const { chainRefId } = await ds.store(enc("tagged"), {
       tags: { "App-Name": "my-app" },
     });
     const result = await ds.retrieveByRefId(chainRefId!);
@@ -774,7 +774,7 @@ describe("upload tags option", () => {
     const ds = new DStorage(config);
     await ds.init();
 
-    const { chainRefId } = await ds.upload(enc("both"), {
+    const { chainRefId } = await ds.store(enc("both"), {
       tags: { "App-Name": "app" },
       metadata: { title: "My Doc" },
     });
@@ -789,7 +789,7 @@ describe("upload tags option", () => {
 describe("removeReference", () => {
   it("removed ref no longer appears in listReferences", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("to remove"));
+    const { chainRefId } = await ds.store(enc("to remove"));
     await ds.removeReference(chainRefId);
     const refs = await ds.listReferences();
     expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
@@ -797,7 +797,7 @@ describe("removeReference", () => {
 
   it("retrieveByRefId throws after removal", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("to remove 2"));
+    const { chainRefId } = await ds.store(enc("to remove 2"));
     await ds.removeReference(chainRefId);
     await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow();
   });
@@ -807,9 +807,9 @@ describe("removeReference", () => {
     await expect(ds.removeReference("ref_nonexistent")).rejects.toThrow();
   });
 
-  it("public upload: removed ref no longer appears in listReferences", async () => {
+  it("public store: removed ref no longer appears in listReferences", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("public to remove"), {
+    const { chainRefId } = await ds.store(enc("public to remove"), {
       isPublic: true,
     });
     await ds.removeReference(chainRefId);
@@ -817,9 +817,9 @@ describe("removeReference", () => {
     expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
   });
 
-  it("public upload: retrieveByRefId throws after removal", async () => {
+  it("public store: retrieveByRefId throws after removal", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("public to remove 2"), {
+    const { chainRefId } = await ds.store(enc("public to remove 2"), {
       isPublic: true,
     });
     await ds.removeReference(chainRefId);
@@ -950,11 +950,11 @@ describe("registerReference", () => {
 
 // ── updateUpload ──────────────────────────────────────────────────────────────
 
-describe("updateUpload", () => {
+describe("update", () => {
   it("returns { chainRefId, storageId }", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId: refId } = await ds.upload(enc("v1 content"));
-    const result = await ds.updateUpload(refId!, enc("v2 content"));
+    const { chainRefId: refId } = await ds.store(enc("v1 content"));
+    const result = await ds.update(refId!, enc("v2 content"));
     expect(result.chainRefId).toBe(refId);
     expect(typeof result.storageId).toBe("string");
   });
@@ -963,8 +963,8 @@ describe("updateUpload", () => {
     const ds = await makeInitedDStorage();
     const v1 = enc("version one content");
     const v2 = enc("version two content — updated");
-    const { chainRefId: refId } = await ds.upload(v1);
-    await ds.updateUpload(refId!, v2);
+    const { chainRefId: refId } = await ds.store(v1);
+    await ds.update(refId!, v2);
     const { bytes } = await ds.retrieveByRefId(refId!);
     expect(bytes).toEqual(v2);
   });
@@ -981,7 +981,7 @@ describe("updateUpload", () => {
       ],
     });
     await ds.init();
-    await expect(ds.updateUpload("refId", enc("data"))).rejects.toMatchObject({
+    await expect(ds.update("refId", enc("data"))).rejects.toMatchObject({
       code: CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
       message: expect.stringContaining("requires a chain adapter"),
     });
@@ -1004,8 +1004,8 @@ describe("updateUpload", () => {
       ],
     });
     await ds.init();
-    const { chainRefId: refId } = await ds.upload(enc("v1"));
-    await expect(ds.updateUpload(refId!, enc("v2"))).rejects.toMatchObject({
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    await expect(ds.update(refId!, enc("v2"))).rejects.toMatchObject({
       code: CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
       message: expect.stringContaining("not supported by this chain adapter"),
     });
@@ -1017,7 +1017,7 @@ describe("updateUpload", () => {
       chainAdapter: new MockChainAdapter(),
     });
     await ds.init();
-    await expect(ds.updateUpload("refId", enc("data"))).rejects.toMatchObject({
+    await expect(ds.update("refId", enc("data"))).rejects.toMatchObject({
       code: CoreErrorCode.UPDATE_UPLOAD_REQUIRES_ENCRYPTION,
       message: expect.stringContaining(
         "requires at least one encryption adapter",
@@ -1025,18 +1025,18 @@ describe("updateUpload", () => {
     });
   });
 
-  it("removeReference succeeds after updateUpload", async () => {
+  it("removeReference succeeds after update", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("v1 content"));
-    await ds.updateUpload(chainRefId!, enc("v2 content"));
+    const { chainRefId } = await ds.store(enc("v1 content"));
+    await ds.update(chainRefId!, enc("v2 content"));
     await expect(ds.removeReference(chainRefId!)).resolves.toBeUndefined();
   });
 
-  it("second updateUpload succeeds after first updateUpload", async () => {
+  it("second update succeeds after first update", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.upload(enc("v1 content"));
-    await ds.updateUpload(chainRefId!, enc("v2 content"));
-    await ds.updateUpload(chainRefId!, enc("v3 content"));
+    const { chainRefId } = await ds.store(enc("v1 content"));
+    await ds.update(chainRefId!, enc("v2 content"));
+    await ds.update(chainRefId!, enc("v3 content"));
     const { bytes } = await ds.retrieveByRefId(chainRefId!);
     expect(bytes).toEqual(enc("v3 content"));
   });

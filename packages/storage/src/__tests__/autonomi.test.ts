@@ -15,7 +15,7 @@ describe("AutonomiStorageAdapter", () => {
   describe("upload", () => {
     it("returns an UploadResult with all required fields", async () => {
       const adapter = new AutonomiStorageAdapter();
-      const result = await adapter.upload(enc("hello autonomi"));
+      const result = await adapter.store(enc("hello autonomi"));
       expect(result).toHaveProperty("id");
       expect(result).toHaveProperty("provider", "autonomi");
       expect(result).toHaveProperty("uploadedAt");
@@ -23,20 +23,20 @@ describe("AutonomiStorageAdapter", () => {
 
     it('id starts with "autonomi_"', async () => {
       const adapter = new AutonomiStorageAdapter();
-      const result = await adapter.upload(enc("data"));
+      const result = await adapter.store(enc("data"));
       expect(result.id.startsWith("autonomi_")).toBe(true);
     });
 
     it("each upload returns a unique id", async () => {
       const adapter = new AutonomiStorageAdapter();
-      const r1 = await adapter.upload(enc("a"));
-      const r2 = await adapter.upload(enc("b"));
+      const r1 = await adapter.store(enc("a"));
+      const r2 = await adapter.store(enc("b"));
       expect(r1.id).not.toBe(r2.id);
     });
 
     it("uploads arbitrary binary data without error", async () => {
       const adapter = new AutonomiStorageAdapter();
-      const result = await adapter.upload(new Uint8Array([0, 1, 2, 255]));
+      const result = await adapter.store(new Uint8Array([0, 1, 2, 255]));
       expect(result.id).toBeDefined();
     });
   });
@@ -47,7 +47,7 @@ describe("AutonomiStorageAdapter", () => {
     it("returns the exact bytes that were uploaded", async () => {
       const adapter = new AutonomiStorageAdapter();
       const data = enc("exact content match");
-      const { id } = await adapter.upload(data);
+      const { id } = await adapter.store(data);
       const { bytes } = await adapter.retrieve(id);
       expect(bytes).toEqual(data);
     });
@@ -55,7 +55,7 @@ describe("AutonomiStorageAdapter", () => {
     it("retrieves arbitrary binary data unchanged", async () => {
       const adapter = new AutonomiStorageAdapter();
       const data = new Uint8Array([0, 1, 2, 128, 255]);
-      const { id } = await adapter.upload(data);
+      const { id } = await adapter.store(data);
       const { bytes } = await adapter.retrieve(id);
       expect(bytes).toEqual(data);
     });
@@ -72,8 +72,8 @@ describe("AutonomiStorageAdapter", () => {
 
     it("multiple items: each id retrieves its own data", async () => {
       const adapter = new AutonomiStorageAdapter();
-      const r1 = await adapter.upload(enc("content A"));
-      const r2 = await adapter.upload(enc("content B"));
+      const r1 = await adapter.store(enc("content A"));
+      const r2 = await adapter.store(enc("content B"));
       expect((await adapter.retrieve(r1.id)).bytes).toEqual(enc("content A"));
       expect((await adapter.retrieve(r2.id)).bytes).toEqual(enc("content B"));
     });

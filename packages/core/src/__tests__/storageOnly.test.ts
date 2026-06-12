@@ -50,46 +50,46 @@ describe("storage-only: init / disconnect", () => {
 describe("storage-only: upload (private)", () => {
   it("returns a storageId", async () => {
     const ds = await makeInited();
-    const result = await ds.upload(enc("hello storage-only"));
+    const result = await ds.store(enc("hello storage-only"));
     expect(typeof result.storageId).toBe("string");
     expect(result.storageId.length).toBeGreaterThan(0);
   });
 
   it("does not include chainRefId", async () => {
     const ds = await makeInited();
-    const result = await ds.upload(enc("hello"));
+    const result = await ds.store(enc("hello"));
     expect(result).not.toHaveProperty("chainRefId");
   });
 
   it("does not include chainProvider", async () => {
     const ds = await makeInited();
-    const result = await ds.upload(enc("hello"));
+    const result = await ds.store(enc("hello"));
     expect(result).not.toHaveProperty("chainProvider");
   });
 
   it('storageProvider is "mock"', async () => {
     const ds = await makeInited();
-    const result = await ds.upload(enc("hello"));
+    const result = await ds.store(enc("hello"));
     expect(result.storageProvider).toBe("mock");
   });
 
   it('encryptionScheme is "xchacha20poly1305-v1"', async () => {
     const ds = await makeInited();
-    const result = await ds.upload(enc("hello"));
+    const result = await ds.store(enc("hello"));
     expect(result.encryptionScheme).toBe("xchacha20poly1305-v1");
   });
 
   it("costEstimate has storageCost but no chainCost", async () => {
     const ds = await makeInited();
-    const result = await ds.upload(enc("hello"));
+    const result = await ds.store(enc("hello"));
     expect(result.costEstimate).toHaveProperty("storageCost");
     expect(result.costEstimate).not.toHaveProperty("chainCost");
   });
 
   it("two uploads of the same content produce different storageIds", async () => {
     const ds = await makeInited();
-    const r1 = await ds.upload(enc("same"));
-    const r2 = await ds.upload(enc("same"));
+    const r1 = await ds.store(enc("same"));
+    const r2 = await ds.store(enc("same"));
     expect(r1.storageId).not.toBe(r2.storageId);
   });
 });
@@ -100,7 +100,7 @@ describe("storage-only: upload (public)", () => {
   it("returns a storageId with no chainRefId", async () => {
     const ds = new DStorage(makePublicConfig());
     await ds.init();
-    const result = await ds.upload(enc("public data"), { isPublic: true });
+    const result = await ds.store(enc("public data"), { isPublic: true });
     expect(typeof result.storageId).toBe("string");
     expect(result).not.toHaveProperty("chainRefId");
   });
@@ -108,7 +108,7 @@ describe("storage-only: upload (public)", () => {
   it("encryptionScheme is empty string for public data", async () => {
     const ds = new DStorage(makePublicConfig());
     await ds.init();
-    const result = await ds.upload(enc("public data"), { isPublic: true });
+    const result = await ds.store(enc("public data"), { isPublic: true });
     expect(result.encryptionScheme).toBe("");
   });
 });
@@ -119,7 +119,7 @@ describe("storage-only: retrieveByStorageId", () => {
   it("round-trips private data", async () => {
     const ds = await makeInited();
     const content = "round-trip private content";
-    const { storageId, cryptoScheme } = await ds.upload(enc(content));
+    const { storageId, cryptoScheme } = await ds.store(enc(content));
     const result = await ds.retrieveByStorageId(storageId, cryptoScheme!);
     expect(new TextDecoder().decode(result.bytes)).toBe(content);
   });
@@ -128,21 +128,21 @@ describe("storage-only: retrieveByStorageId", () => {
     const ds = new DStorage(makePublicConfig());
     await ds.init();
     const content = "round-trip public content";
-    const { storageId } = await ds.upload(enc(content), { isPublic: true });
+    const { storageId } = await ds.store(enc(content), { isPublic: true });
     const result = await ds.retrieveByStorageId(storageId);
     expect(new TextDecoder().decode(result.bytes)).toBe(content);
   });
 
   it("returns bytes as a Uint8Array", async () => {
     const ds = await makeInited();
-    const { storageId } = await ds.upload(enc("type check"));
+    const { storageId } = await ds.store(enc("type check"));
     const result = await ds.retrieveByStorageId(storageId);
     expect(result.bytes).toBeInstanceOf(Uint8Array);
   });
 
   it("returns metadata as an object", async () => {
     const ds = await makeInited();
-    const { storageId } = await ds.upload(enc("meta check"));
+    const { storageId } = await ds.store(enc("meta check"));
     const result = await ds.retrieveByStorageId(storageId);
     expect(typeof result.metadata).toBe("object");
   });

@@ -1,7 +1,7 @@
 /**
  * Multi-key wrapping integration tests — real arlocal storage + mock chain.
  *
- * Verifies that a single upload encrypted with two seed providers (password +
+ * Verifies that a single store encrypted with two seed providers (password +
  * mnemonic) can be independently decrypted by each provider against real
  * Arweave-local storage.
  *
@@ -62,7 +62,7 @@ describe.skipIf(!arlocalOk)(
       chainAdapter = new MockMidnightChainAdapter({ logger: console });
     });
 
-    it("content uploaded with two providers is retrievable by the password provider", async () => {
+    it("content stored with two providers is retrievable by the password provider", async () => {
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
@@ -71,7 +71,7 @@ describe.skipIf(!arlocalOk)(
       await uploader.init();
 
       const content = "integration: password retrieval";
-      const { chainRefId } = await uploader.upload(enc(content));
+      const { chainRefId } = await uploader.store(enc(content));
 
       const sdk = new DStorage({
         storageAdapter,
@@ -84,7 +84,7 @@ describe.skipIf(!arlocalOk)(
       expect(dec(bytes)).toBe(content);
     });
 
-    it("content uploaded with two providers is retrievable by the mnemonic provider", async () => {
+    it("content stored with two providers is retrievable by the mnemonic provider", async () => {
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
@@ -93,7 +93,7 @@ describe.skipIf(!arlocalOk)(
       await uploader.init();
 
       const content = "integration: mnemonic retrieval";
-      const { chainRefId } = await uploader.upload(enc(content));
+      const { chainRefId } = await uploader.store(enc(content));
 
       const sdk = new DStorage({
         storageAdapter,
@@ -106,7 +106,7 @@ describe.skipIf(!arlocalOk)(
       expect(dec(bytes)).toBe(content);
     });
 
-    it("both providers recover identical bytes from the same upload", async () => {
+    it("both providers recover identical bytes from the same store", async () => {
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
@@ -115,7 +115,7 @@ describe.skipIf(!arlocalOk)(
       await uploader.init();
 
       const content = "integration: identical bytes check";
-      const { chainRefId } = await uploader.upload(enc(content));
+      const { chainRefId } = await uploader.store(enc(content));
 
       const passwordSdk = new DStorage({
         storageAdapter,
@@ -146,7 +146,7 @@ describe.skipIf(!arlocalOk)(
       });
       await uploader.init();
 
-      const { chainRefId } = await uploader.upload(enc("private"));
+      const { chainRefId } = await uploader.store(enc("private"));
 
       const unrelated = new DStorage({
         storageAdapter,
@@ -164,14 +164,14 @@ describe.skipIf(!arlocalOk)(
       await expect(unrelated.retrieveByRefId(chainRefId)).rejects.toThrow();
     });
 
-    it("password-only SDK can removeReference a public upload made with two providers", async () => {
+    it("password-only SDK can removeReference a public store made with two providers", async () => {
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
-      const { chainRefId } = await uploader.upload(enc("public removable"), {
+      const { chainRefId } = await uploader.store(enc("public removable"), {
         isPublic: true,
       });
 
@@ -189,14 +189,14 @@ describe.skipIf(!arlocalOk)(
       expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
     });
 
-    it("mnemonic-only SDK can removeReference a public upload made with two providers", async () => {
+    it("mnemonic-only SDK can removeReference a public store made with two providers", async () => {
       const uploader = new DStorage({
         storageAdapter,
         chainAdapter,
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
-      const { chainRefId } = await uploader.upload(enc("public removable 2"), {
+      const { chainRefId } = await uploader.store(enc("public removable 2"), {
         isPublic: true,
       });
 

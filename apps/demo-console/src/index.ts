@@ -11,7 +11,7 @@
  *       d. Derives encryption key from the seed
  *  4. Displays chain wallet addresses and balances
  *  5. Upload loop: asks for a local file path, reads its contents, calls
- *       sdk.upload(content) → encrypt → mock-store → write on-chain reference
+ *       sdk.store(content) → encrypt → mock-store → write on-chain reference
  *     and prints the refId returned by the DataRegistry circuit
  *
  * Prerequisite: run `npm run compile:contract` from packages/chain to build the

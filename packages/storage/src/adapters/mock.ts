@@ -119,7 +119,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
   }
 
-  async upload(
+  async store(
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<StorageUploadResult> {

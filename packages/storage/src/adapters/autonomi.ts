@@ -59,9 +59,9 @@ export class AutonomiStorageAdapter implements StorageAdapter {
   }
 
   // In-memory fallback until real SDK wired up
-  private store = new Map<string, Uint8Array>();
+  private _store = new Map<string, Uint8Array>();
 
-  async upload(
+  async store(
     data: Uint8Array,
     _metadata: Record<string, string> = {},
   ): Promise<StorageUploadResult> {
@@ -73,7 +73,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
     const id = `autonomi_${Date.now()}_${randomPart}`;
-    this.store.set(id, data);
+    this._store.set(id, data);
     const cost = await this.estimateCost(data.byteLength);
 
     this.logger?.log(
@@ -95,7 +95,7 @@ export class AutonomiStorageAdapter implements StorageAdapter {
     /**
      * TODO: Replace with real Autonomi retrieval:
      */
-    const data = this.store.get(id);
+    const data = this._store.get(id);
     if (!data) {
       throw new DStorageError(
         StorageErrorCode.AUTONOMI_DATA_NOT_FOUND,

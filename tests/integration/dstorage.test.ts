@@ -67,20 +67,20 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     await sdk.init();
   });
 
-  it("uploads and retrieves private data", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT);
+  it("stores and retrieves private data", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
     const result = await sdk.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(CONTENT);
   });
 
-  it("uploads and retrieves public data", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+  it("stores and retrieves public data", async () => {
+    const { chainRefId } = await sdk.store(CONTENT, { isPublic: true });
     const result = await sdk.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(CONTENT);
   });
 
-  it("public upload produces a non-empty keyEnvelope with one wrapper per provider", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+  it("public store produces a non-empty keyEnvelope with one wrapper per provider", async () => {
+    const { chainRefId } = await sdk.store(CONTENT, { isPublic: true });
     const ref = await mockChain.readReference(chainRefId);
     expect(ref.keyEnvelope).toBeTruthy();
     const envelope = JSON.parse(ref.keyEnvelope);
@@ -89,14 +89,14 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     expect(envelope.wrappers[0].wrapKeyName).toBe("password");
   });
 
-  it("two uploads produce different storage IDs", async () => {
-    const a = await sdk.upload(CONTENT);
-    const b = await sdk.upload(CONTENT);
+  it("two stores produce different storage IDs", async () => {
+    const a = await sdk.store(CONTENT);
+    const b = await sdk.store(CONTENT);
     expect(a.storageId).not.toBe(b.storageId);
   });
 
-  it("listing references returns uploaded entries", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT);
+  it("listing references returns stored entries", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
     const refs = await sdk.listReferences();
     expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
   });
@@ -192,38 +192,38 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     await chainAdapter?.stop?.();
   });
 
-  it("uploads private data and retrieves it", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT);
+  it("stores private data and retrieves it", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
     const result = await sdk.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(CONTENT);
   });
 
-  it("uploads public data and retrieves it", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+  it("stores public data and retrieves it", async () => {
+    const { chainRefId } = await sdk.store(CONTENT, { isPublic: true });
     const result = await sdk.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(CONTENT);
   });
 
-  it("two uploads from the same wallet produce different DEKs", async () => {
-    const a = await sdk.upload(CONTENT);
-    const b = await sdk.upload(CONTENT);
+  it("two stores from the same wallet produce different DEKs", async () => {
+    const a = await sdk.store(CONTENT);
+    const b = await sdk.store(CONTENT);
     // Different storageIds confirm different DEKs were used.
     expect(a.storageId).not.toBe(b.storageId);
   });
 
-  it("listing references includes the uploaded entry", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT);
+  it("listing references includes the stored entry", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
     const refs = await sdk.listReferences();
     expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
   });
 
   it("wallet isolation: Bob cannot decrypt Alice's private reference", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT);
+    const { chainRefId } = await sdk.store(CONTENT);
     await expect(sdkBob.retrieveByRefId(chainRefId)).rejects.toThrow();
   });
 
-  it("public removeReference succeeds when called by the uploader", async () => {
-    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+  it("public removeReference succeeds when called by the storer", async () => {
+    const { chainRefId } = await sdk.store(CONTENT, { isPublic: true });
     await expect(sdk.removeReference(chainRefId)).resolves.toBeUndefined();
     const refs = await sdk.listReferences();
     expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
@@ -233,7 +233,7 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     // Alice uploads a public reference — ownerSeed is wrapped under Alice's KEK only.
     // Bob's KEK cannot unwrap it, so the ownerSecret Bob derives will not match the
     // ownerCommitment stored on-chain, and the ZK circuit must reject the transaction.
-    const { chainRefId } = await sdk.upload(CONTENT, { isPublic: true });
+    const { chainRefId } = await sdk.store(CONTENT, { isPublic: true });
     await expect(sdkBob.removeReference(chainRefId)).rejects.toThrow();
   });
 
@@ -273,7 +273,7 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     // updateUpload must pass the current sentinel-derived ownerSecret to the ZK circuit,
     // then commit a new ownerSecret derived from the fresh storageId.
     const UPDATED = new TextEncoder().encode("promoted content");
-    const { storageId } = await sdk.updateUpload(chainRefId, UPDATED, {
+    const { storageId } = await sdk.update(chainRefId, UPDATED, {
       metadata: { version: "2" },
     });
     expect(storageId).toBeTruthy();

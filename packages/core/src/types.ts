@@ -71,7 +71,7 @@ export interface DStorageConfig {
   logger?: Logger;
 }
 
-export interface UploadProgress {
+export interface StoreProgress {
   phase: "encrypting" | "uploading" | "finalizing";
   chunksUploaded: number;
   totalChunks: number;
@@ -79,7 +79,7 @@ export interface UploadProgress {
   totalBytes: number;
 }
 
-export interface UploadOptions {
+export interface StoreOptions {
   /**
    * Unencrypted key/value tags forwarded to the storage layer (e.g. Arweave tx tags).
    * Never written on-chain.
@@ -89,16 +89,16 @@ export interface UploadOptions {
    * Encrypted key/value metadata stored on-chain alongside the key envelope.
    * Encrypted with the content DEK — only holders of a valid KEK can read it.
    * Returned in `RetrieveResult.metadata` after decryption.
-   * Not supported for public (`isPublic: true`) uploads.
+   * Not supported for public (`isPublic: true`) stores.
    */
   metadata?: Record<string, string>;
-  onProgress?: (progress: UploadProgress) => void;
+  onProgress?: (progress: StoreProgress) => void;
   /** When true, content is stored unencrypted and the storageId is written on-chain as plaintext. */
   isPublic?: boolean;
 }
 
 /**
- * Aggregated cost estimate for a complete upload operation.
+ * Aggregated cost estimate for a complete store operation.
  * Built from two quotes — one from the storage adapter and one from the chain adapter.
  */
 export interface CostEstimate {
@@ -115,8 +115,8 @@ export interface CostEstimate {
   fileSizeBytes: number;
 }
 
-/** Result returned from dStorage.upload() */
-export interface UploadResult {
+/** Result returned from dStorage.store() */
+export interface StoreResult {
   /**
    * The primary on-chain reference ID.
    * Undefined when no chain adapter is configured (storage-only mode).
@@ -132,18 +132,18 @@ export interface UploadResult {
   uploadedAt: number;
   /**
    * Encryption algorithm used for the stored data and on-chain storageId.
-   * "xchacha20poly1305-v1" for private (encrypted) uploads.
-   * Empty string ("") for public (unencrypted) uploads.
+   * "xchacha20poly1305-v1" for private (encrypted) stores.
+   * Empty string ("") for public (unencrypted) stores.
    */
   encryptionScheme: string;
   /**
-   * Decryption scheme for the uploaded content.
-   * Present only for private uploads in storage-only mode (no chainAdapter).
+   * Decryption scheme for the stored content.
+   * Present only for private stores in storage-only mode (no chainAdapter).
    * In chain mode the scheme is recoverable from the on-chain key envelope instead.
    * Pass this back to retrieveByStorageId() to decrypt locally.
    */
   cryptoScheme?: CryptoScheme;
-  /** Estimated cost of upload */
+  /** Estimated cost of the store operation */
   costEstimate: CostEstimate;
 }
 
@@ -182,11 +182,11 @@ export interface RegisterReferenceResult {
   chainRefId: string;
 }
 
-/** Result returned from dStorage.updateUpload() */
-export interface UpdateUploadResult {
+/** Result returned from dStorage.update() */
+export interface UpdateResult {
   /** Same refId as the input — updated in place. */
   chainRefId: string;
-  /** StorageId of the newly uploaded content. */
+  /** StorageId of the newly stored content. */
   storageId: string;
 }
 

@@ -24,7 +24,7 @@
  *   await adapter.testnet.mintTokens(address, 5_000_000_000_000n); // 5 AR
  *
  *   # 4. Use exactly like ArweaveStorageAdapter
- *   const { id } = await adapter.upload('my encrypted data');
+ *   const { id } = await adapter.store('my encrypted data');
  *   await adapter.testnet.mine(); // confirm the tx instantly
  *   const data = await adapter.retrieve(id);
  *
@@ -501,7 +501,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
 
   // ── Overridden upload: log testnet context ──────────────────────────────────
 
-  override async upload(
+  override async store(
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<StorageUploadResult> {
@@ -514,7 +514,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     // anchor that its own validation rejects with "last_tx is invalid".
     await this.testnet.mine();
 
-    const result = await super.upload(data, metadata);
+    const result = await super.store(data, metadata);
     this.logger?.log(
       "dStorage/arweave-local",
       "⚠️  Testnet upload — data is NOT on the real Arweave network.",

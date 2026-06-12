@@ -212,7 +212,7 @@ export interface PaymentAdapter {
    * Example: Arweave bundles data + fee in one transaction object — it must have
    * the data at sign time. MetaTransaction calls this immediately after encrypt
    * so that pay() can create → tag → sign the transaction, and the storage
-   * adapter's upload() can then simply post the pre-signed transaction.
+   * adapter's store() can then simply post the pre-signed transaction.
    *
    * Adapters that do not need the data (Mock, WalletManaged, Midnight) leave
    * this unimplemented and MetaTransaction skips the call.

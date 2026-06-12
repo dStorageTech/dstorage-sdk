@@ -40,7 +40,7 @@ describe("ML-KEM upload and retrieve", () => {
     await sdk.init();
 
     const content = "post-quantum encrypted content";
-    const { chainRefId } = await sdk.upload(enc(content));
+    const { chainRefId } = await sdk.store(enc(content));
     const { bytes } = await sdk.retrieveByRefId(chainRefId);
     expect(dec(bytes)).toBe(content);
   });
@@ -60,7 +60,7 @@ describe("ML-KEM upload and retrieve", () => {
     await uploaderSdk.init();
 
     const content = "sealed for PQ recipient";
-    const { chainRefId } = await uploaderSdk.upload(enc(content));
+    const { chainRefId } = await uploaderSdk.store(enc(content));
 
     // Retriever: has both PK + SK
     const readerSdk = new DStorage({
@@ -87,7 +87,7 @@ describe("ML-KEM upload and retrieve", () => {
     });
     await sdk.init();
 
-    const { chainRefId } = await sdk.upload(enc("secret"));
+    const { chainRefId } = await sdk.store(enc("secret"));
 
     // PK-only retriever
     const pkOnlySdk = new DStorage({
@@ -127,7 +127,7 @@ describe("ML-KEM upload and retrieve", () => {
     await uploaderSdk.init();
 
     const content = "password-derived PQ keypair";
-    const { chainRefId } = await uploaderSdk.upload(enc(content));
+    const { chainRefId } = await uploaderSdk.store(enc(content));
 
     const readerSdk = new DStorage({
       ...adapters,
@@ -164,7 +164,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
     await uploaderSdk.init();
 
     const content = "multi-key post-quantum content";
-    const { chainRefId } = await uploaderSdk.upload(enc(content));
+    const { chainRefId } = await uploaderSdk.store(enc(content));
 
     // Retrieve with only ML-KEM
     const mlkemSdk = new DStorage({
@@ -209,7 +209,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
     });
     await sdk.init();
 
-    const { chainRefId } = await sdk.upload(enc("envelope check"));
+    const { chainRefId } = await sdk.store(enc("envelope check"));
     const ref = await adapters.chainAdapter.readReference(chainRefId);
     const envelope = JSON.parse(ref.keyEnvelope);
 
@@ -235,7 +235,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
     });
     await sdk.init();
 
-    const { chainRefId } = await sdk.upload(enc("secret"));
+    const { chainRefId } = await sdk.store(enc("secret"));
 
     // Different ML-KEM keypair — cannot unwrap
     const { adapter: otherAdapter } =

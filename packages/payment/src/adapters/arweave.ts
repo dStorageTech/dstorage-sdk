@@ -20,7 +20,7 @@
  *        wallet for approval (ArConnect popup / JWK signing). Stores the
  *        signed transaction for the upload step to pick up.
  *
- *   3. ArweaveStorageAdapter.upload()  [upload step]
+ *   3. ArweaveStorageAdapter.store()  [store step]
  *        Detects the pre-signed transaction via consumeSignedTx() and simply
  *        posts it — no additional signing or wallet interaction needed.
  *
@@ -96,7 +96,7 @@ interface PendingUpload {
   metadata: Record<string, string>;
 }
 
-/** Result stored after pay() signs the transaction, consumed by upload(). */
+/** Result stored after pay() signs the transaction, consumed by store(). */
 export interface SignedArweaveUpload {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tx: any;
@@ -233,11 +233,11 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
    * Sign-then-store flow (when provideUploadData was called):
    *   Creates the Arweave transaction with data + tags, prompts the wallet
    *   for approval (ArConnect popup or JWK signing), and stores the signed
-   *   transaction for ArweaveStorageAdapter.upload() to post.
+   *   transaction for ArweaveStorageAdapter.store() to post.
    *
    * Pass-through fallback (when provideUploadData was NOT called):
    *   Returns a receipt acknowledging that payment is bundled with the upload.
-   *   ArweaveStorageAdapter.upload() performs the full create → sign → post flow.
+   *   ArweaveStorageAdapter.store() performs the full create → sign → post flow.
    */
   async pay(
     instruction: PaymentInstruction,
@@ -252,7 +252,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     }
 
     if (!this.pendingUpload) {
-      // Fallback: payment handled inside upload()
+      // Fallback: payment handled inside store()
       onStatus?.("AR fee will be deducted as part of the upload transaction.");
       return {
         txHash: "arweave-bundled-with-upload",
@@ -308,7 +308,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
   /**
    * Returns the pre-signed transaction produced by pay(), then clears it.
-   * Called by ArweaveStorageAdapter.upload() to post the already-signed tx.
+   * Called by ArweaveStorageAdapter.store() to post the already-signed tx.
    * Returns null if pay() did not sign a transaction (pass-through mode).
    */
   consumeSignedUpload(): SignedArweaveUpload | null {

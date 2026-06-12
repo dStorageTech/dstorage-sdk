@@ -383,7 +383,7 @@ const sdk = new DStorage({
 await sdk.init();
 
 // 3. Encrypt, store, and write an on-chain reference in one call
-const { chainRefId, storageId } = await sdk.upload(
+const { chainRefId, storageId } = await sdk.store(
   new TextEncoder().encode("Hello dStorage!"),
 );
 
@@ -396,10 +396,10 @@ const { bytes: direct } = await sdk.retrieveByStorageId(storageId);
 console.log(new TextDecoder().decode(direct)); // "Hello dStorage!"
 ```
 
-`upload()` also accepts an options object as the second argument:
+`store()` also accepts an options object as the second argument:
 
 ```typescript
-const { chainRefId } = await sdk.upload(bytes, {
+const { chainRefId } = await sdk.store(bytes, {
   metadata: { filename: "report.pdf", version: "2" },
   onProgress: ({ phase, chunksUploaded, totalChunks }) => {
     console.log(`${phase}: ${chunksUploaded}/${totalChunks} chunks`);
@@ -418,7 +418,7 @@ Every error thrown by the SDK is a `DStorageError` — a subclass of `Error` tha
 import { isDStorageError } from "@dstorage-tech/dstorage";
 
 try {
-  await sdk.upload(bytes);
+  await sdk.store(bytes);
 } catch (err) {
   if (isDStorageError(err)) {
     console.error(`SDK error (code ${err.code}): ${err.message}`);
@@ -516,7 +516,7 @@ User input
 
 ### Large-file chunking
 
-Files larger than **10 MB** are automatically split into independently encrypted 10 MB chunks. Each chunk is uploaded as a separate storage transaction; a small manifest file ties them together and its `storageId` is the single pointer written on-chain. The split/reassembly is entirely transparent to the caller — `upload()`, `retrieveByRefId()`, and `retrieveByStorageId()` behave identically regardless of file size.
+Files larger than **10 MB** are automatically split into independently encrypted 10 MB chunks. Each chunk is uploaded as a separate storage transaction; a small manifest file ties them together and its `storageId` is the single pointer written on-chain. The split/reassembly is entirely transparent to the caller — `store()`, `retrieveByRefId()`, and `retrieveByStorageId()` behave identically regardless of file size.
 
 ## Encryption Design
 
@@ -546,7 +546,7 @@ Encrypting the storage pointer means a blockchain observer cannot learn which de
 The SDK supports an explicit opt-in public mode:
 
 ```typescript
-await sdk.upload(data, { isPublic: true });
+await sdk.store(data, { isPublic: true });
 ```
 
 In public mode **neither layer is encrypted**:

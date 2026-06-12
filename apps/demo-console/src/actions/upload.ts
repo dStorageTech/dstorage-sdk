@@ -59,8 +59,7 @@ export async function uploadFile(
       );
       const result = await withTicker(
         () => `Updating reference ${replaceRefId}...`,
-        () =>
-          sdk.updateUpload(replaceRefId!, fileContent, { isPublic, metadata }),
+        () => sdk.update(replaceRefId!, fileContent, { isPublic, metadata }),
       );
       console.log("\n  ✓ Update complete!");
       console.log(`  refId:     ${result.chainRefId}`);
@@ -71,7 +70,7 @@ export async function uploadFile(
       );
       const result = await withTicker(
         () => "Generating ZK proof and submitting reference...",
-        () => sdk.upload(fileContent, { isPublic, metadata }),
+        () => sdk.store(fileContent, { isPublic, metadata }),
       );
 
       const visibility = result.encryptionScheme

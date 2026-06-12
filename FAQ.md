@@ -50,11 +50,11 @@ A 43-character base64url string (32 decoded bytes) that identifies the encrypted
 
 **Does dStorage work without a blockchain?**
 
-Yes. Omit `chainAdapter` from `DStorageConfig` to run in storage-only mode. Uploads go directly to the storage network; no on-chain reference is written. `upload()` still returns a `storageId` for later retrieval, but there is no verifiable on-chain ownership record.
+Yes. Omit `chainAdapter` from `DStorageConfig` to run in storage-only mode. Uploads go directly to the storage network; no on-chain reference is written. `store()` still returns a `storageId` for later retrieval, but there is no verifiable on-chain ownership record.
 
 **Does dStorage support large files?**
 
-Yes. Files larger than 10 MB are automatically split into independently encrypted 10 MB chunks. A small manifest ties them together; the manifest's `storageId` is the single pointer written on-chain. `upload()`, `retrieveByRefId()`, and `retrieveByStorageId()` behave identically regardless of file size.
+Yes. Files larger than 10 MB are automatically split into independently encrypted 10 MB chunks. A small manifest ties them together; the manifest's `storageId` is the single pointer written on-chain. `store()`, `retrieveByRefId()`, and `retrieveByStorageId()` behave identically regardless of file size.
 
 **What networks and storage providers are supported today?**
 
@@ -101,7 +101,7 @@ const sdk = new DStorage({
   ],
 });
 await sdk.init();
-const { chainRefId } = await sdk.upload(new TextEncoder().encode("hello"));
+const { chainRefId } = await sdk.store(new TextEncoder().encode("hello"));
 const { bytes } = await sdk.retrieveByRefId(chainRefId);
 ```
 
@@ -109,7 +109,7 @@ Mock adapters are fully in-memory — no network, no Docker, no tokens required.
 
 **What does `sdk.init()` do?**
 
-`init()` prepares the SDK for use: it derives the chain encryption key and, if a `chainAdapter` is configured, calls `chainAdapter.init()` which either deploys a new `DataRegistry` contract or joins an existing one. You must call `init()` before `upload()` or `retrieveByRefId()` when using private (encrypted) data.
+`init()` prepares the SDK for use: it derives the chain encryption key and, if a `chainAdapter` is configured, calls `chainAdapter.init()` which either deploys a new `DataRegistry` contract or joins an existing one. You must call `init()` before `store()` or `retrieveByRefId()` when using private (encrypted) data.
 
 **How do I preserve a deployed contract address across runs?**
 
@@ -128,10 +128,10 @@ const estimate = await sdk.estimateCost(bytes.byteLength);
 
 **How do I pass metadata to an upload?**
 
-Use the second argument to `upload()`:
+Use the second argument to `store()`:
 
 ```typescript
-await sdk.upload(bytes, {
+await sdk.store(bytes, {
   metadata: { filename: "report.pdf", mimeType: "application/pdf" },
   onProgress: ({ phase, chunksUploaded, totalChunks }) => {
     /* … */
@@ -182,7 +182,7 @@ Yes. See `QUICK_START.md` for a step-by-step guide that wires dStorage into the 
 
 **What is `executeMetaTransaction()` and when should I use it?**
 
-It is a convenience wrapper that runs the full upload pipeline atomically and fires a progress callback at each step (`estimate` → `encrypt` → `payment_storage` → `upload` → `chain_reference` → `complete`). Use it when you want a single entry point and progress reporting. Use `upload()` directly when you need fine-grained control.
+It is a convenience wrapper that runs the full upload pipeline atomically and fires a progress callback at each step (`estimate` → `encrypt` → `payment_storage` → `upload` → `chain_reference` → `complete`). Use it when you want a single entry point and progress reporting. Use `store()` directly when you need fine-grained control.
 
 **What Node.js version is required?**
 
@@ -495,7 +495,7 @@ Caused by spreading large `Uint8Array` values into `String.fromCharCode()`. This
 
 **`Invalid URL` instead of an `init()` error**
 
-The chain adapter's `_getAPI()` is called before `init()` completes, hitting an endpoint that has no URL yet. Make sure `await sdk.init()` resolves fully before any `upload()` or `retrieve*()` call.
+The chain adapter's `_getAPI()` is called before `init()` completes, hitting an endpoint that has no URL yet. Make sure `await sdk.init()` resolves fully before any `store()` or `retrieve*()` call.
 
 **ZK artifacts not found / `Invalid URL` at runtime**
 

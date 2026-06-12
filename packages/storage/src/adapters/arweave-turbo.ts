@@ -117,7 +117,7 @@ export interface ArweaveTurboAdapterConfig {
  *   signingServerUrl: "https://api.my-server.com",
  *   authToken: "ds_...",
  * });
- * const { id } = await adapter.upload(encryptedBytes, { "Content-Type": "application/octet-stream" });
+ * const { id } = await adapter.store(encryptedBytes, { "Content-Type": "application/octet-stream" });
  */
 export class ArweaveTurboStorageAdapter implements StorageAdapter {
   readonly name: StorageProviderName = "arweave_turbo";
@@ -173,7 +173,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
 
   // ── upload ─────────────────────────────────────────────────────────────────────
 
-  async upload(
+  async store(
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<StorageUploadResult> {

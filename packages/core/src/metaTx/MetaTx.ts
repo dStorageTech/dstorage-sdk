@@ -133,7 +133,7 @@ export class MetaTx {
       // Pass the same metadata to upload(). Storage adapters that consumed a
       // pre-signed transaction (Arweave sign-then-post flow) will ignore it;
       // others (Mock, Autonomi) use it to attach metadata to the upload.
-      const uploadResult = await this.sdk.storageAdapter.upload(
+      const uploadResult = await this.sdk.storageAdapter.store(
         uploadData,
         uploadMetadata,
       );

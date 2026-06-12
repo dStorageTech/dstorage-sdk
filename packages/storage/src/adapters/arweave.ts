@@ -113,7 +113,7 @@ export interface ArweaveAdapterConfig {
 
   /**
    * If true, poll Arweave until the transaction is confirmed (block included)
-   * before returning from upload(). Confirmation typically takes 2–20 minutes.
+   * before returning from store(). Confirmation typically takes 2–20 minutes.
    *
    * Defaults to false (optimistic — returns as soon as the gateway accepts
    * the transaction with HTTP 200 or 202).
@@ -262,7 +262,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   // ── upload ─────────────────────────────────────────────────────────────────────
 
-  async upload(
+  async store(
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<StorageUploadResult> {
