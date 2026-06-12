@@ -111,6 +111,31 @@ Mock adapters are fully in-memory — no network, no Docker, no tokens required.
 
 `init()` prepares the SDK for use: it derives the chain encryption key and, if a `chainAdapter` is configured, calls `chainAdapter.init()` which either deploys a new `DataRegistry` contract or joins an existing one. You must call `init()` before `store()` or `retrieveByRefId()` when using private (encrypted) data.
 
+**Should I call `sdk.destroy()` when I'm done, and why?**
+
+Yes, calling `destroy()` is strongly recommended whenever the user logs out, navigates away, or the SDK instance is no longer needed. It immediately wipes all sensitive in-memory state:
+
+- **Encryption providers** — the live `EncryptionAdapter` instances holding derived KEKs
+- **Wallet reference** — the in-memory wallet info including the raw seed used to derive keys
+- **Initialized flag** — prevents accidental further use of a stale instance
+
+Without an explicit `destroy()` call, this material stays in the JavaScript heap for the lifetime of the process or page. In a browser context that means it persists across route changes and is accessible to any code running in the same tab. In a Node.js server context it stays in memory for the lifetime of the process, potentially across multiple users' sessions if the instance is inadvertently shared.
+
+```typescript
+// React example — destroy on logout or unmount
+useEffect(() => {
+  return () => sdk.destroy();
+}, []);
+
+// or on explicit logout
+function handleLogout() {
+  sdk.destroy();
+  router.push("/login");
+}
+```
+
+`destroy()` does not delete any on-chain data or stored content — it only clears the local key material. You can call `init()` again on the same instance to reinitialise if needed.
+
 **How do I preserve a deployed contract address across runs?**
 
 `init()` returns the `contractAddress` of the deployed (or joined) `DataRegistry` contract. Save it and pass it as `contractAddress` to `MidnightChainAdapter` on subsequent runs to reconnect instead of deploying a new one each time.
