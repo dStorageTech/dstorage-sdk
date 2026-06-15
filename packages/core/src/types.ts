@@ -177,6 +177,8 @@ export interface ListReferencesOptions {
 
 /** Options for dStorage.registerReference() */
 export interface RegisterReferenceOptions {
+  /** The pre-existing storage network ID to register. Omit for metadata-only references. */
+  storageId?: string;
   /**
    * Storage provider name recorded in the chain reference.
    * Defaults to the configured `storageAdapter.name`.

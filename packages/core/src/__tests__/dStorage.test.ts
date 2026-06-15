@@ -858,18 +858,18 @@ describe("estimateCost", () => {
 describe("registerReference", () => {
   it("returns a chainRefId", async () => {
     const ds = await makeInitedDStorage();
-    const result = await ds.registerReference(
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-    );
+    const result = await ds.registerReference({
+      storageId: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    });
     expect(typeof result.chainRefId).toBe("string");
     expect(result.chainRefId.length).toBeGreaterThan(0);
   });
 
   it("ref appears in listReferences after registerReference", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.registerReference(
-      "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-    );
+    const { chainRefId } = await ds.registerReference({
+      storageId: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    });
     const refs = await ds.listReferences();
     expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
   });
@@ -886,7 +886,9 @@ describe("registerReference", () => {
       ],
     });
     await ds.init();
-    await expect(ds.registerReference("someId")).rejects.toMatchObject({
+    await expect(
+      ds.registerReference({ storageId: "someId" }),
+    ).rejects.toMatchObject({
       code: CoreErrorCode.REGISTER_REF_REQUIRES_CHAIN,
       message: expect.stringContaining("requires a chain adapter"),
     });
@@ -898,7 +900,9 @@ describe("registerReference", () => {
       chainAdapter: new MockChainAdapter(),
     });
     await ds.init();
-    await expect(ds.registerReference("someId")).rejects.toMatchObject({
+    await expect(
+      ds.registerReference({ storageId: "someId" }),
+    ).rejects.toMatchObject({
       code: CoreErrorCode.REGISTER_REF_REQUIRES_ENCRYPTION,
       message: expect.stringContaining(
         "requires at least one encryption adapter",
@@ -912,10 +916,10 @@ describe("registerReference", () => {
     const ds = new DStorage(config);
     await ds.init();
 
-    const { chainRefId } = await ds.registerReference(
-      "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-      { storageProvider: "arweave" as StorageProviderName },
-    );
+    const { chainRefId } = await ds.registerReference({
+      storageId: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      storageProvider: "arweave" as StorageProviderName,
+    });
 
     const refs = await chain.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
@@ -925,16 +929,16 @@ describe("registerReference", () => {
   it("uses provided refId instead of the one returned by the chain adapter", async () => {
     const ds = await makeInitedDStorage();
     const customRefId = "my-custom-ref-id-override";
-    const result = await ds.registerReference(
-      "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
-      { refId: customRefId },
-    );
+    const result = await ds.registerReference({
+      storageId: "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+      refId: customRefId,
+    });
     expect(result.chainRefId).toBe(customRefId);
   });
 
   it("metadata is returned by retrieveByRefId after registerReference with no content", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.registerReference(undefined, {
+    const { chainRefId } = await ds.registerReference({
       metadata: { type: "profile", name: "Alice" },
     });
     const result = await ds.retrieveByRefId(chainRefId);
@@ -945,7 +949,7 @@ describe("registerReference", () => {
 
   it("retrieveByRefId returns empty bytes when registerReference had no storageId and no metadata", async () => {
     const ds = await makeInitedDStorage();
-    const { chainRefId } = await ds.registerReference(undefined);
+    const { chainRefId } = await ds.registerReference();
     const result = await ds.retrieveByRefId(chainRefId);
     expect(result.bytes).toEqual(new Uint8Array(0));
     expect(result.metadata).toEqual({});
@@ -1142,7 +1146,8 @@ describe("StorePartialError recovery", () => {
       err as StorePartialError
     ).recovery;
 
-    const { chainRefId } = await ds.registerReference(storageId, {
+    const { chainRefId } = await ds.registerReference({
+      storageId,
       storageProvider,
       keyEnvelope,
     });
@@ -1225,13 +1230,11 @@ describe("StorePartialError recovery", () => {
 
     expect(capturedRecovery).toBeDefined();
 
-    const { chainRefId } = await ds.registerReference(
-      capturedRecovery!.storageId,
-      {
-        storageProvider: capturedRecovery!.storageProvider,
-        keyEnvelope: capturedRecovery!.keyEnvelope,
-      },
-    );
+    const { chainRefId } = await ds.registerReference({
+      storageId: capturedRecovery!.storageId,
+      storageProvider: capturedRecovery!.storageProvider,
+      keyEnvelope: capturedRecovery!.keyEnvelope,
+    });
     const { bytes } = await ds.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(bytes)).toBe("proactive recovery");
   });
@@ -1251,7 +1254,8 @@ describe("StorePartialError recovery", () => {
       err as StorePartialError
     ).recovery;
 
-    const result = await ds.registerReference(storageId, {
+    const result = await ds.registerReference({
+      storageId,
       storageProvider,
       keyEnvelope,
     });
@@ -1270,7 +1274,8 @@ describe("StorePartialError recovery", () => {
       err as StorePartialError
     ).recovery;
 
-    const { chainRefId } = await ds.registerReference(storageId, {
+    const { chainRefId } = await ds.registerReference({
+      storageId,
       storageProvider,
       keyEnvelope,
     });

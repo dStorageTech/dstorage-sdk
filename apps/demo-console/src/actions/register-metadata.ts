@@ -15,7 +15,7 @@ export async function registerMetadataOnly(
   try {
     const result = await withTicker(
       () => "Registering metadata-only reference on-chain...",
-      () => sdk.registerReference(undefined, { metadata }),
+      () => sdk.registerReference({ metadata }),
     );
     console.log("\n  ✓ Metadata reference registered!");
     console.log(`  refId: ${result.chainRefId}\n`);

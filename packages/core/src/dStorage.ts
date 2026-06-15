@@ -384,7 +384,6 @@ export class DStorage implements DStorageContext {
    * uploads already split into chunks, register the manifest storageId.
    */
   async registerReference(
-    storageId: string | undefined,
     options: RegisterReferenceOptions = {},
   ): Promise<RegisterReferenceResult> {
     try {
@@ -427,8 +426,8 @@ export class DStorage implements DStorageContext {
           : undefined;
 
         const onChainStorageId =
-          storageId !== undefined
-            ? await scheme.encryptStorageId(storageId)
+          options.storageId !== undefined
+            ? await scheme.encryptStorageId(options.storageId)
             : undefined;
 
         let keyEnvelope: string;
@@ -446,8 +445,8 @@ export class DStorage implements DStorageContext {
 
         const ownerSecret = await deriveOwnerSecret(
           dek,
-          storageId !== undefined
-            ? new TextEncoder().encode(storageId)
+          options.storageId !== undefined
+            ? new TextEncoder().encode(options.storageId)
             : METADATA_ONLY_OWNER_SECRET_SALT,
         );
         const chainResult = await this.config.chainAdapter.writeReference({

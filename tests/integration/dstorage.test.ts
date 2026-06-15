@@ -112,7 +112,7 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
 
   it("registers a metadata-only reference and retrieves metadata by refId", async () => {
     const meta = { type: "profile", name: "Alice" };
-    const { chainRefId } = await sdk.registerReference(undefined, {
+    const { chainRefId } = await sdk.registerReference({
       metadata: meta,
     });
     const result = await sdk.retrieveByRefId(chainRefId);
@@ -122,7 +122,7 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
   });
 
   it("metadata-only reference with no metadata returns empty metadata and empty bytes", async () => {
-    const { chainRefId } = await sdk.registerReference(undefined);
+    const { chainRefId } = await sdk.registerReference();
     const result = await sdk.retrieveByRefId(chainRefId);
     expect(result.metadata).toEqual({});
     expect(result.bytes).toEqual(new Uint8Array(0));
@@ -248,7 +248,7 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
 
   it("registers a metadata-only reference and retrieves metadata by refId", async () => {
     const meta = { type: "profile", name: "Alice" };
-    const { chainRefId } = await sdk.registerReference(undefined, {
+    const { chainRefId } = await sdk.registerReference({
       metadata: meta,
     });
     const result = await sdk.retrieveByRefId(chainRefId);
@@ -258,14 +258,14 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
   });
 
   it("wallet isolation: Bob cannot read metadata from Alice's metadata-only reference", async () => {
-    const { chainRefId } = await sdk.registerReference(undefined, {
+    const { chainRefId } = await sdk.registerReference({
       metadata: { secret: "alice-only" },
     });
     await expect(sdkBob.retrieveByRefId(chainRefId)).rejects.toThrow();
   });
 
   it("metadata-only removeReference succeeds and reference no longer appears in list", async () => {
-    const { chainRefId } = await sdk.registerReference(undefined, {
+    const { chainRefId } = await sdk.registerReference({
       metadata: { temp: "true" },
     });
     await sdk.removeReference(chainRefId);
@@ -275,7 +275,7 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
 
   it("updateUpload over a metadata-only reference promotes to full content ref with storageId-based ownerSecret", async () => {
     // Register with no storageId — ownerSecret is sentinel-based (METADATA_ONLY_OWNER_SECRET_SALT).
-    const { chainRefId } = await sdk.registerReference(undefined, {
+    const { chainRefId } = await sdk.registerReference({
       metadata: { version: "1" },
     });
 
@@ -342,7 +342,8 @@ describe.skipIf(!arlocalOk)(
         err as import("@dstorage/core").StorePartialError
       ).recovery;
 
-      const { chainRefId } = await sdk.registerReference(storageId, {
+      const { chainRefId } = await sdk.registerReference({
+        storageId,
         storageProvider,
         keyEnvelope,
       });
@@ -370,13 +371,11 @@ describe.skipIf(!arlocalOk)(
 
       expect(capturedRecovery).toBeDefined();
 
-      const { chainRefId } = await sdk.registerReference(
-        capturedRecovery!.storageId,
-        {
-          storageProvider: capturedRecovery!.storageProvider,
-          keyEnvelope: capturedRecovery!.keyEnvelope,
-        },
-      );
+      const { chainRefId } = await sdk.registerReference({
+        storageId: capturedRecovery!.storageId,
+        storageProvider: capturedRecovery!.storageProvider,
+        keyEnvelope: capturedRecovery!.keyEnvelope,
+      });
       const { bytes } = await sdk.retrieveByRefId(chainRefId);
       expect(bytes).toEqual(content);
     });
