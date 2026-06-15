@@ -36,9 +36,11 @@ import { DStorage, isStorePartialError } from "@dstorage/core";
 import type { StoreRecovery } from "@dstorage/core";
 import { MockMidnightChainAdapter } from "@dstorage/chain";
 import {
+  KeypairEncryptionAdapter,
   MnemonicEncryptionAdapter,
   PasswordEncryptionAdapter,
 } from "@dstorage/encryption";
+import { ArweaveLocalStorageAdapter } from "@dstorage/storage";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
 import { isMidnightAvailable, createChainAdapter } from "./helpers/midnight.js";
@@ -127,6 +129,22 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     expect(result.metadata).toEqual({});
     expect(result.bytes).toEqual(new Uint8Array(0));
   });
+
+  it("metadata supplied to store() is returned by retrieveByRefId", async () => {
+    const meta = { category: "health", version: "2" };
+    const { chainRefId } = await sdk.store(CONTENT, { metadata: meta });
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.metadata).toEqual(meta);
+  });
+
+  it("user-supplied tags survive a real Arweave upload/retrieve round-trip", async () => {
+    const userTags = { category: "health", version: "v1" };
+    const { chainRefId } = await sdk.store(CONTENT, { tags: userTags });
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.tags).toMatchObject(userTags);
+    // X-Content-Hash is also present, written by the payment adapter alongside user tags.
+    expect(result.tags["X-Content-Hash"]).toBeTruthy();
+  });
 });
 
 // ── Suite 2: full stack — Midnight + arlocal ───────────────────────────────────
@@ -137,6 +155,7 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
 describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
   let sdk: DStorage;
   let sdkBob: DStorage;
+  let adapter: ArweaveLocalStorageAdapter;
   let chainAdapter: Awaited<ReturnType<typeof createChainAdapter>>;
 
   const ALICE_SEED =
@@ -145,10 +164,11 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote";
 
   beforeAll(async () => {
-    const [{ adapter }, chain] = await Promise.all([
+    const [{ adapter: sa }, chain] = await Promise.all([
       createStorageAdapter(env.arlocalUrl),
       createChainAdapter(env),
     ]);
+    adapter = sa;
     chainAdapter = chain;
 
     // Both Alice and Bob share the same chain adapter and storage adapter.
@@ -296,6 +316,262 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     // correctly committed by updateUpload and matches what _computeOwnerSecret re-derives.
     await expect(sdk.removeReference(chainRefId)).resolves.toBeUndefined();
   });
+
+  // ── Item 2: private removeReference with real Midnight ──────────────────────
+
+  it("private removeReference succeeds and ref no longer appears in list", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
+    await expect(sdk.removeReference(chainRefId)).resolves.toBeUndefined();
+    const refs = await sdk.listReferences();
+    expect(refs.find((r) => r.refId === chainRefId)).toBeUndefined();
+  });
+
+  it("retrieveByRefId throws after private removeReference", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
+    await sdk.removeReference(chainRefId);
+    await expect(sdk.retrieveByRefId(chainRefId)).rejects.toThrow();
+  });
+
+  it("private removeReference fails when called by a different user (wrong ownerSecret)", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
+    await expect(sdkBob.removeReference(chainRefId)).rejects.toThrow();
+  });
+
+  // ── Item 3: update() on existing content with real Midnight + arlocal ────────
+
+  it("update replaces content: retrieveByRefId returns new bytes", async () => {
+    const V1 = new TextEncoder().encode("version 1 content");
+    const V2 = new TextEncoder().encode("version 2 content");
+    const { chainRefId } = await sdk.store(V1);
+    const { storageId } = await sdk.update(chainRefId, V2);
+    expect(storageId).toBeTruthy();
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.bytes).toEqual(V2);
+  });
+
+  it("second update succeeds and reflects the latest content", async () => {
+    const V1 = new TextEncoder().encode("v1");
+    const V2 = new TextEncoder().encode("v2");
+    const V3 = new TextEncoder().encode("v3");
+    const { chainRefId } = await sdk.store(V1);
+    await sdk.update(chainRefId, V2);
+    await sdk.update(chainRefId, V3);
+    const result = await sdk.retrieveByRefId(chainRefId);
+    expect(result.bytes).toEqual(V3);
+  });
+
+  it("removeReference succeeds after update (ownerSecret derived from updated storageId)", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
+    await sdk.update(chainRefId, new TextEncoder().encode("updated content"));
+    await expect(sdk.removeReference(chainRefId)).resolves.toBeUndefined();
+  });
+
+  // ── Item 10: error code propagation through real Midnight chain reads ─────────
+
+  it("listReferences for Bob shows Alice's private ref with null storageId and decryptionError", async () => {
+    const { chainRefId } = await sdk.store(CONTENT);
+    const refs = await sdkBob.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry).toBeDefined();
+    expect(entry?.storageId).toBeNull();
+    expect(entry?.decryptionError).toBeDefined();
+    expect(typeof entry?.decryptionError).toBe("string");
+  });
+
+  it("listReferences for Bob shows Alice's public ref as visible but with decryptionError (cannot unwrap ownerSeed)", async () => {
+    const { chainRefId } = await sdk.store(CONTENT, { isPublic: true });
+    const refs = await sdkBob.listReferences();
+    const entry = refs.find((r) => r.refId === chainRefId);
+    expect(entry).toBeDefined();
+    expect(entry?.storageId).toBeTruthy();
+    expect(entry?.decryptionError).toBeDefined();
+  });
+
+  // ── Item 4: session destroy + reinit with real Midnight ───────────────────────
+
+  describe("session lifecycle — destroy and reinit", () => {
+    it("content stored before destroy is retrievable after reinit with same seed", async () => {
+      const content = new TextEncoder().encode("persisted-after-reinit");
+      const first = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [
+          new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
+        ],
+      });
+      await first.init();
+      const { chainRefId } = await first.store(content);
+      first.destroy();
+
+      const second = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [
+          new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
+        ],
+      });
+      await second.init();
+      const result = await second.retrieveByRefId(chainRefId);
+      expect(result.bytes).toEqual(content);
+      second.destroy();
+    });
+
+    it("listReferences on a fresh instance still includes the pre-destroy ref", async () => {
+      const first = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [
+          new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
+        ],
+      });
+      await first.init();
+      const { chainRefId } = await first.store(CONTENT);
+      first.destroy();
+
+      const second = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [
+          new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
+        ],
+      });
+      await second.init();
+      const refs = await second.listReferences();
+      expect(refs.some((r) => r.refId === chainRefId)).toBe(true);
+      second.destroy();
+    });
+  });
+
+  // ── Item 5: multi-key envelope (password + mnemonic) with real Midnight ────────
+
+  describe("multi-key envelope (password + mnemonic) with real Midnight", () => {
+    const PASSWORD_ADAPTER = new PasswordEncryptionAdapter({
+      password: "dstorage-multikey-integration-test-v1!",
+      salt: "dstorage:multikey:integration:v1",
+      params: { N: 1024, r: 8, p: 1 },
+    });
+    // Reuse ALICE_SEED so the mnemonic adapter matches what Alice's sdk already uses.
+    const MNEMONIC_ADAPTER = new MnemonicEncryptionAdapter({
+      mnemonic: ALICE_SEED,
+    });
+
+    let multiKeySdk: DStorage;
+    let passwordOnlySdk: DStorage;
+    let mnemonicOnlySdk: DStorage;
+
+    beforeAll(async () => {
+      multiKeySdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [PASSWORD_ADAPTER, MNEMONIC_ADAPTER],
+      });
+      await multiKeySdk.init();
+
+      passwordOnlySdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [PASSWORD_ADAPTER],
+      });
+      await passwordOnlySdk.init();
+
+      mnemonicOnlySdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [MNEMONIC_ADAPTER],
+      });
+      await mnemonicOnlySdk.init();
+    });
+
+    it("password-only SDK retrieves content uploaded with two adapters", async () => {
+      const { chainRefId } = await multiKeySdk.store(CONTENT);
+      const result = await passwordOnlySdk.retrieveByRefId(chainRefId);
+      expect(result.bytes).toEqual(CONTENT);
+    });
+
+    it("mnemonic-only SDK retrieves content uploaded with two adapters", async () => {
+      const { chainRefId } = await multiKeySdk.store(CONTENT);
+      const result = await mnemonicOnlySdk.retrieveByRefId(chainRefId);
+      expect(result.bytes).toEqual(CONTENT);
+    });
+
+    it("unrelated SDK (Bob) cannot retrieve multi-key upload", async () => {
+      const { chainRefId } = await multiKeySdk.store(CONTENT);
+      await expect(sdkBob.retrieveByRefId(chainRefId)).rejects.toThrow();
+    });
+
+    it("on-chain keyEnvelope has exactly two wrappers for a two-adapter upload", async () => {
+      const { chainRefId } = await multiKeySdk.store(CONTENT);
+      const ref = await chainAdapter.readReference(chainRefId);
+      const envelope = JSON.parse(ref.keyEnvelope) as { wrappers: unknown[] };
+      expect(envelope.wrappers).toHaveLength(2);
+    });
+  });
+
+  // ── Item 6: ML-KEM asymmetric encryption with real Midnight ───────────────────
+
+  describe("ML-KEM asymmetric encryption with real Midnight", () => {
+    let mlkemSdk: DStorage;
+    let kpPublicKey: Uint8Array;
+    let kpSecretKey: Uint8Array;
+
+    beforeAll(async () => {
+      const {
+        adapter: kpAdapter,
+        publicKey,
+        secretKey,
+      } = KeypairEncryptionAdapter.generateKeypair();
+      kpPublicKey = publicKey;
+      kpSecretKey = secretKey;
+
+      mlkemSdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [kpAdapter],
+      });
+      await mlkemSdk.init();
+    });
+
+    it("ML-KEM encrypted content round-trips through real Midnight chain", async () => {
+      const { chainRefId } = await mlkemSdk.store(CONTENT);
+      const result = await mlkemSdk.retrieveByRefId(chainRefId);
+      expect(result.bytes).toEqual(CONTENT);
+    });
+
+    it("on-chain keyEnvelope contains exactly one ML-KEM wrapper with kemCiphertext", async () => {
+      const { chainRefId } = await mlkemSdk.store(CONTENT);
+      const ref = await chainAdapter.readReference(chainRefId);
+      const envelope = JSON.parse(ref.keyEnvelope) as {
+        wrappers: Array<{ kemCiphertext?: string }>;
+      };
+      expect(envelope.wrappers).toHaveLength(1);
+      expect(envelope.wrappers[0]?.kemCiphertext).toBeTruthy();
+    });
+
+    it("PK-only SDK uploads; SK SDK retrieves the same content", async () => {
+      const pkOnly = KeypairEncryptionAdapter.fromPublicKey(kpPublicKey);
+      const skFull = KeypairEncryptionAdapter.fromKeypair(
+        kpPublicKey,
+        kpSecretKey,
+      );
+
+      const pkSdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [pkOnly],
+      });
+      const skSdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter,
+        encryptionAdapters: [skFull],
+      });
+      await pkSdk.init();
+      await skSdk.init();
+
+      const { chainRefId } = await pkSdk.store(CONTENT);
+      const result = await skSdk.retrieveByRefId(chainRefId);
+      expect(result.bytes).toEqual(CONTENT);
+    });
+  });
 });
 
 // ── Suite 3: StorePartialError recovery — arlocal + mock chain ─────────────────
@@ -378,6 +654,156 @@ describe.skipIf(!arlocalOk)(
       });
       const { bytes } = await sdk.retrieveByRefId(chainRefId);
       expect(bytes).toEqual(content);
+    });
+  },
+);
+
+// ── Suite 4: storage-only mode with real Arweave (item 7) ─────────────────────
+//
+// Verifies that DStorage without a chain adapter works end-to-end against a
+// real arlocal node: upload → retrieveByStorageId, metadata round-trip, and
+// that chain-dependent methods throw with helpful messages.
+
+describe.skipIf(!arlocalOk)("storage-only mode with real Arweave", () => {
+  let storageOnlySdk: DStorage;
+
+  beforeAll(async () => {
+    const { adapter } = await createStorageAdapter(env.arlocalUrl);
+    storageOnlySdk = new DStorage({
+      storageAdapter: adapter,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-storageonly-integration-v1!",
+          salt: "dstorage:storageonly:integration:v1",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await storageOnlySdk.init();
+  });
+
+  afterAll(() => {
+    storageOnlySdk.destroy();
+  });
+
+  it("store() returns storageId with no chainRefId or chainProvider", async () => {
+    const result = await storageOnlySdk.store(CONTENT);
+    expect(result.storageId).toBeTruthy();
+    expect(result.chainRefId).toBeUndefined();
+    expect(result.chainProvider).toBeUndefined();
+  });
+
+  it("private data round-trips via retrieveByStorageId", async () => {
+    const { storageId, cryptoScheme } = await storageOnlySdk.store(CONTENT);
+    const result = await storageOnlySdk.retrieveByStorageId(
+      storageId,
+      cryptoScheme!,
+    );
+    expect(result.bytes).toEqual(CONTENT);
+  });
+
+  it("public data round-trips via retrieveByStorageId without a cryptoScheme", async () => {
+    const { storageId } = await storageOnlySdk.store(CONTENT, {
+      isPublic: true,
+    });
+    const result = await storageOnlySdk.retrieveByStorageId(storageId);
+    expect(result.bytes).toEqual(CONTENT);
+  });
+
+  it("retrieveByStorageId returns empty metadata (metadata is chain-only; not stored in the payload)", async () => {
+    const { storageId, cryptoScheme } = await storageOnlySdk.store(CONTENT, {
+      metadata: { source: "storage-only-integration", version: "1" },
+    });
+    const result = await storageOnlySdk.retrieveByStorageId(
+      storageId,
+      cryptoScheme!,
+    );
+    expect(result.metadata).toEqual({});
+  });
+
+  it("user-supplied tags survive retrieval even without a chain adapter", async () => {
+    const userTags = { category: "health", version: "v1" };
+    const { storageId, cryptoScheme } = await storageOnlySdk.store(CONTENT, {
+      tags: userTags,
+    });
+    const result = await storageOnlySdk.retrieveByStorageId(
+      storageId,
+      cryptoScheme!,
+    );
+    expect(result.tags).toMatchObject(userTags);
+  });
+
+  it("retrieveByRefId() throws with a helpful message when no chain adapter is configured", async () => {
+    await expect(storageOnlySdk.retrieveByRefId("any-ref")).rejects.toThrow(
+      "[dStorage] retrieveByRefId() requires a chain adapter.",
+    );
+  });
+
+  it("listReferences() throws when no chain adapter is configured", async () => {
+    await expect(storageOnlySdk.listReferences()).rejects.toThrow();
+  });
+});
+
+// ── Suite 6: BLAKE3 content-integrity with real Arweave (item 9) ───────────────
+//
+// Verifies that the X-Content-Hash BLAKE3 tag is written during upload and
+// verified during retrieve against a real arlocal node.
+
+describe.skipIf(!arlocalOk)(
+  "BLAKE3 content-integrity with real Arweave",
+  () => {
+    let storageAdapter: ArweaveLocalStorageAdapter;
+    const DATA = new TextEncoder().encode(
+      "blake3-integrity-integration-test-data",
+    );
+
+    beforeAll(async () => {
+      ({ adapter: storageAdapter } = await createStorageAdapter(
+        env.arlocalUrl,
+      ));
+    });
+
+    it("upload and retrieve round-trip succeeds with integrity check enabled (default)", async () => {
+      const { id } = await storageAdapter.store(DATA);
+      const { bytes } = await storageAdapter.retrieve(id);
+      expect(bytes).toEqual(DATA);
+    });
+
+    it("X-Content-Hash tag is present on the Arweave transaction", async () => {
+      const { id } = await storageAdapter.store(DATA);
+
+      // Fetch the raw transaction from arlocal; tags are base64url-encoded in the Arweave protocol.
+      const res = await fetch(`${env.arlocalUrl}/tx/${id}`);
+      const tx = (await res.json()) as {
+        tags: Array<{ name: string; value: string }>;
+      };
+
+      const { blake3 } = await import("@noble/hashes/blake3.js");
+      const hashHex = Array.from(blake3(DATA))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      const toB64url = (s: string) =>
+        btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+
+      const expectedName = toB64url("X-Content-Hash");
+      const expectedValue = toB64url(hashHex);
+
+      const hashTag = tx.tags.find((t) => t.name === expectedName);
+      expect(hashTag).toBeDefined();
+      expect(hashTag?.value).toBe(expectedValue);
+    });
+
+    it("retrieve with skipIntegrityCheck: true also returns correct bytes on clean data", async () => {
+      const { walletKey } =
+        await ArweaveLocalStorageAdapter.createWithTestWallet();
+      const noCheckAdapter = new ArweaveLocalStorageAdapter({
+        walletKey,
+        skipIntegrityCheck: true,
+      });
+      const { id } = await noCheckAdapter.store(DATA);
+      const { bytes } = await noCheckAdapter.retrieve(id);
+      expect(bytes).toEqual(DATA);
     });
   },
 );
