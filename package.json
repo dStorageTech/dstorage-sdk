@@ -23,10 +23,11 @@
     "clean": "find . -type d \\( -name node_modules -o -name dist \\) -prune -exec rm -rf {} +"
   },
   "overrides": {
-    "bn.js": "5.2.3"
+    "bn.js": "5.2.3",
+    "@midnight-ntwrk/ledger-v8": "8.1.0"
   },
   "dependencies": {
-    "@midnight-ntwrk/ledger-v8": "8.0.3",
+    "@midnight-ntwrk/ledger-v8": "8.1.0",
     "axios": "^1.16.0",
     "bn.js": "5.2.3",
     "pino": "^10.3.1",

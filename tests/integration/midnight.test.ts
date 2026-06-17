@@ -6,7 +6,7 @@
  *
  * ── Prerequisites ──────────────────────────────────────────────────────────────
  *   docker run -d --rm -p 1984:1984 textury/arlocal
- *   docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v
+ *   docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:8.1.0 -- midnight-proof-server -v
  *   INTEGRATION_SEED=<mnemonic or hex seed with NIGHT + DUST on preprod>
  *
  * See tests/integration/env.example for all available env vars.

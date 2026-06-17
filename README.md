@@ -99,7 +99,7 @@ Note: Any time you modify any of the packages, e.g. `packages/crypto` or `packag
 Follow the Midnight [documentation to start the local proof server](https://docs.midnight.network/getting-started/installation#run-the-proof-server).
 
 ```sh
-docker run -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v
+docker run -p 6300:6300 midnightntwrk/proof-server:8.1.0 -- midnight-proof-server -v
 ```
 
 ### 5. Run Arweave Local server
@@ -296,7 +296,7 @@ Start the required services:
 docker run -d --rm -p 1984:1984 textury/arlocal
 
 # Midnight Proof Server (required for the full-stack suite)
-docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v
+docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:8.1.0 -- midnight-proof-server -v
 ```
 
 #### Configuration
