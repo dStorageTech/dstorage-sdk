@@ -573,6 +573,83 @@ export class DStorage implements DStorageContext {
   }
 
   /**
+   * Rotate the encryption adapters protecting an existing reference without
+   * re-uploading the content.
+   *
+   * Useful when you want to:
+   * - Change a password: configure [newPassword, mnemonic] and call rotateKeys().
+   *   The mnemonic unwraps the old DEK, the new envelope is wrapped under both
+   *   new adapters, and the old password wrapper is dropped.
+   * - Add or remove adapters: any single adapter that matches a wrapper in the
+   *   existing key envelope can authorise the rotation. The resulting envelope
+   *   is wrapped under exactly the adapters currently configured on this SDK.
+   *
+   * The content in storage is not touched — only the on-chain key envelope is
+   * updated. writtenAt is preserved to reflect the original upload time.
+   */
+  async rotateKeys(refId: string): Promise<void> {
+    try {
+      this.assertConnected();
+      if (!this.config.chainAdapter) {
+        throw new DStorageError(
+          CoreErrorCode.ROTATE_KEYS_REQUIRES_CHAIN,
+          "[dStorage] rotateKeys requires a chain adapter.",
+        );
+      }
+      if (typeof this.config.chainAdapter.updateReference !== "function") {
+        throw new DStorageError(
+          CoreErrorCode.ROTATE_KEYS_NOT_SUPPORTED,
+          "[dStorage] rotateKeys is not supported by this chain adapter.",
+        );
+      }
+      if (this._encryptionProviders.length === 0) {
+        throw new DStorageError(
+          CoreErrorCode.ROTATE_KEYS_REQUIRES_ENCRYPTION,
+          "[dStorage] rotateKeys requires at least one encryption adapter.",
+        );
+      }
+
+      const ref = await this.config.chainAdapter.readReference(refId);
+      // Proves ownership — any adapter matching an old wrapper suffices.
+      const ownerSecret = await this._computeOwnerSecret(refId);
+      // Unwrap the existing DEK/ownerSeed to re-wrap under the new adapter set.
+      const seed = await this._unwrapDek(ref.keyEnvelope);
+      try {
+        const wrapperEntries = await Promise.all(
+          this._encryptionProviders.map(async (p) => ({
+            wrapKeyName: p.name,
+            ...(await p.wrapDek(seed)),
+          })),
+        );
+        const newKeyEnvelope = serializeKeyEnvelope(
+          buildKeyEnvelope(wrapperEntries),
+        );
+        // ownerSecret = HKDF(seed, rawStorageId). Since seed and storageId
+        // are unchanged, old and new ownerSecret are identical.
+        await this.config.chainAdapter.updateReference(
+          refId,
+          {
+            storageId: ref.storageId ?? "",
+            encryptionScheme: ref.encryptionScheme ?? "",
+            storageProvider: ref.storageProvider,
+            writtenAt: ref.writtenAt,
+            keyEnvelope: newKeyEnvelope,
+            ...(ref.encryptedMetadata !== undefined
+              ? { encryptedMetadata: ref.encryptedMetadata }
+              : {}),
+          },
+          ownerSecret,
+          ownerSecret,
+        );
+      } finally {
+        seed.fill(0);
+      }
+    } catch (err) {
+      wrapError(err);
+    }
+  }
+
+  /**
    * Retrieve and decrypt data by its storageId.
    * Decryption happens locally — the SDK never sends plaintext anywhere.
    *

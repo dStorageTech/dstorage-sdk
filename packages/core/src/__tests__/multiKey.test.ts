@@ -18,6 +18,7 @@ import {
   PasswordEncryptionAdapter,
   MnemonicEncryptionAdapter,
 } from "@dstorage/encryption";
+import { CoreErrorCode } from "../errors.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -461,5 +462,178 @@ describe("removeReference via any available KEK", () => {
     await expect(
       mnemonicSdk.removeReference(chainRefId),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ── rotateKeys — password rotation via mnemonic recovery ───────────────────────────
+
+const newPasswordProvider = () =>
+  new PasswordEncryptionAdapter({
+    password: "dstorage-NEW-passphrase-after-rotation!",
+    salt: "dstorage:multikey:test:v1",
+    params: { N: 1024, r: 8, p: 1 },
+  });
+
+describe("rotateKeys — password rotation via mnemonic recovery", () => {
+  it("mnemonic adapter alone can authorise rotateKeys to a new password", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+    });
+    await storeSdk.init();
+    const content = "secret record";
+    const { chainRefId } = await storeSdk.store(enc(content));
+
+    const rotateKeysSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [newPasswordProvider(), mnemonicProvider()],
+    });
+    await rotateKeysSdk.init();
+    await expect(rotateKeysSdk.rotateKeys(chainRefId)).resolves.toBeUndefined();
+
+    const newPasswordSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [newPasswordProvider()],
+    });
+    await newPasswordSdk.init();
+    const byNewPassword = await newPasswordSdk.retrieveByRefId(chainRefId);
+    expect(dec(byNewPassword.bytes)).toBe(content);
+
+    const mnemonicSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider()],
+    });
+    await mnemonicSdk.init();
+    const byMnemonic = await mnemonicSdk.retrieveByRefId(chainRefId);
+    expect(dec(byMnemonic.bytes)).toBe(content);
+  });
+
+  it("after rotateKeys: new password decrypts, old password cannot, mnemonic still can", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+    });
+    await storeSdk.init();
+    const content = "sensitive data";
+    const { chainRefId } = await storeSdk.store(enc(content));
+
+    const rotateKeysSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [newPasswordProvider(), mnemonicProvider()],
+    });
+    await rotateKeysSdk.init();
+    await rotateKeysSdk.rotateKeys(chainRefId);
+
+    const newPasswordSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [newPasswordProvider()],
+    });
+    await newPasswordSdk.init();
+    const byNewPassword = await newPasswordSdk.retrieveByRefId(chainRefId);
+    expect(dec(byNewPassword.bytes)).toBe(content);
+
+    const mnemonicSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider()],
+    });
+    await mnemonicSdk.init();
+    const byMnemonic = await mnemonicSdk.retrieveByRefId(chainRefId);
+    expect(dec(byMnemonic.bytes)).toBe(content);
+
+    const oldPasswordSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider()],
+    });
+    await oldPasswordSdk.init();
+    await expect(oldPasswordSdk.retrieveByRefId(chainRefId)).rejects.toThrow();
+  });
+
+  it("rotateKeys replaces the key envelope wrappers, content bytes are unchanged", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+    });
+    await storeSdk.init();
+    const content = "immutable content";
+    const { chainRefId } = await storeSdk.store(enc(content));
+
+    const rotateKeysSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [newPasswordProvider(), mnemonicProvider()],
+    });
+    await rotateKeysSdk.init();
+    await rotateKeysSdk.rotateKeys(chainRefId);
+
+    const ref = await adapters.chainAdapter.readReference(chainRefId);
+    const envelope = JSON.parse(ref!.keyEnvelope!);
+    expect(envelope.wrappers).toHaveLength(2);
+    expect(envelope.wrappers[0].wrapKeyName).toBe("password");
+    expect(envelope.wrappers[1].wrapKeyName).toBe("mnemonic");
+
+    const newPasswordSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [newPasswordProvider()],
+    });
+    await newPasswordSdk.init();
+    const byNewPassword = await newPasswordSdk.retrieveByRefId(chainRefId);
+    expect(dec(byNewPassword.bytes)).toBe(content);
+
+    const mnemonicSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider()],
+    });
+    await mnemonicSdk.init();
+    const byMnemonic = await mnemonicSdk.retrieveByRefId(chainRefId);
+    expect(dec(byMnemonic.bytes)).toBe(content);
+  });
+
+  it("throws ROTATE_KEYS_REQUIRES_CHAIN when no chain adapter is configured", async () => {
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      encryptionAdapters: [passwordProvider()],
+    });
+    await ds.init();
+    await expect(ds.rotateKeys("refId")).rejects.toMatchObject({
+      code: CoreErrorCode.ROTATE_KEYS_REQUIRES_CHAIN,
+    });
+  });
+
+  it("throws ROTATE_KEYS_REQUIRES_ENCRYPTION when no encryption adapters are configured", async () => {
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: new MockChainAdapter(),
+    });
+    await ds.init();
+    await expect(ds.rotateKeys("refId")).rejects.toMatchObject({
+      code: CoreErrorCode.ROTATE_KEYS_REQUIRES_ENCRYPTION,
+    });
+  });
+
+  it("throws when no configured adapter matches any wrapper in the old envelope", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider()],
+    });
+    await storeSdk.init();
+    const { chainRefId } = await storeSdk.store(enc("content"));
+
+    const unrelatedSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "completely-different-passphrase!",
+          salt: "dstorage:multikey:test:v1",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await unrelatedSdk.init();
+    await expect(unrelatedSdk.rotateKeys(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.UNWRAP_DEK_NO_WRAPPER_MATCHED,
+    });
   });
 });
