@@ -10,6 +10,7 @@ import { mlkemGenerateKeypairFromSeed } from "@dstorage/crypto";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { EncryptionErrorCode } from "../errors.js";
+import { CryptoErrorCode } from "@dstorage/crypto";
 
 // Use the "v1-lite" preset params for all functional tests.
 // N=65536 (64 MB) matches a real-world preset and exercises the full scrypt
@@ -78,7 +79,9 @@ describe("sensitivity", () => {
       params: FAST_PARAMS,
     });
     const wrapped = await a.wrapDek(dek);
-    await expect(b.unwrapDek(wrapped)).rejects.toThrow();
+    await expect(b.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 
   it("different password + same salt → cannot unwrap (different key)", async () => {
@@ -94,7 +97,9 @@ describe("sensitivity", () => {
       params: FAST_PARAMS,
     });
     const wrapped = await a.wrapDek(dek);
-    await expect(b.unwrapDek(wrapped)).rejects.toThrow();
+    await expect(b.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 });
 
@@ -319,7 +324,9 @@ describe("KDF presets", () => {
       params: { N: 2048, r: 8, p: 1 },
     });
     const wrapped = await a.wrapDek(dek);
-    await expect(b.unwrapDek(wrapped)).rejects.toThrow();
+    await expect(b.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 
   it("unknown preset string → throws at construction", () => {
@@ -664,7 +671,9 @@ describe("generatePqsPassword", () => {
       "test-context",
     );
     const wrappedRaw = await rawAdapter.wrapDek(dek);
-    await expect(keypairAdapter.unwrapDek(wrappedRaw)).rejects.toThrow();
+    await expect(keypairAdapter.unwrapDek(wrappedRaw)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 
   it("ML-KEM seed is derived via HKDF with info='dstorage:mlkem-seed:v1'", async () => {

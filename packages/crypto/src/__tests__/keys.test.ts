@@ -122,7 +122,9 @@ describe("KeyDeriver", () => {
   it("does not silently produce an all-zero seed for invalid hex input", async () => {
     const invalid = "G".repeat(64);
     const deriver = new KeyDeriver({ seedHex: invalid });
-    await expect(deriver.getSeed()).rejects.toThrow();
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.HEX_INVALID_CHARS,
+    });
   });
 
   it("getSeed() is deterministic for the same hex seed", async () => {

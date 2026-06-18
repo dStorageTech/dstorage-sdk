@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
-import { MockChainAdapter } from "@dstorage/chain";
+import { MockChainAdapter, ChainErrorCode } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
 
@@ -116,9 +116,10 @@ describe("wallet isolation", () => {
     // Reconstruct Bob's refId for Alice to try to retrieveByRefId
     const refId = `${storageId}::${chainRefId}`;
 
-    // Alice attempts to retrieveByRefId and decrypt Bob's data — should fail or produce garbage
-    // The decrypt will throw because the ciphertext was encrypted with Bob's key.
-    await expect(alice.retrieveByRefId(refId)).rejects.toThrow();
+    // Alice attempts to retrieveByRefId with a refId from Bob's separate chain adapter — not found.
+    await expect(alice.retrieveByRefId(refId)).rejects.toMatchObject({
+      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+    });
   });
 
   it("same address always derives the same encryption key", async () => {

@@ -205,7 +205,9 @@ describe("MockChainAdapter", () => {
       const adapter = new MockChainAdapter();
       const { refId } = await adapter.writeReference(uniqueRef("del4"));
       await adapter.removeReference!(refId);
-      await expect(adapter.readReference(refId)).rejects.toThrow();
+      await expect(adapter.readReference(refId)).rejects.toMatchObject({
+        code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+      });
     });
   });
 

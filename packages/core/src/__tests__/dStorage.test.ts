@@ -492,7 +492,9 @@ describe("public store and retrieve", () => {
     tampered[Math.floor(tampered.length / 2)] ^= 0xff;
     storage.set(storageId, tampered);
 
-    await expect(ds.retrieveByRefId(chainRefId!)).rejects.toThrow();
+    await expect(ds.retrieveByRefId(chainRefId!)).rejects.toMatchObject({
+      code: CoreErrorCode.DECRYPT_PAYLOAD_FAILED,
+    });
   });
 
   it("two users can both retrieve the same public content by refId", async () => {
@@ -803,12 +805,16 @@ describe("removeReference", () => {
     const ds = await makeInitedDStorage();
     const { chainRefId } = await ds.store(enc("to remove 2"));
     await ds.removeReference(chainRefId);
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow();
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+    });
   });
 
   it("throws when the refId is not found", async () => {
     const ds = await makeInitedDStorage();
-    await expect(ds.removeReference("ref_nonexistent")).rejects.toThrow();
+    await expect(ds.removeReference("ref_nonexistent")).rejects.toMatchObject({
+      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+    });
   });
 
   it("public store: removed ref no longer appears in listReferences", async () => {
@@ -827,7 +833,9 @@ describe("removeReference", () => {
       isPublic: true,
     });
     await ds.removeReference(chainRefId);
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow();
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+    });
   });
 });
 

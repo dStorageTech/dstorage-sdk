@@ -96,7 +96,9 @@ describe("wrapDek / unwrapDek roundtrip", () => {
     const b = KeypairEncryptionAdapter.generateKeypair(CTX);
 
     const wrapped = await a.adapter.wrapDek(TEST_DEK);
-    await expect(b.adapter.unwrapDek(wrapped)).rejects.toThrow();
+    await expect(b.adapter.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 });
 
@@ -274,7 +276,7 @@ describe("fromPassword", () => {
         "mlkem768",
         FAST_PARAMS,
       ),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: EncryptionErrorCode.PASSWORD_TOO_SHORT });
   });
 });
 

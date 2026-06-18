@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MockMidnightChainAdapter } from "../adapters/mockMidnight.js";
+import { ChainErrorCode } from "../errors.js";
 import type { ChainReferenceUpdate } from "../types.js";
 
 afterEach(() => vi.useRealTimers());
@@ -181,7 +182,9 @@ describe("MockMidnightChainAdapter.removeReference", () => {
     });
 
     const p = adapter.removeReference!("ref_nonexistent");
-    const assertion = expect(p).rejects.toThrow();
+    const assertion = expect(p).rejects.toMatchObject({
+      code: ChainErrorCode.MOCK_MIDNIGHT_REF_NOT_FOUND_REMOVE,
+    });
     await vi.runAllTimersAsync();
     await assertion;
   });
@@ -268,7 +271,9 @@ describe("MockMidnightChainAdapter.updateReference", () => {
     });
 
     const p = adapter.updateReference!("ref_nonexistent", makeUpdate());
-    const assertion = expect(p).rejects.toThrow();
+    const assertion = expect(p).rejects.toMatchObject({
+      code: ChainErrorCode.MOCK_MIDNIGHT_REF_NOT_FOUND_UPDATE,
+    });
     await vi.runAllTimersAsync();
     await assertion;
   });

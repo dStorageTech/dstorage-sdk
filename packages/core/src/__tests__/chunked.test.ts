@@ -27,6 +27,7 @@ import {
   type ChunkManifest,
 } from "../chunked.js";
 import type { DStorageConfig } from "../types.js";
+import { CoreErrorCode } from "../errors.js";
 
 // Must match the mocked value above.
 const CHUNK_SIZE = 512;
@@ -382,7 +383,7 @@ describe("security: chunk AAD binding catches gateway swap", () => {
 
     const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE * 3); // 3 chunks + 1 manifest
-    await ds.store(bytes);
+    const { chainRefId } = await ds.store(bytes);
 
     // uploadedIds = [chunk0, chunk1, chunk2, manifest]
     // Swap chunk0 and chunk1 bytes — same DEK, wrong position.
@@ -397,14 +398,11 @@ describe("security: chunk AAD binding catches gateway swap", () => {
     // Re-create ds from the same config so it uses the tampered storage.
     const ds2 = new DStorage(config);
     await ds2.init();
-    const refs = await ds2.listReferences();
-    const refId = refs[0]?.refId;
-    if (!refId) throw new Error("no reference found");
 
     // Retrieval must fail with an auth error, not return silently corrupted data.
-    await expect(ds2.retrieveByRefId(refId)).rejects.toThrow(
-      /Failed to decrypt chunk|decrypt/i,
-    );
+    await expect(ds2.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.DECRYPT_CHUNK_FAILED,
+    });
   });
 });
 
@@ -446,9 +444,9 @@ describe("security: manifest structural validation", () => {
       ...m,
       chunkCount: m.chunks.length + 1, // claim one more chunk than present
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
-      /declares.*chunks.*contains|contains.*entries/i,
-    );
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.MANIFEST_CHUNK_COUNT_MISMATCH,
+    });
   });
 
   it("rejects manifest with duplicate chunk index", async () => {
@@ -456,9 +454,9 @@ describe("security: manifest structural validation", () => {
       ...m,
       chunks: m.chunks.map((c, i) => (i === 1 ? { ...c, index: 0 } : c)),
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
-      /not contiguous|expected index/i,
-    );
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.MANIFEST_NOT_CONTIGUOUS,
+    });
   });
 
   it("rejects manifest with a missing chunk index (gap)", async () => {
@@ -469,9 +467,9 @@ describe("security: manifest structural validation", () => {
         i === m.chunks.length - 1 ? { ...c, index: c.index + 1 } : c,
       ),
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
-      /not contiguous|expected index/i,
-    );
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.MANIFEST_NOT_CONTIGUOUS,
+    });
   });
 
   it("rejects manifest where chunk data overflows declared totalSize", async () => {
@@ -479,9 +477,9 @@ describe("security: manifest structural validation", () => {
       ...m,
       totalSize: 1, // shrink so real chunks overflow it
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toThrow(
-      /overflows|Reassembled|totalSize/i,
-    );
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.CHUNK_OVERFLOWS_TOTAL_SIZE,
+    });
   });
 });
 

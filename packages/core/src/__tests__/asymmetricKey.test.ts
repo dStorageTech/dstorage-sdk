@@ -14,6 +14,7 @@ import {
   KeypairEncryptionAdapter,
   PasswordEncryptionAdapter,
 } from "@dstorage/encryption";
+import { CoreErrorCode } from "../errors.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -98,7 +99,9 @@ describe("ML-KEM upload and retrieve", () => {
     });
     await pkOnlySdk.init();
 
-    await expect(pkOnlySdk.retrieveByRefId(chainRefId)).rejects.toThrow();
+    await expect(pkOnlySdk.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
+    });
   });
 
   it("fromPassword: deterministic keypair enables round-trip", async () => {
@@ -246,6 +249,8 @@ describe("mixed symmetric + asymmetric envelope", () => {
     });
     await otherSdk.init();
 
-    await expect(otherSdk.retrieveByRefId(chainRefId)).rejects.toThrow();
+    await expect(otherSdk.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
+    });
   });
 });

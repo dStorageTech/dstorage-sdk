@@ -167,7 +167,14 @@ export async function decryptXChaCha(
 ): Promise<Uint8Array> {
   const nonce = base64ToBytes(payload.nonce);
   const ciphertext = base64ToBytes(payload.ciphertext);
-  return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
+  try {
+    return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
+  } catch {
+    throw new DStorageError(
+      CryptoErrorCode.XCHACHA_PAYLOAD_MALFORMED,
+      "[dStorage/crypto] XChaCha: authentication tag verification failed.",
+    );
+  }
 }
 
 // ── On-chain storageId encryption ─────────────────────────────────────────────
@@ -235,7 +242,14 @@ export async function decryptStorageIdXChaCha(
   const ctWithTag = new Uint8Array(ct.length + tag.length);
   ctWithTag.set(ct, 0);
   ctWithTag.set(tag, ct.length);
-  return xchacha20poly1305(key, nonce, STORAGE_ID_AAD).decrypt(ctWithTag);
+  try {
+    return xchacha20poly1305(key, nonce, STORAGE_ID_AAD).decrypt(ctWithTag);
+  } catch {
+    throw new DStorageError(
+      CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+      "[dStorage/crypto] XChaCha: storageId authentication tag verification failed.",
+    );
+  }
 }
 
 // ── Serialisation helpers ─────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import {
   serializeXChaChaPayload,
   deserializeXChaChaPayload,
 } from "../xchacha.js";
+import { CryptoErrorCode } from "../errors.js";
 
 // ── deriveSymmetricKeyFromSeed ─────────────────────────────────────────────────
 
@@ -108,7 +109,9 @@ describe("encryptXChaCha / decryptXChaCha", () => {
     );
     const data = new TextEncoder().encode("secret");
     const payload = await encryptXChaCha(key1, data);
-    await expect(decryptXChaCha(key2, payload)).rejects.toThrow();
+    await expect(decryptXChaCha(key2, payload)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_PAYLOAD_MALFORMED,
+    });
   });
 });
 
@@ -143,7 +146,9 @@ describe("encryptStorageIdXChaCha / decryptStorageIdXChaCha", () => {
   it("decryptStorageIdXChaCha throws on wrong length", async () => {
     const key = await deriveSymmetricKeyFromSeed(new Uint8Array(32).fill(0x13));
     const bad = new Uint8Array(60); // wrong size (not 72 bytes)
-    await expect(decryptStorageIdXChaCha(key, bad)).rejects.toThrow(/72/);
+    await expect(decryptStorageIdXChaCha(key, bad)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_INVALID_STORAGE_ID_LEN,
+    });
   });
 
   it("decryptStorageIdXChaCha throws with wrong key", async () => {
@@ -155,7 +160,11 @@ describe("encryptStorageIdXChaCha / decryptStorageIdXChaCha", () => {
     );
     const storageId = new Uint8Array(32).fill(0xaa);
     const encrypted = await encryptStorageIdXChaCha(key1, storageId);
-    await expect(decryptStorageIdXChaCha(key2, encrypted)).rejects.toThrow();
+    await expect(
+      decryptStorageIdXChaCha(key2, encrypted),
+    ).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 
   it("layout: nonce at offset 0..23, ciphertext at 24..55, tag at 56..71", async () => {

@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { DStorage } from "@dstorage/core";
+import { DStorage, CoreErrorCode } from "@dstorage/core";
 import { MockMidnightChainAdapter } from "@dstorage/chain";
 import {
   PasswordEncryptionAdapter,
@@ -47,6 +47,14 @@ const passwordProvider = () =>
 
 const mnemonicProvider = () =>
   new MnemonicEncryptionAdapter({ mnemonic: TEST_MNEMONIC });
+
+// Different password used to simulate a post-rotation credential.
+const newPasswordProvider = () =>
+  new PasswordEncryptionAdapter({
+    password: "dstorage-multikey-integration-ROTATED!",
+    salt: "dstorage:multikey:integration:v1",
+    params: { N: 1024, r: 8, p: 1 },
+  });
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
 
@@ -161,7 +169,11 @@ describe.skipIf(!arlocalOk)(
       });
       await unrelated.init();
 
-      await expect(unrelated.retrieveByRefId(chainRefId)).rejects.toThrow();
+      await expect(unrelated.retrieveByRefId(chainRefId)).rejects.toMatchObject(
+        {
+          code: CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
+        },
+      );
     });
 
     it("password-only SDK can removeReference a public store made with two providers", async () => {
@@ -210,6 +222,131 @@ describe.skipIf(!arlocalOk)(
       await expect(
         mnemonicSdk.removeReference(chainRefId),
       ).resolves.toBeUndefined();
+    });
+
+    // ── rotateKeys ──────────────────────────────────────────────────────────────
+
+    describe("rotateKeys", () => {
+      it("mnemonic authorises rotation to a new password; both new adapters can then retrieve", async () => {
+        const uploader = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+        });
+        await uploader.init();
+
+        const content = "integration: rotate password via mnemonic";
+        const { chainRefId } = await uploader.store(enc(content));
+
+        // Rotate: old password is absent — mnemonic unwraps the old DEK.
+        const rotateSdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [newPasswordProvider(), mnemonicProvider()],
+        });
+        await rotateSdk.init();
+        await rotateSdk.rotateKeys(chainRefId);
+
+        const newPasswordSdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [newPasswordProvider()],
+        });
+        await newPasswordSdk.init();
+        const byNewPassword = await newPasswordSdk.retrieveByRefId(chainRefId);
+        expect(dec(byNewPassword.bytes)).toBe(content);
+
+        const mnemonicSdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [mnemonicProvider()],
+        });
+        await mnemonicSdk.init();
+        const byMnemonic = await mnemonicSdk.retrieveByRefId(chainRefId);
+        expect(dec(byMnemonic.bytes)).toBe(content);
+      });
+
+      it("old password can no longer decrypt after rotation", async () => {
+        const uploader = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+        });
+        await uploader.init();
+
+        const { chainRefId } = await uploader.store(
+          enc("integration: old key locked out after rotation"),
+        );
+
+        const rotateSdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [newPasswordProvider(), mnemonicProvider()],
+        });
+        await rotateSdk.init();
+        await rotateSdk.rotateKeys(chainRefId);
+
+        const oldPasswordSdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [passwordProvider()],
+        });
+        await oldPasswordSdk.init();
+        await expect(
+          oldPasswordSdk.retrieveByRefId(chainRefId),
+        ).rejects.toMatchObject({
+          code: CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
+        });
+      });
+
+      it("rotateKeys with the same adapter set is idempotent — content still decrypts", async () => {
+        const sdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+        });
+        await sdk.init();
+
+        const content = "integration: idempotent rotate";
+        const { chainRefId } = await sdk.store(enc(content));
+
+        // rotateKeys with the exact same adapter set — envelope is re-wrapped
+        // but semantics are unchanged.
+        await sdk.rotateKeys(chainRefId);
+
+        const { bytes } = await sdk.retrieveByRefId(chainRefId);
+        expect(dec(bytes)).toBe(content);
+      });
+
+      it("unrelated adapter cannot authorise rotateKeys", async () => {
+        const storeSdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [passwordProvider()],
+        });
+        await storeSdk.init();
+        const { chainRefId } = await storeSdk.store(
+          enc("integration: unrelated adapter rejected"),
+        );
+
+        const unrelatedSdk = new DStorage({
+          storageAdapter,
+          chainAdapter,
+          encryptionAdapters: [
+            new PasswordEncryptionAdapter({
+              password: "completely-different-passphrase!",
+              salt: "dstorage:multikey:integration:v1",
+              params: { N: 1024, r: 8, p: 1 },
+            }),
+          ],
+        });
+        await unrelatedSdk.init();
+        await expect(unrelatedSdk.rotateKeys(chainRefId)).rejects.toMatchObject(
+          {
+            code: CoreErrorCode.UNWRAP_DEK_NO_WRAPPER_MATCHED,
+          },
+        );
+      });
     });
   },
 );

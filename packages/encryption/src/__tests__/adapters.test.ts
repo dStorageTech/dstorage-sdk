@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { MnemonicEncryptionAdapter } from "../MnemonicEncryptionAdapter.js";
 import { EncryptionErrorCode } from "../errors.js";
+import { CryptoErrorCode } from "@dstorage/crypto";
 
 // ---------------------------------------------------------------------------
 // MnemonicEncryptionAdapter
@@ -55,7 +56,9 @@ describe("MnemonicEncryptionAdapter", () => {
     const a = new MnemonicEncryptionAdapter({ mnemonic: MNEMONIC });
     const b = new MnemonicEncryptionAdapter({ mnemonic: MNEMONIC2 });
     const wrapped = await a.wrapDek(dek);
-    await expect(b.unwrapDek(wrapped)).rejects.toThrow();
+    await expect(b.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 });
 

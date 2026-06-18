@@ -3,6 +3,7 @@ import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
+import { CoreErrorCode } from "../errors.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -153,23 +154,26 @@ describe("storage-only: retrieveByStorageId", () => {
 describe("storage-only: chain-dependent methods throw", () => {
   it("retrieveByRefId() throws with a helpful message", async () => {
     const ds = await makeInited();
-    await expect(ds.retrieveByRefId("any-ref")).rejects.toThrow(
-      "[dStorage] retrieveByRefId() requires a chain adapter.",
-    );
+    await expect(ds.retrieveByRefId("any-ref")).rejects.toMatchObject({
+      code: CoreErrorCode.RETRIEVE_BY_REF_ID_REQUIRES_CHAIN,
+      message: expect.stringContaining("requires a chain adapter"),
+    });
   });
 
   it("listReferences() throws", async () => {
     const ds = await makeInited();
-    await expect(ds.listReferences()).rejects.toThrow(
-      "[dStorage] listReferences() requires a chain adapter.",
-    );
+    await expect(ds.listReferences()).rejects.toMatchObject({
+      code: CoreErrorCode.LIST_REFS_REQUIRES_CHAIN,
+      message: expect.stringContaining("requires a chain adapter"),
+    });
   });
 
   it("removeReference() throws", async () => {
     const ds = await makeInited();
-    await expect(ds.removeReference("any-ref")).rejects.toThrow(
-      "[dStorage] removeReference() requires a chain adapter.",
-    );
+    await expect(ds.removeReference("any-ref")).rejects.toMatchObject({
+      code: CoreErrorCode.REMOVE_REF_REQUIRES_CHAIN,
+      message: expect.stringContaining("requires a chain adapter"),
+    });
   });
 });
 

@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { DStorage } from "@dstorage/core";
+import { DStorage, CoreErrorCode } from "@dstorage/core";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
@@ -95,12 +95,17 @@ describe.skipIf(!arlocalOk)("storage-only mode with real Arweave", () => {
   });
 
   it("retrieveByRefId() throws with a helpful message when no chain adapter is configured", async () => {
-    await expect(storageOnlySdk.retrieveByRefId("any-ref")).rejects.toThrow(
-      "[dStorage] retrieveByRefId() requires a chain adapter.",
-    );
+    await expect(
+      storageOnlySdk.retrieveByRefId("any-ref"),
+    ).rejects.toMatchObject({
+      code: CoreErrorCode.RETRIEVE_BY_REF_ID_REQUIRES_CHAIN,
+      message: expect.stringContaining("requires a chain adapter"),
+    });
   });
 
   it("listReferences() throws when no chain adapter is configured", async () => {
-    await expect(storageOnlySdk.listReferences()).rejects.toThrow();
+    await expect(storageOnlySdk.listReferences()).rejects.toMatchObject({
+      code: CoreErrorCode.LIST_REFS_REQUIRES_CHAIN,
+    });
   });
 });

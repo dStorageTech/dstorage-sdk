@@ -126,7 +126,11 @@ describe("multi-key wrapping — upload with two providers", () => {
     });
     await unrelatedSdk.init();
 
-    await expect(unrelatedSdk.retrieveByRefId(chainRefId)).rejects.toThrow();
+    await expect(
+      unrelatedSdk.retrieveByRefId(chainRefId),
+    ).rejects.toMatchObject({
+      code: CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
+    });
   });
 
   it("both providers independently decrypt the same bytes", async () => {
@@ -190,7 +194,11 @@ describe("multi-key wrapping — upload with two providers", () => {
     });
     await mnemonicSdk.init();
 
-    await expect(mnemonicSdk.retrieveByRefId(chainRefId)).rejects.toThrow();
+    await expect(mnemonicSdk.retrieveByRefId(chainRefId)).rejects.toMatchObject(
+      {
+        code: CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
+      },
+    );
   });
 
   it("multiple uploads each get independent DEKs (different envelopes)", async () => {
@@ -547,7 +555,11 @@ describe("rotateKeys — password rotation via mnemonic recovery", () => {
       encryptionAdapters: [passwordProvider()],
     });
     await oldPasswordSdk.init();
-    await expect(oldPasswordSdk.retrieveByRefId(chainRefId)).rejects.toThrow();
+    await expect(
+      oldPasswordSdk.retrieveByRefId(chainRefId),
+    ).rejects.toMatchObject({
+      code: CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
+    });
   });
 
   it("rotateKeys replaces the key envelope wrappers, content bytes are unchanged", async () => {

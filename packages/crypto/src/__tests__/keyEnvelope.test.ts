@@ -113,7 +113,9 @@ describe("wrapKey / unwrapKey", () => {
     const kek = new Uint8Array(32).fill(0x44);
     const wrongKek = new Uint8Array(32).fill(0x55);
     const wrapped = await wrapKey(dek, kek);
-    await expect(unwrapKey(wrapped, wrongKek)).rejects.toThrow();
+    await expect(unwrapKey(wrapped, wrongKek)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
   });
 });
 
