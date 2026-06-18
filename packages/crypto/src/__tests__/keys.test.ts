@@ -132,4 +132,33 @@ describe("KeyDeriver", () => {
     const b = await new KeyDeriver({ seedHex: SEED_HEX }).getSeed();
     expect(a).toEqual(b);
   });
+
+  // Known-answer test: verifies PBKDF2-HMAC-SHA512 output matches the BIP-39
+  // standard. Guards against regressions when swapping the underlying crypto
+  // implementation (bip39 → @scure/bip39 → Web Crypto API).
+  // Mnemonic shared with encryption and integration test suites.
+  it("getSeed() produces the correct BIP-39 PBKDF2 output for a known mnemonic", async () => {
+    const MNEMONIC =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon " +
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon " +
+      "abandon abandon abandon abandon abandon art";
+    const EXPECTED_HEX =
+      "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70" +
+      "5489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840";
+    const seed = await new KeyDeriver({ mnemonic: MNEMONIC }).getSeed();
+    const hex = Array.from(seed)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    expect(hex).toBe(EXPECTED_HEX);
+  });
+
+  it("getSeed() is deterministic for the same mnemonic", async () => {
+    const MNEMONIC =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon " +
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon " +
+      "abandon abandon abandon abandon abandon art";
+    const a = await new KeyDeriver({ mnemonic: MNEMONIC }).getSeed();
+    const b = await new KeyDeriver({ mnemonic: MNEMONIC }).getSeed();
+    expect(a).toEqual(b);
+  });
 });

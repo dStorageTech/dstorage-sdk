@@ -8,7 +8,34 @@
  *   HKDF CryptoKey, used to wrap per-upload random DEKs.
  */
 
+import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { DStorageError, CryptoErrorCode } from "./errors.js";
+
+const ENGLISH_WORD_SET = new Set(wordlist);
+
+// BIP-39: PBKDF2-HMAC-SHA512, 2048 iterations, 64-byte output.
+// Uses Web Crypto API — no @noble/hashes dep required.
+async function mnemonicToSeed(mnemonic: string): Promise<Uint8Array> {
+  const enc = new TextEncoder();
+  const key = await globalThis.crypto.subtle.importKey(
+    "raw",
+    enc.encode(mnemonic.normalize("NFKD")),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await globalThis.crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-512",
+      salt: enc.encode("mnemonic".normalize("NFKD")),
+      iterations: 2048,
+    },
+    key,
+    512,
+  );
+  return new Uint8Array(bits);
+}
 
 // ── KeyDeriver ────────────────────────────────────────────────────────────────
 
@@ -61,15 +88,14 @@ export class KeyDeriver {
     }
 
     // mnemonic path — validate then convert
-    const bip39 = await import("bip39");
-    if (!bip39.validateMnemonic(this.input.mnemonic!)) {
+    const words = this.input.mnemonic!.trim().split(/\s+/);
+    if (!words.every((w) => ENGLISH_WORD_SET.has(w))) {
       throw new DStorageError(
         CryptoErrorCode.MNEMONIC_INVALID,
         "[dStorage/crypto] Invalid BIP-39 mnemonic phrase.",
       );
     }
-    const buf = await bip39.mnemonicToSeed(this.input.mnemonic!);
-    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    return mnemonicToSeed(this.input.mnemonic!);
   }
 }
 
