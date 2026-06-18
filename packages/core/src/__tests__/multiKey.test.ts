@@ -321,6 +321,96 @@ describe("public upload — ownerSeed envelope", () => {
   });
 });
 
+// ── update — adding an encryption adapter ─────────────────────────────────────
+
+describe("update — adding an encryption adapter", () => {
+  it("update with an added mnemonic adapter expands the key envelope to two wrappers", async () => {
+    const adapters = sharedAdapters();
+
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider()],
+    });
+    await storeSdk.init();
+    const { chainRefId } = await storeSdk.store(enc("v1 content"));
+
+    const v1Ref = await adapters.chainAdapter.readReference(chainRefId);
+    const v1Envelope = JSON.parse(v1Ref!.keyEnvelope!);
+    expect(v1Envelope.wrappers).toHaveLength(1);
+    expect(v1Envelope.wrappers[0].wrapKeyName).toBe("password");
+
+    const updateSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+    });
+    await updateSdk.init();
+    const result = await updateSdk.update(chainRefId, enc("v2 content"));
+
+    expect(result.chainRefId).toBe(chainRefId);
+
+    const v2Ref = await adapters.chainAdapter.readReference(chainRefId);
+    const v2Envelope = JSON.parse(v2Ref!.keyEnvelope!);
+    expect(v2Envelope.wrappers).toHaveLength(2);
+    expect(v2Envelope.wrappers[0].wrapKeyName).toBe("password");
+    expect(v2Envelope.wrappers[1].wrapKeyName).toBe("mnemonic");
+  });
+
+  it("after update both adapters independently retrieve v2 content", async () => {
+    const adapters = sharedAdapters();
+
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider()],
+    });
+    await storeSdk.init();
+    const { chainRefId } = await storeSdk.store(enc("v1 content"));
+
+    const updateSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+    });
+    await updateSdk.init();
+    const v2 = enc("v2 content — updated");
+    await updateSdk.update(chainRefId, v2);
+
+    const passwordSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider()],
+    });
+    await passwordSdk.init();
+    const byPassword = await passwordSdk.retrieveByRefId(chainRefId);
+    expect(dec(byPassword.bytes)).toBe("v2 content — updated");
+
+    const mnemonicSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider()],
+    });
+    await mnemonicSdk.init();
+    const byMnemonic = await mnemonicSdk.retrieveByRefId(chainRefId);
+    expect(byMnemonic.bytes).toEqual(v2);
+  });
+
+  it("password-only SDK can update a reference it originally stored, adding a mnemonic adapter", async () => {
+    const adapters = sharedAdapters();
+
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider()],
+    });
+    await storeSdk.init();
+    const { chainRefId } = await storeSdk.store(enc("v1 content"));
+
+    const updateSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider(), mnemonicProvider()],
+    });
+    await updateSdk.init();
+    const result = await updateSdk.update(chainRefId, enc("v2 content"));
+
+    expect(result.chainRefId).toBe(chainRefId);
+  });
+});
+
 // ── removeReference via any KEK ───────────────────────────────────────────────
 
 describe("removeReference via any available KEK", () => {
