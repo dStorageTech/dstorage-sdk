@@ -55,17 +55,10 @@ export type ProvableCircuits<PS> = {
 }
 
 export type PureCircuits = {
-  computeOwnerCommitment(secret_0: Uint8Array,
-                         nonce_0: Uint8Array,
-                         instanceSalt_0: Uint8Array): Uint8Array;
   deriveRefId(refCounter_0: Uint8Array, instanceSalt_0: Uint8Array): Uint8Array;
 }
 
 export type Circuits<PS> = {
-  computeOwnerCommitment(context: __compactRuntime.CircuitContext<PS>,
-                         secret_0: Uint8Array,
-                         nonce_0: Uint8Array,
-                         instanceSalt_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
   deriveRefId(context: __compactRuntime.CircuitContext<PS>,
               refCounter_0: Uint8Array,
               instanceSalt_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;

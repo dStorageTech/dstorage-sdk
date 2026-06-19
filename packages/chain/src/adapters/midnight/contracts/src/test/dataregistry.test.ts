@@ -544,7 +544,7 @@ describe("DataRegistry contract", () => {
       );
 
       // The contract uses refId as the nonce in computeOwnerCommitment
-      const expectedCommitment = pureCircuits.computeOwnerCommitment(
+      const expectedCommitment = simulator.computeOwnerCommitment(
         ownerSecret,
         refId,
         instanceSalt,
@@ -589,12 +589,12 @@ describe("DataRegistry contract", () => {
       );
 
       // Verify both commitments match what computeOwnerCommitment produces for each secret
-      const ownerCommitment = pureCircuits.computeOwnerCommitment(
+      const ownerCommitment = simulator.computeOwnerCommitment(
         ownerSecret,
         refId1,
         instanceSalt,
       );
-      const otherCommitment = pureCircuits.computeOwnerCommitment(
+      const otherCommitment = simulator.computeOwnerCommitment(
         otherSecret,
         refId2,
         instanceSalt,

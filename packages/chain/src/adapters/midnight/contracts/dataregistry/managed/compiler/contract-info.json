@@ -4,38 +4,6 @@
   "runtime-version": "0.16.0",
   "circuits": [
     {
-      "name": "computeOwnerCommitment",
-      "pure": true,
-      "proof": false,
-      "arguments": [
-        {
-          "name": "secret",
-          "type": {
-            "type-name": "Bytes",
-            "length": 32
-          }
-        },
-        {
-          "name": "nonce",
-          "type": {
-            "type-name": "Bytes",
-            "length": 32
-          }
-        },
-        {
-          "name": "instanceSalt",
-          "type": {
-            "type-name": "Bytes",
-            "length": 32
-          }
-        }
-      ],
-      "result-type": {
-        "type-name": "Bytes",
-        "length": 32
-      }
-    },
-    {
       "name": "deriveRefId",
       "pure": true,
       "proof": false,

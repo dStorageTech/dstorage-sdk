@@ -49,9 +49,9 @@ const _descriptor_5 = new _ContractAddress_0();
 
 const _descriptor_6 = new __compactRuntime.CompactTypeUnsignedInteger(65535n, 2);
 
-const _descriptor_7 = new __compactRuntime.CompactTypeVector(3, _descriptor_0);
+const _descriptor_7 = new __compactRuntime.CompactTypeVector(4, _descriptor_0);
 
-const _descriptor_8 = new __compactRuntime.CompactTypeVector(4, _descriptor_0);
+const _descriptor_8 = new __compactRuntime.CompactTypeVector(3, _descriptor_0);
 
 class _Either_0 {
   alignment() {
@@ -93,9 +93,6 @@ export class Contract {
     }
     this.witnesses = witnesses_0;
     this.circuits = {
-      computeOwnerCommitment(context, ...args_1) {
-        return { result: pureCircuits.computeOwnerCommitment(...args_1), context };
-      },
       deriveRefId(context, ...args_1) {
         return { result: pureCircuits.deriveRefId(...args_1), context };
       },
@@ -378,7 +375,7 @@ export class Contract {
     if (!(result_0.buffer instanceof ArrayBuffer && result_0.BYTES_PER_ELEMENT === 1 && result_0.length === 32)) {
       __compactRuntime.typeError('newOwnerSecret',
                                  'return value',
-                                 'DataRegistry.compact line 27 char 1',
+                                 'DataRegistry.compact line 28 char 1',
                                  'Bytes<32>',
                                  result_0)
     }
@@ -389,13 +386,13 @@ export class Contract {
     return result_0;
   }
   _computeOwnerCommitment_0(secret_0, nonce_0, instanceSalt_0) {
-    return this._persistentHash_0([new Uint8Array([100, 115, 116, 111, 114, 97, 103, 101, 58, 111, 119, 110, 101, 114, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    return this._persistentHash_1([new Uint8Array([100, 115, 116, 111, 114, 97, 103, 101, 58, 111, 119, 110, 101, 114, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
                                    secret_0,
                                    nonce_0,
                                    instanceSalt_0]);
   }
   _deriveRefId_0(refCounter_0, instanceSalt_0) {
-    return this._persistentHash_1([new Uint8Array([100, 115, 116, 111, 114, 97, 103, 101, 58, 114, 101, 102, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    return this._persistentHash_0([new Uint8Array([100, 115, 116, 111, 114, 97, 103, 101, 58, 114, 101, 102, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
                                    refCounter_0,
                                    instanceSalt_0]);
   }
@@ -754,7 +751,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('member',
                                      'argument 1',
-                                     'DataRegistry.compact line 70 char 1',
+                                     'DataRegistry.compact line 71 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -783,7 +780,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('lookup',
                                      'argument 1',
-                                     'DataRegistry.compact line 70 char 1',
+                                     'DataRegistry.compact line 71 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -851,38 +848,6 @@ const _dummyContract = new Contract({
   ownerSecret: (...args) => undefined, newOwnerSecret: (...args) => undefined
 });
 export const pureCircuits = {
-  computeOwnerCommitment: (...args_0) => {
-    if (args_0.length !== 3) {
-      throw new __compactRuntime.CompactError(`computeOwnerCommitment: expected 3 arguments (as invoked from Typescript), received ${args_0.length}`);
-    }
-    const secret_0 = args_0[0];
-    const nonce_0 = args_0[1];
-    const instanceSalt_0 = args_0[2];
-    if (!(secret_0.buffer instanceof ArrayBuffer && secret_0.BYTES_PER_ELEMENT === 1 && secret_0.length === 32)) {
-      __compactRuntime.typeError('computeOwnerCommitment',
-                                 'argument 1',
-                                 'DataRegistry.compact line 122 char 1',
-                                 'Bytes<32>',
-                                 secret_0)
-    }
-    if (!(nonce_0.buffer instanceof ArrayBuffer && nonce_0.BYTES_PER_ELEMENT === 1 && nonce_0.length === 32)) {
-      __compactRuntime.typeError('computeOwnerCommitment',
-                                 'argument 2',
-                                 'DataRegistry.compact line 122 char 1',
-                                 'Bytes<32>',
-                                 nonce_0)
-    }
-    if (!(instanceSalt_0.buffer instanceof ArrayBuffer && instanceSalt_0.BYTES_PER_ELEMENT === 1 && instanceSalt_0.length === 32)) {
-      __compactRuntime.typeError('computeOwnerCommitment',
-                                 'argument 3',
-                                 'DataRegistry.compact line 122 char 1',
-                                 'Bytes<32>',
-                                 instanceSalt_0)
-    }
-    return _dummyContract._computeOwnerCommitment_0(secret_0,
-                                                    nonce_0,
-                                                    instanceSalt_0);
-  },
   deriveRefId: (...args_0) => {
     if (args_0.length !== 2) {
       throw new __compactRuntime.CompactError(`deriveRefId: expected 2 arguments (as invoked from Typescript), received ${args_0.length}`);

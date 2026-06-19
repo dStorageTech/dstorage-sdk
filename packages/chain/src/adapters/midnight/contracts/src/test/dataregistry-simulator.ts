@@ -104,6 +104,19 @@ export class DataRegistrySimulator {
     return res.result;
   }
 
+  public computeOwnerCommitment(
+    secret: Uint8Array,
+    nonce: Uint8Array,
+    instanceSalt: Uint8Array,
+  ): Uint8Array {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (this.contract as any)._computeOwnerCommitment_0(
+      secret,
+      nonce,
+      instanceSalt,
+    );
+  }
+
   public updateReference(
     refId: Uint8Array,
     storageId: string,

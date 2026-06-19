@@ -9,7 +9,7 @@
 //
 // Circuits:
 //   deriveRefId          — deterministic helper to derive a refId from counter + instance salt
-//   computeOwnerCommitment — pure helper: hash ownerSecret into a shielded commitment
+//   computeOwnerCommitment — internal helper: hash ownerSecret into a shielded commitment
 //   storeReference       — record a new storage reference, returns a unique refId
 //   removeReference      — delete a reference; caller must prove ownership via ownerSecret witness
 //   updateReference      — update mutable fields; caller must prove ownership via ownerSecret witness
@@ -24,6 +24,7 @@ import CompactStandardLibrary;
 // before calling any impure circuit, then stores it in the private state so
 // this function can read it during ZK proof generation.
 witness ownerSecret(): Bytes<32>;
+
 witness newOwnerSecret(): Bytes<32>;
 
 // A single storage reference entry stored on-chain.
@@ -111,19 +112,18 @@ constructor() {
 //
 // Parameters:
 // - `secret`: caller-supplied private secret (Bytes<32>). In impure circuits this
-//   is provided by the ownerSecret() witness. Exposed as a pure circuit parameter
-//   so client code can verify ownership by supplying the derived secret.
+//   is provided by the ownerSecret() witness.
 // - `nonce`: to avoid linkability across different entries.
 // - `instanceSalt`: contract instance-specific salt (e.g. `kernel.self().bytes`)
 //   to avoid cross-contract collisions.
 //
 // Returns: computed commitment (Bytes<32>), disclosed for ledger storage.
 //
-export pure circuit computeOwnerCommitment(
-                      secret: Bytes<32>,
-                      nonce: Bytes<32>,
-                      instanceSalt: Bytes<32>,
-                      ): Bytes<32> {
+pure circuit computeOwnerCommitment(
+               secret: Bytes<32>,
+               nonce: Bytes<32>,
+               instanceSalt: Bytes<32>,
+               ): Bytes<32> {
   return disclose(persistentHash<Vector<4, Bytes<32>>>(
                     [pad(32, "dstorage:owner:"), secret, nonce, instanceSalt]
                     ));
