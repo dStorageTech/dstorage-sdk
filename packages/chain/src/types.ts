@@ -56,7 +56,11 @@ export interface ChainReference {
   encryptionScheme?: EncryptionScheme;
   /** Storage network used */
   storageProvider: string;
-  /** Timestamp of when the reference was written on-chain */
+  /**
+   * Caller-supplied write timestamp (milliseconds since Unix epoch).
+   * The on-chain contract stores whatever the caller provides — this value is NOT validated
+   * against block time and must NOT be trusted for security-critical ordering decisions.
+   */
   writtenAt: number;
   /**
    * JSON-encoded KeyEnvelope containing the wrapped DEK (private) or ownerSeed (public).
@@ -87,7 +91,10 @@ export interface ChainWriteResult {
   provider: ChainProviderName;
   /** Block or ledger position (if available) */
   blockHeight?: number;
-  /** Timestamp of when the reference was written on-chain */
+  /**
+   * Caller-supplied write timestamp echoed back from the on-chain entry (milliseconds since epoch).
+   * Reflects what the SDK passed at submission time, not a chain-verified block timestamp.
+   */
   writtenAt: number;
   /**
    * Payment receipt for the chain transaction fee, when the adapter handles
@@ -149,6 +156,10 @@ export interface ChainReferenceUpdate {
   storageId: string;
   encryptionScheme: EncryptionScheme;
   storageProvider: string;
+  /**
+   * Caller-supplied write timestamp (milliseconds since Unix epoch).
+   * Stored verbatim by the contract — not validated against block time.
+   */
   writtenAt: number;
   /** JSON-encoded KeyEnvelope wrapping the DEK (private) or ownerSeed (public). Always a non-empty string. */
   keyEnvelope: string;

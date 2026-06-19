@@ -110,14 +110,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 176 char 1',
+                                     'DataRegistry.compact line 178 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 5 (argument 6 as invoked from Typescript)',
-                                     'DataRegistry.compact line 176 char 1',
+                                     'DataRegistry.compact line 178 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
@@ -151,14 +151,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 214 char 1',
+                                     'DataRegistry.compact line 216 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 214 char 1',
+                                     'DataRegistry.compact line 216 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
@@ -193,21 +193,21 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 241 char 1',
+                                     'DataRegistry.compact line 243 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 241 char 1',
+                                     'DataRegistry.compact line 243 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 6 (argument 7 as invoked from Typescript)',
-                                     'DataRegistry.compact line 241 char 1',
+                                     'DataRegistry.compact line 243 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
@@ -458,7 +458,7 @@ export class Contract {
                                                                                                                                                                    alignment: _descriptor_11.alignment() } }] } },
                                                                                                                                         { popeq: { cached: true,
                                                                                                                                                    result: undefined } }]).value),
-                                                                             'DataRegistry.compact line 184 char 29'),
+                                                                             'DataRegistry.compact line 186 char 29'),
                                         _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                   partialProofData,
                                                                                                   [
@@ -751,7 +751,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('member',
                                      'argument 1',
-                                     'DataRegistry.compact line 71 char 1',
+                                     'DataRegistry.compact line 73 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -780,7 +780,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('lookup',
                                      'argument 1',
-                                     'DataRegistry.compact line 71 char 1',
+                                     'DataRegistry.compact line 73 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -857,14 +857,14 @@ export const pureCircuits = {
     if (!(refCounter_0.buffer instanceof ArrayBuffer && refCounter_0.BYTES_PER_ELEMENT === 1 && refCounter_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 1',
-                                 'DataRegistry.compact line 141 char 1',
+                                 'DataRegistry.compact line 143 char 1',
                                  'Bytes<32>',
                                  refCounter_0)
     }
     if (!(instanceSalt_0.buffer instanceof ArrayBuffer && instanceSalt_0.BYTES_PER_ELEMENT === 1 && instanceSalt_0.length === 32)) {
       __compactRuntime.typeError('deriveRefId',
                                  'argument 2',
-                                 'DataRegistry.compact line 141 char 1',
+                                 'DataRegistry.compact line 143 char 1',
                                  'Bytes<32>',
                                  instanceSalt_0)
     }
