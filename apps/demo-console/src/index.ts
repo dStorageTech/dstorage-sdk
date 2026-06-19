@@ -307,7 +307,7 @@ async function main(): Promise<void> {
         network: networkName,
         walletMode: "provider",
         walletProvider: walletProvider!,
-        privateStatePassword: derivePrivateStatePassword(seedHex),
+        privateStatePassword: await derivePrivateStatePassword(seedHex),
         ...(contractAddressInput
           ? { contractAddress: contractAddressInput }
           : {}),

@@ -19,6 +19,12 @@ export const createInMemoryPrivateStateProvider = <
 
   return {
     set(key: PSI, state: PS): Promise<void> {
+      const existing = record.get(key);
+      if (existing != null && typeof existing === "object") {
+        for (const v of Object.values(existing as object)) {
+          if (v instanceof Uint8Array) v.fill(0);
+        }
+      }
       record.set(key, state);
       return Promise.resolve();
     },

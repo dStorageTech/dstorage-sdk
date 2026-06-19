@@ -10,6 +10,7 @@ import {
   MidnightWalletProvider,
   type EnvironmentConfiguration,
 } from "./wallet-provider.js";
+import { bytesToBase64url } from "@dstorage/crypto";
 import { type UnshieldedTokenType } from "@midnight-ntwrk/ledger-v8";
 import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
@@ -24,21 +25,43 @@ export type { MidnightWalletProvider, EnvironmentConfiguration };
 /**
  * Derives a deterministic LevelDB encryption password from the wallet seed hex.
  *
- * The password policy requires at least 3 of 4 character classes (uppercase,
- * lowercase, digits, special characters). A raw hex seed only contains lowercase
- * letters + digits (2 classes), so we prefix with "Aa1!" which adds uppercase
- * and a special character, guaranteeing all 4 classes are present.
- * The prefix is fixed — the same seed always produces the same password.
+ * Uses HKDF-SHA-256 to derive a 32-byte key from the seed, then encodes it as
+ * base64url and prepends "Aa1!" to satisfy the wallet SDK password policy
+ * (at least 3 of 4 character classes: uppercase, lowercase, digits, special).
+ *
+ * The HKDF step is one-way: the seed cannot be recovered from the password even
+ * if the password is observed (e.g. in a memory dump or log).
  */
-export function derivePrivateStatePassword(
+export async function derivePrivateStatePassword(
   seedHex: string | undefined,
-): string {
+): Promise<string> {
   if (!seedHex) {
     throw new Error(
       "Cannot derive private state password: no wallet seed available.",
     );
   }
-  return "Aa1!" + seedHex;
+  const seedBytes = Uint8Array.from(
+    seedHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)),
+  );
+  const keyMaterial = await globalThis.crypto.subtle.importKey(
+    "raw",
+    seedBytes,
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
+  const enc = new TextEncoder();
+  const bits = await globalThis.crypto.subtle.deriveBits(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: enc.encode("dstorage:leveldb-password:v1"),
+    },
+    keyMaterial,
+    256,
+  );
+  return "Aa1!" + bytesToBase64url(new Uint8Array(bits));
 }
 
 // ── Seed resolution ────────────────────────────────────────────────────────────
@@ -152,7 +175,7 @@ export const syncWallet = (
         const unshieldedBalances = state.unshielded.balances || {};
         const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
 
-        console.log(
+        console.debug(
           `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Unshielded: ${JSON.stringify(unshieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Dust: ${dustBalances}`,
         );
       }),
