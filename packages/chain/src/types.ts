@@ -153,6 +153,14 @@ export interface DataReferenceSummary {
  * The ownerCommitment is updated separately via the newOwnerSecret parameter on updateReference.
  */
 export interface ChainReferenceUpdate {
+  /**
+   * Storage content identifier to replace the existing one. Stored verbatim on-chain without
+   * format validation — passing a malformed value permanently bricks the reference (silent
+   * decryption failure on read). Callers must ensure the format matches the storage provider
+   * and encryptionScheme in use (e.g. 43-char base64url for plain Arweave, 96-char base64url
+   * for xchacha20poly1305-v1 encrypted). Only the entry owner can trigger this, so the risk
+   * is self-inflicted data loss.
+   */
   storageId: string;
   encryptionScheme: EncryptionScheme;
   storageProvider: string;
