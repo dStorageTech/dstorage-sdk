@@ -230,6 +230,31 @@ describe("MidnightChainAdapter", () => {
           }),
       ).not.toThrow();
     });
+
+    it("connector mode accepts allowWalletProofServer: true without throwing", () => {
+      expect(
+        () =>
+          new MidnightChainAdapter({
+            contractAddress: VALID_ADDR,
+            network: MOCK_NETWORK,
+            walletMode: "connector",
+            zkConfigBaseUrl: "http://localhost:3000",
+            allowWalletProofServer: true,
+          }),
+      ).not.toThrow();
+    });
+
+    it("connector mode defaults allowWalletProofServer to false (no throw)", () => {
+      expect(
+        () =>
+          new MidnightChainAdapter({
+            contractAddress: VALID_ADDR,
+            network: MOCK_NETWORK,
+            walletMode: "connector",
+            zkConfigBaseUrl: "http://localhost:3000",
+          }),
+      ).not.toThrow();
+    });
   });
 
   // ── Runtime behaviour when wallet is not initialized ─────────────────────

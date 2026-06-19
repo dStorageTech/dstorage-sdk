@@ -199,10 +199,33 @@ export type MidnightChainAdapterConfig = BaseConfig &
          * Required for write operations (storeReference, etc.) in connector mode.
          */
         zkConfigBaseUrl?: string;
+        /**
+         * Allow a proof server URL supplied by the wallet extension to override
+         * `proofServerEndpoint`. Default: `false`.
+         *
+         * When `false` (default): if the wallet returns a `proverServerUri` that differs
+         * from the configured endpoint, it is logged as a warning and ignored — the
+         * developer-configured endpoint is always used.
+         *
+         * Set to `true` only when you trust the connected wallet extension to supply a safe
+         * proof server (e.g. Midnight Lace in a controlled deployment). A compromised wallet
+         * extension can redirect ZK witness inputs — including the ownerSecret — to an
+         * attacker-controlled server, allowing reference takeover or deletion.
+         */
+        allowWalletProofServer?: boolean;
       }
   );
 
 // ── Browser-safe byte/encoding helpers ────────────────────────────────────────
+
+function isHttpOrHttps(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 /** Convert a Uint8Array to a lowercase hex string (browser-safe, no Buffer). */
 function uint8ArrayToHex(bytes: Uint8Array): string {
@@ -232,6 +255,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   private readonly walletMode: "connector" | "provider";
   private readonly connectorName: string | null;
+  private readonly allowWalletProofServer: boolean;
   private readonly logger: ChainAdapterLogger | undefined;
 
   private _contractAddress: string | undefined;
@@ -293,6 +317,15 @@ export class MidnightChainAdapter implements ChainAdapter {
             >
           ).connectorName ?? null)
         : null;
+    this.allowWalletProofServer =
+      walletMode === "connector"
+        ? ((
+            config as Extract<
+              MidnightChainAdapterConfig,
+              { walletMode: "connector" }
+            >
+          ).allowWalletProofServer ?? false)
+        : false;
 
     this._contractAddress = config.contractAddress;
     this._zkArtifactsPath =
@@ -981,6 +1014,13 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
   }
 
+  /**
+   * Update the mutable fields of an existing reference.
+   *
+   * `update.storageId` is stored verbatim on-chain without format validation. Passing a
+   * malformed storageId permanently bricks the reference (silent decryption failure on read).
+   * Validate the format against the storage provider before calling this method.
+   */
   async updateReference(
     refId: string,
     update: ChainReferenceUpdate,
@@ -1162,8 +1202,34 @@ export class MidnightChainAdapter implements ChainAdapter {
         walletConfig.indexerUri ?? this.config.indexerHttp;
       this.connectorIndexerWs =
         walletConfig.indexerWsUri ?? this.config.indexerWs ?? null;
-      this.connectorProofServer =
-        walletConfig.proverServerUri ?? this.config.proofServer;
+      const walletProofServer = walletConfig.proverServerUri;
+      if (walletProofServer && walletProofServer !== this.config.proofServer) {
+        if (!isHttpOrHttps(walletProofServer)) {
+          this.logger?.warn(
+            "dStorage/midnight",
+            `Wallet-supplied proverServerUri has an invalid URL scheme — must be http or https. ` +
+              `Ignoring wallet URL, using configured endpoint "${this.config.proofServer}".`,
+          );
+          this.connectorProofServer = this.config.proofServer;
+        } else if (this.allowWalletProofServer) {
+          this.logger?.warn(
+            "dStorage/midnight",
+            `Using wallet-supplied proof server "${walletProofServer}" (allowWalletProofServer: true). ` +
+              `Ensure this endpoint is trusted — a compromised wallet can redirect ZK witness inputs to an attacker-controlled server.`,
+          );
+          this.connectorProofServer = walletProofServer;
+        } else {
+          this.logger?.warn(
+            "dStorage/midnight",
+            `Wallet-supplied proverServerUri "${walletProofServer}" differs from configured endpoint ` +
+              `"${this.config.proofServer}" — ignoring wallet URL (set allowWalletProofServer: true to override).`,
+          );
+          this.connectorProofServer = this.config.proofServer;
+        }
+      } else {
+        this.connectorProofServer =
+          walletProofServer ?? this.config.proofServer;
+      }
     } catch (err) {
       this.logger?.warn(
         "dStorage/midnight",
