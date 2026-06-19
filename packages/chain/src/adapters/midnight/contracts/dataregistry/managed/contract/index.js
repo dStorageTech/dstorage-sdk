@@ -113,14 +113,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 160 char 1',
+                                     'DataRegistry.compact line 176 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('storeReference',
                                      'argument 5 (argument 6 as invoked from Typescript)',
-                                     'DataRegistry.compact line 160 char 1',
+                                     'DataRegistry.compact line 176 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
@@ -154,14 +154,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 201 char 1',
+                                     'DataRegistry.compact line 214 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('removeReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 201 char 1',
+                                     'DataRegistry.compact line 214 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
@@ -196,21 +196,21 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (as invoked from Typescript)',
-                                     'DataRegistry.compact line 228 char 1',
+                                     'DataRegistry.compact line 241 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(refId_0.buffer instanceof ArrayBuffer && refId_0.BYTES_PER_ELEMENT === 1 && refId_0.length === 32)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'DataRegistry.compact line 228 char 1',
+                                     'DataRegistry.compact line 241 char 1',
                                      'Bytes<32>',
                                      refId_0)
         }
         if (!(typeof(writtenAt_0) === 'bigint' && writtenAt_0 >= 0n && writtenAt_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('updateReference',
                                      'argument 6 (argument 7 as invoked from Typescript)',
-                                     'DataRegistry.compact line 228 char 1',
+                                     'DataRegistry.compact line 241 char 1',
                                      'Uint<0..18446744073709551616>',
                                      writtenAt_0)
         }
@@ -399,6 +399,46 @@ export class Contract {
                                    refCounter_0,
                                    instanceSalt_0]);
   }
+  _validatedOwnerCommitment_0(context, partialProofData, refId_0) {
+    const secret_0 = this._ownerSecret_0(context, partialProofData);
+    __compactRuntime.assert(!this._equal_0(secret_0,
+                                           new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])),
+                            'ownerSecret must not be zero');
+    return this._computeOwnerCommitment_0(secret_0,
+                                          refId_0,
+                                          _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                                    partialProofData,
+                                                                                                    [
+                                                                                                     { dup: { n: 2 } },
+                                                                                                     { idx: { cached: true,
+                                                                                                              pushPath: false,
+                                                                                                              path: [
+                                                                                                                     { tag: 'value',
+                                                                                                                       value: { value: _descriptor_11.toValue(0n),
+                                                                                                                                alignment: _descriptor_11.alignment() } }] } },
+                                                                                                     { popeq: { cached: true,
+                                                                                                                result: undefined } }]).value).bytes);
+  }
+  _validatedNewOwnerCommitment_0(context, partialProofData, refId_0) {
+    const secret_0 = this._newOwnerSecret_0(context, partialProofData);
+    __compactRuntime.assert(!this._equal_1(secret_0,
+                                           new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])),
+                            'newOwnerSecret must not be zero');
+    return this._computeOwnerCommitment_0(secret_0,
+                                          refId_0,
+                                          _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                                    partialProofData,
+                                                                                                    [
+                                                                                                     { dup: { n: 2 } },
+                                                                                                     { idx: { cached: true,
+                                                                                                              pushPath: false,
+                                                                                                              path: [
+                                                                                                                     { tag: 'value',
+                                                                                                                       value: { value: _descriptor_11.toValue(0n),
+                                                                                                                                alignment: _descriptor_11.alignment() } }] } },
+                                                                                                     { popeq: { cached: true,
+                                                                                                                result: undefined } }]).value).bytes);
+  }
   _storeReference_0(context,
                     partialProofData,
                     storageId_0,
@@ -421,7 +461,7 @@ export class Contract {
                                                                                                                                                                    alignment: _descriptor_11.alignment() } }] } },
                                                                                                                                         { popeq: { cached: true,
                                                                                                                                                    result: undefined } }]).value),
-                                                                             'DataRegistry.compact line 168 char 29'),
+                                                                             'DataRegistry.compact line 184 char 29'),
                                         _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                   partialProofData,
                                                                                                   [
@@ -451,21 +491,9 @@ export class Contract {
                                                                                         { popeq: { cached: true,
                                                                                                    result: undefined } }]).value),
                             'Reference already stored');
-    const ownerCommitment_0 = this._computeOwnerCommitment_0(this._ownerSecret_0(context,
-                                                                                 partialProofData),
-                                                             refId_0,
-                                                             _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                                       partialProofData,
-                                                                                                                       [
-                                                                                                                        { dup: { n: 2 } },
-                                                                                                                        { idx: { cached: true,
-                                                                                                                                 pushPath: false,
-                                                                                                                                 path: [
-                                                                                                                                        { tag: 'value',
-                                                                                                                                          value: { value: _descriptor_11.toValue(0n),
-                                                                                                                                                   alignment: _descriptor_11.alignment() } }] } },
-                                                                                                                        { popeq: { cached: true,
-                                                                                                                                   result: undefined } }]).value).bytes);
+    const ownerCommitment_0 = this._validatedOwnerCommitment_0(context,
+                                                               partialProofData,
+                                                               refId_0);
     const entry_0 = { storageId: storageId_0,
                       encryptionScheme: encryptionScheme_0,
                       storageProvider: storageProvider_0,
@@ -544,22 +572,10 @@ export class Contract {
                                                                                                           alignment: _descriptor_0.alignment() } }] } },
                                                                                { popeq: { cached: false,
                                                                                           result: undefined } }]).value);
-    const ownerCommitment_0 = this._computeOwnerCommitment_0(this._ownerSecret_0(context,
-                                                                                 partialProofData),
-                                                             refId_0,
-                                                             _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                                       partialProofData,
-                                                                                                                       [
-                                                                                                                        { dup: { n: 2 } },
-                                                                                                                        { idx: { cached: true,
-                                                                                                                                 pushPath: false,
-                                                                                                                                 path: [
-                                                                                                                                        { tag: 'value',
-                                                                                                                                          value: { value: _descriptor_11.toValue(0n),
-                                                                                                                                                   alignment: _descriptor_11.alignment() } }] } },
-                                                                                                                        { popeq: { cached: true,
-                                                                                                                                   result: undefined } }]).value).bytes);
-    __compactRuntime.assert(this._equal_0(entry_0.ownerCommitment,
+    const ownerCommitment_0 = this._validatedOwnerCommitment_0(context,
+                                                               partialProofData,
+                                                               refId_0);
+    __compactRuntime.assert(this._equal_2(entry_0.ownerCommitment,
                                           ownerCommitment_0),
                             'Not the owner');
     __compactRuntime.queryLedgerState(context,
@@ -623,39 +639,15 @@ export class Contract {
                                                                                                           alignment: _descriptor_0.alignment() } }] } },
                                                                                { popeq: { cached: false,
                                                                                           result: undefined } }]).value);
-    const ownerCommitment_0 = this._computeOwnerCommitment_0(this._ownerSecret_0(context,
-                                                                                 partialProofData),
-                                                             refId_0,
-                                                             _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                                       partialProofData,
-                                                                                                                       [
-                                                                                                                        { dup: { n: 2 } },
-                                                                                                                        { idx: { cached: true,
-                                                                                                                                 pushPath: false,
-                                                                                                                                 path: [
-                                                                                                                                        { tag: 'value',
-                                                                                                                                          value: { value: _descriptor_11.toValue(0n),
-                                                                                                                                                   alignment: _descriptor_11.alignment() } }] } },
-                                                                                                                        { popeq: { cached: true,
-                                                                                                                                   result: undefined } }]).value).bytes);
-    __compactRuntime.assert(this._equal_1(entry_0.ownerCommitment,
+    const ownerCommitment_0 = this._validatedOwnerCommitment_0(context,
+                                                               partialProofData,
+                                                               refId_0);
+    __compactRuntime.assert(this._equal_3(entry_0.ownerCommitment,
                                           ownerCommitment_0),
                             'Not the owner');
-    const newCommitment_0 = this._computeOwnerCommitment_0(this._newOwnerSecret_0(context,
-                                                                                  partialProofData),
-                                                           refId_0,
-                                                           _descriptor_5.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                                     partialProofData,
-                                                                                                                     [
-                                                                                                                      { dup: { n: 2 } },
-                                                                                                                      { idx: { cached: true,
-                                                                                                                               pushPath: false,
-                                                                                                                               path: [
-                                                                                                                                      { tag: 'value',
-                                                                                                                                        value: { value: _descriptor_11.toValue(0n),
-                                                                                                                                                 alignment: _descriptor_11.alignment() } }] } },
-                                                                                                                      { popeq: { cached: true,
-                                                                                                                                 result: undefined } }]).value).bytes);
+    const newCommitment_0 = this._validatedNewOwnerCommitment_0(context,
+                                                                partialProofData,
+                                                                refId_0);
     const updatedEntry_0 = { storageId: storageId_0,
                              encryptionScheme: encryptionScheme_0,
                              storageProvider: storageProvider_0,
@@ -687,6 +679,14 @@ export class Contract {
     return true;
   }
   _equal_1(x0, y0) {
+    if (!x0.every((x, i) => y0[i] === x)) { return false; }
+    return true;
+  }
+  _equal_2(x0, y0) {
+    if (!x0.every((x, i) => y0[i] === x)) { return false; }
+    return true;
+  }
+  _equal_3(x0, y0) {
     if (!x0.every((x, i) => y0[i] === x)) { return false; }
     return true;
   }

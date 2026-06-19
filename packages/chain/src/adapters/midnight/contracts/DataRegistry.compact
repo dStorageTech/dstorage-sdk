@@ -14,7 +14,7 @@
 //   removeReference      — delete a reference; caller must prove ownership via ownerSecret witness
 //   updateReference      — update mutable fields; caller must prove ownership via ownerSecret witness
 //
-pragma language_version >= 0.20;
+pragma language_version >= 0.23;
 
 import CompactStandardLibrary;
 
@@ -142,6 +142,22 @@ export pure circuit deriveRefId(refCounter: Bytes<32>, instanceSalt: Bytes<32>):
   return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dstorage:ref:"), refCounter, instanceSalt]);
 }
 
+// Read ownerSecret(), assert non-zero, return the owner commitment for refId.
+// Not exported — called only by the impure circuits below.
+circuit validatedOwnerCommitment(refId: Bytes<32>): Bytes<32> {
+  const secret = ownerSecret();
+  assert(secret != pad(32, ""), "ownerSecret must not be zero");
+  return computeOwnerCommitment(secret, refId, kernel.self().bytes);
+}
+
+// Read newOwnerSecret(), assert non-zero, return the new owner commitment for refId.
+// Not exported — called only by updateReference.
+circuit validatedNewOwnerCommitment(refId: Bytes<32>): Bytes<32> {
+  const secret = newOwnerSecret();
+  assert(secret != pad(32, ""), "newOwnerSecret must not be zero");
+  return computeOwnerCommitment(secret, refId, kernel.self().bytes);
+}
+
 // storeReference
 //
 // Records an encrypted data pointer on-chain.
@@ -168,10 +184,7 @@ export circuit storeReference(
   const refId = deriveRefId(refCounter as Bytes<32>, kernel.self().bytes);
   assert(!references.member(disclose(refId)), "Reference already stored");
 
-  // Derive owner commitment from the private witness secret.
-  // The SDK sets ownerSecret = HKDF-SHA256(dek, rawStorageId) in private state
-  // before proof generation. This secret is never transmitted on-chain.
-  const ownerCommitment = computeOwnerCommitment(ownerSecret(), refId, kernel.self().bytes);
+  const ownerCommitment = validatedOwnerCommitment(refId);
 
   // Persist the reference entry.
   const entry = ReferenceEntry { storageId,
@@ -201,7 +214,7 @@ export circuit storeReference(
 export circuit removeReference(refId: Bytes<32>): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
-  const ownerCommitment = computeOwnerCommitment(ownerSecret(), refId, kernel.self().bytes);
+  const ownerCommitment = validatedOwnerCommitment(refId);
   assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
   references.remove(disclose(refId));
 }
@@ -236,9 +249,9 @@ export circuit updateReference(
                  ): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
-  const ownerCommitment = computeOwnerCommitment(ownerSecret(), refId, kernel.self().bytes);
+  const ownerCommitment = validatedOwnerCommitment(refId);
   assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
-  const newCommitment = computeOwnerCommitment(newOwnerSecret(), refId, kernel.self().bytes);
+  const newCommitment = validatedNewOwnerCommitment(refId);
   const updatedEntry =
           ReferenceEntry { storageId,
                            encryptionScheme,

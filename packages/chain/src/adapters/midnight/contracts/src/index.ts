@@ -22,8 +22,7 @@ export type DataRegistryPrivateState = {
 
 /**
  * Witness implementations: read secrets placed in private state by the SDK before proof generation.
- * Throws on missing ownerSecret — always required for ownership-proving circuits.
- * newOwnerSecret defaults to zeros (sentinel for "no commitment update") when absent.
+ * Both witnesses throw when their field is absent — the SDK must always set them before proof generation.
  */
 export const witnesses: Witnesses<DataRegistryPrivateState> = {
   ownerSecret: (
@@ -42,7 +41,13 @@ export const witnesses: Witnesses<DataRegistryPrivateState> = {
     context: WitnessContext<Ledger, DataRegistryPrivateState>,
   ): [DataRegistryPrivateState, Uint8Array] => {
     const privateState = context.privateState as DataRegistryPrivateState;
-    return [privateState, privateState.newOwnerSecret ?? new Uint8Array(32)];
+    if (!privateState.newOwnerSecret) {
+      throw new Error(
+        "[dStorage/midnight] newOwnerSecret is not set in private state. " +
+          "The SDK must call privateStateProvider.set() with newOwnerSecret before proof generation.",
+      );
+    }
+    return [privateState, privateState.newOwnerSecret];
   },
 };
 

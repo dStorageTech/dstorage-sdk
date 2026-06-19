@@ -26,6 +26,10 @@ export class DataRegistrySimulator {
   readonly contractAddress: ContractAddress;
   circuitContext: CircuitContext<DataRegistryPrivateState>;
   currentPk: string;
+  /** Default ownerSecret used when no secret is passed to circuit methods. Refreshed on switchUser(). */
+  private _defaultOwnerSecret: Uint8Array = crypto.getRandomValues(
+    new Uint8Array(32),
+  );
 
   constructor(senderPk: string) {
     this.contractAddress = sampleContractAddress();
@@ -51,11 +55,13 @@ export class DataRegistrySimulator {
 
   /**
    * Switch to a different user (different secret key and public key).
+   * Generates a fresh random default owner secret for the new user.
    */
   public switchUser(senderPk: string): void {
     this.currentPk = senderPk;
     this.circuitContext.currentZswapLocalState = emptyZswapLocalState(senderPk);
     this.circuitContext.currentPrivateState = createDataRegistryPrivateState();
+    this._defaultOwnerSecret = crypto.getRandomValues(new Uint8Array(32));
   }
 
   public getLedger(): Ledger {
@@ -69,7 +75,7 @@ export class DataRegistrySimulator {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string = "",
-    ownerSecret: Uint8Array = new Uint8Array(32),
+    ownerSecret: Uint8Array = this._defaultOwnerSecret,
   ): Uint8Array {
     this.circuitContext.currentPrivateState = { ownerSecret };
     const res = this.contract.impureCircuits.storeReference(
@@ -87,7 +93,7 @@ export class DataRegistrySimulator {
 
   public removeReference(
     refId: Uint8Array,
-    ownerSecret: Uint8Array = new Uint8Array(32),
+    ownerSecret: Uint8Array = this._defaultOwnerSecret,
   ): [] {
     this.circuitContext.currentPrivateState = { ownerSecret };
     const res = this.contract.impureCircuits.removeReference(
@@ -106,9 +112,13 @@ export class DataRegistrySimulator {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string = "",
-    ownerSecret: Uint8Array = new Uint8Array(32),
+    ownerSecret: Uint8Array = this._defaultOwnerSecret,
+    newOwnerSecret?: Uint8Array,
   ): [] {
-    this.circuitContext.currentPrivateState = { ownerSecret };
+    this.circuitContext.currentPrivateState = {
+      ownerSecret,
+      newOwnerSecret: newOwnerSecret ?? ownerSecret,
+    };
     const res = this.contract.impureCircuits.updateReference(
       this.circuitContext,
       refId,

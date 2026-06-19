@@ -435,7 +435,7 @@ describe("DataRegistry contract", () => {
     });
 
     it("allows the owner to update their reference after another user stored a separate one", () => {
-      // Owner stores a reference
+      // Owner stores a reference with an explicit secret so it can be re-used after the user switch.
       const ownerEntry = randomEntry();
       const ownerRefId = simulator.storeReference(
         ownerEntry.storageId,
@@ -443,6 +443,8 @@ describe("DataRegistry contract", () => {
         ownerEntry.storageProvider,
         ownerEntry.metadata,
         ownerEntry.writtenAt,
+        "",
+        owner.secretKey,
       );
 
       // Other user stores their own reference
@@ -456,7 +458,7 @@ describe("DataRegistry contract", () => {
         otherEntry.writtenAt,
       );
 
-      // Owner switches back and updates their own reference
+      // Owner switches back and updates their own reference using the same secret.
       simulator.switchUser(owner.pk);
       const newStorageId = randomString();
       simulator.updateReference(
@@ -466,6 +468,8 @@ describe("DataRegistry contract", () => {
         "arweave",
         "updated",
         randomTimestamp(),
+        "",
+        owner.secretKey,
       );
 
       const updated = simulator.getLedger().references.lookup(ownerRefId);
@@ -776,6 +780,122 @@ describe("DataRegistry contract", () => {
 
       expect(simulator.getLedger().references.lookup(refId2).keyEnvelope).toBe(
         envelope2,
+      );
+    });
+  });
+
+  describe("zero-secret rejection", () => {
+    let validSecret: Uint8Array;
+
+    beforeEach(() => {
+      validSecret = randomBytes(32);
+    });
+
+    it("storeReference rejects an all-zeros ownerSecret", () => {
+      const entry = randomEntry();
+      expect(() =>
+        simulator.storeReference(
+          entry.storageId,
+          entry.encryptionScheme,
+          entry.storageProvider,
+          entry.metadata,
+          entry.writtenAt,
+          "",
+          new Uint8Array(32),
+        ),
+      ).toThrow("ownerSecret must not be zero");
+    });
+
+    it("removeReference rejects an all-zeros ownerSecret", () => {
+      const refId = simulator.storeReference(
+        randomString(32),
+        "xchacha20poly1305-v1",
+        "arweave",
+        "doc",
+        randomTimestamp(),
+        "",
+        validSecret,
+      );
+      expect(() =>
+        simulator.removeReference(refId, new Uint8Array(32)),
+      ).toThrow("ownerSecret must not be zero");
+    });
+
+    it("updateReference rejects an all-zeros ownerSecret", () => {
+      const refId = simulator.storeReference(
+        randomString(32),
+        "xchacha20poly1305-v1",
+        "arweave",
+        "doc",
+        randomTimestamp(),
+        "",
+        validSecret,
+      );
+      expect(() =>
+        simulator.updateReference(
+          refId,
+          randomString(),
+          "",
+          "arweave",
+          "",
+          randomTimestamp(),
+          "",
+          new Uint8Array(32),
+        ),
+      ).toThrow("ownerSecret must not be zero");
+    });
+
+    it("updateReference rejects an all-zeros newOwnerSecret", () => {
+      const refId = simulator.storeReference(
+        randomString(32),
+        "xchacha20poly1305-v1",
+        "arweave",
+        "doc",
+        randomTimestamp(),
+        "",
+        validSecret,
+      );
+      expect(() =>
+        simulator.updateReference(
+          refId,
+          randomString(),
+          "",
+          "arweave",
+          "",
+          randomTimestamp(),
+          "",
+          validSecret,
+          new Uint8Array(32),
+        ),
+      ).toThrow("newOwnerSecret must not be zero");
+    });
+
+    it("updateReference throws when newOwnerSecret is absent from private state", () => {
+      const refId = simulator.storeReference(
+        randomString(32),
+        "xchacha20poly1305-v1",
+        "arweave",
+        "doc",
+        randomTimestamp(),
+        "",
+        validSecret,
+      );
+      simulator.circuitContext.currentPrivateState = {
+        ownerSecret: validSecret,
+      };
+      expect(() =>
+        simulator.contract.impureCircuits.updateReference(
+          simulator.circuitContext,
+          refId,
+          randomString(),
+          "",
+          "arweave",
+          "",
+          randomTimestamp(),
+          "",
+        ),
+      ).toThrow(
+        "[dStorage/midnight] newOwnerSecret is not set in private state",
       );
     });
   });
