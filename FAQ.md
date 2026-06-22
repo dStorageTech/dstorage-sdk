@@ -154,7 +154,8 @@ try {
     // Persist recovery to localStorage or DB — keyEnvelope is safe to store
     localStorage.setItem("pending-store", JSON.stringify(err.recovery));
     // Retry the chain write:
-    const { chainRefId } = await sdk.registerReference(storageId, {
+    const { chainRefId } = await sdk.registerReference({
+      storageId,
       storageProvider,
       keyEnvelope,
     });
@@ -182,7 +183,7 @@ On app startup, check for a pending recovery:
 const pending = localStorage.getItem("pending-store");
 if (pending) {
   const { storageId, storageProvider, keyEnvelope } = JSON.parse(pending);
-  await sdk.registerReference(storageId, { storageProvider, keyEnvelope });
+  await sdk.registerReference({ storageId, storageProvider, keyEnvelope });
   localStorage.removeItem("pending-store");
 }
 ```
@@ -261,6 +262,69 @@ Yes. See `QUICK_START.md` for a step-by-step guide that wires dStorage into the 
 **What is `executeMetaTransaction()` and when should I use it?**
 
 It is a convenience wrapper that runs the full upload pipeline atomically and fires a progress callback at each step (`estimate` → `encrypt` → `payment_storage` → `upload` → `chain_reference` → `complete`). Use it when you want a single entry point and progress reporting. Use `store()` directly when you need fine-grained control.
+
+**How do I update the content stored at an existing reference?**
+
+Use `sdk.update(refId, newBytes, options?)`. It encrypts the new content with a fresh DEK, uploads it to the storage network, then calls `chainAdapter.updateReference()` — proving ownership with the old `ownerSecret` and registering the new one atomically.
+
+- The on-chain pointer is updated in place; the `refId` stays the same.
+- Old content is **not** deleted from the storage network — only the on-chain pointer changes.
+- Chunking is **not** applied by `update()`. For large replacements, use `store()` to create a new chunked reference and then `removeReference()` on the old one.
+- Requires the chain adapter to implement `updateReference()`. Both `MockChainAdapter` and `MidnightChainAdapter` support it; storage-only mode does not.
+
+```typescript
+const { chainRefId, storageId } = await sdk.update(refId, newBytes);
+```
+
+**How do I rotate encryption adapters without re-uploading content?**
+
+Use `sdk.rotateKeys(refId)`. It re-wraps the existing DEK under all adapters currently in the instance's `encryptionAdapters` list, then writes the new `keyEnvelope` back on-chain. The storage-network ciphertext is **never touched** and `writtenAt` is preserved to reflect the original upload time.
+
+Common use cases:
+
+- **Add a recovery key** — include both the primary and the new recovery adapter in the instance, then call `rotateKeys`. Both adapters will be able to decrypt going forward.
+- **Change password (full revocation)** — two steps: (1) init with `[old, new]` so `rotateKeys` can unwrap with `old` and re-wrap under both; (2) init a fresh instance with `[new]` only and call `rotateKeys` again to prune the old wrapper from the envelope.
+
+Requires the chain adapter to implement `updateReference()` (same as `update()`).
+
+```typescript
+// Add a recovery key to an existing reference
+const sdk = new DStorage({
+  storageAdapter,
+  chainAdapter,
+  encryptionAdapters: [
+    new PasswordEncryptionAdapter({ password, salt }), // existing
+    new MnemonicEncryptionAdapter({ mnemonic: backupPhrase }), // new recovery
+  ],
+});
+await sdk.init();
+await sdk.rotateKeys(refId);
+```
+
+**How do I list all my on-chain references?**
+
+Call `sdk.listReferences()`. It returns a `DataReferenceSummary[]` — one entry per reference in the DataRegistry contract — containing the `refId`, decrypted `storageId`, `storageProvider`, `writtenAt`, and any attached metadata. The SDK automatically decrypts each entry using the configured adapters; references whose envelope cannot be decrypted are returned with a `decryptionError` field rather than throwing.
+
+To look up a known subset without fetching the entire list, pass `refIds`:
+
+```typescript
+const all = await sdk.listReferences();
+const specific = await sdk.listReferences({ refIds: [refId1, refId2] });
+```
+
+Requires a chain adapter. The full (no-filter) path additionally requires the adapter to implement `listReferences()`.
+
+**How do I remove an on-chain reference?**
+
+Call `sdk.removeReference(refId)`. The SDK re-derives the `ownerSecret` from the reference and submits a ZK ownership proof. Only the original owner can remove a reference — the chain contract enforces this.
+
+Removing a reference does **not** delete the data from the storage network; it only removes the on-chain pointer. Whether the underlying blob can be reclaimed later depends on the storage provider. Any caller who saved the old `storageId` can still fetch the ciphertext via `retrieveByStorageId()`, but without the `keyEnvelope` they cannot decrypt it.
+
+Requires the chain adapter to implement `removeReference()`.
+
+```typescript
+await sdk.removeReference(refId);
+```
 
 **What Node.js version is required?**
 
@@ -358,6 +422,26 @@ Yes. The `storageId` (the Arweave content address) is encrypted with the same pe
 
 `ownerSecret` is an HKDF derivative of the DEK and the raw `storageId`. It is needed to remove or update a reference on-chain. Because it is derived deterministically from values the SDK already holds, it never needs to be persisted — it is recomputed on demand during `removeReference()`.
 
+**What exactly changes when I call `rotateKeys()` — and what stays the same?**
+
+| Field                                | Changes?                                                 |
+| ------------------------------------ | -------------------------------------------------------- |
+| `keyEnvelope` on-chain               | Yes — re-wrapped under the new adapter set               |
+| Encrypted `storageId` on-chain       | No                                                       |
+| `writtenAt` on-chain                 | No — preserved from the original upload                  |
+| `encryptionScheme`                   | No                                                       |
+| Ciphertext on the storage network    | No — bytes are never re-uploaded                         |
+| `ownerSecret` / ownership commitment | No — derived from the same DEK + storageId, so identical |
+
+Because the DEK itself is unchanged, any party who previously obtained the DEK retains the ability to decrypt until the corresponding adapter wrapper is pruned from the envelope (see the two-step password-change flow in the Developers section).
+
+**If I call `update()`, what happens to the original content on the storage network?**
+
+Nothing — it stays there. `update()` only changes the on-chain pointer (the `storageId` field in the DataRegistry reference) to point at the newly encrypted blob. The old blob remains at its original `storageId` on the storage network; whether it can be garbage-collected depends on the storage provider (Arweave uploads, for example, are permanent and immutable).
+
+- Anyone who saved the old `storageId` can still download the old ciphertext — but without the old `keyEnvelope` they cannot decrypt it, as the key envelope on-chain now covers the new content's DEK.
+- `update()` is best suited for mutable application state (user profiles, document drafts) where preserving old versions is not required.
+
 ---
 
 ## Deployment & Configuration
@@ -366,7 +450,7 @@ Yes. The `storageId` (the Arweave content address) is encrypted with the same pe
 
 - Node.js 22+, npm
 - Docker (for Midnight proof server and Arweave Local)
-- Midnight Compact compiler v0.30.0 (for recompiling the contract)
+- Midnight Compact compiler v0.31.0 (for recompiling the contract)
 - Lace wallet extension ≥ 1.36.2 (browser connector flows only)
 - Wander wallet extension (Arweave browser flows only)
 
