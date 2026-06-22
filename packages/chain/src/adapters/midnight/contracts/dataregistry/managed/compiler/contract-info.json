@@ -74,6 +74,13 @@
             "type-name": "Opaque",
             "tsType": "string"
           }
+        },
+        {
+          "name": "contentHash",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
         }
       ],
       "result-type": {
@@ -152,6 +159,13 @@
           "type": {
             "type-name": "Opaque",
             "tsType": "string"
+          }
+        },
+        {
+          "name": "contentHash",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
           }
         }
       ],
@@ -242,6 +256,13 @@
           },
           {
             "name": "ownerCommitment",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "contentHash",
             "type": {
               "type-name": "Bytes",
               "length": 32

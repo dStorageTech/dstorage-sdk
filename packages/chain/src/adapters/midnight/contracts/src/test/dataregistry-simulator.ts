@@ -75,6 +75,7 @@ export class DataRegistrySimulator {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string = "",
+    contentHash: Uint8Array = new Uint8Array(32),
     ownerSecret: Uint8Array = this._defaultOwnerSecret,
   ): Uint8Array {
     this.circuitContext.currentPrivateState = { ownerSecret };
@@ -86,6 +87,7 @@ export class DataRegistrySimulator {
       metadata,
       writtenAt,
       keyEnvelope,
+      contentHash,
     );
     this.circuitContext = { ...res.context, currentPrivateState: {} };
     return res.result;
@@ -125,6 +127,7 @@ export class DataRegistrySimulator {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string = "",
+    contentHash: Uint8Array = new Uint8Array(32),
     ownerSecret: Uint8Array = this._defaultOwnerSecret,
     newOwnerSecret?: Uint8Array,
   ): [] {
@@ -141,6 +144,7 @@ export class DataRegistrySimulator {
       metadata,
       writtenAt,
       keyEnvelope,
+      contentHash,
     );
     this.circuitContext = { ...res.context, currentPrivateState: {} };
     return res.result;

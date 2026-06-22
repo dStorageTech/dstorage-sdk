@@ -20,6 +20,7 @@ import {
   XChaChaScheme,
   DStorageError,
   isDStorageError,
+  computeBlake3Hex,
 } from "@dstorage/crypto";
 import {
   generateDek,
@@ -292,12 +293,15 @@ export class DStorage implements DStorageContext {
       // 4. Write on-chain reference — only the storage pointer, never the data.
       //    Skipped in storage-only mode (no chain adapter).
       if (this.config.chainAdapter) {
+        const contentHash = await computeBlake3Hex(uploadData);
+
         // Emit "stored" before the chain write so callers can persist recovery
         // info proactively (in case the chain write fails or the process crashes).
         const storeRecovery: StoreRecovery = {
           storageId: storageResult.id,
           storageProvider: storageResult.provider,
           keyEnvelope: isPublic ? undefined : keyEnvelope,
+          contentHash,
         };
         onProgress?.({
           phase: "stored",
@@ -324,6 +328,7 @@ export class DStorage implements DStorageContext {
             ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
             writtenAt: Date.now(),
             keyEnvelope,
+            contentHash,
             ownerSecret,
           });
 
@@ -460,6 +465,9 @@ export class DStorage implements DStorageContext {
           ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
           writtenAt: Date.now(),
           keyEnvelope,
+          ...(options.contentHash !== undefined
+            ? { contentHash: options.contentHash }
+            : {}),
           ownerSecret,
         });
         return { chainRefId: chainResult.refId };
@@ -548,6 +556,7 @@ export class DStorage implements DStorageContext {
               ),
             )
           : undefined;
+        const contentHash = await computeBlake3Hex(uploadData);
         const rawNewStorageId = new TextEncoder().encode(storageResult.id);
         const newOwnerSecret = await deriveOwnerSecret(dek, rawNewStorageId);
         await this.config.chainAdapter.updateReference(
@@ -559,6 +568,7 @@ export class DStorage implements DStorageContext {
             ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
             writtenAt: Date.now(),
             keyEnvelope,
+            contentHash,
           },
           ownerSecret,
           newOwnerSecret,
@@ -626,6 +636,7 @@ export class DStorage implements DStorageContext {
         );
         // ownerSecret = HKDF(seed, rawStorageId). Since seed and storageId
         // are unchanged, old and new ownerSecret are identical.
+        // Pass the existing contentHash through unchanged (content not re-uploaded).
         await this.config.chainAdapter.updateReference(
           refId,
           {
@@ -636,6 +647,9 @@ export class DStorage implements DStorageContext {
             keyEnvelope: newKeyEnvelope,
             ...(ref.encryptedMetadata !== undefined
               ? { encryptedMetadata: ref.encryptedMetadata }
+              : {}),
+            ...(ref.contentHash !== undefined
+              ? { contentHash: ref.contentHash }
               : {}),
           },
           ownerSecret,
@@ -660,13 +674,26 @@ export class DStorage implements DStorageContext {
   async retrieveByStorageId(
     storageId: string,
     dekScheme?: CryptoScheme,
+    contentHash?: string,
   ): Promise<RetrieveResult> {
     try {
       this.assertConnected();
 
-      // 1. Fetch blob from storage
       const { bytes: rawBytes, tags } =
         await this.config.storageAdapter.retrieve(storageId);
+
+      if (contentHash) {
+        const computed = await computeBlake3Hex(rawBytes);
+        if (computed !== contentHash) {
+          throw new DStorageError(
+            CoreErrorCode.CONTENT_HASH_MISMATCH,
+            `[dStorage] Content hash mismatch for storageId ${storageId}. ` +
+              `Expected ${contentHash}, got ${computed}. ` +
+              `The retrieved bytes do not match the hash committed on-chain — ` +
+              `the storage content may have been tampered with.`,
+          );
+        }
+      }
 
       return this._decryptAndReassemble(rawBytes, storageId, tags, dekScheme);
     } catch (err) {
@@ -968,7 +995,11 @@ export class DStorage implements DStorageContext {
       let contentBytes: Uint8Array;
       let contentTags: Record<string, string>;
       if (storageId !== undefined) {
-        const r = await this.retrieveByStorageId(storageId, dekScheme);
+        const r = await this.retrieveByStorageId(
+          storageId,
+          dekScheme,
+          ref.contentHash,
+        );
         contentBytes = r.bytes;
         contentTags = r.tags;
       } else {
@@ -1441,12 +1472,15 @@ export class DStorage implements DStorageContext {
         );
 
     if (this.config.chainAdapter) {
+      const contentHash = await computeBlake3Hex(manifestData);
+
       // Emit "stored" before the chain write so callers can persist recovery
       // info proactively (in case the chain write fails or the process crashes).
       const storeRecovery: StoreRecovery = {
         storageId: manifestResult.id,
         storageProvider: manifestResult.provider,
         keyEnvelope: isPublic ? undefined : keyEnvelope,
+        contentHash,
       };
       onProgress?.({
         phase: "stored",
@@ -1474,6 +1508,7 @@ export class DStorage implements DStorageContext {
           ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
           writtenAt: Date.now(),
           keyEnvelope,
+          contentHash,
           ownerSecret,
         });
 

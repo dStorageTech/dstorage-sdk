@@ -81,6 +81,12 @@ export interface ChainReference {
    * Never stored on-chain.
    */
   ownerSecret?: Uint8Array;
+  /**
+   * BLAKE3 hash of the ciphertext bytes stored at `storageId`, hex-encoded (64 chars).
+   * Computed by the SDK before upload and verified by `retrieveByRefId()` after fetch,
+   * providing a chain-anchored integrity check independent of the storage adapter's own tags.
+   */
+  contentHash?: string;
 }
 
 /** Result of writing a reference to chain */
@@ -177,6 +183,12 @@ export interface ChainReferenceUpdate {
    * Absent when no metadata was provided at upload time.
    */
   encryptedMetadata?: string;
+  /**
+   * BLAKE3 hash of the new ciphertext bytes at `storageId`, hex-encoded (64 chars).
+   * When provided, the on-chain contentHash is overwritten with this value.
+   * For `rotateKeys()`: pass the existing hash unchanged (content bytes are not re-uploaded).
+   */
+  contentHash?: string;
 }
 
 /**

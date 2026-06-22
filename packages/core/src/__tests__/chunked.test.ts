@@ -427,57 +427,57 @@ describe("security: manifest structural validation", () => {
     // Public upload — manifest stored as plaintext, easy to tamper.
     const bytes = makeBytes(CHUNK_SIZE * 2 + 10);
     // storageId is the manifest's storageId (the on-chain pointer).
-    const { chainRefId, storageId } = await ds.store(bytes, {
-      isPublic: true,
-    });
+    const { storageId } = await ds.store(bytes, { isPublic: true });
 
     const raw = storage.get(storageId)!;
     const manifest = JSON.parse(new TextDecoder().decode(raw)) as ChunkManifest;
     const tampered = tamper(manifest);
     storage.set(storageId, new TextEncoder().encode(JSON.stringify(tampered)));
 
-    return { ds, chainRefId };
+    // Use retrieveByStorageId so the on-chain hash check is bypassed —
+    // these tests target manifest validation, not the hash-check path.
+    return { ds, storageId: storageId! };
   }
 
   it("rejects manifest where chunks.length < chunkCount", async () => {
-    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+    const { ds, storageId } = await uploadAndTamperManifest((m) => ({
       ...m,
       chunkCount: m.chunks.length + 1, // claim one more chunk than present
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+    await expect(ds.retrieveByStorageId(storageId)).rejects.toMatchObject({
       code: CoreErrorCode.MANIFEST_CHUNK_COUNT_MISMATCH,
     });
   });
 
   it("rejects manifest with duplicate chunk index", async () => {
-    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+    const { ds, storageId } = await uploadAndTamperManifest((m) => ({
       ...m,
       chunks: m.chunks.map((c, i) => (i === 1 ? { ...c, index: 0 } : c)),
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+    await expect(ds.retrieveByStorageId(storageId)).rejects.toMatchObject({
       code: CoreErrorCode.MANIFEST_NOT_CONTIGUOUS,
     });
   });
 
   it("rejects manifest with a missing chunk index (gap)", async () => {
-    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+    const { ds, storageId } = await uploadAndTamperManifest((m) => ({
       ...m,
       // shift last chunk index to leave a gap: 0, 2 instead of 0, 1
       chunks: m.chunks.map((c, i) =>
         i === m.chunks.length - 1 ? { ...c, index: c.index + 1 } : c,
       ),
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+    await expect(ds.retrieveByStorageId(storageId)).rejects.toMatchObject({
       code: CoreErrorCode.MANIFEST_NOT_CONTIGUOUS,
     });
   });
 
   it("rejects manifest where chunk data overflows declared totalSize", async () => {
-    const { ds, chainRefId } = await uploadAndTamperManifest((m) => ({
+    const { ds, storageId } = await uploadAndTamperManifest((m) => ({
       ...m,
       totalSize: 1, // shrink so real chunks overflow it
     }));
-    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+    await expect(ds.retrieveByStorageId(storageId)).rejects.toMatchObject({
       code: CoreErrorCode.CHUNK_OVERFLOWS_TOTAL_SIZE,
     });
   });

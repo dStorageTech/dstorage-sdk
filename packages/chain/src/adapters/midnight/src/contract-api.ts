@@ -75,6 +75,7 @@ export interface DeployedDataRegistryAPI {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    contentHash: Uint8Array,
     ownerSecret: Uint8Array,
   ) => Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }>;
 
@@ -91,6 +92,7 @@ export interface DeployedDataRegistryAPI {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    contentHash: Uint8Array,
     ownerSecret: Uint8Array,
   ) => Promise<{ txHash: string; blockHeight: number }>;
 }
@@ -183,6 +185,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    contentHash: Uint8Array,
     ownerSecret: Uint8Array,
   ): Promise<{ refId: Uint8Array; txHash: string; blockHeight: number }> {
     this.logger?.log(
@@ -205,6 +208,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
             metadata,
             writtenAt,
             keyEnvelope,
+            contentHash,
           );
         },
         { scopeName: "storeReference" },
@@ -291,6 +295,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     metadata: string,
     writtenAt: bigint,
     keyEnvelope: string,
+    contentHash: Uint8Array,
     ownerSecret: Uint8Array,
     newOwnerSecret?: Uint8Array,
   ): Promise<{ txHash: string; blockHeight: number }> {
@@ -318,6 +323,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
             metadata,
             writtenAt,
             keyEnvelope,
+            contentHash,
           );
         },
         { scopeName: "updateReference" },

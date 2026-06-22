@@ -287,6 +287,7 @@ describe("DataRegistry contract", () => {
         entry.metadata,
         entry.writtenAt,
         "",
+        new Uint8Array(32),
         owner.secretKey,
       );
 
@@ -415,6 +416,7 @@ describe("DataRegistry contract", () => {
         entry.metadata,
         entry.writtenAt,
         "",
+        new Uint8Array(32),
         owner.secretKey,
       );
 
@@ -429,6 +431,7 @@ describe("DataRegistry contract", () => {
           "hijacked",
           randomTimestamp(),
           "",
+          new Uint8Array(32),
           other.secretKey,
         ),
       ).toThrow("Not the owner");
@@ -444,6 +447,7 @@ describe("DataRegistry contract", () => {
         ownerEntry.metadata,
         ownerEntry.writtenAt,
         "",
+        new Uint8Array(32),
         owner.secretKey,
       );
 
@@ -469,6 +473,7 @@ describe("DataRegistry contract", () => {
         "updated",
         randomTimestamp(),
         "",
+        new Uint8Array(32),
         owner.secretKey,
       );
 
@@ -540,6 +545,7 @@ describe("DataRegistry contract", () => {
         entry.metadata,
         entry.writtenAt,
         "",
+        new Uint8Array(32),
         ownerSecret,
       );
 
@@ -572,6 +578,7 @@ describe("DataRegistry contract", () => {
         entry.metadata,
         entry.writtenAt,
         "",
+        new Uint8Array(32),
         ownerSecret,
       );
 
@@ -585,6 +592,7 @@ describe("DataRegistry contract", () => {
         entry.metadata,
         entry.writtenAt,
         "",
+        new Uint8Array(32),
         otherSecret,
       );
 
@@ -801,7 +809,8 @@ describe("DataRegistry contract", () => {
           entry.metadata,
           entry.writtenAt,
           "",
-          new Uint8Array(32),
+          new Uint8Array(32), // contentHash (zeros OK)
+          new Uint8Array(32), // ownerSecret (zeros must be rejected)
         ),
       ).toThrow("ownerSecret must not be zero");
     });
@@ -814,6 +823,7 @@ describe("DataRegistry contract", () => {
         "doc",
         randomTimestamp(),
         "",
+        new Uint8Array(32),
         validSecret,
       );
       expect(() =>
@@ -829,6 +839,7 @@ describe("DataRegistry contract", () => {
         "doc",
         randomTimestamp(),
         "",
+        new Uint8Array(32),
         validSecret,
       );
       expect(() =>
@@ -840,7 +851,8 @@ describe("DataRegistry contract", () => {
           "",
           randomTimestamp(),
           "",
-          new Uint8Array(32),
+          new Uint8Array(32), // contentHash (zeros OK)
+          new Uint8Array(32), // ownerSecret (zeros must be rejected)
         ),
       ).toThrow("ownerSecret must not be zero");
     });
@@ -853,6 +865,7 @@ describe("DataRegistry contract", () => {
         "doc",
         randomTimestamp(),
         "",
+        new Uint8Array(32),
         validSecret,
       );
       expect(() =>
@@ -864,8 +877,9 @@ describe("DataRegistry contract", () => {
           "",
           randomTimestamp(),
           "",
+          new Uint8Array(32), // contentHash
           validSecret,
-          new Uint8Array(32),
+          new Uint8Array(32), // newOwnerSecret (zeros must be rejected)
         ),
       ).toThrow("newOwnerSecret must not be zero");
     });
@@ -878,6 +892,7 @@ describe("DataRegistry contract", () => {
         "doc",
         randomTimestamp(),
         "",
+        new Uint8Array(32),
         validSecret,
       );
       simulator.circuitContext.currentPrivateState = {
@@ -893,6 +908,7 @@ describe("DataRegistry contract", () => {
           "",
           randomTimestamp(),
           "",
+          new Uint8Array(32),
         ),
       ).toThrow(
         "[dStorage/midnight] newOwnerSecret is not set in private state",

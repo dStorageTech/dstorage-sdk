@@ -477,7 +477,7 @@ describe("public store and retrieve", () => {
     expect(ref.encryptedMetadata).not.toContain("Dr Smith");
   });
 
-  it("tampered ciphertext in storage is rejected by AEAD authentication", async () => {
+  it("tampered ciphertext in storage is caught by on-chain hash check before decryption", async () => {
     const config = makeConfig();
     const storage = config.storageAdapter as MockStorageAdapter;
     const ds = new DStorage(config);
@@ -485,15 +485,15 @@ describe("public store and retrieve", () => {
 
     const { chainRefId, storageId } = await ds.store(enc("original content"));
 
-    // Flip a byte in the middle of the ciphertext — the Poly1305 auth tag will
-    // no longer match, so decryption must throw rather than return corrupt data.
+    // Flip a byte in the middle of the ciphertext. With contentHash stored on-chain,
+    // the hash check fires before decryption and throws CONTENT_HASH_MISMATCH.
     const raw = storage.get(storageId)!;
     const tampered = new Uint8Array(raw);
     tampered[Math.floor(tampered.length / 2)] ^= 0xff;
     storage.set(storageId, tampered);
 
     await expect(ds.retrieveByRefId(chainRefId!)).rejects.toMatchObject({
-      code: CoreErrorCode.DECRYPT_PAYLOAD_FAILED,
+      code: CoreErrorCode.CONTENT_HASH_MISMATCH,
     });
   });
 
@@ -1289,5 +1289,206 @@ describe("StorePartialError recovery", () => {
     });
     const { bytes } = await ds.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(bytes)).toBe(content);
+  });
+});
+
+// ── contentHash integrity ─────────────────────────────────────────────────────
+
+describe("contentHash", () => {
+  it("store() writes a 64-char hex contentHash to the chain adapter", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.store(enc("integrity test"));
+    const ref = await chain.readReference(chainRefId!);
+    expect(typeof ref.contentHash).toBe("string");
+    expect(ref.contentHash).toHaveLength(64);
+    expect(/^[0-9a-f]{64}$/.test(ref.contentHash!)).toBe(true);
+  });
+
+  it("contentHash is the BLAKE3 hex of the raw ciphertext bytes in storage", async () => {
+    const { computeBlake3Hex } = await import("@dstorage/crypto");
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId, storageId } = await ds.store(enc("hash verification"));
+    const raw = storage.get(storageId)!;
+    const expected = await computeBlake3Hex(raw);
+    const ref = await chain.readReference(chainRefId!);
+    expect(ref.contentHash).toBe(expected);
+  });
+
+  it("retrieveByRefId() succeeds when contentHash matches", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.store(enc("matching hash"));
+    const result = await ds.retrieveByRefId(chainRefId!);
+    expect(new TextDecoder().decode(result.bytes)).toBe("matching hash");
+  });
+
+  it("retrieveByRefId() throws CONTENT_HASH_MISMATCH when storage bytes are tampered", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId, storageId } = await ds.store(enc("tamper me"));
+    const raw = storage.get(storageId)!;
+    const tampered = new Uint8Array(raw);
+    tampered[0] ^= 0xff;
+    storage.set(storageId, tampered);
+
+    await expect(ds.retrieveByRefId(chainRefId!)).rejects.toMatchObject({
+      code: CoreErrorCode.CONTENT_HASH_MISMATCH,
+      message: expect.stringContaining("[dStorage] Content hash mismatch"),
+    });
+  });
+
+  it("contentHash is preserved unchanged through rotateKeys()", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.store(enc("stable content"));
+    const refBefore = await chain.readReference(chainRefId!);
+    const hashBefore = refBefore.contentHash;
+
+    await ds.rotateKeys(chainRefId!);
+
+    const refAfter = await chain.readReference(chainRefId!);
+    expect(refAfter.contentHash).toBe(hashBefore);
+  });
+
+  it("contentHash changes after update() with new content", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.store(enc("original"));
+    const refBefore = await chain.readReference(chainRefId!);
+    const hashBefore = refBefore.contentHash;
+
+    await ds.update(chainRefId!, enc("updated content"));
+
+    const refAfter = await chain.readReference(chainRefId!);
+    expect(refAfter.contentHash).toBeDefined();
+    expect(refAfter.contentHash).not.toBe(hashBefore);
+  });
+
+  it("update() followed by retrieveByRefId() returns updated content with no hash error", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId } = await ds.store(enc("before update"));
+    await ds.update(chainRefId!, enc("after update"));
+    const result = await ds.retrieveByRefId(chainRefId!);
+    expect(new TextDecoder().decode(result.bytes)).toBe("after update");
+  });
+
+  it("StorePartialError.recovery includes a 64-char hex contentHash", async () => {
+    const config = makeConfig();
+    const ds = new DStorage(config);
+    await ds.init();
+    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("chain down"),
+    );
+
+    const err = await ds.store(enc("recovery hash")).catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+    const { contentHash } = (err as StorePartialError).recovery;
+    expect(typeof contentHash).toBe("string");
+    expect(contentHash).toHaveLength(64);
+    expect(/^[0-9a-f]{64}$/.test(contentHash!)).toBe(true);
+  });
+
+  it("registerReference() with contentHash stores it on chain", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+
+    const err = await ds.store(enc("reg-hash")).catch((e: unknown) => e);
+    const { storageId, storageProvider, keyEnvelope, contentHash } = (
+      err as StorePartialError
+    ).recovery;
+
+    const { chainRefId } = await ds.registerReference({
+      storageId,
+      storageProvider,
+      keyEnvelope,
+      contentHash,
+    });
+    const ref = await chain.readReference(chainRefId);
+    expect(ref.contentHash).toBe(contentHash);
+  });
+
+  it("recovery round-trip with contentHash: registerReference → retrieveByRefId verifies hash", async () => {
+    const config = makeConfig();
+    const ds = new DStorage(config);
+    await ds.init();
+    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+
+    const content = "recovery with hash verification";
+    const err = await ds.store(enc(content)).catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+
+    const { storageId, storageProvider, keyEnvelope, contentHash } = (
+      err as StorePartialError
+    ).recovery;
+
+    const { chainRefId } = await ds.registerReference({
+      storageId,
+      storageProvider,
+      keyEnvelope,
+      contentHash,
+    });
+
+    const { bytes } = await ds.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe(content);
+  });
+
+  it("tampered storage after recovery triggers CONTENT_HASH_MISMATCH via retrieveByRefId", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+
+    const err = await ds
+      .store(enc("tamper after recovery"))
+      .catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+
+    const { storageId, storageProvider, keyEnvelope, contentHash } = (
+      err as StorePartialError
+    ).recovery;
+
+    const { chainRefId } = await ds.registerReference({
+      storageId,
+      storageProvider,
+      keyEnvelope,
+      contentHash,
+    });
+
+    const raw = storage.get(storageId!)!;
+    const tampered = new Uint8Array(raw);
+    tampered[0] ^= 0xff;
+    storage.set(storageId!, tampered);
+
+    await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: CoreErrorCode.CONTENT_HASH_MISMATCH,
+      message: expect.stringContaining("[dStorage] Content hash mismatch"),
+    });
   });
 });

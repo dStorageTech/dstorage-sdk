@@ -85,6 +85,11 @@ export interface StoreRecovery {
   /** Storage provider that holds the content — required by registerReference(). */
   storageProvider: StorageProviderName;
   keyEnvelope: string | undefined;
+  /**
+   * BLAKE3 hash of the ciphertext bytes stored at `storageId`, hex-encoded (64 chars).
+   * Pass to `registerReference()` to preserve the on-chain integrity check on the recovered reference.
+   */
+  contentHash?: string;
 }
 
 export interface StoreProgress {
@@ -206,6 +211,12 @@ export interface RegisterReferenceOptions {
    * written, without requiring a re-upload.
    */
   keyEnvelope?: string;
+  /**
+   * BLAKE3 hash of the ciphertext bytes at `storageId`, hex-encoded (64 chars).
+   * When passed from `StorePartialError.recovery.contentHash`, this ensures the
+   * recovered reference carries the same on-chain hash as a normal `store()` write.
+   */
+  contentHash?: string;
 }
 
 /** Result returned from dStorage.registerReference() */

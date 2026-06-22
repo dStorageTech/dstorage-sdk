@@ -889,6 +889,10 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
 
+    const contentHashBytes = refEntry.contentHash as Uint8Array | undefined;
+    const hasContentHash =
+      contentHashBytes !== undefined && contentHashBytes.some((b) => b !== 0);
+
     return {
       storageId: refEntry.storageId,
       encryptionScheme: refEntry.encryptionScheme as EncryptionScheme,
@@ -896,6 +900,9 @@ export class MidnightChainAdapter implements ChainAdapter {
       ...(refEntry.metadata ? { encryptedMetadata: refEntry.metadata } : {}),
       writtenAt: Number(refEntry.writtenAt),
       keyEnvelope: refEntry.keyEnvelope ?? "",
+      ...(hasContentHash
+        ? { contentHash: uint8ArrayToHex(contentHashBytes!) }
+        : {}),
     };
   }
 
@@ -940,6 +947,9 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
       }
       const ownerSecret = ref.ownerSecret;
+      const contentHashBytes = ref.contentHash
+        ? hexToBytes(ref.contentHash, "contentHash")
+        : new Uint8Array(32);
       const { refId, blockHeight } = await this._withProofRetry(
         () =>
           api.storeReference(
@@ -949,6 +959,7 @@ export class MidnightChainAdapter implements ChainAdapter {
             ref.encryptedMetadata ?? "",
             BigInt(ref.writtenAt),
             ref.keyEnvelope ?? "",
+            contentHashBytes,
             ownerSecret,
           ),
         "storeReference",
@@ -1042,6 +1053,9 @@ export class MidnightChainAdapter implements ChainAdapter {
     try {
       const api = await this._getAPI();
       const refIdBytes = hexToBytes(refId, "refId");
+      const contentHashBytes = update.contentHash
+        ? hexToBytes(update.contentHash, "contentHash")
+        : new Uint8Array(32);
       await this._withProofRetry(
         () =>
           api.updateReference(
@@ -1052,6 +1066,7 @@ export class MidnightChainAdapter implements ChainAdapter {
             update.encryptedMetadata ?? "",
             BigInt(update.writtenAt),
             update.keyEnvelope ?? "",
+            contentHashBytes,
             secret,
             newOwnerSecret,
           ),

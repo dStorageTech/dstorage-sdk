@@ -67,6 +67,13 @@ export struct ReferenceEntry {
   // ownerSecret = HKDF-SHA256(dek, rawStorageId) — never disclosed on-chain.
   // Any holder of the DEK (unwrapped from keyEnvelope) can re-derive the ownerSecret.
   ownerCommitment: Bytes<32>;
+  // Content hash of the bytes as stored on the storage network.
+  // For private uploads: hash of the encrypted blob (non-deterministic even for identical
+  // plaintext because the nonce is random). For public uploads: hash of the raw bytes.
+  // For chunked uploads: hash of the manifest ciphertext at the top-level storageId.
+  // The SDK verifies this on retrieveByRefId() before attempting decryption.
+  // All-zeros when no hash was provided at registration time.
+  contentHash: Bytes<32>;
 }
 
 // Primary storage: refId → ReferenceEntry
@@ -93,7 +100,6 @@ export sealed ledger contractVersion: Uint<16>;
 constructor() {
   // Start at 1 so the first stored entry uses a non-zero counter value.
   refCounter.increment(1);
-  // Current version: 0.
   contractVersion = 0;
 }
 
@@ -181,7 +187,8 @@ export circuit storeReference(
                  storageProvider: Opaque<"string">,
                  metadata: Opaque<"string">,
                  writtenAt: Uint<64>,
-                 keyEnvelope: Opaque<"string">
+                 keyEnvelope: Opaque<"string">,
+                 contentHash: Bytes<32>
                  ): Bytes<32> {
   const refId = deriveRefId(refCounter as Bytes<32>, kernel.self().bytes);
   assert(!references.member(disclose(refId)), "Reference already stored");
@@ -195,7 +202,8 @@ export circuit storeReference(
                                  metadata,
                                  writtenAt,
                                  keyEnvelope,
-                                 ownerCommitment };
+                                 ownerCommitment,
+                                 contentHash };
   references.insert(disclose(refId), disclose(entry));
 
   // Increment after insertion so the next write gets a fresh refId.
@@ -247,13 +255,14 @@ export circuit updateReference(
                  storageProvider: Opaque<"string">,
                  metadata: Opaque<"string">,
                  writtenAt: Uint<64>,
-                 keyEnvelope: Opaque<"string">
+                 keyEnvelope: Opaque<"string">,
+                 contentHash: Bytes<32>
                  ): [] {
   assert(references.member(disclose(refId)), "Reference not found");
   const entry = references.lookup(disclose(refId));
-  const ownerCommitment = validatedOwnerCommitment(refId);
-  assert(entry.ownerCommitment == ownerCommitment, "Not the owner");
-  const newCommitment = validatedNewOwnerCommitment(refId);
+  const currentOwnerCommitment = validatedOwnerCommitment(refId);
+  assert(entry.ownerCommitment == currentOwnerCommitment, "Not the owner");
+  const ownerCommitment = validatedNewOwnerCommitment(refId);
   const updatedEntry =
           ReferenceEntry { storageId,
                            encryptionScheme,
@@ -261,6 +270,7 @@ export circuit updateReference(
                            metadata,
                            writtenAt,
                            keyEnvelope,
-                           ownerCommitment: newCommitment };
+                           ownerCommitment,
+                           contentHash };
   references.insert(disclose(refId), disclose(updatedEntry));
 }

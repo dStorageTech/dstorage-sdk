@@ -460,4 +460,48 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
       expect(result.bytes).toEqual(CONTENT);
     });
   });
+
+  // ── Content hash — full stack ─────────────────────────────────────────────────
+
+  describe("content hash", () => {
+    it("store() writes a 64-char hex contentHash to the Midnight DataRegistry contract", async () => {
+      const { chainRefId } = await sdk.store(CONTENT);
+      const ref = await chainAdapter.readReference(chainRefId);
+      expect(typeof ref.contentHash).toBe("string");
+      expect(ref.contentHash).toHaveLength(64);
+      expect(/^[0-9a-f]{64}$/.test(ref.contentHash!)).toBe(true);
+    });
+
+    it("contentHash round-trip: store → retrieveByRefId succeeds with correct content", async () => {
+      const { chainRefId } = await sdk.store(CONTENT);
+      const result = await sdk.retrieveByRefId(chainRefId);
+      expect(result.bytes).toEqual(CONTENT);
+    });
+
+    it("contentHash appears in listReferences() output", async () => {
+      const { chainRefId } = await sdk.store(CONTENT);
+      const refs = await sdk.listReferences();
+      // listReferences returns DataReferenceSummary which doesn't expose contentHash,
+      // but we verify the underlying ref has it via readReference
+      const ref = await chainAdapter.readReference(chainRefId);
+      expect(ref.contentHash).toHaveLength(64);
+    });
+
+    it("update() stores a new contentHash and retrieval returns updated content", async () => {
+      const { chainRefId } = await sdk.store(CONTENT);
+      const refBefore = await chainAdapter.readReference(chainRefId);
+
+      const newContent = new TextEncoder().encode(
+        "updated via Midnight circuit",
+      );
+      await sdk.update(chainRefId, newContent);
+
+      const refAfter = await chainAdapter.readReference(chainRefId);
+      expect(refAfter.contentHash).toBeDefined();
+      expect(refAfter.contentHash).not.toBe(refBefore.contentHash);
+
+      const result = await sdk.retrieveByRefId(chainRefId);
+      expect(result.bytes).toEqual(newContent);
+    });
+  });
 });

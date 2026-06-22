@@ -1,14 +1,8 @@
-import { DStorageError } from "@dstorage/crypto";
+import { DStorageError, computeBlake3Hex } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
 
 export const CONTENT_HASH_TAG = "X-Content-Hash";
-
-export async function computeBlake3Hex(bytes: Uint8Array): Promise<string> {
-  const { blake3 } = await import("@noble/hashes/blake3.js");
-  return Array.from(blake3(bytes))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+export { computeBlake3Hex };
 
 export async function assertContentHash(
   id: string,
