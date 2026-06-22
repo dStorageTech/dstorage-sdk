@@ -19,7 +19,6 @@
 import {
   XChaChaScheme,
   DStorageError,
-  isDStorageError,
   computeBlake3Hex,
 } from "@dstorage/crypto";
 import {
@@ -351,7 +350,7 @@ export class DStorage implements DStorageContext {
               fileSizeBytes: uploadData.length,
             },
           };
-        } catch (chainErr) {
+        } catch {
           throw new StorePartialError(storeRecovery);
         }
       }
@@ -1537,7 +1536,7 @@ export class DStorage implements DStorageContext {
             fileSizeBytes: bytes.length,
           },
         };
-      } catch (chainErr) {
+      } catch {
         throw new StorePartialError(storeRecovery);
       }
     }

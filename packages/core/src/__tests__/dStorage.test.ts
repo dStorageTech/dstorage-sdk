@@ -764,7 +764,6 @@ describe("store tags option", () => {
 
   it("tags are returned in RetrieveResult.tags from retrieveByRefId", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
