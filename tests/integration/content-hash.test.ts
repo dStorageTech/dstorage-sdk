@@ -94,14 +94,24 @@ describe.skipIf(!arlocalOk)("content hash — arlocal + mock chain", () => {
     expect(ref.contentHash).toBe(expected);
   });
 
-  it("Arweave X-Content-Hash tag and on-chain contentHash match (both are BLAKE3 of ciphertext)", async () => {
+  it("private upload: Arweave X-Content-Hash tag and on-chain contentHash both agree", async () => {
     const { chainRefId } = await sdk.store(CONTENT);
     const ref = await mockChain.readReference(chainRefId);
     const result = await sdk.retrieveByRefId(chainRefId);
-    // The Arweave adapter writes X-Content-Hash = BLAKE3(ciphertext)
+    // ArweaveStorageAdapter writes X-Content-Hash = BLAKE3(ciphertext) as a tx tag
     const arweaveHash = result.tags["X-Content-Hash"];
     expect(arweaveHash).toBeTruthy();
-    // On-chain contentHash is also BLAKE3(ciphertext) — both should agree
+    // On-chain contentHash is also BLAKE3(ciphertext) — both must agree
+    expect(ref.contentHash).toBe(arweaveHash);
+  });
+
+  it("public upload: Arweave X-Content-Hash tag and on-chain contentHash both agree (hash of plaintext)", async () => {
+    const { chainRefId } = await sdk.store(CONTENT, { isPublic: true });
+    const ref = await mockChain.readReference(chainRefId);
+    const result = await sdk.retrieveByRefId(chainRefId);
+    // For public uploads the stored bytes are plaintext — both hashes cover the same bytes
+    const arweaveHash = result.tags["X-Content-Hash"];
+    expect(arweaveHash).toBeTruthy();
     expect(ref.contentHash).toBe(arweaveHash);
   });
 

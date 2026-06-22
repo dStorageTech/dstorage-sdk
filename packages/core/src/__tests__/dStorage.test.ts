@@ -1491,4 +1491,71 @@ describe("contentHash", () => {
       message: expect.stringContaining("[dStorage] Content hash mismatch"),
     });
   });
+
+  // ── public uploads ────────────────────────────────────────────────────────────
+
+  it("public store() writes a 64-char hex contentHash to chain", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId } = await ds.store(enc("public hash test"), {
+      isPublic: true,
+    });
+    const ref = await chain.readReference(chainRefId!);
+    expect(typeof ref.contentHash).toBe("string");
+    expect(ref.contentHash).toHaveLength(64);
+    expect(/^[0-9a-f]{64}$/.test(ref.contentHash!)).toBe(true);
+  });
+
+  it("public contentHash equals BLAKE3 of the raw plaintext bytes (no encryption layer)", async () => {
+    const { computeBlake3Hex } = await import("@dstorage/crypto");
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const chain = config.chainAdapter as MockChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const content = enc("public blake3 check");
+    const { chainRefId, storageId } = await ds.store(content, {
+      isPublic: true,
+    });
+    // Public: what's in storage is raw plaintext — same as the input bytes
+    const raw = storage.get(storageId)!;
+    const expected = await computeBlake3Hex(raw);
+    const ref = await chain.readReference(chainRefId!);
+    expect(ref.contentHash).toBe(expected);
+    // The stored bytes are also the original plaintext (no encryption for public uploads)
+    expect(raw).toEqual(content);
+  });
+
+  it("retrieveByRefId() succeeds for public upload when contentHash matches", async () => {
+    const ds = await makeInitedDStorage();
+    const content = "public retrieve with hash";
+    const { chainRefId } = await ds.store(enc(content), { isPublic: true });
+    const result = await ds.retrieveByRefId(chainRefId!);
+    expect(new TextDecoder().decode(result.bytes)).toBe(content);
+  });
+
+  it("tampered public upload triggers CONTENT_HASH_MISMATCH (no AEAD fallback for public data)", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId, storageId } = await ds.store(enc("public tamper"), {
+      isPublic: true,
+    });
+    // Flip a byte — public data has no AEAD protection, so only the on-chain hash catches this
+    const raw = storage.get(storageId)!;
+    const tampered = new Uint8Array(raw);
+    tampered[0] ^= 0xff;
+    storage.set(storageId, tampered);
+
+    await expect(ds.retrieveByRefId(chainRefId!)).rejects.toMatchObject({
+      code: CoreErrorCode.CONTENT_HASH_MISMATCH,
+      message: expect.stringContaining("[dStorage] Content hash mismatch"),
+    });
+  });
 });
