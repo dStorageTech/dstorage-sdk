@@ -150,7 +150,8 @@ try {
   const result = await sdk.store(bytes);
 } catch (err) {
   if (isStorePartialError(err)) {
-    const { storageId, storageProvider, keyEnvelope } = err.recovery;
+    const { storageId, storageProvider, keyEnvelope, contentHash } =
+      err.recovery;
     // Persist recovery to localStorage or DB — keyEnvelope is safe to store
     localStorage.setItem("pending-store", JSON.stringify(err.recovery));
     // Retry the chain write:
@@ -158,6 +159,7 @@ try {
       storageId,
       storageProvider,
       keyEnvelope,
+      contentHash, // preserves the on-chain integrity hash for the recovered reference
     });
   }
 }
@@ -182,13 +184,19 @@ On app startup, check for a pending recovery:
 ```typescript
 const pending = localStorage.getItem("pending-store");
 if (pending) {
-  const { storageId, storageProvider, keyEnvelope } = JSON.parse(pending);
-  await sdk.registerReference({ storageId, storageProvider, keyEnvelope });
+  const { storageId, storageProvider, keyEnvelope, contentHash } =
+    JSON.parse(pending);
+  await sdk.registerReference({
+    storageId,
+    storageProvider,
+    keyEnvelope,
+    contentHash,
+  });
   localStorage.removeItem("pending-store");
 }
 ```
 
-`keyEnvelope` is the DEK already encrypted under your KEK — it is safe to persist to localStorage or a database. The raw DEK is never exposed. For public uploads, `keyEnvelope` is `undefined` and the content remains publicly accessible via `retrieveByStorageId(recovery.storageId)`.
+`keyEnvelope` is the DEK already encrypted under your KEK — it is safe to persist to localStorage or a database. The raw DEK is never exposed. For public uploads, `keyEnvelope` is `undefined` and the content remains publicly accessible via `retrieveByStorageId(recovery.storageId)`. `contentHash` is the BLAKE3 hex digest of the stored ciphertext — pass it to `registerReference()` so the recovered reference carries the same on-chain integrity commitment.
 
 **How do I preserve a deployed contract address across runs?**
 
@@ -417,6 +425,37 @@ To opt out when using a fully trusted private gateway, pass `skipIntegrityCheck:
 **Is the storage pointer on-chain encrypted?**
 
 Yes. The `storageId` (the Arweave content address) is encrypted with the same per-upload DEK using a fresh nonce, then stored in the `DataRegistry` contract. A blockchain observer cannot learn which storage resource belongs to which wallet even though the on-chain record is public.
+
+**What is the on-chain content hash and what does it protect against?**
+
+When a reference is written (via `store()` or `registerReference()`), the SDK computes a BLAKE3 hash of the ciphertext bytes — the exact bytes as written to the storage network — and stores it in the `DataRegistry` contract alongside the encrypted storage pointer. On `retrieveByRefId()`, the SDK re-downloads those bytes, recomputes the hash, and compares it to the on-chain value before attempting decryption.
+
+This catches:
+
+- A compromised or manipulated storage gateway returning bytes that have been altered since upload.
+- Any divergence between what was committed to the chain and what the storage network currently serves.
+
+For private uploads, AEAD authentication (XChaCha20-Poly1305) provides a second independent tamper check during decryption. For public uploads (no encryption), the on-chain hash is the primary integrity guarantee beyond the storage adapter's own tag.
+
+If the check fails, `retrieveByStorageId()` throws a `DStorageError` with code `CONTENT_HASH_MISMATCH` before any decryption is attempted. `retrieveByRefId()` delegates to `retrieveByStorageId()`, passing the hash from the on-chain reference — so the check fires automatically on every `retrieveByRefId()` call when a hash is present. You can also call `retrieveByStorageId(storageId, dekScheme, knownHash)` directly to perform the same check without going through the chain adapter.
+
+**Is the on-chain content hash computed from the plaintext or the ciphertext?**
+
+Always the ciphertext — the bytes exactly as stored on the storage network. For private uploads this is the encrypted blob; because a fresh random nonce is generated per upload, the ciphertext is non-deterministic even for identical plaintext, so the on-chain hash reveals nothing about content. For public uploads (`isPublic: true`) the ciphertext equals the plaintext, which is acceptable since the data is world-readable by design.
+
+For chunked uploads, the hash covers the **manifest ciphertext** (the small encrypted JSON at the `storageId` pointer), not the concatenated chunks. Individual chunks are already independently protected by their AEAD authentication tags and position-binding AAD.
+
+**How does the on-chain hash differ from the `X-Content-Hash` Arweave tag?**
+
+|                          | `X-Content-Hash` (Arweave tag)            | On-chain hash (`DataRegistry`)                                |
+| ------------------------ | ----------------------------------------- | ------------------------------------------------------------- |
+| **Where stored**         | Arweave transaction metadata              | Midnight `DataRegistry` contract                              |
+| **Who verifies**         | Storage adapter (`ArweaveStorageAdapter`) | Core SDK (`retrieveByStorageId`, called by `retrieveByRefId`) |
+| **Applies to**           | Arweave adapters only                     | All storage adapters                                          |
+| **Skippable**            | Yes — `skipIntegrityCheck: true`          | No — always checked when present                              |
+| **Independent of chain** | Yes                                       | Anchored to the on-chain reference                            |
+
+Both checks run on `retrieveByRefId()` with Arweave adapters, providing two independent commitments. The on-chain hash covers storage adapters that do not implement their own tag (Mock, Autonomi, future adapters).
 
 **What is `ownerSecret` and why is it not stored?**
 
