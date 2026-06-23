@@ -70,6 +70,17 @@ import type {
 import type { DataReferenceSummary, EncryptionScheme } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
+// Storage transaction tag keys and values attached to every upload.
+const TAG_SDK_VERSION = "dStorage-Version";
+const TAG_CONTENT_TYPE = "Content-Type";
+const TAG_CONTENT_TYPE_OCTET_STREAM = "application/octet-stream"; // encrypted or unknown binary
+const TAG_CONTENT_TYPE_JSON = "application/json"; // public chunk manifests
+// Chunk-specific tags written on each piece of a chunked upload.
+const TAG_CHUNK_INDEX = "dStorage-Chunk-Index";
+const TAG_CHUNK_TOTAL = "dStorage-Chunk-Total";
+// Marks the manifest transaction that ties a chunked upload together.
+const TAG_MANIFEST_UPLOAD = "dStorage-Manifest-Upload";
+
 function wrapError(err: unknown): never {
   if (err instanceof DStorageError) throw err;
   throw new DStorageError(
@@ -236,8 +247,8 @@ export class DStorage implements DStorageContext {
       const sdkVersion = corePackageJson.version ?? "unknown";
       const storageResult = await this.config.storageAdapter.store(uploadData, {
         ...tags,
-        "dStorage-version": sdkVersion,
-        "Content-Type": "application/octet-stream",
+        [TAG_SDK_VERSION]: sdkVersion,
+        [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
       });
 
       if (isPublic) {
@@ -532,7 +543,7 @@ export class DStorage implements DStorageContext {
           uploadData,
           {
             ...tags,
-            "Content-Type": "application/octet-stream",
+            [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
           },
         );
         const onChainStorageId = await scheme.encryptStorageId(
@@ -1386,10 +1397,10 @@ export class DStorage implements DStorageContext {
 
       const chunkResult = await this.config.storageAdapter.store(chunkData, {
         ...tags,
-        "dStorage-version": sdkVersion,
-        "Content-Type": "application/octet-stream",
-        "dstorage-chunk-index": String(i),
-        "dstorage-chunk-total": String(totalChunks),
+        [TAG_SDK_VERSION]: sdkVersion,
+        [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
+        [TAG_CHUNK_INDEX]: String(i),
+        [TAG_CHUNK_TOTAL]: String(totalChunks),
       });
 
       chunkEntries.push({
@@ -1441,9 +1452,11 @@ export class DStorage implements DStorageContext {
     const manifestResult = await this.config.storageAdapter.store(
       manifestData,
       {
-        "dStorage-version": sdkVersion,
-        "Content-Type": "application/octet-stream",
-        "dStorage-manifest-upload": "true",
+        [TAG_SDK_VERSION]: sdkVersion,
+        [TAG_CONTENT_TYPE]: isPublic
+          ? TAG_CONTENT_TYPE_JSON
+          : TAG_CONTENT_TYPE_OCTET_STREAM,
+        [TAG_MANIFEST_UPLOAD]: "true",
       },
     );
 
