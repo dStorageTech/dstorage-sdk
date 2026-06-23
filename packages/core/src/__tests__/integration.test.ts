@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
-import { MockChainAdapter, ChainErrorCode } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter, ChainErrorCode } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
 
@@ -25,12 +25,12 @@ const testSeedProvider = (salt: string) =>
 
 // ── Shared adapters ───────────────────────────────────────────────────────────
 // Each test gets its own storage + chain adapter instances to avoid cross-test
-// state interference (module-level Maps in mock adapters are isolated per file).
+// state interference (simulator state is per-instance).
 
 function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockChainAdapter(),
+    chainAdapter: new MidnightSimulatorChainAdapter(),
     encryptionAdapters: [testSeedProvider(address)],
   };
 }
@@ -96,42 +96,42 @@ describe("upload → retrieveByRefId round-trip", () => {
 
 describe("wallet isolation", () => {
   it("Alice cannot decrypt Bob's data (different encryption keys)", async () => {
-    // Use separate adapter instances so storage is shared but chain is separate
+    // Use separate chain adapter instances so Alice's chain has no knowledge of Bob's refs.
     const sharedStorage = new MockStorageAdapter();
     const alice = new DStorage({
       storageAdapter: sharedStorage,
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
       encryptionAdapters: [testSeedProvider("0xAlice_iso1")],
     });
     const bob = new DStorage({
       storageAdapter: sharedStorage,
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
       encryptionAdapters: [testSeedProvider("0xBob_iso1")],
     });
     await alice.init();
     await bob.init();
 
-    // Bob uploads something
-    const { storageId, chainRefId } = await bob.store(enc("Bob private"));
-    // Reconstruct Bob's refId for Alice to try to retrieveByRefId
-    const refId = `${storageId}::${chainRefId}`;
+    // Bob uploads something — refId is stored only in Bob's chain adapter instance.
+    const { chainRefId } = await bob.store(enc("Bob private"));
 
-    // Alice attempts to retrieveByRefId with a refId from Bob's separate chain adapter — not found.
-    await expect(alice.retrieveByRefId(refId)).rejects.toMatchObject({
-      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+    // Alice attempts to retrieveByRefId with Bob's refId — not in Alice's chain adapter.
+    await expect(alice.retrieveByRefId(chainRefId)).rejects.toMatchObject({
+      code: ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
     });
   });
 
   it("same address always derives the same encryption key", async () => {
+    // Share one chain adapter so both SDK instances see the same on-chain state.
     const sharedStorage = new MockStorageAdapter();
+    const sharedChain = new MidnightSimulatorChainAdapter();
     const ds1 = new DStorage({
       storageAdapter: sharedStorage,
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: sharedChain,
       encryptionAdapters: [testSeedProvider("0xAlice_iso2")],
     });
     const ds2 = new DStorage({
       storageAdapter: sharedStorage,
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: sharedChain,
       encryptionAdapters: [testSeedProvider("0xAlice_iso2")], // same salt → same key
     });
     await ds1.init();
@@ -140,7 +140,7 @@ describe("wallet isolation", () => {
     // Upload with ds1
     const { chainRefId } = await ds1.store(enc("Shared key test"));
 
-    // Retrieve with ds2 (same address → same key)
+    // Retrieve with ds2 (same address → same key, same chain → same ref)
     const { bytes } = await ds2.retrieveByRefId(chainRefId);
     expect(new TextDecoder().decode(bytes)).toBe("Shared key test");
   });
@@ -188,7 +188,7 @@ describe("upload → list → remove lifecycle", () => {
 
   it("Alice's private ref: storageId visible and no decryptionError for Alice; storageId null and decryptionError set for Bob", async () => {
     const sharedStorage = new MockStorageAdapter();
-    const sharedChain = new MockChainAdapter();
+    const sharedChain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: sharedChain,
@@ -226,7 +226,7 @@ describe("destroy and reconnect", () => {
     const makeDs = () =>
       new DStorage({
         storageAdapter: sharedStorage,
-        chainAdapter: new MockChainAdapter(),
+        chainAdapter: new MidnightSimulatorChainAdapter(),
         encryptionAdapters: [testSeedProvider("0xAlice_drr1")],
       });
 

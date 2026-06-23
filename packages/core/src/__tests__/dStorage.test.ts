@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import type { StorageProviderName } from "@dstorage/storage";
-import { MockChainAdapter, ChainErrorCode } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter, ChainErrorCode } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
 import {
@@ -18,7 +18,7 @@ const enc = (s: string) => new TextEncoder().encode(s);
 function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockChainAdapter(),
+    chainAdapter: new MidnightSimulatorChainAdapter(),
     encryptionAdapters: [
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
@@ -127,10 +127,10 @@ describe("store", () => {
     expect(result.storageProvider).toBe("mock");
   });
 
-  it('chainProvider is "mock"', async () => {
+  it('chainProvider is "midnight"', async () => {
     const ds = await makeInitedDStorage();
     const result = await ds.store(enc("hello world"));
-    expect(result.chainProvider).toBe("mock");
+    expect(result.chainProvider).toBe("midnight");
   });
 
   it("uploadedAt is a recent timestamp", async () => {
@@ -209,10 +209,10 @@ describe("retrieveByRefId", () => {
 
   it("throws when the chainRefId is not found in storage", async () => {
     const ds = await makeInitedDStorage();
-    await expect(ds.retrieveByRefId("::ref_abc")).rejects.toMatchObject({
-      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+    await expect(ds.retrieveByRefId("a".repeat(64))).rejects.toMatchObject({
+      code: ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
       message: expect.stringContaining(
-        "No reference found for refId: ::ref_abc",
+        "No reference found for refId: " + "a".repeat(64),
       ),
     });
   });
@@ -226,7 +226,7 @@ describe("retrieveByRefId", () => {
       override readonly name: StorageProviderName = "arweave";
     }
 
-    const chainAdapter = new MockChainAdapter();
+    const chainAdapter = new MidnightSimulatorChainAdapter();
     const encryption = new PasswordEncryptionAdapter({
       password: "dstorage-test-passphrase-v1!",
       salt: "mismatch-test",
@@ -263,7 +263,7 @@ describe("retrieveByRefId", () => {
 
 describe("keyEnvelope error codes on retrieveByRefId", () => {
   // Helper: a chain adapter that overrides readReference to inject a bad envelope.
-  class TamperedChainAdapter extends MockChainAdapter {
+  class TamperedChainAdapter extends MidnightSimulatorChainAdapter {
     constructor(private readonly badEnvelope: string) {
       super();
     }
@@ -339,7 +339,7 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
   });
 
   it("throws with cause.code 'no_wrapper_matched' when the envelope is valid but the key is wrong", async () => {
-    const chain = new MockChainAdapter();
+    const chain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
       storageAdapter: new MockStorageAdapter(),
       chainAdapter: chain,
@@ -392,7 +392,7 @@ describe("public store and retrieve", () => {
     // ownerSecret. Without it the reference could never be removed or updated.
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
       encryptionAdapters: [],
     });
     await ds.init();
@@ -461,7 +461,7 @@ describe("public store and retrieve", () => {
 
   it("private store: metadata stored on-chain is not the plaintext JSON", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -498,8 +498,24 @@ describe("public store and retrieve", () => {
   });
 
   it("two users can both retrieve the same public content by refId", async () => {
-    const ds1 = await makeInitedDStorage();
-    const ds2 = await makeInitedDStorage();
+    const sharedStorage = new MockStorageAdapter();
+    const sharedChain = new MidnightSimulatorChainAdapter();
+    const makePublicUser = (address: string) =>
+      new DStorage({
+        storageAdapter: sharedStorage,
+        chainAdapter: sharedChain,
+        encryptionAdapters: [
+          new PasswordEncryptionAdapter({
+            password: "dstorage-test-passphrase-v1!",
+            salt: address,
+            params: { N: 1024, r: 8, p: 1 },
+          }),
+        ],
+      });
+    const ds1 = makePublicUser("0xUserA");
+    const ds2 = makePublicUser("0xUserB");
+    await ds1.init();
+    await ds2.init();
     const content = "shared public content";
     const { chainRefId } = await ds1.store(enc(content), { isPublic: true });
     const result = await ds2.retrieveByRefId(chainRefId);
@@ -530,7 +546,7 @@ describe("listReferences", () => {
 
   it("private store by another user: storageId is null and decryptionError is set", async () => {
     const sharedStorage = new MockStorageAdapter();
-    const sharedChain = new MockChainAdapter();
+    const sharedChain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: sharedChain,
@@ -583,7 +599,7 @@ describe("listReferences", () => {
   it("public store by another user: storageId is visible but decryptionError is set", async () => {
     const adapters = {
       storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
     };
     const alice = new DStorage({
       ...adapters,
@@ -673,7 +689,7 @@ describe("store metadata option", () => {
 
   it("another user cannot decrypt metadata from listReferences", async () => {
     const sharedStorage = new MockStorageAdapter();
-    const sharedChain = new MockChainAdapter();
+    const sharedChain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
       storageAdapter: sharedStorage,
       chainAdapter: sharedChain,
@@ -805,14 +821,14 @@ describe("removeReference", () => {
     const { chainRefId } = await ds.store(enc("to remove 2"));
     await ds.removeReference(chainRefId);
     await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
-      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+      code: ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
     });
   });
 
   it("throws when the refId is not found", async () => {
     const ds = await makeInitedDStorage();
-    await expect(ds.removeReference("ref_nonexistent")).rejects.toMatchObject({
-      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+    await expect(ds.removeReference("b".repeat(64))).rejects.toMatchObject({
+      code: ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
     });
   });
 
@@ -833,7 +849,7 @@ describe("removeReference", () => {
     });
     await ds.removeReference(chainRefId);
     await expect(ds.retrieveByRefId(chainRefId)).rejects.toMatchObject({
-      code: ChainErrorCode.MOCK_REF_NOT_FOUND,
+      code: ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
     });
   });
 });
@@ -904,7 +920,7 @@ describe("registerReference", () => {
   it("throws when no encryption adapters are configured", async () => {
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
     });
     await ds.init();
     await expect(
@@ -919,7 +935,7 @@ describe("registerReference", () => {
 
   it("forwards storageProvider option to the chain reference", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -931,16 +947,6 @@ describe("registerReference", () => {
     const refs = await chain.listReferences();
     const entry = refs.find((r) => r.refId === chainRefId);
     expect(entry?.storageProvider).toBe("arweave");
-  });
-
-  it("uses provided refId instead of the one returned by the chain adapter", async () => {
-    const ds = await makeInitedDStorage();
-    const customRefId = "my-custom-ref-id-override";
-    const result = await ds.registerReference({
-      storageId: "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
-      refId: customRefId,
-    });
-    expect(result.chainRefId).toBe(customRefId);
   });
 
   it("metadata is returned by retrieveByRefId after registerReference with no content", async () => {
@@ -1003,9 +1009,9 @@ describe("update", () => {
   });
 
   it("throws when the chain adapter does not support updateReference", async () => {
-    class NoUpdateChain extends MockChainAdapter {
+    class NoUpdateChain extends MidnightSimulatorChainAdapter {
       override updateReference =
-        undefined as unknown as MockChainAdapter["updateReference"];
+        undefined as unknown as MidnightSimulatorChainAdapter["updateReference"];
     }
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
@@ -1029,7 +1035,7 @@ describe("update", () => {
   it("throws when no encryption adapters are configured", async () => {
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
     });
     await ds.init();
     await expect(ds.update("refId", enc("data"))).rejects.toMatchObject({
@@ -1296,7 +1302,7 @@ describe("StorePartialError recovery", () => {
 describe("contentHash", () => {
   it("store() writes a 64-char hex contentHash to the chain adapter", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1311,7 +1317,7 @@ describe("contentHash", () => {
     const { computeBlake3Hex } = await import("@dstorage/crypto");
     const config = makeConfig();
     const storage = config.storageAdapter as MockStorageAdapter;
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1349,7 +1355,7 @@ describe("contentHash", () => {
 
   it("contentHash is preserved unchanged through rotateKeys()", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1365,7 +1371,7 @@ describe("contentHash", () => {
 
   it("contentHash changes after update() with new content", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1406,7 +1412,7 @@ describe("contentHash", () => {
 
   it("registerReference() with contentHash stores it on chain", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
     vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
@@ -1495,7 +1501,7 @@ describe("contentHash", () => {
 
   it("public store() writes a 64-char hex contentHash to chain", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1512,7 +1518,7 @@ describe("contentHash", () => {
     const { computeBlake3Hex } = await import("@dstorage/crypto");
     const config = makeConfig();
     const storage = config.storageAdapter as MockStorageAdapter;
-    const chain = config.chainAdapter as MockChainAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 

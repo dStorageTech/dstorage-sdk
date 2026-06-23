@@ -13,7 +13,7 @@
 import { describe, it, expect } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
-import { MockChainAdapter } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
 import {
   PasswordEncryptionAdapter,
   MnemonicEncryptionAdapter,
@@ -43,7 +43,7 @@ const mnemonicProvider = () =>
 function sharedAdapters() {
   return {
     storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockChainAdapter(),
+    chainAdapter: new MidnightSimulatorChainAdapter(),
   };
 }
 
@@ -616,7 +616,7 @@ describe("rotateKeys — password rotation via mnemonic recovery", () => {
   it("throws ROTATE_KEYS_REQUIRES_ENCRYPTION when no encryption adapters are configured", async () => {
     const ds = new DStorage({
       storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MockChainAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
     });
     await ds.init();
     await expect(ds.rotateKeys("refId")).rejects.toMatchObject({

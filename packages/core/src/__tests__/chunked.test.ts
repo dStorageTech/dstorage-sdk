@@ -18,7 +18,7 @@ vi.mock("../chunked.js", async (importOriginal) => {
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import type { StorageProviderName } from "@dstorage/storage";
-import { MockChainAdapter } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import {
   isManifest,
@@ -35,7 +35,7 @@ const CHUNK_SIZE = 512;
 function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
     storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockChainAdapter(),
+    chainAdapter: new MidnightSimulatorChainAdapter(),
     encryptionAdapters: [
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",

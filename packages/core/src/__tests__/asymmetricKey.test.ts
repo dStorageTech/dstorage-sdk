@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
-import { MockChainAdapter } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
 import {
   KeypairEncryptionAdapter,
   PasswordEncryptionAdapter,
@@ -23,7 +23,7 @@ const CTX = "test-context";
 function sharedAdapters() {
   return {
     storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MockChainAdapter(),
+    chainAdapter: new MidnightSimulatorChainAdapter(),
   };
 }
 

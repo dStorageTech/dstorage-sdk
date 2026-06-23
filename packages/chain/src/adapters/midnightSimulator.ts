@@ -188,6 +188,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
         encryptionScheme: (e.encryptionScheme as EncryptionScheme) || null,
         keyEnvelope: e.keyEnvelope ?? "",
         ownerCommitment: uint8ArrayToHex(e.ownerCommitment),
+        ...(e.metadata ? { encryptedMetadata: e.metadata } : {}),
       });
     }
     return result.sort((a, b) => a.refId.localeCompare(b.refId));
