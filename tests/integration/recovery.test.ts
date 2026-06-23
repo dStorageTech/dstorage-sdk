@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { DStorage, isStorePartialError } from "@dstorage/core";
 import type { StoreRecovery } from "@dstorage/core";
-import { MockMidnightChainAdapter } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
@@ -31,11 +31,11 @@ describe.skipIf(!arlocalOk)(
   "StorePartialError recovery — arlocal storage + mock chain",
   () => {
     let sdk: DStorage;
-    let mockChain: MockMidnightChainAdapter;
+    let mockChain: MidnightSimulatorChainAdapter;
 
     beforeAll(async () => {
       const { adapter } = await createStorageAdapter(env.arlocalUrl);
-      mockChain = new MockMidnightChainAdapter({ logger: console });
+      mockChain = new MidnightSimulatorChainAdapter({ logger: console });
       sdk = new DStorage({
         storageAdapter: adapter,
         chainAdapter: mockChain,

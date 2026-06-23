@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { DStorage } from "@dstorage/core";
-import { MockMidnightChainAdapter } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import { readEnv } from "./helpers/env.js";
 import { checkArlocal, createStorageAdapter } from "./helpers/arlocal.js";
@@ -27,11 +27,11 @@ const arlocalOk = await checkArlocal(env.arlocalUrl);
 
 describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
   let sdk: DStorage;
-  let mockChain: MockMidnightChainAdapter;
+  let mockChain: MidnightSimulatorChainAdapter;
 
   beforeAll(async () => {
     const { adapter } = await createStorageAdapter(env.arlocalUrl);
-    mockChain = new MockMidnightChainAdapter({ logger: console });
+    mockChain = new MidnightSimulatorChainAdapter({ logger: console });
     sdk = new DStorage({
       storageAdapter: adapter,
       chainAdapter: mockChain,

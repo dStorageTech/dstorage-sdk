@@ -48,4 +48,7 @@ export type {
   DataReferenceSummary,
   ChainQuote,
 } from "@dstorage/chain";
-export { MockChainAdapter, MockMidnightChainAdapter } from "@dstorage/chain";
+export {
+  MockChainAdapter,
+  MidnightSimulatorChainAdapter,
+} from "@dstorage/chain";

@@ -9,9 +9,8 @@
  */
 export * from "./types.js";
 export * from "./adapters/mock.js";
-export * from "./adapters/mockMidnight.js";
+export * from "./adapters/midnightSimulator.js";
 export * from "./adapters/httpGateway.js";
-export * from "./mockProofServer.js";
 export {
   MidnightChainAdapter,
   NETWORKS,

@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { DStorage, CoreErrorCode } from "@dstorage/core";
-import { MockMidnightChainAdapter } from "@dstorage/chain";
+import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
 import {
   PasswordEncryptionAdapter,
   MnemonicEncryptionAdapter,
@@ -62,12 +62,12 @@ describe.skipIf(!arlocalOk)(
   "multi-key wrapping — arlocal storage + mock chain",
   () => {
     let storageAdapter: ArweaveLocalStorageAdapter;
-    let chainAdapter: MockMidnightChainAdapter;
+    let chainAdapter: MidnightSimulatorChainAdapter;
 
     beforeAll(async () => {
       const { adapter } = await createStorageAdapter(env.arlocalUrl);
       storageAdapter = adapter;
-      chainAdapter = new MockMidnightChainAdapter({ logger: console });
+      chainAdapter = new MidnightSimulatorChainAdapter({ logger: console });
     });
 
     it("content stored with two providers is retrievable by the password provider", async () => {

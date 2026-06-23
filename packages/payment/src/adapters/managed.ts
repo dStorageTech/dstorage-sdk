@@ -301,7 +301,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     }
 
     // When the adapter itself is configured for managed mock, always use that
-    // flow regardless of what network the caller claims (e.g. MockMidnightChainAdapter
+    // flow regardless of what network the caller claims (e.g. MidnightSimulatorChainAdapter
     // passes network:"midnight" but the payment should still go through TEST).
     if (this.network === "managedmock") {
       return this._payManagedMock(instruction, onStatus);

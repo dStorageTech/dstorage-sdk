@@ -228,7 +228,7 @@ Reference `dist/browser.mjs` directly, or serve it from a CDN that supports impo
 | `ArweavePaymentAdapter`                       |       ✅       |                                                                                            |
 | `ManagedPaymentAdapter`                       |       ✅       |                                                                                            |
 | `MockChainAdapter`                            |       ✅       |                                                                                            |
-| `MockMidnightChainAdapter`                    |       ✅       |                                                                                            |
+| `MidnightSimulatorChainAdapter`               |       ✅       |                                                                                            |
 | `HttpGatewayChainAdapter`                     |       ✅       |                                                                                            |
 | `MidnightChainAdapter` (connector mode)       |       ✅       | Requires Lace wallet extension; use `NETWORKS` preset for endpoint config — see note below |
 | `MidnightChainAdapter` (provider/facade mode) |       ❌       | Requires LevelDB (private state) and filesystem (ZK artifacts) — Node.js only              |
@@ -283,7 +283,7 @@ npm test
 
 Integration tests exercise real network adapters end-to-end:
 
-- **arlocal-only suite** — `ArweaveLocalStorageAdapter` against a local arlocal node with `MockMidnightChainAdapter`
+- **arlocal-only suite** — `ArweaveLocalStorageAdapter` against a local arlocal node with `MidnightSimulatorChainAdapter`
 - **multi-key wrapping suite** — uploads encrypted with two encryption adapters verified against real arlocal storage; each adapter independently decrypts and an unrelated adapter is rejected
 - **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node); includes wallet-isolation test verifying that a different encryption adapter cannot decrypt another user's private references
 

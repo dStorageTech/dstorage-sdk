@@ -3,7 +3,7 @@ import {
   MockStorageAdapter,
   ArweaveStorageAdapter,
   ArweaveLocalStorageAdapter,
-  MockMidnightChainAdapter,
+  MidnightSimulatorChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage-tech/dstorage";
 import { type EncryptionAdapter } from "@dstorage/encryption";
@@ -79,7 +79,7 @@ export async function buildSDK(
     }
     chainAdapter = new MidnightChainAdapter(midnightConfig);
   } else {
-    chainAdapter = new MockMidnightChainAdapter({
+    chainAdapter = new MidnightSimulatorChainAdapter({
       logger: console,
     });
   }

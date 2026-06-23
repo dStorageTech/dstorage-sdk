@@ -39,7 +39,7 @@ import {
   type Logger as DStorageLogger,
   MnemonicEncryptionAdapter,
   PasswordEncryptionAdapter,
-  MockMidnightChainAdapter,
+  MidnightSimulatorChainAdapter,
   MockStorageAdapter,
 } from "@dstorage-tech/dstorage";
 import { ArweaveLocalStorageAdapter } from "@dstorage/storage";
@@ -89,7 +89,10 @@ type NetworkName = keyof typeof NETWORKS;
 
 async function main(): Promise<void> {
   let rl = createInterface({ input, output });
-  let chainAdapter: MidnightChainAdapter | MockMidnightChainAdapter | undefined;
+  let chainAdapter:
+    | MidnightChainAdapter
+    | MidnightSimulatorChainAdapter
+    | undefined;
 
   try {
     console.log("\n=== dStorage Midnight Console Demo ===\n");
@@ -296,7 +299,7 @@ async function main(): Promise<void> {
 
     // ── 8. Build the chain adapter ──────────────────────────────────────────
     if (useManagedMock) {
-      chainAdapter = new MockMidnightChainAdapter({
+      chainAdapter = new MidnightSimulatorChainAdapter({
         signingServerUrl: SIGNING_SERVER_URL!,
         authToken: authToken!,
         logger,

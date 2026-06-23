@@ -1,29 +1,29 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MockMidnightChainAdapter } from "../adapters/mockMidnight.js";
+import { MidnightSimulatorChainAdapter } from "../adapters/midnightSimulator.js";
 import { ChainErrorCode } from "../errors.js";
 
 afterEach(() => vi.useRealTimers());
 
-// Use a zero-delay proof server for all tests to keep them fast.
 function makeAdapter() {
-  return new MockMidnightChainAdapter({
-    proofServerMinMs: 0,
-    proofServerMaxMs: 0,
-  });
+  return new MidnightSimulatorChainAdapter();
 }
+
+const TEST_OWNER_SECRET = new Uint8Array(32).fill(1);
 
 function uniqueRef(tag: string) {
   return {
     storageId: `store_${tag}`,
     storageProvider: "mock",
-    owner: `0xOwner_${tag}`,
     writtenAt: Date.now(),
     keyEnvelope:
       '{"v":1,"wrappers":[{"wrapKeyName":"test","algorithm":"xchacha20poly1305-v1","kekDerivation":"hkdf-sha256-v1","wrappedDek":"AAAA"}]}',
+    ownerSecret: TEST_OWNER_SECRET,
   };
 }
 
-describe("MockMidnightChainAdapter", () => {
+const NONEXISTENT_REF_ID = "a".repeat(64);
+
+describe("MidnightSimulatorChainAdapter", () => {
   it('name is "midnight"', () => {
     expect(makeAdapter().name).toBe("midnight");
   });
@@ -32,11 +32,8 @@ describe("MockMidnightChainAdapter", () => {
 
   describe("writeReference", () => {
     it("returns a ChainWriteResult with refId, provider, blockHeight, writtenAt", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
-      const p = adapter.writeReference(uniqueRef("wr1"));
-      await vi.runAllTimersAsync();
-      const result = await p;
+      const result = await adapter.writeReference(uniqueRef("wr1"));
       expect(result).toHaveProperty("refId");
       expect(result).toHaveProperty("provider");
       expect(result).toHaveProperty("blockHeight");
@@ -44,72 +41,44 @@ describe("MockMidnightChainAdapter", () => {
     });
 
     it('provider is "midnight"', async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
-      const p = adapter.writeReference(uniqueRef("wr2"));
-      await vi.runAllTimersAsync();
-      const result = await p;
+      const result = await adapter.writeReference(uniqueRef("wr2"));
       expect(result.provider).toBe("midnight");
     });
 
-    it('refId starts with "ref_"', async () => {
-      vi.useFakeTimers();
+    it("refId is a 64-char lowercase hex string (circuit-derived)", async () => {
       const adapter = makeAdapter();
-      const p = adapter.writeReference(uniqueRef("wr3"));
-      await vi.runAllTimersAsync();
-      const result = await p;
-      expect(result.refId.startsWith("ref_")).toBe(true);
+      const result = await adapter.writeReference(uniqueRef("wr3"));
+      expect(result.refId).toHaveLength(64);
+      expect(/^[0-9a-f]{64}$/.test(result.refId)).toBe(true);
     });
 
     it("blockHeight starts at or above 1,000,000 (realistic mock)", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
-      const p = adapter.writeReference(uniqueRef("wr4"));
-      await vi.runAllTimersAsync();
-      const result = await p;
+      const result = await adapter.writeReference(uniqueRef("wr4"));
       expect(result.blockHeight).toBeGreaterThanOrEqual(1_000_000);
     });
 
     it("blockHeight increments by 1 on each write", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
-
-      const p1 = adapter.writeReference(uniqueRef("wr5a"));
-      await vi.runAllTimersAsync();
-      const r1 = await p1;
-
-      const p2 = adapter.writeReference(uniqueRef("wr5b"));
-      await vi.runAllTimersAsync();
-      const r2 = await p2;
-
+      const r1 = await adapter.writeReference(uniqueRef("wr5a"));
+      const r2 = await adapter.writeReference(uniqueRef("wr5b"));
       expect(r2.blockHeight).toBe(r1.blockHeight! + 1);
     });
 
     it("successive writes return unique refIds", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
-
-      const p1 = adapter.writeReference(uniqueRef("wr6a"));
-      await vi.runAllTimersAsync();
-      const r1 = await p1;
-
-      const p2 = adapter.writeReference(uniqueRef("wr6b"));
-      await vi.runAllTimersAsync();
-      const r2 = await p2;
-
+      const r1 = await adapter.writeReference(uniqueRef("wr6a"));
+      const r2 = await adapter.writeReference(uniqueRef("wr6b"));
       expect(r1.refId).not.toBe(r2.refId);
     });
 
     it("written reference is retrievable", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
       const ref = uniqueRef("wr7");
-      const p = adapter.writeReference(ref);
-      await vi.runAllTimersAsync();
-      const result = await p;
+      const result = await adapter.writeReference(ref);
       const stored = await adapter.readReference(result.refId);
       expect(stored.storageId).toBe(ref.storageId);
-      expect(stored.owner).toBe(ref.owner);
     });
   });
 
@@ -117,33 +86,29 @@ describe("MockMidnightChainAdapter", () => {
 
   describe("readReference", () => {
     it("returns the stored reference", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
       const ref = {
         storageId: "sid_rr1",
         storageProvider: "arweave",
-        owner: "0xAlice_rr1",
         writtenAt: Date.now(),
         keyEnvelope:
           '{"v":1,"wrappers":[{"wrapKeyName":"test","algorithm":"xchacha20poly1305-v1","kekDerivation":"hkdf-sha256-v1","wrappedDek":"AAAA"}]}',
+        ownerSecret: TEST_OWNER_SECRET,
       };
-      const p = adapter.writeReference(ref);
-      await vi.runAllTimersAsync();
-      const { refId } = await p;
+      const { refId } = await adapter.writeReference(ref);
       const stored = await adapter.readReference(refId);
       expect(stored.storageId).toBe("sid_rr1");
       expect(stored.storageProvider).toBe("arweave");
-      expect(stored.owner).toBe("0xAlice_rr1");
     });
 
     it("throws for unknown refId", async () => {
       const adapter = makeAdapter();
       await expect(
-        adapter.readReference("ref_does_not_exist"),
+        adapter.readReference(NONEXISTENT_REF_ID),
       ).rejects.toMatchObject({
-        code: ChainErrorCode.MOCK_MIDNIGHT_REF_NOT_FOUND,
+        code: ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
         message: expect.stringContaining(
-          "[dStorage/mock-midnight] No reference found for refId: ref_does_not_exist",
+          "[dStorage/midnight] No reference found for refId:",
         ),
       });
     });
@@ -159,24 +124,16 @@ describe("MockMidnightChainAdapter", () => {
     });
 
     it("includes a written reference", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
-      const wp = adapter.writeReference(uniqueRef("all1"));
-      await vi.runAllTimersAsync();
-      const { refId } = await wp;
-
+      const { refId } = await adapter.writeReference(uniqueRef("all1"));
       const list = await adapter.listReferences();
       expect(list.some((r) => r.refId === refId)).toBe(true);
     });
 
     it("returns a written reference after writeReference()", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
       const ref = uniqueRef("lr1");
-      const wp = adapter.writeReference(ref);
-      await vi.runAllTimersAsync();
-      const { refId } = await wp;
-
+      const { refId } = await adapter.writeReference(ref);
       const list = await adapter.listReferences();
       const found = list.find((r) => r.refId === refId);
       expect(found).toBeDefined();
@@ -184,18 +141,24 @@ describe("MockMidnightChainAdapter", () => {
     });
 
     it("each item has refId, storageId, and storageProvider", async () => {
-      vi.useFakeTimers();
       const adapter = makeAdapter();
-      const wp = adapter.writeReference(uniqueRef("lr2"));
-      await vi.runAllTimersAsync();
-      await wp;
-
+      await adapter.writeReference(uniqueRef("lr2"));
       const list = await adapter.listReferences();
       expect(list.length).toBeGreaterThan(0);
       for (const item of list) {
         expect(typeof item.refId).toBe("string");
         expect(typeof item.storageId).toBe("string");
         expect(typeof item.storageProvider).toBe("string");
+      }
+    });
+
+    it("ownerCommitment is a non-empty hex string", async () => {
+      const adapter = makeAdapter();
+      await adapter.writeReference(uniqueRef("lr3"));
+      const list = await adapter.listReferences();
+      for (const item of list) {
+        expect(item.ownerCommitment.length).toBeGreaterThan(0);
+        expect(/^[0-9a-f]+$/.test(item.ownerCommitment)).toBe(true);
       }
     });
   });

@@ -664,7 +664,7 @@ The managed service covers Arweave storage costs billed in AR. Midnight chain fe
 
 **How do I test the managed payment code path without real dStorage Pro credentials?**
 
-Use `MockStorageAdapter` and `MockMidnightChainAdapter` with `signingServerUrl` and `authToken` pointing at a local signing server (or any reachable test endpoint). Both adapters automatically use the `managedmock` payment network, which sends the network identifier `"TEST"` to the server instead of `"arweave_turbo"` or `"midnight"`. This exercises the full managed payment request/response round-trip — including auth token pinning and error handling — without touching real funds or the production signing server.
+Use `MockStorageAdapter` and `MidnightSimulatorChainAdapter` with `signingServerUrl` and `authToken` pointing at a local signing server (or any reachable test endpoint). Both adapters automatically use the `managedmock` payment network, which sends the network identifier `"TEST"` to the server instead of `"arweave_turbo"` or `"midnight"`. This exercises the full managed payment request/response round-trip — including auth token pinning and error handling — without touching real funds or the production signing server.
 
 ```typescript
 const sdk = new DStorage({
@@ -672,7 +672,7 @@ const sdk = new DStorage({
     signingServerUrl: "http://localhost:3000",
     authToken: process.env.DSTORAGE_TEST_TOKEN ?? "",
   }),
-  chainAdapter: new MockMidnightChainAdapter({
+  chainAdapter: new MidnightSimulatorChainAdapter({
     signingServerUrl: "http://localhost:3000",
     authToken: process.env.DSTORAGE_TEST_TOKEN ?? "",
   }),
