@@ -15,7 +15,10 @@ import {
   type WalletProvider,
 } from "@midnight-ntwrk/midnight-js-types";
 import { ttlOneHour } from "@midnight-ntwrk/midnight-js-utils";
-import { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import {
+  WalletFacade,
+  type DefaultConfiguration,
+} from "@midnight-ntwrk/wallet-sdk-facade";
 import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
 import {
   createKeystore,
@@ -254,7 +257,7 @@ export class MidnightWalletProvider
 
     const walletFacade = await WalletFacade.init({
       configuration: walletConfig,
-      shielded: (cfg: any) => {
+      shielded: (cfg: DefaultConfiguration) => {
         if (cache) {
           try {
             shieldedWallet = ShieldedWallet(cfg).restore(cache.shielded);
@@ -266,7 +269,7 @@ export class MidnightWalletProvider
         shieldedWallet = ShieldedWallet(cfg).startWithSeed(shieldedSeed);
         return shieldedWallet;
       },
-      dust: (cfg: any) => {
+      dust: (cfg: DefaultConfiguration) => {
         const dustCfg = {
           ...cfg,
           txHistoryStorage: new NoOpTransactionHistoryStorage(),
@@ -285,7 +288,7 @@ export class MidnightWalletProvider
         );
         return dustWallet;
       },
-      unshielded: (cfg: any) => {
+      unshielded: (cfg: DefaultConfiguration) => {
         if (cache) {
           try {
             unshieldedWallet = UnshieldedWallet({

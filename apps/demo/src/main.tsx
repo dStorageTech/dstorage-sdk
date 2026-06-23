@@ -3,8 +3,11 @@
 // compact-runtime uses Buffer as a global, so without this it throws
 // "ReferenceError: Buffer is not defined" during contract execution.
 import { Buffer } from "buffer";
-if (typeof (globalThis as any).Buffer === "undefined") {
-  (globalThis as any).Buffer = Buffer;
+const globalWithBuffer = globalThis as typeof globalThis & {
+  Buffer?: typeof Buffer;
+};
+if (typeof globalWithBuffer.Buffer === "undefined") {
+  globalWithBuffer.Buffer = Buffer;
 }
 
 import React from "react";
