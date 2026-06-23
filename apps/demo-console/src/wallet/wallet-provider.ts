@@ -235,6 +235,8 @@ export class MidnightWalletProvider
     const walletId = createHash("sha256")
       .update("dstorage:wallet-id:v1:")
       .update(masterSeedHex)
+      .update(":")
+      .update(env.networkId)
       .digest("hex")
       .slice(0, 16);
     const cacheFilePath = walletCachePath(cacheDir, walletId);
