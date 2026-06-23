@@ -65,7 +65,14 @@ describe.skipIf(!arlocalOk)("storage transaction tags on arlocal", () => {
 
   it("public chunked manifest — Content-Type: application/json and chunk txs carry chunk index/total tags", async () => {
     // Force chunked path: needs data > CHUNK_SIZE (10 MB).
+    // Random bytes ensure a unique data_root each run — arlocal deduplicates
+    // chunks by data_root, so reusing all-zeros would cause HTTP 400 on the
+    // second run against the same arlocal instance.
     const largeData = new Uint8Array(CHUNK_SIZE + 1);
+    // getRandomValues is limited to 65536 bytes per call — fill in slices.
+    for (let i = 0; i < largeData.length; i += 65536) {
+      crypto.getRandomValues(largeData.subarray(i, i + 65536));
+    }
 
     const { storageId: manifestId } = await sdk.store(largeData, {
       isPublic: true,
