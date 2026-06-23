@@ -30,13 +30,12 @@ const MOCK_CONTENT_HASH = Array.from(blake3(MOCK_RETRIEVED_DATA))
 function makeMockTxWithTags(tags: Record<string, string>) {
   return {
     data_size: "0",
-    get: (field: string) => {
-      if (field === "tags") {
-        return Object.entries(tags).map(([name, value]) => ({
-          get: (k: string, _opts?: unknown) => (k === "name" ? name : value),
-        }));
-      }
-    },
+    tags: Object.entries(tags).map(([name, value]) => ({
+      name,
+      value,
+      get: (field: string, _opts?: unknown): string =>
+        field === "name" ? name : value,
+    })),
   };
 }
 

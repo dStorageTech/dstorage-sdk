@@ -257,12 +257,13 @@ export function parseKeyEnvelope(raw: string): KeyEnvelope | null {
   if (!raw) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
+    const obj = parsed as Record<string, unknown>;
     if (
       typeof parsed !== "object" ||
       parsed === null ||
-      (parsed as any).v !== 1 ||
-      !Array.isArray((parsed as any).wrappers) ||
-      (parsed as any).wrappers.length === 0
+      obj.v !== 1 ||
+      !Array.isArray(obj.wrappers) ||
+      obj.wrappers.length === 0
     ) {
       return null;
     }

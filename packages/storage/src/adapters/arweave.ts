@@ -38,6 +38,7 @@
  *     the XChaCha20-Poly1305 encryption applied by @dstorage/crypto before reaching here.
  */
 
+import type Arweave from "arweave";
 import type {
   StorageAdapterLogger,
   StorageAdapter,
@@ -57,6 +58,10 @@ import type {
 import { CONTENT_HASH_TAG, assertContentHash } from "./integrity.js";
 import { DStorageError } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
+
+import type Transaction from "arweave/node/lib/transaction";
+import type { TransactionUploader } from "arweave/node/lib/transaction-uploader";
+import type { TransactionStatusResponse } from "arweave/node/transactions";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -189,8 +194,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
   private readonly maxRetrieveSizeBytes: number;
   protected readonly logger: StorageAdapterLogger | undefined;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private arweaveClient: any; // typed as `any` to avoid a hard import at module level
+  private arweaveClient: Arweave | null = null;
 
   constructor(config: ArweaveAdapterConfig = {}) {
     this.gateway = config.gateway ?? ARWEAVE_MAINNET;
@@ -236,20 +240,20 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   // ── Private: lazy Arweave client ──────────────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async getClient(): Promise<any> {
+  private async getClient(): Promise<Arweave> {
     if (this.arweaveClient) return this.arweaveClient;
 
     try {
       // Dynamic import — arweave-js is only bundled when this adapter is used.
       const _m = await import("arweave");
       // Vite 8/Rolldown wraps CJS modules differently: unwrap double-default if needed.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Arweave: any =
-        typeof (_m.default as any)?.init === "function"
-          ? _m.default
-          : (_m.default as any)?.default;
-      this.arweaveClient = Arweave.init(this.gateway);
+      const raw: unknown = _m.default;
+      const ctor: { init(config: object): Arweave } =
+        typeof (raw as { init?: unknown }).init === "function"
+          ? (raw as { init(config: object): Arweave })
+          : ((raw as { default?: { init(config: object): Arweave } }).default ??
+            (raw as { init(config: object): Arweave }));
+      this.arweaveClient = ctor.init(this.gateway);
       return this.arweaveClient;
     } catch {
       throw new DStorageError(
@@ -356,15 +360,10 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     const tags: Record<string, string> = {};
     if (!this.skipIntegrityCheck) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tx: any = await arweave.transactions.get(id);
+        const tx = await arweave.transactions.get(id);
 
         // Size guard — reject before materialising a potentially huge blob.
-        const dataSize = parseInt(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ((tx as any).data_size as string) ?? "0",
-          10,
-        );
+        const dataSize = parseInt(tx.data_size ?? "0", 10);
         if (!isNaN(dataSize) && dataSize > this.maxRetrieveSizeBytes) {
           throw new DStorageError(
             StorageErrorCode.ARWEAVE_TX_TOO_LARGE,
@@ -373,18 +372,9 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           );
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const tag of (tx.get("tags") as any[]) ?? []) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const name = (tag as any).get("name", {
-            decode: true,
-            string: true,
-          }) as string;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const value = (tag as any).get("value", {
-            decode: true,
-            string: true,
-          }) as string;
+        for (const tag of tx.tags) {
+          const name = tag.get("name", { decode: true, string: true });
+          const value = tag.get("value", { decode: true, string: true });
           tags[name] = value;
           if (name === CONTENT_HASH_TAG) storedHash = value;
         }
@@ -477,26 +467,27 @@ export class ArweaveStorageAdapter implements StorageAdapter {
    * Failed slices are retried individually up to maxRetries times with linear
    * back-off, so a transient network error won't restart the entire upload.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async uploadWithChunker(arweave: any, tx: any): Promise<void> {
+  private async uploadWithChunker(
+    arweave: Arweave,
+    tx: Transaction,
+  ): Promise<void> {
     this.logger?.log(
       "dStorage/arweave",
-      `Posting tx id=${tx.id as string} owner=${(tx.owner as string)?.slice(0, 16)}… data_size=${tx.data_size as string} reward=${tx.reward as string}`,
+      `Posting tx id=${tx.id} owner=${tx.owner.slice(0, 16)}… data_size=${tx.data_size} reward=${tx.reward}`,
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let uploader: any;
+    let uploader: TransactionUploader | undefined;
     try {
       uploader = await arweave.transactions.getUploader(tx);
     } catch (err) {
       const { protocol, host, port } = this.gateway;
       const gwUrl = `${protocol}://${host}:${port}`;
       try {
-        const diagResp = await fetch(`${gwUrl}/tx/${tx.id as string}`);
+        const diagResp = await fetch(`${gwUrl}/tx/${tx.id}`);
         const diagBody = await diagResp.text();
         this.logger?.warn(
           "dStorage/arweave",
-          `gateway GET /tx/${tx.id as string} → HTTP ${diagResp.status} — ${diagBody}`,
+          `gateway GET /tx/${tx.id} → HTTP ${diagResp.status} — ${diagBody}`,
         );
       } catch {
         /* ignore diagnostic failures */
@@ -517,20 +508,13 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         if (uploader.totalChunks > 1) {
           this.logger?.log(
             "dStorage/arweave",
-            `Uploading: ${uploader.pctComplete as number}% (${uploader.uploadedChunks as number}/${uploader.totalChunks as number} network chunks)`,
+            `Uploading: ${uploader.pctComplete}% (${uploader.uploadedChunks}/${uploader.totalChunks} network chunks)`,
           );
         }
       } catch (err) {
         chunkAttempt++;
-        const status =
-          (uploader.lastResponseStatus as number | undefined) ?? "n/a";
-        const rawErr = uploader.lastResponseError as unknown;
-        const body =
-          rawErr != null
-            ? typeof rawErr === "string"
-              ? rawErr
-              : JSON.stringify(rawErr)
-            : `${err}`;
+        const status = uploader.lastResponseStatus ?? "n/a";
+        const body = uploader.lastResponseError || String(err);
         this.logger?.warn(
           "dStorage/arweave",
           `chunk upload failed — HTTP ${status} — ${body}`,
@@ -553,18 +537,20 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   // ── Private: confirmation polling ─────────────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async pollUntilConfirmed(arweave: any, txId: string): Promise<void> {
+  private async pollUntilConfirmed(
+    arweave: Arweave,
+    txId: string,
+  ): Promise<void> {
     const deadline = Date.now() + this.confirmationTimeoutMs;
 
     while (Date.now() < deadline) {
       await sleep(this.confirmationPollMs);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const status: any = await arweave.transactions.getStatus(txId);
+      const status: TransactionStatusResponse =
+        await arweave.transactions.getStatus(txId);
 
       if (status.status === 200) {
-        const block = status.confirmed?.block_height as number | undefined;
+        const block = status.confirmed?.block_height;
         this.logger?.log(
           "dStorage/arweave",
           `Confirmed: ${txId}${block !== undefined ? ` (block ${block})` : ""}`,

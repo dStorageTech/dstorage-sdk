@@ -57,13 +57,12 @@ const mockUploader = {
 function makeMockTxWithTags(tags: Record<string, string>, dataSize = "0") {
   return {
     data_size: dataSize,
-    get: (field: string) => {
-      if (field === "tags") {
-        return Object.entries(tags).map(([name, value]) => ({
-          get: (k: string, _opts?: unknown) => (k === "name" ? name : value),
-        }));
-      }
-    },
+    tags: Object.entries(tags).map(([name, value]) => ({
+      name,
+      value,
+      get: (field: string, _opts?: unknown): string =>
+        field === "name" ? name : value,
+    })),
   };
 }
 

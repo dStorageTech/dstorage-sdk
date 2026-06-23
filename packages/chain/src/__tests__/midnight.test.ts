@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { MidnightChainAdapter } from "../adapters/midnight/src/midnight.js";
+import type { AdapterWalletProvider } from "../adapters/midnight/src/common-types.js";
 import { ChainErrorCode } from "../errors.js";
 
-const MOCK_WALLET_PROVIDER = { wallet: {} } as any;
+const MOCK_WALLET_PROVIDER = {} as AdapterWalletProvider;
 const MOCK_PRIVATE_STATE_PASSWORD = "Aa1!mockseedfortest";
 const MOCK_NETWORK = "undeployed" as const;
 

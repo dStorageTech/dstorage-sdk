@@ -195,9 +195,8 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
       ownerSecret,
     });
-    let txData;
     try {
-      txData = await withContractScopedTransaction(
+      const txData = await withContractScopedTransaction(
         this.providers,
         async (txCtx) => {
           await this.deployedContract.callTx.storeReference(
@@ -213,37 +212,33 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         },
         { scopeName: "storeReference" },
       );
+
+      const txHash: string = txData.public.txHash ?? txData.public.txId ?? "";
+      const blockHeight: number = Number(txData.public.blockHeight ?? 0);
+      const circuitResult: unknown = txData.private.result;
+      if (!(circuitResult instanceof Uint8Array)) {
+        throw new DStorageError(
+          ChainErrorCode.CONTRACT_CIRCUIT_RESULT_MISSING,
+          `[dStorage/midnight] storeReference succeeded on-chain (txHash=${txHash}) ` +
+            `but the runtime did not return the circuit refId at txData.private.result ` +
+            `(got ${typeof circuitResult}). ` +
+            `This is likely a compact-runtime version mismatch. ` +
+            `Upgrade @midnight-ntwrk/compact-runtime or report this as a bug.`,
+        );
+      }
+
+      this.logger?.debug?.(
+        "dStorage/midnight",
+        `transaction: circuit=storeReference txHash=${txHash} blockHeight=${blockHeight}`,
+      );
+
+      return { refId: circuitResult, txHash, blockHeight };
     } finally {
       await this.providers.privateStateProvider.set(
         dataRegistryPrivateStateKey,
         {},
       );
     }
-
-    const txHash: string =
-      (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
-    const blockHeight: number = Number(
-      (txData as any).public?.blockHeight ?? 0,
-    );
-    const circuitResult = (txData as any).private?.result;
-    if (!(circuitResult instanceof Uint8Array)) {
-      throw new DStorageError(
-        ChainErrorCode.CONTRACT_CIRCUIT_RESULT_MISSING,
-        `[dStorage/midnight] storeReference succeeded on-chain (txHash=${txHash}) ` +
-          `but the runtime did not return the circuit refId at txData.private.result ` +
-          `(got ${typeof circuitResult}). ` +
-          `This is likely a compact-runtime version mismatch. ` +
-          `Upgrade @midnight-ntwrk/compact-runtime or report this as a bug.`,
-      );
-    }
-    const refId: Uint8Array = circuitResult;
-
-    this.logger?.debug?.(
-      "dStorage/midnight",
-      `transaction: circuit=storeReference txHash=${txHash} blockHeight=${blockHeight}`,
-    );
-
-    return { refId, txHash, blockHeight };
   }
 
   async removeReference(
@@ -257,34 +252,30 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
       ownerSecret,
     });
-    let txData;
     try {
-      txData = await withContractScopedTransaction(
+      const txData = await withContractScopedTransaction(
         this.providers,
         async (txCtx) => {
           await this.deployedContract.callTx.removeReference(txCtx, refId);
         },
         { scopeName: "removeReference" },
       );
+
+      const txHash: string = txData.public.txHash ?? txData.public.txId ?? "";
+      const blockHeight: number = Number(txData.public.blockHeight ?? 0);
+
+      this.logger?.debug?.(
+        "dStorage/midnight",
+        `transaction: circuit=removeReference txHash=${txHash} blockHeight=${blockHeight}`,
+      );
+
+      return { txHash, blockHeight };
     } finally {
       await this.providers.privateStateProvider.set(
         dataRegistryPrivateStateKey,
         {},
       );
     }
-
-    const txHash: string =
-      (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
-    const blockHeight: number = Number(
-      (txData as any).public?.blockHeight ?? 0,
-    );
-
-    this.logger?.debug?.(
-      "dStorage/midnight",
-      `transaction: circuit=removeReference txHash=${txHash} blockHeight=${blockHeight}`,
-    );
-
-    return { txHash, blockHeight };
   }
 
   async updateReference(
@@ -309,9 +300,8 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       // commitment and the stored value is preserved unchanged.
       newOwnerSecret: newOwnerSecret ?? ownerSecret,
     });
-    let txData;
     try {
-      txData = await withContractScopedTransaction(
+      const txData = await withContractScopedTransaction(
         this.providers,
         async (txCtx) => {
           await this.deployedContract.callTx.updateReference(
@@ -328,25 +318,22 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         },
         { scopeName: "updateReference" },
       );
+
+      const txHash: string = txData.public.txHash ?? txData.public.txId ?? "";
+      const blockHeight: number = Number(txData.public.blockHeight ?? 0);
+
+      this.logger?.debug?.(
+        "dStorage/midnight",
+        `transaction: circuit=updateReference txHash=${txHash} blockHeight=${blockHeight}`,
+      );
+
+      return { txHash, blockHeight };
     } finally {
       await this.providers.privateStateProvider.set(
         dataRegistryPrivateStateKey,
         {},
       );
     }
-
-    const txHash: string =
-      (txData as any).public?.txHash ?? (txData as any).public?.txId ?? "";
-    const blockHeight: number = Number(
-      (txData as any).public?.blockHeight ?? 0,
-    );
-
-    this.logger?.debug?.(
-      "dStorage/midnight",
-      `transaction: circuit=updateReference txHash=${txHash} blockHeight=${blockHeight}`,
-    );
-
-    return { txHash, blockHeight };
   }
 
   /**

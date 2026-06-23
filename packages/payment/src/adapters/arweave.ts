@@ -36,6 +36,7 @@
  * Docs: https://docs.arweave.org/developers
  */
 
+import type Arweave from "arweave";
 import { blake3 } from "@noble/hashes/blake3.js";
 import type {
   PaymentAdapterLogger,
@@ -49,6 +50,15 @@ import type {
 } from "../types.js";
 import { DStorageError } from "@dstorage/crypto";
 import { PaymentErrorCode } from "../errors.js";
+
+import type Transaction from "arweave/node/lib/transaction";
+import type { JWKInterface } from "arweave/node/lib/wallet";
+
+// ── Arweave wallet union ───────────────────────────────────────────────────────
+
+type ArweaveWallet = JWKInterface | "use_wallet";
+
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 /** Default quote validity window in milliseconds. 2 minutes is appropriate for Arweave's volatile pricing. */
 const DEFAULT_QUOTE_VALIDITY_MS = 120_000;
@@ -98,8 +108,7 @@ interface PendingUpload {
 
 /** Result stored after pay() signs the transaction, consumed by store(). */
 export interface SignedArweaveUpload {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tx: any;
+  tx: Transaction;
   /** AR cost string (e.g. "0.000001234") for the upload result. */
   arCost: string;
 }
@@ -109,8 +118,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
   readonly token: TokenSymbol = "AR";
   readonly type: NetworkType = "storage";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected arweaveClient: any;
+  protected arweaveClient: Arweave | null = null;
   protected readonly gateway: ArweavePaymentAdapterConfig["gateway"];
   private readonly walletKey: Record<string, string> | undefined;
   protected readonly quoteValidityMs: number;
@@ -132,18 +140,18 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
   // ── Protected: lazy Arweave client ───────────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected async getClient(): Promise<any> {
+  protected async getClient(): Promise<Arweave> {
     if (this.arweaveClient) return this.arweaveClient;
     try {
       const _m = await import("arweave");
       // Vite 8/Rolldown wraps CJS modules differently: unwrap double-default if needed.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Arweave: any =
-        typeof (_m.default as any)?.init === "function"
-          ? _m.default
-          : (_m.default as any)?.default;
-      this.arweaveClient = Arweave.init(this.gateway ?? {});
+      const raw: unknown = _m.default;
+      const ctor: { init(config: object): Arweave } =
+        typeof (raw as { init?: unknown }).init === "function"
+          ? (raw as { init(config: object): Arweave })
+          : ((raw as { default?: { init(config: object): Arweave } }).default ??
+            (raw as { init(config: object): Arweave }));
+      this.arweaveClient = ctor.init(this.gateway ?? {});
       return this.arweaveClient;
     } catch {
       throw new DStorageError(
@@ -155,10 +163,9 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
   // ── Protected: wallet resolution ─────────────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected resolveWallet(): any {
+  protected resolveWallet(): ArweaveWallet {
     if (this.walletKey && Object.keys(this.walletKey).length > 0) {
-      return this.walletKey;
+      return this.walletKey as unknown as ArweaveWallet;
     }
     if (typeof window === "undefined") {
       throw new DStorageError(
@@ -166,8 +173,10 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
         "[dStorage/arweave-payment] Node.js usage requires a walletKey in the config.",
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof (window as any).arweaveWallet === "undefined") {
+    if (
+      typeof (window as unknown as Record<string, unknown>).arweaveWallet ===
+      "undefined"
+    ) {
       throw new DStorageError(
         PaymentErrorCode.ARWEAVE_CONNECT_NOT_FOUND,
         "[dStorage/arweave-payment] ArConnect extension not found. Install it from https://arconnect.io",
@@ -271,8 +280,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     const wallet = this.resolveWallet();
 
     onStatus?.("Creating Arweave transaction…");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx: any = await arweave.createTransaction({ data }, wallet);
+    const tx = await arweave.createTransaction({ data }, wallet);
 
     for (const [key, value] of Object.entries(metadata)) {
       tx.addTag(key, value);
@@ -291,11 +299,11 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
 
     this.logger?.log(
       "dStorage/arweave-payment",
-      `Transaction signed → txId: ${tx.id as string}  cost: ~${arCost} AR`,
+      `Transaction signed → txId: ${tx.id}  cost: ~${arCost} AR`,
     );
 
     return {
-      txHash: tx.id as string,
+      txHash: tx.id,
       token: this.token,
       amount: arCost,
       type: this.type,

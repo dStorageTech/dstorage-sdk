@@ -38,11 +38,27 @@
  *   ArweaveLocalError          — typed error thrown by helper methods
  */
 
+import type Arweave from "arweave";
+import type { JWKInterface } from "arweave/node/lib/wallet";
 import { ArweaveStorageAdapter } from "./arweave.js";
 import type { ArweaveAdapterConfig, ArweaveGatewayConfig } from "./arweave.js";
 import type { StorageProviderName, StorageUploadResult } from "../types.js";
 import { DStorageError } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
+
+// ── Arweave loader ─────────────────────────────────────────────────────────────
+
+async function loadArweaveClient(gateway: object): Promise<Arweave> {
+  const _m = await import("arweave");
+  // Vite 8/Rolldown wraps CJS modules differently: unwrap double-default if needed.
+  const raw: unknown = _m.default;
+  const ctor: { init(config: object): Arweave } =
+    typeof (raw as { init?: unknown }).init === "function"
+      ? (raw as { init(config: object): Arweave })
+      : ((raw as { default?: { init(config: object): Arweave } }).default ??
+        (raw as { init(config: object): Arweave }));
+  return ctor.init(gateway);
+}
 
 // ── Gateway presets ────────────────────────────────────────────────────────────
 
@@ -358,18 +374,9 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     managedOwnerKey?: string,
   ): Promise<void> {
     try {
-      const _m = await import("arweave");
-      // Vite 8/Rolldown wraps CJS modules differently: mod.default may be the
-      // full exports object { default: Arweave } rather than the class itself.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Arweave: any =
-        typeof (_m.default as any)?.init === "function"
-          ? _m.default
-          : (_m.default as any)?.default;
-      const arweave = Arweave.init(gateway);
+      const arweave = await loadArweaveClient(gateway);
       const address: string = await arweave.wallets.jwkToAddress(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        walletKey as any,
+        walletKey as unknown as JWKInterface,
       );
       this.logger?.log(
         "dStorage/arweave-local",
@@ -396,14 +403,8 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     gateway: ArweaveGatewayConfig,
   ): Promise<void> {
     try {
-      const _m = await import("arweave");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Arweave: any =
-        typeof (_m.default as any)?.init === "function"
-          ? _m.default
-          : (_m.default as any)?.default;
       await this._mintToOwnerKey(
-        Arweave.init(gateway),
+        await loadArweaveClient(gateway),
         managedOwnerKey,
         gateway,
       );
@@ -415,16 +416,14 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async _mintToOwnerKey(
-    arweave: any,
+    arweave: Arweave,
     ownerKey: string,
     gateway: ArweaveGatewayConfig,
   ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const serverAddress: string = await arweave.wallets.jwkToAddress({
       n: ownerKey,
-    } as any);
+    } as unknown as JWKInterface);
     this.logger?.log(
       "dStorage/arweave-local",
       `Minting 10 AR to managed payment server wallet ${serverAddress} on arlocal via ${gateway.protocol}://${gateway.host}:${gateway.port}…`,
@@ -466,15 +465,9 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     const fundAr = options.fundAr ?? 10;
 
     // Dynamically import arweave-js to generate a wallet without a hard dep.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let arweaveModule: any;
+    let arweave: Arweave;
     try {
-      const mod = await import("arweave");
-      // Vite 8/Rolldown wraps CJS modules differently: unwrap double-default if needed.
-      arweaveModule =
-        typeof (mod.default as any)?.init === "function"
-          ? mod.default
-          : (mod.default as any)?.default;
+      arweave = await loadArweaveClient(gateway);
     } catch {
       throw new DStorageError(
         StorageErrorCode.ARWEAVE_LOCAL_NOT_INSTALLED,
@@ -483,14 +476,13 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
       );
     }
 
-    const arweave = arweaveModule.init(gateway) as {
-      wallets: {
-        generate: () => Promise<Record<string, string>>;
-        jwkToAddress: (jwk: Record<string, string>) => Promise<string>;
-      };
-    };
-    const walletKey = await arweave.wallets.generate();
-    const address = await arweave.wallets.jwkToAddress(walletKey);
+    const walletKey = (await arweave.wallets.generate()) as unknown as Record<
+      string,
+      string
+    >;
+    const address = await arweave.wallets.jwkToAddress(
+      walletKey as unknown as JWKInterface,
+    );
 
     const adapter = new ArweaveLocalStorageAdapter({ walletKey, gateway });
     const winstons = BigInt(fundAr) * 1_000_000_000_000n;

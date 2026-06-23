@@ -25,7 +25,11 @@ import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
 import { hexToBytes, DStorageError } from "@dstorage/crypto";
 import { ChainErrorCode } from "../../../errors.js";
-import { type WalletProvider } from "@midnight-ntwrk/midnight-js-types";
+import {
+  type WalletProvider,
+  type ZKConfigProvider,
+} from "@midnight-ntwrk/midnight-js-types";
+import type { FinalizedTransaction } from "@midnight-ntwrk/ledger-v8";
 
 import type {
   ChainAdapter,
@@ -42,9 +46,12 @@ import type {
 
 import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
 import type { DataRegistryAPI } from "./contract-api.js";
-import type { DataRegistryProviders } from "./common-types.js";
+import type {
+  DataRegistryProviders,
+  DataRegistryCircuitKeys,
+  AdapterWalletProvider,
+} from "./common-types.js";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-import type { AdapterWalletProvider } from "./common-types.js";
 import { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
 const sleep = (ms: number) =>
@@ -241,7 +248,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   _lastPaymentReceipt: PaymentReceipt | undefined;
 
-  private facade: unknown | null = null;
+  private facade: WalletFacade | null = null;
   private connectorAPI: ConnectedAPI | null = null;
   private addresses: WalletAddresses | null = null;
 
@@ -464,7 +471,9 @@ export class MidnightChainAdapter implements ChainAdapter {
    * Facade (Node.js): reads ZK artifact files from the local filesystem via zkArtifactsPath.
    * Connector (browser): fetches ZK artifacts over HTTP via zkConfigBaseUrl.
    */
-  private async _buildZkConfigProvider(): Promise<any> {
+  private async _buildZkConfigProvider(): Promise<
+    ZKConfigProvider<DataRegistryCircuitKeys>
+  > {
     if (this.walletMode === "connector") {
       // Browser mode: fetch ZK artifacts via HTTP from the app's origin or a configured base URL.
       const baseUrl =
@@ -518,7 +527,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const { NodeZkConfigProvider } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/midnight-js-node-zk-config-provider"
     );
-    return new NodeZkConfigProvider(zkConfigPath);
+    return new NodeZkConfigProvider<DataRegistryCircuitKeys>(zkConfigPath);
   }
 
   /**
@@ -532,7 +541,9 @@ export class MidnightChainAdapter implements ChainAdapter {
     privateStateProvider: T,
   ): T & { setContractAddress: (address: string) => void } {
     if (!("setContractAddress" in privateStateProvider)) {
-      (privateStateProvider as any).setContractAddress = (_address: string) => {
+      (privateStateProvider as Record<string, unknown>).setContractAddress = (
+        _address: string,
+      ) => {
         /* no-op: provider doesn't use contract address for scoping */
       };
     }
@@ -546,7 +557,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    */
   private async _assembleDataRegistryProviders(params: {
     privateStateProvider: object;
-    zkConfigProvider: unknown;
+    zkConfigProvider: ZKConfigProvider<DataRegistryCircuitKeys>;
     indexerHttp: string;
     indexerWs: string;
     proofServer: string;
@@ -568,11 +579,10 @@ export class MidnightChainAdapter implements ChainAdapter {
         params.indexerHttp,
         params.indexerWs,
       ),
-      zkConfigProvider:
-        params.zkConfigProvider as DataRegistryProviders["zkConfigProvider"],
+      zkConfigProvider: params.zkConfigProvider,
       proofProvider: httpClientProofProvider(
         params.proofServer,
-        params.zkConfigProvider as any,
+        params.zkConfigProvider,
       ),
       walletProvider:
         params.walletProvider as unknown as DataRegistryProviders["walletProvider"],
@@ -690,15 +700,14 @@ export class MidnightChainAdapter implements ChainAdapter {
     };
 
     const midnightProvider = {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      submitTx: async (tx: any): Promise<any> => {
-        const serializedTx = uint8ArrayToHex((tx as any).serialize());
+      submitTx: async (tx: FinalizedTransaction): Promise<string> => {
+        const serializedTx = uint8ArrayToHex(tx.serialize());
         logger?.log(
           "dStorage/midnight",
           `submitTx: submitting tx length=${serializedTx.length}`,
         );
         await connectorAPI.submitTransaction(serializedTx);
-        return (tx as any).identifiers?.()[0] ?? "";
+        return tx.identifiers()[0] ?? "";
       },
     };
 
@@ -725,10 +734,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     const zkConfigProvider = await this._buildZkConfigProvider();
 
     const { firstValueFrom } = await import("rxjs");
-    const facadeState = await firstValueFrom(
-      (walletFacade as any).state() as any,
-    );
-    const { ShieldedAddress, UnshieldedAddress } = await import(
+    const facadeState = await firstValueFrom(walletFacade.state());
+    const { ShieldedAddress, UnshieldedAddress, DustAddress } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/wallet-sdk-address-format"
     );
     const { getNetworkId } = await import(
@@ -736,19 +743,21 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
     this.addresses = {
       shielded: ShieldedAddress.codec
-        .encode(getNetworkId(), (facadeState as any).shielded.address)
+        .encode(getNetworkId(), facadeState.shielded.address)
         .toString(),
       unshielded: UnshieldedAddress.codec
-        .encode(getNetworkId(), (facadeState as any).unshielded.address)
+        .encode(getNetworkId(), facadeState.unshielded.address)
         .toString(),
-      dust: (facadeState as any).dust.dustAddress,
+      dust: DustAddress.codec
+        .encode(getNetworkId(), facadeState.dust.address)
+        .toString(),
     };
 
     const privateStateStoreName = "data-registry-private-state";
     const { levelPrivateStateProvider } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/midnight-js-level-private-state-provider"
     );
-    const basePrivateStateProvider = (levelPrivateStateProvider as any)({
+    const basePrivateStateProvider = levelPrivateStateProvider({
       privateStateStoreName,
       signingKeyStoreName: `${privateStateStoreName}-signing-keys`,
       privateStoragePasswordProvider: () => this._injectedPrivateStatePassword!,
@@ -1125,8 +1134,11 @@ export class MidnightChainAdapter implements ChainAdapter {
    * dApp connector spec: https://docs.midnight.network/api-reference/dapp-connector
    */
   private async _initConnector(): Promise<WalletAddresses> {
-    const windowAny = typeof window !== "undefined" ? (window as any) : null;
-    const midnightObj = windowAny?.midnight;
+    const windowObj =
+      typeof window !== "undefined"
+        ? (window as unknown as Record<string, unknown>)
+        : null;
+    const midnightObj = windowObj?.midnight;
 
     if (!midnightObj || typeof midnightObj !== "object") {
       throw new DStorageError(
@@ -1142,7 +1154,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         ([, v]) =>
           v &&
           typeof v === "object" &&
-          typeof (v as any).connect === "function",
+          typeof (v as Record<string, unknown>).connect === "function",
       )
       .map(([id, v]) => ({
         id,
@@ -1259,15 +1271,9 @@ export class MidnightChainAdapter implements ChainAdapter {
       let shieldedAddr = "";
       try {
         const r = await connectedAPI.getShieldedAddresses();
-        const obj = Array.isArray(r) ? r[0] : r;
-        shieldedAddr =
-          (obj as any)?.shieldedAddress ??
-          (obj as any)?.address ??
-          (typeof obj === "string" ? obj : "");
-        this.connectorCoinPublicKey =
-          (obj as any)?.shieldedCoinPublicKey ?? null;
-        this.connectorEncPublicKey =
-          (obj as any)?.shieldedEncryptionPublicKey ?? null;
+        shieldedAddr = r.shieldedAddress;
+        this.connectorCoinPublicKey = r.shieldedCoinPublicKey;
+        this.connectorEncPublicKey = r.shieldedEncryptionPublicKey;
       } catch (err) {
         this.logger?.warn(
           "dStorage/midnight",
@@ -1277,9 +1283,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
       let unshieldedAddr = "";
       try {
-        const r = await (connectedAPI as any).getUnshieldedAddress?.();
-        unshieldedAddr =
-          (r as any)?.unshieldedAddress ?? (typeof r === "string" ? r : "");
+        const r = await connectedAPI.getUnshieldedAddress();
+        unshieldedAddr = r.unshieldedAddress;
       } catch {
         this.logger?.warn(
           "dStorage/midnight",
@@ -1289,8 +1294,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
       let dustAddr = "";
       try {
-        const r = await (connectedAPI as any).getDustAddress?.();
-        dustAddr = (r as any)?.dustAddress ?? (typeof r === "string" ? r : "");
+        const r = await connectedAPI.getDustAddress();
+        dustAddr = r.dustAddress;
       } catch {
         this.logger?.warn(
           "dStorage/midnight",
@@ -1355,12 +1360,12 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
       }
 
-      const state = await (this.facade as any).waitForSyncedState();
+      const state = await this.facade.waitForSyncedState();
       const nightToken = unshieldedToken();
 
       return {
-        night: (state as any).unshielded?.balances?.[nightToken.raw] ?? 0n,
-        dust: (state as any).dust?.balance?.(new Date()) ?? 0n,
+        night: state.unshielded.balances[nightToken.raw] ?? 0n,
+        dust: state.dust.balance(new Date()),
       };
     } else {
       if (!this.connectorAPI) {
