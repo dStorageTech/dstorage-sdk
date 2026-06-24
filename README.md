@@ -342,7 +342,7 @@ npm run test:integration -- -t "uploads and retrieves private data"
 | Area             | Current state                                                                                                                                  |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Storage adapters | `Mock`, `ArweaveLocal`, and `Arweave` are live; `ArweaveBundler` (ANS-104 bundled uploads, managed server-signing) is live; `Autonomi` is stub |
-| Chain adapters   | `Mock`, `MockMidnight`, and `Midnight` (connector + facade modes) are implemented                                                              |
+| Chain adapters   | `Mock`, `MidnightSimulator`, and `Midnight` (connector + facade modes) are implemented                                                         |
 | Payment adapters | `Mock` is simulated by design; `Arweave` is live (JWK wallet); `Managed` (remote signing server) is live; Midnight fees handled by wallet      |
 | Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector, Arweave, and Arweave Local paths                                              |
 | Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                                                           |
@@ -520,7 +520,7 @@ Tokens are selected automatically based on your chosen adapters.
     ├── @dstorage/encryption    ← Encryption adapters: PasswordEncryptionAdapter | MnemonicEncryptionAdapter | KeypairEncryptionAdapter [bundled]
     ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveBundler | Arweave Local | Autonomi(stub) [bundled: Mock only]
     ├── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed           [bundled: Mock only]
-    └── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight     [bundled: Mock only]
+    └── @dstorage/chain         ← Chain adapters:   Mock | MidnightSimulator | Midnight [bundled: Mock only]
 ```
 
 ### Data Flow
@@ -837,11 +837,11 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
 
 ### Blockchain
 
-| Chain        | Status  | Notes                                  |
-| ------------ | ------- | -------------------------------------- |
-| Mock         | ✅ Live | Simulates on-chain references locally  |
-| MockMidnight | ✅ Live | Simulated Midnight-like chain behavior |
-| Midnight     | ✅ Live | Connector + facade modes supported     |
+| Chain             | Status  | Notes                                                                            |
+| ----------------- | ------- | -------------------------------------------------------------------------------- |
+| Mock              | ✅ Live | Simulates on-chain references locally                                            |
+| MidnightSimulator | ✅ Live | Simulated Midnight chain; runs real DataRegistry circuits without a live network |
+| Midnight          | ✅ Live | Connector + facade modes supported                                               |
 
 ---
 

@@ -42,7 +42,7 @@ export const CHAIN_ADAPTER_CONFIGS: Record<
   }
 > = {
   mock: {
-    label: "Mock Midnight",
+    label: "Midnight Simulator",
     description:
       "Simulated Midnight chain. Instant transactions — ideal for development.",
   },

@@ -59,11 +59,11 @@ Yes. Files larger than 10 MB are automatically split into independently encrypte
 
 **What networks and storage providers are supported today?**
 
-| Area    | Available now                                             | Stub / planned |
-| ------- | --------------------------------------------------------- | -------------- |
-| Storage | Mock, Arweave Local, Arweave, Arweave Bundler (managed)   |
-| Chain   | Mock, MockMidnight, Midnight (connector + provider modes) |
-| Payment | Mock, Arweave (JWK), Managed (remote signing server)      |
+| Area    | Available now                                                  | Stub / planned |
+| ------- | -------------------------------------------------------------- | -------------- |
+| Storage | Mock, Arweave Local, Arweave, Arweave Bundler (managed)        |
+| Chain   | Mock, MidnightSimulator, Midnight (connector + provider modes) |
+| Payment | Mock, Arweave (JWK), Managed (remote signing server)           |
 
 **What tokens are used for payments?**
 
