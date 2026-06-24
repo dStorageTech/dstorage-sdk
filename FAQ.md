@@ -682,6 +682,77 @@ const sdk = new DStorage({
 });
 ```
 
+**What type of API token do I need to use the managed service?**
+
+The standard credential is a **secret `ds_*` API token** issued by the dStorage Pro portal. Obtain one via the portal UI (API Tokens tab) or `POST /api/tokens`. Tokens use the compound format:
+
+```
+ds_<credential>.<base64url_modulus>
+```
+
+`<credential>` is the authentication secret sent as the `Authorization: Bearer` header. `<base64url_modulus>` is the base64url-encoded RSA-4096 public key modulus of the server's Arweave signing key; the SDK parses and pins it at construction time so that a signing key rotation is caught immediately.
+
+Always supply the token via an environment variable — never hard-code it:
+
+```typescript
+new ArweaveTurboStorageAdapter({
+  signingServerUrl: "https://dstorage.pro",
+  authToken: process.env.DSTORAGE_AUTH_TOKEN ?? "",
+});
+```
+
+`ds_*` tokens carry **full account access** (manage other tokens, payment history, coupons). Treat them like private keys. Tokens expire after 90 days by default; re-issue before expiry in the portal.
+
+**Can I use a `ds_*` token in browser-side JavaScript?**
+
+No. A `ds_*` token grants full account control — anyone who can read your bundle can extract it and manage your entire account. Never ship a `ds_*` token in a browser bundle, React app, or any public-facing code.
+
+For frontends that need to call the managed service directly, use a **JWT token** instead (see below).
+
+**What is a JWT token and why does the service support it?**
+
+JWT tokens exist to solve one problem: `ds_*` tokens cannot safely leave a secure server environment, but some applications need to call the managed `sign-tx` endpoint directly from browser JavaScript — for example, a dApp that submits transactions on behalf of users without a backend proxy.
+
+The portal issues ES256-signed JWT tokens that are specifically designed to be public:
+
+- They are accepted **only** on `POST /api/service/sign-tx`. No other endpoint will honour them — they cannot list tokens, access payment history, redeem coupons, or do anything else.
+- Their constraints (allowed origin, spend cap, request cap) are **baked into the cryptographic signature**. They cannot be forged or modified without invalidating the JWT.
+- Each JWT has a unique `jti` identifier checked against the database on every request, so revocation is instant — delete the token in the portal and it stops working immediately.
+
+This gives you a credential that is safe to embed in a browser bundle because the blast radius of a leak is mathematically bounded.
+
+**What do JWT tokens provide that a `ds_*` token does not?**
+
+| Capability                              | `ds_*` API token | JWT token                 |
+| --------------------------------------- | ---------------- | ------------------------- |
+| Call `sign-tx`                          | Yes              | Yes                       |
+| Origin restriction (lock to one domain) | No               | Optional — `origin` claim |
+| Per-token spend cap                     | No               | `maxBalance` (USD)        |
+| Per-token request cap                   | No               | `maxRequests`             |
+| Safe to embed in browser JavaScript     | No               | Yes                       |
+| Account management endpoints            | Yes              | No                        |
+
+Create a JWT token in the portal (JWT Tokens tab) or via `POST /api/jwt-tokens` using a `ds_*` token. Required fields: `name`, `expiresAt`, `maxBalance`. The `origin` and `maxRequests` constraints are optional but recommended for public deployments.
+
+Use a JWT token in the SDK exactly the same way as a `ds_*` token — the `authToken` field accepts either format:
+
+```typescript
+new ArweaveTurboStorageAdapter({
+  signingServerUrl: "https://dstorage.pro",
+  authToken: process.env.DSTORAGE_JWT_TOKEN ?? "",
+});
+```
+
+Lock a JWT to your production domain to limit exposure if the token is scraped:
+
+```
+origin: "https://myapp.com"
+maxBalance: 50       // stop after $50 of Arweave storage charged to your account
+maxRequests: 10000   // or after 10 000 sign-tx calls, whichever comes first
+```
+
+If a JWT is compromised, an attacker can only call `sign-tx` within those configured bounds on that one origin — and you can revoke it instantly from the portal.
+
 ---
 
 ## Troubleshooting
