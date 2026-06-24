@@ -52,7 +52,7 @@ describe("ArweaveBundlerStorageAdapter — authToken parsing", () => {
       err = e;
     }
     expect(err).toMatchObject({
-      code: StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_KEY,
+      code: StorageErrorCode.ARWEAVE_BUNDLER_INVALID_AUTH_TOKEN_KEY,
       message: expect.stringContaining("[dStorage/arweave-bundler]"),
     });
   });
@@ -68,7 +68,7 @@ describe("ArweaveBundlerStorageAdapter — authToken parsing", () => {
       err = e;
     }
     expect(err).toMatchObject({
-      code: StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_FORMAT,
+      code: StorageErrorCode.ARWEAVE_BUNDLER_INVALID_AUTH_TOKEN_FORMAT,
       message: expect.stringContaining("[dStorage/arweave-bundler]"),
     });
   });
@@ -88,21 +88,21 @@ describe("ArweaveBundlerStorageAdapter — retrieve ID validation", () => {
 
   it("throws before any network call when the id contains path-traversal characters", async () => {
     await expect(adapter().retrieve("../../etc/passwd")).rejects.toMatchObject({
-      code: StorageErrorCode.TURBO_INVALID_TX_ID,
+      code: StorageErrorCode.ARWEAVE_BUNDLER_INVALID_TX_ID,
       message: expect.stringContaining("Invalid transaction ID"),
     });
   });
 
   it("throws for an id shorter than 43 characters", async () => {
     await expect(adapter().retrieve("shortId")).rejects.toMatchObject({
-      code: StorageErrorCode.TURBO_INVALID_TX_ID,
+      code: StorageErrorCode.ARWEAVE_BUNDLER_INVALID_TX_ID,
       message: expect.stringContaining("Invalid transaction ID"),
     });
   });
 
   it("throws for an id longer than 43 characters", async () => {
     await expect(adapter().retrieve(TX_VALID + "A")).rejects.toMatchObject({
-      code: StorageErrorCode.TURBO_INVALID_TX_ID,
+      code: StorageErrorCode.ARWEAVE_BUNDLER_INVALID_TX_ID,
       message: expect.stringContaining("Invalid transaction ID"),
     });
   });

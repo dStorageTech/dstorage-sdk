@@ -107,7 +107,7 @@ export type PaymentInstruction = Omit<
   PaymentQuote,
   "amount" | "token" | "type"
 > & {
-  /** base64url-encoded RSA-4096 modulus the client asserts as the expected signing key (Turbo path). */
+  /** base64url-encoded RSA-4096 modulus the client asserts as the expected signing key (bundler signing path). */
   ownerKey?: string;
 };
 
