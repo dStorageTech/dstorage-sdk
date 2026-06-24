@@ -193,7 +193,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       `storing reference: storageId=${storageId}`,
     );
     await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
-      ownerSecret,
+      ownerSecret: new Uint8Array(ownerSecret),
     });
     try {
       const txData = await withContractScopedTransaction(
@@ -250,7 +250,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       `removing reference: ${toHex(refId)}`,
     );
     await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
-      ownerSecret,
+      ownerSecret: new Uint8Array(ownerSecret),
     });
     try {
       const txData = await withContractScopedTransaction(
@@ -295,10 +295,10 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       `updating reference: ${toHex(refId)}`,
     );
     await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
-      ownerSecret,
+      ownerSecret: new Uint8Array(ownerSecret),
       // When no new secret is provided, pass the old one so the circuit recomputes the same
       // commitment and the stored value is preserved unchanged.
-      newOwnerSecret: newOwnerSecret ?? ownerSecret,
+      newOwnerSecret: new Uint8Array(newOwnerSecret ?? ownerSecret),
     });
     try {
       const txData = await withContractScopedTransaction(
