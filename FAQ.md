@@ -676,6 +676,28 @@ const sdk = new DStorage({
 });
 ```
 
+**`HttpGatewayChainAdapter` — remote REST backend**
+
+Delegates reference operations to a custom HTTP/HTTPS service instead of a blockchain. Configure it with four paths (write, read, list, delete) appended to a shared `baseUrl`:
+
+```typescript
+new HttpGatewayChainAdapter({
+  baseUrl: "https://my-backend.example.com",
+  writePath: "/api/refs",
+  readPath: "/api/refs",
+  listPath: "/api/refs",
+  deletePath: "/api/refs",
+});
+```
+
+All four CRUD operations (`POST /{refId}`, `GET /{refId}`, `GET`, `DELETE /{refId}`) are issued against those paths. For gateways that use a custom CA or mutual-TLS client certificate, pass a preconfigured `fetch`-compatible function via `customFetch`.
+
+One important security note: `ownerSecret` is an internal ZK witness that is deliberately stripped before any network call — it is never transmitted to the gateway. Ownership enforcement (whether to honour a remove or update request) is therefore the responsibility of the backend service, not the adapter.
+
+`refId` values are UUID-style strings (not circuit-derived Bytes<32>), matching `MockChainAdapter`'s format. No Midnight infrastructure (proof server, indexer, DUST wallet) is needed — cost estimates always return zero.
+
+Typical use cases: staging environments backed by a custom database, non-Midnight deployments where a simple REST service is preferable to a blockchain, and integration testing against a real HTTP service.
+
 **`MidnightSimulatorChainAdapter` — real DataRegistry circuits without a live network**
 
 Runs the actual DataRegistry Compact circuits in-process via `DataRegistrySimulator`. Ownership enforcement, `ownerSecret`/`ownerCommitment` semantics, and `refId` derivation all match the on-chain behavior exactly — unlike `MockChainAdapter`, which uses simplified UUID-style IDs. No Midnight node, indexer, proof server, or DUST tokens are required. Optionally accepts `signingServerUrl` and `authToken` to exercise the managed payment flow end-to-end in tests.
