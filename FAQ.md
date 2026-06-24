@@ -61,7 +61,7 @@ Yes. Files larger than 10 MB are automatically split into independently encrypte
 
 | Area    | Available now                                             | Stub / planned |
 | ------- | --------------------------------------------------------- | -------------- |
-| Storage | Mock, Arweave Local, Arweave, Arweave Turbo (managed)     |
+| Storage | Mock, Arweave Local, Arweave, Arweave Bundler (managed)   |
 | Chain   | Mock, MockMidnight, Midnight (connector + provider modes) |
 | Payment | Mock, Arweave (JWK), Managed (remote signing server)      |
 
@@ -532,10 +532,10 @@ Use the `walletMode` discriminated union:
 
 `walletMode` is required. See `QUICK_START.md` for a complete provider-mode setup example.
 
-**How do I configure ArweaveTurbo for managed uploads?**
+**How do I configure `ArweaveBundlerStorageAdapter` for managed uploads?**
 
 ```typescript
-new ArweaveTurboStorageAdapter({
+new ArweaveBundlerStorageAdapter({
   signingServerUrl: "https://dstorage.pro",
   // Token format: <credential>.<base64url_modulus> — issued by the signing server.
   // The modulus (512 bytes, base64url) is the server's RSA-4096 public key and is
@@ -625,7 +625,7 @@ const sdk = new DStorage({
 });
 ```
 
-Requires a funded AR wallet. Not suitable for applications where end-users do not hold AR — use `ArweaveTurboStorageAdapter` instead.
+Requires a funded AR wallet. Not suitable for applications where end-users do not hold AR — use `ArweaveBundlerStorageAdapter` instead.
 
 **`ArweaveLocalStorageAdapter` — local Arweave integration testing**
 
@@ -647,13 +647,13 @@ docker run -d --rm -p 1984:1984 textury/arlocal
 # or: npx arlocal
 ```
 
-**`ArweaveTurboStorageAdapter` — fast finality via managed signing**
+**`ArweaveBundlerStorageAdapter` — fast finality via managed signing**
 
-Uploads via the Arweave Turbo bundler (ANS-104 format), which delivers near-instant finality compared to the 2–20 minute wait for Arweave L1 transactions. The signing server holds a funded Turbo Credits account, so end-users need no AR wallet. Privacy is preserved: only a 48-byte ANS-104 `deep_hash` is sent to the server — the file bytes never leave the client.
+Uploads via the ANS-104 Arweave bundler, which delivers near-instant finality compared to the 2–20 minute wait for Arweave L1 transactions. The signing server holds a funded bundler account, so end-users need no AR wallet. Privacy is preserved: only a 48-byte ANS-104 `deep_hash` is sent to the server — the file bytes never leave the client.
 
 ```typescript
 const sdk = new DStorage({
-  storageAdapter: new ArweaveTurboStorageAdapter({
+  storageAdapter: new ArweaveBundlerStorageAdapter({
     signingServerUrl:
       process.env.DSTORAGE_SERVICE_URL ?? "https://dstorage.pro",
     authToken: process.env.DSTORAGE_AUTH_TOKEN ?? "",
@@ -813,17 +813,17 @@ Only a cryptographic hash of the content and the request metadata needed to cons
 
 **How do I configure the managed payment flow?**
 
-Pass `signingServerUrl` and `authToken` to `ArweaveTurboStorageAdapter`:
+Pass `signingServerUrl` and `authToken` to `ArweaveBundlerStorageAdapter`:
 
 ```typescript
 import {
   DStorage,
-  ArweaveTurboStorageAdapter,
+  ArweaveBundlerStorageAdapter,
   MidnightChainAdapter,
 } from "@dstorage-tech/dstorage";
 
 const sdk = new DStorage({
-  storageAdapter: new ArweaveTurboStorageAdapter({
+  storageAdapter: new ArweaveBundlerStorageAdapter({
     signingServerUrl:
       process.env.DSTORAGE_SERVICE_URL ?? "https://dstorage.pro",
     authToken: process.env.DSTORAGE_AUTH_TOKEN ?? "",
@@ -861,9 +861,9 @@ export DSTORAGE_AUTH_TOKEN=ds_your_token_here
 
 Or add them to a `.env` file in your project root (loaded via `dotenv` or equivalent). The SDK does not load `.env` files automatically — your application loader must do that.
 
-**What is `ArweaveTurboStorageAdapter` and how does it differ from `ArweaveStorageAdapter`?**
+**What is `ArweaveBundlerStorageAdapter` and how does it differ from `ArweaveStorageAdapter`?**
 
-`ArweaveTurboStorageAdapter` uses the Arweave Turbo upload protocol routed through the dStorage Pro signing server. Uploads reach near-instant finality and require no client-side AR wallet or JWK key file. `ArweaveStorageAdapter` requires the caller to hold a funded Arweave JWK wallet and signs transactions locally.
+`ArweaveBundlerStorageAdapter` uses the ANS-104 Arweave bundler protocol routed through the dStorage Pro signing server. Uploads reach near-instant finality and require no client-side AR wallet or JWK key file. `ArweaveStorageAdapter` requires the caller to hold a funded Arweave JWK wallet and signs transactions locally.
 
 **What does the managed Midnight chain payment flow look like?**
 
@@ -871,7 +871,7 @@ For Midnight, fees (DUST) are handled internally by the wallet — the Midnight 
 
 **Does the managed service support the bboard quick-start example?**
 
-Yes — the QUICK_START guide is built around the managed flow. `ArweaveTurboStorageAdapter` + `MidnightChainAdapter` in provider-wallet mode both accept `signingServerUrl` / `authToken` and reuse bboard's existing wallet and proof server. No separate AR wallet is needed.
+Yes — the QUICK_START guide is built around the managed flow. `ArweaveBundlerStorageAdapter` + `MidnightChainAdapter` in provider-wallet mode both accept `signingServerUrl` / `authToken` and reuse bboard's existing wallet and proof server. No separate AR wallet is needed.
 
 **Is there a known security limitation with the managed payment response?**
 
@@ -887,7 +887,7 @@ The managed service covers Arweave storage costs billed in AR. Midnight chain fe
 
 **How do I test the managed payment code path without real dStorage Pro credentials?**
 
-Use `MockStorageAdapter` and `MidnightSimulatorChainAdapter` with `signingServerUrl` and `authToken` pointing at a local signing server (or any reachable test endpoint). Both adapters automatically use the `managedmock` payment network, which sends the network identifier `"TEST"` to the server instead of `"arweave_turbo"` or `"midnight"`. This exercises the full managed payment request/response round-trip — including auth token pinning and error handling — without touching real funds or the production signing server.
+Use `MockStorageAdapter` and `MidnightSimulatorChainAdapter` with `signingServerUrl` and `authToken` pointing at a local signing server (or any reachable test endpoint). Both adapters automatically use the `managedmock` payment network, which sends the network identifier `"TEST"` to the server instead of `"arweave_bundler"` or `"midnight"`. This exercises the full managed payment request/response round-trip — including auth token pinning and error handling — without touching real funds or the production signing server.
 
 ```typescript
 const sdk = new DStorage({
@@ -918,7 +918,7 @@ ds_<credential>.<base64url_modulus>
 Always supply the token via an environment variable — never hard-code it:
 
 ```typescript
-new ArweaveTurboStorageAdapter({
+new ArweaveBundlerStorageAdapter({
   signingServerUrl: "https://dstorage.pro",
   authToken: process.env.DSTORAGE_AUTH_TOKEN ?? "",
 });
@@ -960,7 +960,7 @@ Create a JWT token in the portal (JWT Tokens tab) or via `POST /api/jwt-tokens` 
 Use a JWT token in the SDK exactly the same way as a `ds_*` token — the `authToken` field accepts either format:
 
 ```typescript
-new ArweaveTurboStorageAdapter({
+new ArweaveBundlerStorageAdapter({
   signingServerUrl: "https://dstorage.pro",
   authToken: process.env.DSTORAGE_JWT_TOKEN ?? "",
 });

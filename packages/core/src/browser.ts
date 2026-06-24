@@ -20,7 +20,8 @@ export type {
 export { MockStorageAdapter } from "@dstorage/storage";
 export type { MockStorageAdapterConfig } from "@dstorage/storage";
 export { ArweaveStorageAdapter } from "@dstorage/storage";
-export { ArweaveTurboStorageAdapter } from "@dstorage/storage";
+export { ArweaveBundlerStorageAdapter } from "@dstorage/storage";
+export type { ArweaveBundlerAdapterConfig } from "@dstorage/storage";
 export { AutonomiStorageAdapter } from "@dstorage/storage";
 // ArweaveLocalStorageAdapter: no node:http dependency — uses fetch() throughout.
 // Requires arlocal running at a browser-reachable URL (CORS enabled).

@@ -1,7 +1,7 @@
 /**
- * @dstorage/storage — adapters/arweave-turbo.ts
+ * @dstorage/storage — adapters/arweave-bundler.ts
  *
- * Arweave Turbo storage adapter with server-side ANS-104 signing.
+ * Arweave Bundler storage adapter — ANS-104 bundled uploads with server-side signing.
  *
  * ── Upload flow (no client-side Arweave wallet needed) ────────────────────────
  *
@@ -61,7 +61,7 @@ const ARWEAVE_GATEWAY_URL = "https://turbo-gateway.com";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-export interface ArweaveTurboAdapterConfig {
+export interface ArweaveBundlerAdapterConfig {
   /**
    * Base URL of the dStorage API server that holds the funded Turbo Credits account.
    * Example: "https://api.my-dstorage-server.com"
@@ -113,15 +113,15 @@ export interface ArweaveTurboAdapterConfig {
  * as the existing managed Arweave flow.
  *
  * @example
- * const adapter = new ArweaveTurboStorageAdapter({
+ * const adapter = new ArweaveBundlerStorageAdapter({
  *   signingServerUrl: "https://api.my-server.com",
  *   authToken: "ds_...",
  * });
  * const { id } = await adapter.store(encryptedBytes, { "Content-Type": "application/octet-stream" });
  */
-export class ArweaveTurboStorageAdapter implements StorageAdapter {
-  readonly name: StorageProviderName = "arweave_turbo";
-  readonly providerName = "Arweave (Turbo)";
+export class ArweaveBundlerStorageAdapter implements StorageAdapter {
+  readonly name: StorageProviderName = "arweave_bundler";
+  readonly providerName = "Arweave (Bundler)";
   readonly paymentAdapter: PaymentAdapter;
 
   private readonly signingServerUrl: string | null;
@@ -133,7 +133,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
   /** RSA-4096 public key modulus (512 bytes) parsed from the auth token at construction time. */
   private readonly ownerPublicKey: Uint8Array;
 
-  constructor(config: ArweaveTurboAdapterConfig = {}) {
+  constructor(config: ArweaveBundlerAdapterConfig = {}) {
     this.signingServerUrl = config.signingServerUrl
       ? config.signingServerUrl.replace(/\/$/, "")
       : null;
@@ -150,10 +150,10 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       if (!config.authToken?.trim()) {
         throw new DStorageError(
           StorageErrorCode.TURBO_AUTH_TOKEN_REQUIRED,
-          "[dStorage/arweave-turbo] authToken is required when signingServerUrl is provided.",
+          "[dStorage/arweave-bundler] authToken is required when signingServerUrl is provided.",
         );
       }
-      this.ownerPublicKey = ArweaveTurboStorageAdapter._parseToken(
+      this.ownerPublicKey = ArweaveBundlerStorageAdapter._parseToken(
         config.authToken,
       );
       this.paymentAdapter = new ManagedPaymentAdapter({
@@ -166,7 +166,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     } else {
       throw new DStorageError(
         StorageErrorCode.TURBO_LOCAL_NOT_SUPPORTED,
-        "[dStorage/arweave-turbo] Local Arweave Turbo Adapter not supported yet.",
+        "[dStorage/arweave-bundler] Local signing not supported yet.",
       );
     }
   }
@@ -190,7 +190,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     ];
 
     this.logger?.log(
-      "dStorage/arweave-turbo",
+      "dStorage/arweave-bundler",
       `Creating ANS-104 data item (${dataSizeBytes} bytes, ${tags.length} tags)…`,
     );
 
@@ -201,14 +201,14 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     await dataItem.sign(signer);
 
     const raw: Uint8Array = dataItem.getRaw();
-    const { txId, dataCaches } = await this._uploadToTurbo(raw);
+    const { txId, dataCaches } = await this._uploadToBundler(raw);
 
     const url = dataCaches[0]
       ? `https://${dataCaches[0]}/${txId}`
       : `${this.gateway}/${txId}`;
     this.logger?.log(
-      "dStorage/arweave-turbo",
-      `Uploaded via Turbo → txId: ${txId}`,
+      "dStorage/arweave-bundler",
+      `Uploaded via bundler → txId: ${txId}`,
     );
 
     return { id: txId, provider: this.name, url, uploadedAt: Date.now() };
@@ -222,7 +222,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
       throw new DStorageError(
         StorageErrorCode.TURBO_INVALID_TX_ID,
-        `[dStorage/arweave-turbo] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
+        `[dStorage/arweave-bundler] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
       );
     }
     // ── Pre-fetch transaction metadata ────────────────────────────────────────
@@ -233,7 +233,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       if (!metaResp.ok) {
         throw new DStorageError(
           StorageErrorCode.TURBO_TX_METADATA_FAILED,
-          `[dStorage/arweave-turbo] Could not fetch transaction metadata for txId: ${id} — ` +
+          `[dStorage/arweave-bundler] Could not fetch transaction metadata for txId: ${id} — ` +
             "content hash cannot be verified. " +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
@@ -250,7 +250,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       if (!storedHash) {
         throw new DStorageError(
           StorageErrorCode.TURBO_HASH_TAG_MISSING,
-          `[dStorage/arweave-turbo] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
+          `[dStorage/arweave-bundler] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
       }
@@ -261,7 +261,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (!resp.ok) {
       throw new DStorageError(
         StorageErrorCode.TURBO_RETRIEVE_HTTP_ERROR,
-        `[dStorage/arweave-turbo] Failed to retrieve txId=${id}: HTTP ${resp.status}\n` +
+        `[dStorage/arweave-bundler] Failed to retrieve txId=${id}: HTTP ${resp.status}\n` +
           `Check: https://viewblock.io/arweave/tx/${id}`,
       );
     }
@@ -274,7 +274,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       if (!isNaN(size) && size > this.maxRetrieveSizeBytes) {
         throw new DStorageError(
           StorageErrorCode.TURBO_SIZE_LIMIT_EXCEEDED,
-          `[dStorage/arweave-turbo] Content-Length (${size} bytes) exceeds ` +
+          `[dStorage/arweave-bundler] Content-Length (${size} bytes) exceeds ` +
             `the configured limit of ${this.maxRetrieveSizeBytes} bytes for txId: ${id}.`,
         );
       }
@@ -286,17 +286,17 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (bytes.byteLength > this.maxRetrieveSizeBytes) {
       throw new DStorageError(
         StorageErrorCode.TURBO_SIZE_MISMATCH,
-        `[dStorage/arweave-turbo] Downloaded ${bytes.byteLength} bytes for txId: ${id}, ` +
+        `[dStorage/arweave-bundler] Downloaded ${bytes.byteLength} bytes for txId: ${id}, ` +
           `which exceeds the configured limit of ${this.maxRetrieveSizeBytes} bytes.`,
       );
     }
 
     // ── Content hash verification ─────────────────────────────────────────────
     if (!this.skipIntegrityCheck && storedHash) {
-      await assertContentHash(id, bytes, storedHash, "arweave-turbo");
+      await assertContentHash(id, bytes, storedHash, "arweave-bundler");
     }
 
-    this.logger?.log("dStorage/arweave-turbo", `Retrieved txId: ${id}`);
+    this.logger?.log("dStorage/arweave-bundler", `Retrieved txId: ${id}`);
     return { bytes, tags };
   }
 
@@ -311,7 +311,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     } catch (err) {
       throw new DStorageError(
         StorageErrorCode.TURBO_COST_ESTIMATE_FAILED,
-        `[dStorage/arweave-turbo] Failed to fetch upload cost estimate from Turbo: ${err}`,
+        `[dStorage/arweave-bundler] Failed to fetch upload cost estimate from Arweave bundler: ${err}`,
         { cause: err },
       );
     }
@@ -319,7 +319,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (!cost) {
       throw new DStorageError(
         StorageErrorCode.TURBO_NO_COST_ESTIMATE,
-        "[dStorage/arweave-turbo] Turbo returned no cost estimate for the given data size.",
+        "[dStorage/arweave-bundler] Arweave bundler returned no cost estimate for the given data size.",
       );
     }
     return {
@@ -369,7 +369,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     dataSizeBytes: number,
   ): Promise<Uint8Array> {
     this.logger?.log(
-      "dStorage/arweave-turbo",
+      "dStorage/arweave-bundler",
       "Delegating ANS-104 signature to server via sign-tx (only deep_hash sent, data stays on client)…",
     );
 
@@ -385,7 +385,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (!paymentReceipt.signedTx) {
       throw new DStorageError(
         StorageErrorCode.TURBO_INVALID_SIGN_TX_RESPONSE,
-        "[dStorage/arweave-turbo] Signing server returned an invalid sign-tx response for Arweave Turbo payment.",
+        "[dStorage/arweave-bundler] Signing server returned an invalid sign-tx response for Arweave bundler payment.",
       );
     }
 
@@ -405,7 +405,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (dot === -1) {
       throw new DStorageError(
         StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_FORMAT,
-        "[dStorage/arweave-turbo] authToken must be in the format " +
+        "[dStorage/arweave-bundler] authToken must be in the format " +
           "<credential>.<base64url_public_key> — re-issue your token from the signing server.",
       );
     }
@@ -413,7 +413,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     if (ownerBytes.length !== 512) {
       throw new DStorageError(
         StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_KEY,
-        `[dStorage/arweave-turbo] authToken public key must be 512 bytes (RSA-4096 modulus), ` +
+        `[dStorage/arweave-bundler] authToken public key must be 512 bytes (RSA-4096 modulus), ` +
           `got ${ownerBytes.length} — re-issue your token.`,
       );
     }
@@ -424,12 +424,12 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
    * POST the complete signed ANS-104 data item bytes directly to the Turbo bundler.
    * Server Turbo Credits are consumed based on the signing key — no client wallet needed.
    */
-  private async _uploadToTurbo(
+  private async _uploadToBundler(
     dataItemBuffer: Uint8Array,
   ): Promise<{ txId: string; dataCaches: string[] }> {
     this.logger?.log(
-      "dStorage/arweave-turbo",
-      `Uploading ${dataItemBuffer.byteLength}-byte signed data item to Turbo…`,
+      "dStorage/arweave-bundler",
+      `Uploading ${dataItemBuffer.byteLength}-byte signed data item to bundler…`,
     );
 
     const { TurboFactory } = await import("@ardrive/turbo-sdk");
@@ -443,7 +443,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
       if (!result.id) {
         throw new DStorageError(
           StorageErrorCode.TURBO_NO_TX_ID_RETURNED,
-          "[dStorage/arweave-turbo] Arweave Turbo did not return a transaction id.",
+          "[dStorage/arweave-bundler] Arweave bundler did not return a transaction id.",
         );
       }
 
@@ -451,7 +451,7 @@ export class ArweaveTurboStorageAdapter implements StorageAdapter {
     } catch (err) {
       throw new DStorageError(
         StorageErrorCode.TURBO_UPLOAD_FAILED,
-        `[dStorage/arweave-turbo] Upload to Arweave Turbo failed: ${err}`,
+        `[dStorage/arweave-bundler] Upload to Arweave bundler failed: ${err}`,
         { cause: err },
       );
     }

@@ -23,7 +23,7 @@ export type StorageProviderName =
   | "mock"
   | "arweave"
   | "autonomi"
-  | "arweave_turbo";
+  | "arweave_bundler";
 
 /**
  * A cost quote returned by StorageAdapter.estimateCost().

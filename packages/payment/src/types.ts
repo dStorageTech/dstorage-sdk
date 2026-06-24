@@ -52,7 +52,7 @@ export type PaymentNetworkName =
   | "mock"
   | "arweave"
   | "midnight"
-  | "arweave_turbo"
+  | "arweave_bundler"
   | "managedmock";
 
 // ── PaymentQuote ──────────────────────────────────────────────────────────────

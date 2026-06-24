@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ArweaveTurboStorageAdapter } from "../adapters/arweave-turbo.js";
+import { ArweaveBundlerStorageAdapter } from "../adapters/arweave-bundler.js";
 import { StorageErrorCode } from "../errors.js";
 
 // 512 zero-bytes encoded as base64url (all 'A's — 170 AAAA groups + AAA).
@@ -13,11 +13,11 @@ const SIGNING_URL = "https://signing.test";
 // The adapter splits on lastIndexOf('.') so the credential part (everything
 // before the last dot) may itself contain dots — including a full JWT.
 
-describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
+describe("ArweaveBundlerStorageAdapter — authToken parsing", () => {
   it("accepts a plain compound token (<credential>.<modulus>)", () => {
     expect(
       () =>
-        new ArweaveTurboStorageAdapter({
+        new ArweaveBundlerStorageAdapter({
           signingServerUrl: SIGNING_URL,
           authToken: `ds_tok.${MODULUS_683}`,
         }),
@@ -31,7 +31,7 @@ describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
     const jwtCredential = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.fakeJwtSig";
     expect(
       () =>
-        new ArweaveTurboStorageAdapter({
+        new ArweaveBundlerStorageAdapter({
           signingServerUrl: SIGNING_URL,
           authToken: `${jwtCredential}.${MODULUS_683}`,
         }),
@@ -44,7 +44,7 @@ describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
     const plainJwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.shortSignature";
     let err: unknown;
     try {
-      new ArweaveTurboStorageAdapter({
+      new ArweaveBundlerStorageAdapter({
         signingServerUrl: SIGNING_URL,
         authToken: plainJwt,
       });
@@ -53,14 +53,14 @@ describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
     }
     expect(err).toMatchObject({
       code: StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_KEY,
-      message: expect.stringContaining("[dStorage/arweave-turbo]"),
+      message: expect.stringContaining("[dStorage/arweave-bundler]"),
     });
   });
 
   it("throws when authToken has no dot at all", () => {
     let err: unknown;
     try {
-      new ArweaveTurboStorageAdapter({
+      new ArweaveBundlerStorageAdapter({
         signingServerUrl: SIGNING_URL,
         authToken: "nodottoken",
       });
@@ -69,18 +69,18 @@ describe("ArweaveTurboStorageAdapter — authToken parsing", () => {
     }
     expect(err).toMatchObject({
       code: StorageErrorCode.TURBO_INVALID_AUTH_TOKEN_FORMAT,
-      message: expect.stringContaining("[dStorage/arweave-turbo]"),
+      message: expect.stringContaining("[dStorage/arweave-bundler]"),
     });
   });
 });
 
 // ── retrieve: transaction ID format validation ────────────────────────────────
 
-describe("ArweaveTurboStorageAdapter — retrieve ID validation", () => {
+describe("ArweaveBundlerStorageAdapter — retrieve ID validation", () => {
   const TX_VALID = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; // 43 chars
 
   function adapter() {
-    return new ArweaveTurboStorageAdapter({
+    return new ArweaveBundlerStorageAdapter({
       signingServerUrl: SIGNING_URL,
       authToken: `ds_tok.${MODULUS_683}`,
     });

@@ -207,7 +207,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * Strip a RSA-4096 modulus suffix from a compound auth token
    * (<credential>.<base64url_683_chars>), returning only the credential.
    * A plain token (no '.' or wrong suffix length) is returned unchanged.
-   * This lets ArweaveTurboStorageAdapter compound tokens be passed directly
+   * This lets ArweaveBundlerStorageAdapter compound tokens be passed directly
    * to any adapter that uses ManagedPaymentAdapter without breaking authentication.
    *
    * lastIndexOf is intentional: the credential part may itself contain dots
@@ -311,8 +311,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       return this._payMidnight(instruction, onStatus);
     } else if (instruction.network === "arweave") {
       return this._payArweave(instruction, onStatus);
-    } else if (instruction.network === "arweave_turbo") {
-      return this._payArweaveTurbo(instruction, onStatus);
+    } else if (instruction.network === "arweave_bundler") {
+      return this._payArweaveBundler(instruction, onStatus);
     }
 
     throw Error(`Unsupported network: ${instruction.network}`);
@@ -507,9 +507,9 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   }
 
   /**
-   * Arweave Turbo
+   * Arweave Bundler
    */
-  private async _payArweaveTurbo(
+  private async _payArweaveBundler(
     instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
@@ -530,7 +530,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Arweave Turbo Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee})`,
+      `Arweave bundler Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee})`,
     );
 
     return {

@@ -221,7 +221,7 @@ Reference `dist/browser.mjs` directly, or serve it from a CDN that supports impo
 | --------------------------------------------- | :------------: | ------------------------------------------------------------------------------------------ |
 | `MockStorageAdapter`                          |       ✅       |                                                                                            |
 | `ArweaveStorageAdapter`                       |       ✅       |                                                                                            |
-| `ArweaveTurboStorageAdapter`                  |       ✅       |                                                                                            |
+| `ArweaveBundlerStorageAdapter`                |       ✅       |                                                                                            |
 | `AutonomiStorageAdapter`                      |       ✅       |                                                                                            |
 | `ArweaveLocalStorageAdapter`                  |       ✅       | Requires arlocal running at a browser-reachable URL — see note below                       |
 | `MockPaymentAdapter`                          |       ✅       |                                                                                            |
@@ -339,13 +339,13 @@ npm run test:integration -- -t "uploads and retrieves private data"
 
 ## Reality Check (Current Support)
 
-| Area             | Current state                                                                                                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Storage adapters | `Mock`, `ArweaveLocal`, and `Arweave` are live; `ArweaveTurbo` (managed server-signing flow) is live; `Autonomi` is stub                  |
-| Chain adapters   | `Mock`, `MockMidnight`, and `Midnight` (connector + facade modes) are implemented                                                         |
-| Payment adapters | `Mock` is simulated by design; `Arweave` is live (JWK wallet); `Managed` (remote signing server) is live; Midnight fees handled by wallet |
-| Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector, Arweave, and Arweave Local paths                                         |
-| Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                                                      |
+| Area             | Current state                                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Storage adapters | `Mock`, `ArweaveLocal`, and `Arweave` are live; `ArweaveBundler` (ANS-104 bundled uploads, managed server-signing) is live; `Autonomi` is stub |
+| Chain adapters   | `Mock`, `MockMidnight`, and `Midnight` (connector + facade modes) are implemented                                                              |
+| Payment adapters | `Mock` is simulated by design; `Arweave` is live (JWK wallet); `Managed` (remote signing server) is live; Midnight fees handled by wallet      |
+| Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector, Arweave, and Arweave Local paths                                              |
+| Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                                                           |
 
 ---
 
@@ -518,7 +518,7 @@ Tokens are selected automatically based on your chosen adapters.
 @dstorage-tech/dstorage     ← Developer-facing API (npm install @dstorage-tech/dstorage)
     ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation       [bundled]
     ├── @dstorage/encryption    ← Encryption adapters: PasswordEncryptionAdapter | MnemonicEncryptionAdapter | KeypairEncryptionAdapter [bundled]
-    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveTurbo | Arweave Local | Autonomi(stub) [bundled: Mock only]
+    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveBundler | Arweave Local | Autonomi(stub) [bundled: Mock only]
     ├── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed           [bundled: Mock only]
     └── @dstorage/chain         ← Chain adapters:   Mock | MockMidnight | Midnight     [bundled: Mock only]
 ```
@@ -827,13 +827,13 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
 
 ### Storage
 
-| Provider                   | Status  | Notes                                                                        |
-| -------------------------- | ------- | ---------------------------------------------------------------------------- |
-| Mock (localStorage/memory) | ✅ Live | Perfect for development & demos                                              |
-| Arweave Local              | ✅ Live | Local arlocal integration testing                                            |
-| Arweave                    | ✅ Live | Requires `arweave` package + Wander wallet                                   |
-| Arweave Turbo              | ✅ Live | Near-instant finality via managed server-signing; no client AR wallet needed |
-| Autonomi                   | 🔵 Stub | Awaiting Autonomi JS SDK stability                                           |
+| Provider                   | Status  | Notes                                                                                                    |
+| -------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| Mock (localStorage/memory) | ✅ Live | Perfect for development & demos                                                                          |
+| Arweave Local              | ✅ Live | Local arlocal integration testing                                                                        |
+| Arweave                    | ✅ Live | Requires `arweave` package + Wander wallet                                                               |
+| Arweave Bundler            | ✅ Live | Near-instant finality via ANS-104 bundled uploads and managed server-signing; no client AR wallet needed |
+| Autonomi                   | 🔵 Stub | Awaiting Autonomi JS SDK stability                                                                       |
 
 ### Blockchain
 
