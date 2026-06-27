@@ -28,7 +28,7 @@ import { ManagedPaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
 import type { PaymentAdapter } from "@dstorage/payment";
 import { DStorageError, hexToBytes } from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
-import { DataRegistrySimulator } from "./midnight/contracts/src/test/dataregistry-simulator.js";
+import type { DataRegistrySimulator } from "./midnight/contracts/src/test/dataregistry-simulator.js";
 
 function uint8ArrayToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -41,7 +41,8 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
   readonly providerName: string = "Midnight-Simulator";
   readonly paymentAdapter: PaymentAdapter;
 
-  private readonly simulator: DataRegistrySimulator;
+  private readonly senderPk: string;
+  private simulatorPromise: Promise<DataRegistrySimulator> | undefined;
   private readonly logger: ChainAdapterLogger | undefined;
   private blockHeight = 1_000_000 + Math.floor(Math.random() * 10_000);
 
@@ -61,9 +62,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
     ) = {},
   ) {
     this.logger = options.logger;
-    this.simulator = new DataRegistrySimulator(
-      options.senderPk ?? "00".repeat(32),
-    );
+    this.senderPk = options.senderPk ?? "00".repeat(32);
 
     if (options.signingServerUrl) {
       this.paymentAdapter = new ManagedPaymentAdapter({
@@ -79,6 +78,17 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
         ...(options.logger !== undefined ? { logger: options.logger } : {}),
       });
     }
+  }
+
+  private async getSimulator(): Promise<DataRegistrySimulator> {
+    if (!this.simulatorPromise) {
+      this.simulatorPromise =
+        import("./midnight/contracts/src/test/dataregistry-simulator.js").then(
+          ({ DataRegistrySimulator }) =>
+            new DataRegistrySimulator(this.senderPk),
+        );
+    }
+    return this.simulatorPromise;
   }
 
   async estimateCost(): Promise<ChainQuote> {
@@ -122,7 +132,8 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       ? hexToBytes(ref.contentHash, "contentHash")
       : new Uint8Array(32);
 
-    const refIdBytes = this.simulator.storeReference(
+    const sim = await this.getSimulator();
+    const refIdBytes = sim.storeReference(
       ref.storageId ?? "",
       ref.encryptionScheme ?? "",
       ref.storageProvider,
@@ -156,7 +167,8 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
 
   async readReference(refId: string): Promise<ChainReference> {
     const refIdBytes = hexToBytes(refId, "refId");
-    const l = this.simulator.getLedger();
+    const sim = await this.getSimulator();
+    const l = sim.getLedger();
     if (!l.references.member(refIdBytes)) {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
@@ -180,7 +192,8 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
 
   async listReferences(): Promise<DataReferenceSummary[]> {
     const result: DataReferenceSummary[] = [];
-    for (const [refIdBytes, e] of this.simulator.getLedger().references) {
+    const sim = await this.getSimulator();
+    for (const [refIdBytes, e] of sim.getLedger().references) {
       result.push({
         refId: uint8ArrayToHex(refIdBytes),
         storageId: e.storageId || null,
@@ -199,8 +212,9 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
     ownerSecret?: Uint8Array,
   ): Promise<void> {
     const refIdBytes = hexToBytes(refId, "refId");
+    const sim = await this.getSimulator();
 
-    if (!this.simulator.getLedger().references.member(refIdBytes)) {
+    if (!sim.getLedger().references.member(refIdBytes)) {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
         `[dStorage/midnight] No reference found for refId: ${refId}`,
@@ -218,7 +232,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       "dStorage/midnight-simulator",
       `removeReference → refId: ${refId}`,
     );
-    this.simulator.removeReference(refIdBytes, ownerSecret);
+    sim.removeReference(refIdBytes, ownerSecret);
   }
 
   async updateReference(
@@ -228,8 +242,9 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
     newOwnerSecret?: Uint8Array,
   ): Promise<void> {
     const refIdBytes = hexToBytes(refId, "refId");
+    const sim = await this.getSimulator();
 
-    if (!this.simulator.getLedger().references.member(refIdBytes)) {
+    if (!sim.getLedger().references.member(refIdBytes)) {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_REF_NOT_FOUND,
         `[dStorage/midnight] No reference found for refId: ${refId}`,
@@ -251,7 +266,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       "dStorage/midnight-simulator",
       `updateReference → refId: ${refId}`,
     );
-    this.simulator.updateReference(
+    sim.updateReference(
       refIdBytes,
       update.storageId,
       update.encryptionScheme,
