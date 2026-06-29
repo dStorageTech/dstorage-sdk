@@ -1063,6 +1063,127 @@ describe("update", () => {
   });
 });
 
+// ── update() StorePartialError recovery ───────────────────────────────────────
+
+describe("update() StorePartialError recovery", () => {
+  it("update() throws StorePartialError when chain write fails", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("chain down"),
+    );
+    await expect(ds.update(refId!, enc("v2"))).rejects.toBeInstanceOf(
+      StorePartialError,
+    );
+  });
+
+  it("isStorePartialError() returns true for the error thrown by update()", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("chain down"),
+    );
+    const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+  });
+
+  it("StorePartialError from update() has code CHAIN_WRITE_FAILED", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("timeout"),
+    );
+    const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
+    expect((err as StorePartialError).code).toBe(
+      CoreErrorCode.CHAIN_WRITE_FAILED,
+    );
+  });
+
+  it("StorePartialError.recovery.storageId is a non-empty string", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+    const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
+    const { storageId } = (err as StorePartialError).recovery;
+    expect(typeof storageId).toBe("string");
+    expect(storageId.length).toBeGreaterThan(0);
+  });
+
+  it("StorePartialError.recovery.keyEnvelope is a non-empty string", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("net"),
+    );
+    const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
+    const { keyEnvelope } = (err as StorePartialError).recovery;
+    expect(typeof keyEnvelope).toBe("string");
+    expect((keyEnvelope as string).length).toBeGreaterThan(0);
+  });
+
+  it("retryUpdate() returns { chainRefId, storageId }", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("chain down"),
+    );
+    const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+
+    const result = await ds.retryUpdate(
+      refId!,
+      (err as StorePartialError).recovery,
+    );
+    expect(result.chainRefId).toBe(refId);
+    expect(typeof result.storageId).toBe("string");
+    expect(result.storageId.length).toBeGreaterThan(0);
+  });
+
+  it("full round-trip: update() chain write fails → retryUpdate() → retrieveByRefId() returns new bytes", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1 content"));
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("chain temporarily down"),
+    );
+
+    const err = await ds
+      .update(refId!, enc("v2 content"))
+      .catch((e: unknown) => e);
+    expect(isStorePartialError(err)).toBe(true);
+
+    await ds.retryUpdate(refId!, (err as StorePartialError).recovery);
+    const { bytes } = await ds.retrieveByRefId(refId!);
+    expect(bytes).toEqual(enc("v2 content"));
+  });
+
+  it("proactive path: onProgress recovery → retryUpdate() → retrieveByRefId() returns new bytes", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1 content"));
+
+    let capturedRecovery: StorePartialError["recovery"] | undefined;
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      new Error("chain down"),
+    );
+
+    await ds
+      .update(refId!, enc("v2 content"), {
+        onProgress: (p) => {
+          if (p.phase === "stored" && p.recovery) {
+            capturedRecovery = p.recovery;
+          }
+        },
+      })
+      .catch(() => {});
+
+    expect(capturedRecovery).toBeDefined();
+    await ds.retryUpdate(refId!, capturedRecovery!);
+    const { bytes } = await ds.retrieveByRefId(refId!);
+    expect(bytes).toEqual(enc("v2 content"));
+  });
+});
+
 // ── StorePartialError recovery ─────────────────────────────────────────────────
 
 describe("StorePartialError recovery", () => {

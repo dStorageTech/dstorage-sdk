@@ -16,7 +16,7 @@
 
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { DStorage, isStorePartialError } from "@dstorage/core";
-import type { StoreRecovery } from "@dstorage/core";
+import type { StoreRecovery, StorePartialError } from "@dstorage/core";
 import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import { readEnv } from "./helpers/env.js";
@@ -101,6 +101,75 @@ describe.skipIf(!arlocalOk)(
       });
       const { bytes } = await sdk.retrieveByRefId(chainRefId);
       expect(bytes).toEqual(content);
+    });
+  },
+);
+
+describe.skipIf(!arlocalOk)(
+  "retryUpdate() recovery — arlocal storage + mock chain",
+  () => {
+    let sdk: DStorage;
+    let mockChain: MidnightSimulatorChainAdapter;
+    let refId: string;
+
+    beforeAll(async () => {
+      const { adapter } = await createStorageAdapter(env.arlocalUrl);
+      mockChain = new MidnightSimulatorChainAdapter({ logger: console });
+      sdk = new DStorage({
+        storageAdapter: adapter,
+        chainAdapter: mockChain,
+        encryptionAdapters: [
+          new PasswordEncryptionAdapter({
+            password: "dstorage-retryupdate-integration-test!",
+            salt: "dstorage:retryupdate:integration:v1",
+            params: { N: 1024, r: 8, p: 1 },
+          }),
+        ],
+      });
+      await sdk.init();
+      // Store initial v1 so all update tests have a valid refId.
+      const v1 = await sdk.store(new TextEncoder().encode("v1 content"));
+      refId = v1.chainRefId;
+    });
+
+    it("reactive recovery: update() chain fail → retryUpdate() → retrieveByRefId returns v2 bytes", async () => {
+      const v2 = new TextEncoder().encode("v2 reactive recovery integration");
+
+      vi.spyOn(mockChain, "updateReference").mockRejectedValueOnce(
+        new Error("simulated chain outage"),
+      );
+
+      const err = await sdk.update(refId, v2).catch((e: unknown) => e);
+      expect(isStorePartialError(err)).toBe(true);
+
+      await sdk.retryUpdate(refId, (err as StorePartialError).recovery);
+
+      const { bytes } = await sdk.retrieveByRefId(refId);
+      expect(bytes).toEqual(v2);
+    });
+
+    it("proactive recovery: onProgress 'stored' event → simulated failure → retryUpdate() → retrieveByRefId returns v2 bytes", async () => {
+      let capturedRecovery: StoreRecovery | undefined;
+      const v2 = new TextEncoder().encode("v2 proactive recovery integration");
+
+      vi.spyOn(mockChain, "updateReference").mockRejectedValueOnce(
+        new Error("simulated chain outage"),
+      );
+
+      await sdk
+        .update(refId, v2, {
+          onProgress: (p) => {
+            if (p.phase === "stored") capturedRecovery = p.recovery;
+          },
+        })
+        .catch(() => {});
+
+      expect(capturedRecovery).toBeDefined();
+
+      await sdk.retryUpdate(refId, capturedRecovery!);
+
+      const { bytes } = await sdk.retrieveByRefId(refId);
+      expect(bytes).toEqual(v2);
     });
   },
 );

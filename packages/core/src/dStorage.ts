@@ -569,21 +569,120 @@ export class DStorage implements DStorageContext {
         const contentHash = await computeBlake3Hex(uploadData);
         const rawNewStorageId = new TextEncoder().encode(storageResult.id);
         const newOwnerSecret = await deriveOwnerSecret(dek, rawNewStorageId);
+
+        const storeRecovery: StoreRecovery = {
+          storageId: storageResult.id,
+          storageProvider: storageResult.provider,
+          keyEnvelope,
+          contentHash,
+        };
+        options?.onProgress?.({
+          phase: "stored",
+          chunksUploaded: 1,
+          totalChunks: 1,
+          bytesUploaded: bytes.length,
+          totalBytes: bytes.length,
+          recovery: storeRecovery,
+        });
+
+        try {
+          await this.config.chainAdapter.updateReference(
+            refId,
+            {
+              storageId: onChainStorageId,
+              encryptionScheme: "xchacha20poly1305-v1",
+              storageProvider: storageResult.provider,
+              ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+              writtenAt: Date.now(),
+              keyEnvelope,
+              contentHash,
+            },
+            ownerSecret,
+            newOwnerSecret,
+          );
+        } catch {
+          throw new StorePartialError(storeRecovery);
+        }
+        return { chainRefId: refId, storageId: storageResult.id };
+      } finally {
+        dek.fill(0);
+      }
+    } catch (err) {
+      wrapError(err);
+    }
+  }
+
+  /**
+   * Retry only the on-chain reference write after a failed `update()` call.
+   *
+   * Use this when `update()` throws a `StorePartialError` — meaning the new
+   * content was stored successfully but the chain write failed. Call with the
+   * `refId` you passed to `update()` and the `err.recovery` from the caught
+   * error (or the `recovery` emitted via `onProgress` at phase `"stored"`).
+   *
+   * The new content is already in storage; this method re-derives all chain
+   * write parameters from the recovery envelope without re-uploading.
+   */
+  async retryUpdate(
+    refId: string,
+    recovery: StoreRecovery,
+  ): Promise<UpdateResult> {
+    try {
+      this.assertConnected();
+      if (!this.config.chainAdapter) {
+        throw new DStorageError(
+          CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
+          "[dStorage] retryUpdate requires a chain adapter.",
+        );
+      }
+      if (typeof this.config.chainAdapter.updateReference !== "function") {
+        throw new DStorageError(
+          CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
+          "[dStorage] retryUpdate is not supported by this chain adapter.",
+        );
+      }
+      if (this._encryptionProviders.length === 0) {
+        throw new DStorageError(
+          CoreErrorCode.UPDATE_UPLOAD_REQUIRES_ENCRYPTION,
+          "[dStorage] retryUpdate requires at least one encryption adapter.",
+        );
+      }
+      if (!recovery.keyEnvelope) {
+        throw new DStorageError(
+          CoreErrorCode.UNWRAP_DEK_ENVELOPE_EMPTY,
+          "[dStorage] retryUpdate requires a key envelope in the recovery object.",
+        );
+      }
+
+      const dek = await this._unwrapDek(recovery.keyEnvelope);
+      try {
+        const scheme = XChaChaScheme.fromKey(dek);
+        // The failed update() left the chain ref with OLD data, so _computeOwnerSecret
+        // reads the old key envelope and derives the old ownerSecret correctly.
+        const ownerSecret = await this._computeOwnerSecret(refId);
+        const onChainStorageId = await scheme.encryptStorageId(
+          recovery.storageId,
+        );
+        const newOwnerSecret = await deriveOwnerSecret(
+          dek,
+          new TextEncoder().encode(recovery.storageId),
+        );
         await this.config.chainAdapter.updateReference(
           refId,
           {
             storageId: onChainStorageId,
             encryptionScheme: "xchacha20poly1305-v1",
-            storageProvider: storageResult.provider,
-            ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+            storageProvider: recovery.storageProvider,
             writtenAt: Date.now(),
-            keyEnvelope,
-            contentHash,
+            keyEnvelope: recovery.keyEnvelope,
+            ...(recovery.contentHash !== undefined
+              ? { contentHash: recovery.contentHash }
+              : {}),
           },
           ownerSecret,
           newOwnerSecret,
         );
-        return { chainRefId: refId, storageId: storageResult.id };
+        return { chainRefId: refId, storageId: recovery.storageId };
       } finally {
         dek.fill(0);
       }
