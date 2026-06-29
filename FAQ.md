@@ -490,7 +490,7 @@ Nothing — it stays there. `update()` only changes the on-chain pointer (the `s
 
 - Node.js 22+, npm
 - Docker (for Midnight proof server and Arweave Local)
-- Midnight Compact compiler v0.31.0 (for recompiling the contract)
+- Midnight Compact compiler v0.31.1 (for recompiling the contract)
 - Lace wallet extension ≥ 1.36.2 (browser connector flows only)
 - Wander wallet extension (Arweave browser flows only)
 
