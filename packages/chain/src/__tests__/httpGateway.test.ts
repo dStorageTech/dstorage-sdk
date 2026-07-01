@@ -48,6 +48,98 @@ function mockFetch(body: unknown, status = 200): ReturnType<typeof vi.fn> {
 afterEach(() => vi.restoreAllMocks());
 
 describe("HttpGatewayChainAdapter", () => {
+  // ── headers ─────────────────────────────────────────────────────────────────
+
+  describe("headers", () => {
+    const TOKEN_HEADERS = {
+      Authorization: "Bearer mytoken",
+      "X-Api-Key": "abc123",
+    };
+    const CONFIG_WITH_HEADERS = { ...BASE_CONFIG, headers: TOKEN_HEADERS };
+
+    it("includes extra headers in writeReference POST", async () => {
+      const fetchMock = mockFetch({});
+      vi.stubGlobal("fetch", fetchMock);
+      const adapter = new HttpGatewayChainAdapter(CONFIG_WITH_HEADERS);
+      await adapter.writeReference({ ...makeRef("h1"), refId: "ref_h1" });
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const headers = init.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer mytoken");
+      expect(headers["X-Api-Key"]).toBe("abc123");
+      expect(headers["Content-Type"]).toBe("application/json");
+    });
+
+    it("includes extra headers in updateReference POST", async () => {
+      vi.stubGlobal("fetch", mockFetch({}));
+      const adapter = new HttpGatewayChainAdapter(CONFIG_WITH_HEADERS);
+      await adapter.updateReference("ref_h2", {
+        storageId: "s",
+        encryptionScheme: "",
+        storageProvider: "mock",
+        writtenAt: 0,
+        keyEnvelope: "{}",
+      });
+      const [, init] = (
+        vi.mocked(fetch) as unknown as {
+          mock: { calls: [string, RequestInit][] };
+        }
+      ).mock.calls[0]!;
+      const headers = init.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer mytoken");
+    });
+
+    it("includes extra headers in readReference GET", async () => {
+      vi.stubGlobal("fetch", mockFetch(makeRef("h3")));
+      const adapter = new HttpGatewayChainAdapter(CONFIG_WITH_HEADERS);
+      await adapter.readReference("ref_h3");
+      const [, init] = (
+        vi.mocked(fetch) as unknown as {
+          mock: { calls: [string, RequestInit][] };
+        }
+      ).mock.calls[0]!;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer mytoken");
+    });
+
+    it("includes extra headers in listReferences GET", async () => {
+      vi.stubGlobal("fetch", mockFetch([]));
+      const adapter = new HttpGatewayChainAdapter(CONFIG_WITH_HEADERS);
+      await adapter.listReferences();
+      const [, init] = (
+        vi.mocked(fetch) as unknown as {
+          mock: { calls: [string, RequestInit][] };
+        }
+      ).mock.calls[0]!;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer mytoken");
+    });
+
+    it("includes extra headers in removeReference DELETE", async () => {
+      vi.stubGlobal("fetch", mockFetch(null));
+      const adapter = new HttpGatewayChainAdapter(CONFIG_WITH_HEADERS);
+      await adapter.removeReference("ref_h4");
+      const [, init] = (
+        vi.mocked(fetch) as unknown as {
+          mock: { calls: [string, RequestInit][] };
+        }
+      ).mock.calls[0]!;
+      const headers = init.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer mytoken");
+      expect(headers["Content-Type"]).toBe("application/json");
+    });
+
+    it("sends no extra headers when headers is omitted", async () => {
+      const fetchMock = mockFetch({});
+      vi.stubGlobal("fetch", fetchMock);
+      const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
+      await adapter.writeReference({ ...makeRef("h5"), refId: "ref_h5" });
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const headers = init.headers as Record<string, string>;
+      expect(headers).not.toHaveProperty("Authorization");
+      expect(headers["Content-Type"]).toBe("application/json");
+    });
+  });
+
   it('name is "httpgateway"', () => {
     const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
     expect(adapter.name).toBe("httpgateway");

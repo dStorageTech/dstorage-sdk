@@ -41,6 +41,12 @@ export interface HttpGatewayChainAdapterConfig {
   /** Path appended to baseUrl for removeReference (DELETE /{refId}) operations. */
   deletePath: string;
   /**
+   * Optional headers included in every outgoing request.
+   * Useful for API tokens, authorization, or any other fixed headers required by
+   * the gateway. Example: `{ "Authorization": "Bearer mytoken", "X-Api-Key": "abc" }`
+   */
+  headers?: Record<string, string>;
+  /**
    * Optional custom fetch implementation. Useful when the gateway uses a custom CA
    * or client certificate: supply an undici Agent configured with the appropriate
    * `ca`, `cert`, and `key` options. Defaults to `globalThis.fetch` when omitted.
@@ -55,6 +61,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
   private readonly logger: ChainAdapterLogger | undefined;
   private readonly fetchFn: typeof fetch;
+  private readonly extraHeaders: Record<string, string>;
   private readonly writeUrl: string;
   private readonly readUrl: string;
   private readonly listUrl: string;
@@ -63,6 +70,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   constructor(config: HttpGatewayChainAdapterConfig) {
     this.logger = config.logger;
     this.fetchFn = config.customFetch ?? globalThis.fetch.bind(globalThis);
+    this.extraHeaders = config.headers ?? {};
     this.writeUrl = `${config.baseUrl}${config.writePath}`;
     this.readUrl = `${config.baseUrl}${config.readPath}`;
     this.listUrl = `${config.baseUrl}${config.listPath}`;
@@ -79,7 +87,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     try {
       res = await this.fetchFn(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...this.extraHeaders },
         body: JSON.stringify(payload),
       });
     } catch (err) {
@@ -118,7 +126,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     try {
       res = await this.fetchFn(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...this.extraHeaders },
         body: JSON.stringify(update),
       });
     } catch (err) {
@@ -144,7 +152,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await this.fetchFn(url);
+      res = await this.fetchFn(url, { headers: { ...this.extraHeaders } });
     } catch (err) {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_READ_FAILED,
@@ -189,7 +197,9 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   async listReferences(): Promise<DataReferenceSummary[]> {
     let res: Response;
     try {
-      res = await this.fetchFn(this.listUrl);
+      res = await this.fetchFn(this.listUrl, {
+        headers: { ...this.extraHeaders },
+      });
     } catch (err) {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_LIST_FAILED,
@@ -256,7 +266,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     try {
       res = await this.fetchFn(url, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...this.extraHeaders },
         body: JSON.stringify(body),
       });
     } catch (err) {

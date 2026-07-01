@@ -690,7 +690,25 @@ new HttpGatewayChainAdapter({
 });
 ```
 
-All four CRUD operations (`POST /{refId}`, `GET /{refId}`, `GET`, `DELETE /{refId}`) are issued against those paths. For gateways that use a custom CA or mutual-TLS client certificate, pass a preconfigured `fetch`-compatible function via `customFetch`.
+All four CRUD operations (`POST /{refId}`, `GET /{refId}`, `GET`, `DELETE /{refId}`) are issued against those paths.
+
+**Fixed request headers** — use the optional `headers` field to send the same headers on every request. This is the standard way to pass API tokens or any other authentication material required by the backend:
+
+```typescript
+new HttpGatewayChainAdapter({
+  baseUrl: "https://my-backend.example.com",
+  writePath: "/api/refs",
+  readPath: "/api/refs",
+  listPath: "/api/refs",
+  deletePath: "/api/refs",
+  headers: {
+    Authorization: "Bearer my-api-token",
+    "X-Api-Key": "abc123",
+  },
+});
+```
+
+For gateways that use a custom CA or mutual-TLS client certificate, pass a preconfigured `fetch`-compatible function via `customFetch`.
 
 One important security note: `ownerSecret` is an internal ZK witness that is deliberately stripped before any network call — it is never transmitted to the gateway. Ownership enforcement (whether to honour a remove or update request) is therefore the responsibility of the backend service, not the adapter.
 
