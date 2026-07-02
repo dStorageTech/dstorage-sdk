@@ -885,7 +885,7 @@ Or add them to a `.env` file in your project root (loaded via `dotenv` or equiva
 
 **What does the managed Midnight chain payment flow look like?**
 
-For Midnight, fees (DUST) are handled internally by the wallet — the Midnight adapter does not use the managed payment service for chain fees. The managed service is used for Arweave storage costs only. On Midnight, configure `MidnightChainAdapter` with `signingServerUrl` and `authToken` so the SDK can route any required server-side calls through dStorage Pro; the wallet still signs the on-chain transaction.
+DUST chain fees are sponsored by the managed service too — not just Arweave storage. When `MidnightChainAdapter` is configured with `signingServerUrl` and `authToken`, the SDK wraps the wallet's transaction-balancing step so the signing server balances _and_ signs the transaction on the wallet's behalf. The local wallet only needs to expose its public keys (for the ZK circuit) — it never needs to hold DUST. This is automatic: no configuration beyond `signingServerUrl`/`authToken` on `MidnightChainAdapter` is needed.
 
 **Does the managed service support the bboard quick-start example?**
 
@@ -901,7 +901,7 @@ The signing key substitution attack (where a MITM replaces the server's public k
 
 **What payment tokens does the managed service handle?**
 
-The managed service covers Arweave storage costs billed in AR. Midnight chain fees (DUST) remain the responsibility of the wallet configured in `MidnightChainAdapter`.
+The managed service covers Arweave storage costs billed in AR, and — when `MidnightChainAdapter` is configured with `signingServerUrl`/`authToken` — Midnight chain fees billed in DUST too. In that case the wallet configured in `MidnightChainAdapter` never needs to hold DUST itself.
 
 **How do I test the managed payment code path without real dStorage Pro credentials?**
 
