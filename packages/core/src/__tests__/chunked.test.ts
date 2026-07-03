@@ -18,7 +18,10 @@ vi.mock("../chunked.js", async (importOriginal) => {
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import type { StorageProviderName } from "@dstorage/storage";
-import { MidnightSimulatorChainAdapter } from "@dstorage/chain";
+import {
+  MidnightSimulatorChainAdapter,
+  MockChainAdapter,
+} from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import {
   isManifest,
@@ -254,6 +257,21 @@ describe("store large file (> CHUNK_SIZE)", () => {
     });
 
     expect(finalizingCount).toBe(1);
+  });
+
+  it("honors a caller-supplied refId for the manifest reference", async () => {
+    const config = makeConfig();
+    config.chainAdapter = new MockChainAdapter();
+    const ds = await makeInitedDStorage(config);
+    const bytes = makeBytes(CHUNK_SIZE + 1);
+
+    const result = await ds.store(bytes, { refId: "my-custom-manifest-ref" });
+    expect(result.chainRefId).toBe("my-custom-manifest-ref");
+
+    const { bytes: retrieved } = await ds.retrieveByRefId(
+      "my-custom-manifest-ref",
+    );
+    expect(retrieved).toEqual(bytes);
   });
 });
 

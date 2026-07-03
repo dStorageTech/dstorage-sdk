@@ -179,7 +179,7 @@ export class DStorage implements DStorageContext {
    * Only the manifest's storageId is written on-chain.
    *
    * @param content  Uint8Array to store
-   * @param options  Optional StoreOptions (metadata, onProgress, isPublic)
+   * @param options  Optional StoreOptions (metadata, onProgress, isPublic, refId)
    * @returns        StoreResult containing the dataId needed to retrieve later
    */
   async store(bytes: Uint8Array, options?: StoreOptions): Promise<StoreResult> {
@@ -191,6 +191,7 @@ export class DStorage implements DStorageContext {
         metadata: rawMeta,
         onProgress,
         isPublic = false,
+        refId,
       } = options ?? {};
 
       if (rawMeta !== undefined && isPublic) {
@@ -202,7 +203,14 @@ export class DStorage implements DStorageContext {
 
       // Route large files through the chunked path.
       if (bytes.length > CHUNK_SIZE) {
-        return this._uploadChunked(bytes, tags, onProgress, isPublic, rawMeta);
+        return this._uploadChunked(
+          bytes,
+          tags,
+          onProgress,
+          isPublic,
+          rawMeta,
+          refId,
+        );
       }
 
       // ── Single-shot path (files ≤ 5 MB) ────────────────────────────────────
@@ -342,6 +350,7 @@ export class DStorage implements DStorageContext {
             storageId: onChainStorageId,
             encryptionScheme,
             storageProvider: storageResult.provider,
+            ...(refId !== undefined ? { refId } : {}),
             ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
             writtenAt: Date.now(),
             keyEnvelope,
@@ -349,11 +358,14 @@ export class DStorage implements DStorageContext {
             ownerSecret,
           });
 
-          const refId = chainResult.refId;
-          this.logger?.log("dStorage", `Upload complete → refId: ${refId}`);
+          const resultRefId = chainResult.refId;
+          this.logger?.log(
+            "dStorage",
+            `Upload complete → refId: ${resultRefId}`,
+          );
 
           return {
-            chainRefId: refId,
+            chainRefId: resultRefId,
             storageId: storageResult.id,
             storageProvider: storageResult.provider,
             chainProvider: chainResult.provider,
@@ -1420,6 +1432,7 @@ export class DStorage implements DStorageContext {
     onProgress?: (p: StoreProgress) => void,
     isPublic = false,
     rawMeta?: Record<string, string>,
+    refId?: string,
   ): Promise<StoreResult> {
     if (this._encryptionProviders.length === 0) {
       throw new DStorageError(
@@ -1623,6 +1636,7 @@ export class DStorage implements DStorageContext {
           storageId: onChainManifestId,
           encryptionScheme,
           storageProvider: manifestResult.provider,
+          ...(refId !== undefined ? { refId } : {}),
           ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
           writtenAt: Date.now(),
           keyEnvelope,
@@ -1630,14 +1644,14 @@ export class DStorage implements DStorageContext {
           ownerSecret,
         });
 
-        const refId = chainResult.refId;
+        const resultRefId = chainResult.refId;
         this.logger?.log(
           "dStorage",
-          `Chunked upload complete → ${totalChunks} chunks + manifest, refId: ${refId}`,
+          `Chunked upload complete → ${totalChunks} chunks + manifest, refId: ${resultRefId}`,
         );
 
         return {
-          chainRefId: refId,
+          chainRefId: resultRefId,
           storageId: manifestResult.id,
           storageProvider: manifestResult.provider,
           chainProvider: chainResult.provider,

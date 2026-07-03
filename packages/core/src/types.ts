@@ -122,6 +122,14 @@ export interface StoreOptions {
   onProgress?: (progress: StoreProgress) => void;
   /** When true, content is stored unencrypted and the storageId is written on-chain as plaintext. */
   isPublic?: boolean;
+  /**
+   * Optional caller-supplied reference ID, forwarded to the chain adapter as
+   * {@link ChainReference.refId}. Adapters that control their own ID generation
+   * (e.g. mock, HTTP gateway) use this as the stored and returned identifier.
+   * Adapters where the on-chain protocol determines the ID (e.g. Midnight)
+   * ignore this field — the chain-assigned ID is returned instead.
+   */
+  refId?: string;
 }
 
 /**

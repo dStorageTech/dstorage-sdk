@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { DStorage } from "../dStorage.js";
 import { MockStorageAdapter } from "@dstorage/storage";
 import type { StorageProviderName } from "@dstorage/storage";
-import { MidnightSimulatorChainAdapter, ChainErrorCode } from "@dstorage/chain";
+import {
+  MidnightSimulatorChainAdapter,
+  MockChainAdapter,
+  ChainErrorCode,
+} from "@dstorage/chain";
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
 import {
@@ -1106,6 +1110,44 @@ describe("update", () => {
     await expect(ds.update("some-ref-id", enc("v2"))).rejects.toMatchObject({
       code: ChainErrorCode.GATEWAY_READ_HTTP_ERROR,
     });
+  });
+});
+
+// ── store() refId option ──────────────────────────────────────────────────────
+
+describe("store() refId option", () => {
+  it("honors a caller-supplied refId when the chain adapter supports it", async () => {
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: new MockChainAdapter(),
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-test-passphrase-v1!",
+          salt: "s",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await ds.init();
+
+    const result = await ds.store(enc("hello"), { refId: "my-custom-ref-id" });
+    expect(result.chainRefId).toBe("my-custom-ref-id");
+
+    // Round-trips too — the reference really was stored under that ID.
+    const { bytes } = await ds.retrieveByRefId("my-custom-ref-id");
+    expect(bytes).toEqual(enc("hello"));
+  });
+
+  it("is ignored by chain adapters whose refId is protocol-determined", async () => {
+    // MidnightSimulatorChainAdapter derives refId from the ZK circuit/ledger
+    // call itself — it never reads ChainReference.refId — mirroring the same
+    // documented best-effort contract already established for
+    // registerReference()'s refId option.
+    const ds = await makeInitedDStorage();
+    const result = await ds.store(enc("hello"), {
+      refId: "requested-but-ignored",
+    });
+    expect(result.chainRefId).not.toBe("requested-but-ignored");
   });
 });
 
