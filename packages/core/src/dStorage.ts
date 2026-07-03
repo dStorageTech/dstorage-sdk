@@ -19,6 +19,7 @@
 import {
   XChaChaScheme,
   DStorageError,
+  isDStorageError,
   computeBlake3Hex,
 } from "@dstorage/crypto";
 import {
@@ -82,7 +83,13 @@ const TAG_CHUNK_TOTAL = "dStorage-Chunk-Total";
 const TAG_MANIFEST_UPLOAD = "dStorage-Manifest-Upload";
 
 function wrapError(err: unknown): never {
-  if (err instanceof DStorageError) throw err;
+  // Check both: `instanceof` still matters for same-bundle subclasses that
+  // override `.name` (e.g. StorePartialError, which isDStorageError() won't
+  // match since its name isn't "DStorageError"). The duck-typed check catches
+  // errors thrown by a *different* package's bundle — each package is bundled
+  // independently, so a DStorageError thrown by another package's bundle
+  // fails `instanceof DStorageError` here even though it structurally is one.
+  if (err instanceof DStorageError || isDStorageError(err)) throw err;
   throw new DStorageError(
     CoreErrorCode.UNKNOWN_ERROR,
     `[dStorage] Unexpected error: ${err instanceof Error ? err.message : String(err)}`,

@@ -1061,6 +1061,52 @@ describe("update", () => {
     const { bytes } = await ds.retrieveByRefId(chainRefId!);
     expect(bytes).toEqual(enc("v3 content"));
   });
+
+  it("preserves a chain adapter's own error code instead of rewrapping it as UNKNOWN_ERROR", async () => {
+    // Simulates an error thrown by a *different* package's independently
+    // bundled DStorageError class — same duck-typed shape (name + numeric
+    // code), but a distinct class reference, so `instanceof DStorageError`
+    // fails inside core's wrapError() even though it structurally is one.
+    class FakeBundledDStorageError extends Error {
+      readonly code: number;
+      constructor(code: number, message: string) {
+        super(message);
+        this.name = "DStorageError";
+        this.code = code;
+      }
+    }
+
+    class ReadFailsChain extends MidnightSimulatorChainAdapter {
+      override readReference = vi
+        .fn()
+        .mockRejectedValue(
+          new FakeBundledDStorageError(
+            ChainErrorCode.GATEWAY_READ_HTTP_ERROR,
+            "[dStorage/http-gateway-chain] readReference failed: HTTP 404 Not Found",
+          ),
+        );
+    }
+
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: new ReadFailsChain(),
+      encryptionAdapters: [
+        new PasswordEncryptionAdapter({
+          password: "dstorage-test-passphrase-v1!",
+          salt: "s",
+          params: { N: 1024, r: 8, p: 1 },
+        }),
+      ],
+    });
+    await ds.init();
+
+    // update() calls _computeOwnerSecret(refId), which calls
+    // chainAdapter.readReference(refId) — the exact call path that
+    // originally surfaced this bug.
+    await expect(ds.update("some-ref-id", enc("v2"))).rejects.toMatchObject({
+      code: ChainErrorCode.GATEWAY_READ_HTTP_ERROR,
+    });
+  });
 });
 
 // ── update() StorePartialError recovery ───────────────────────────────────────
