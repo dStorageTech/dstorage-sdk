@@ -9,7 +9,7 @@ export type { ChunkManifest, ChunkEntry } from "./chunked.js";
 export * from "@dstorage/crypto";
 export * from "@dstorage/encryption";
 
-// Storage: types + mock only.
+// Storage: types + mock + arlocal only.
 // Full package imports (not subpaths) so dts.resolve can inline type declarations.
 // Tree-shaking via sideEffects:false drops unused adapters (arweave, autonomi, etc.).
 export type {
@@ -21,6 +21,20 @@ export type {
 } from "@dstorage/storage";
 export { MockStorageAdapter } from "@dstorage/storage";
 export type { MockStorageAdapterConfig } from "@dstorage/storage";
+// ArweaveLocalStorageAdapter: no node:http dependency — uses fetch() throughout. Node-safe.
+export {
+  ArweaveLocalStorageAdapter,
+  ArweaveLocalHelper,
+  ARWEAVE_LOCAL,
+  arlocalGateway,
+  ArweaveLocalError,
+} from "@dstorage/storage";
+export type {
+  ArweaveLocalAdapterConfig,
+  ArweaveLocalHelperConfig,
+  ArweaveLocalInfo,
+  ArweaveLocalBalance,
+} from "@dstorage/storage";
 
 // Payment: types + mock only
 export type {
