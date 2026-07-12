@@ -1178,11 +1178,14 @@ export class MidnightChainAdapter implements ChainAdapter {
       `Found ${availableWallets.length} wallet(s): ${availableWallets.map((w) => `${w.id} (${w.wallet.name ?? "unknown"})`).join(", ")}`,
     );
 
-    // Select the wallet: prefer the configured connectorName, otherwise use the first available
+    // Select the wallet: prefer the configured connectorName (matched against
+    // the injected key, falling back to the wallet's declared name), otherwise
+    // use the first available.
     let selected = availableWallets[0]!;
     if (this.connectorName) {
       const connectorFound = availableWallets.find(
-        (w) => w.id === this.connectorName,
+        (w) =>
+          w.id === this.connectorName || w.wallet.name === this.connectorName,
       );
       if (connectorFound) {
         selected = connectorFound;
