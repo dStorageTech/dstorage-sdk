@@ -29,7 +29,7 @@ import {
   type WalletProvider,
   type ZKConfigProvider,
 } from "@midnight-ntwrk/midnight-js-types";
-import type { FinalizedTransaction } from "@midnight-ntwrk/ledger-v8";
+import type { FinalizedTransaction } from "@midnight-ntwrk/midnight-js-protocol/ledger";
 
 import type {
   ChainAdapter,
@@ -611,7 +611,8 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     // Use browser-safe helpers defined at module level — compact-runtime's toHex/fromHex
     // use Buffer internally and are not safe in the browser.
-    const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
+    const { Transaction } =
+      await import("@midnight-ntwrk/midnight-js-protocol/ledger");
 
     const connectorAPI = this.connectorAPI;
     const logger = this.logger;
@@ -1353,7 +1354,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    */
   async getBalances(): Promise<WalletBalances> {
     const { unshieldedToken } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/ledger-v8"
+      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-protocol/ledger"
     );
     if (this.walletMode === "provider") {
       if (!this.facade) {

@@ -5,7 +5,7 @@ import {
   type FinalizedTransaction,
   LedgerParameters,
   ZswapSecretKeys,
-} from "@midnight-ntwrk/ledger-v8";
+} from "@midnight-ntwrk/midnight-js-protocol/ledger";
 import {
   type MidnightProvider,
   UnboundTransaction,

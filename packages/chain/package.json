@@ -48,8 +48,8 @@
     "@midnight-ntwrk/midnight-js-types": "4.1.1",
     "@midnight-ntwrk/compact-runtime": "^0.16.0",
     "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
-    "@midnight-ntwrk/ledger-v8": "8.1.0",
     "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-protocol": "^4.1.1",
     "@midnight-ntwrk/wallet-sdk-address-format": "^3.1.1",
     "@midnight-ntwrk/wallet-sdk-dust-wallet": "^4.0.0",
     "@midnight-ntwrk/wallet-sdk-facade": "^4.0.0",
@@ -79,10 +79,10 @@
     "@midnight-ntwrk/dapp-connector-api": {
       "optional": true
     },
-    "@midnight-ntwrk/ledger-v8": {
+    "@midnight-ntwrk/midnight-js-network-id": {
       "optional": true
     },
-    "@midnight-ntwrk/midnight-js-network-id": {
+    "@midnight-ntwrk/midnight-js-protocol": {
       "optional": true
     },
     "@midnight-ntwrk/wallet-sdk-address-format": {

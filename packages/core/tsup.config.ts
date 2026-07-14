@@ -41,7 +41,7 @@ export default defineConfig([
     // Bundle lightweight siblings inline.
     noExternal: sharedNoExternal,
     // Payment's full index pulls in ArweavePaymentAdapter → arweave and
-    // ManagedPaymentAdapter → @midnight-ntwrk/ledger-v8 as dead code paths.
+    // ManagedPaymentAdapter → @midnight-ntwrk/midnight-js-protocol/ledger as dead code paths.
     // Keep these external so rollup doesn't bundle them — they're never reachable
     // from the exported mock adapters.
     external: sharedExternal,

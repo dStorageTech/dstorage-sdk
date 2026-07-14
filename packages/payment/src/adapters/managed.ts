@@ -361,7 +361,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
             "[dStorage/payment] Midnight managed payment server did not return a balanced transaction.",
           );
         }
-        const { Transaction } = await import("@midnight-ntwrk/ledger-v8");
+        const { Transaction } =
+          await import("@midnight-ntwrk/midnight-js-protocol/ledger");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (Transaction as any).deserialize(
           "signature",

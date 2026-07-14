@@ -11,7 +11,7 @@ import {
   type EnvironmentConfiguration,
 } from "./wallet-provider.js";
 import { bytesToBase64url } from "@dstorage/crypto";
-import { type UnshieldedTokenType } from "@midnight-ntwrk/ledger-v8";
+import { type UnshieldedTokenType } from "@midnight-ntwrk/midnight-js-protocol/ledger";
 import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import * as Rx from "rxjs";
@@ -141,7 +141,8 @@ export async function initWallet(
       () => "Caching wallet state...",
       () => walletProvider.saveState(),
     );
-    const { unshieldedToken } = await import("@midnight-ntwrk/ledger-v8");
+    const { unshieldedToken } =
+      await import("@midnight-ntwrk/midnight-js-protocol/ledger");
     const unshieldedState = await ticker(
       () => "Waiting for NIGHT funds...",
       () => waitForUnshieldedFunds(walletProvider.wallet, unshieldedToken()),

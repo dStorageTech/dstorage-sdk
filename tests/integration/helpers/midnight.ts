@@ -88,7 +88,8 @@ export async function createChainAdapter(
   );
 
   // Wait for NIGHT funds — same logic as demo console waitForUnshieldedFunds.
-  const { unshieldedToken } = await import("@midnight-ntwrk/ledger-v8");
+  const { unshieldedToken } =
+    await import("@midnight-ntwrk/midnight-js-protocol/ledger");
   const token = unshieldedToken();
   const initialState = await Rx.firstValueFrom(
     walletProvider.wallet.unshielded.state,
