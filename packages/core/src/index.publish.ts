@@ -50,7 +50,9 @@ export type {
 } from "@dstorage/payment";
 export { MockPaymentAdapter, TOKENS } from "@dstorage/payment";
 
-// Chain: types + mock only. MidnightChainAdapter is tree-shaken away (sideEffects:false).
+// Chain: types + mock + real Midnight adapter (Node.js provider mode).
+// Heavy @midnight-ntwrk/* peer deps are lazy-loaded via dynamic import at
+// call time, never at module load, so requiring this entry stays light.
 export type {
   ChainAdapter,
   ChainProviderName,
@@ -65,4 +67,12 @@ export type {
 export {
   MockChainAdapter,
   MidnightSimulatorChainAdapter,
+  MidnightChainAdapter,
+  NETWORKS,
+} from "@dstorage/chain";
+export type {
+  MidnightChainAdapterConfig,
+  WalletAddresses,
+  AdapterWalletProvider,
+  NetworkId,
 } from "@dstorage/chain";

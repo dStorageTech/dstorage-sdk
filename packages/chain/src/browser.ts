@@ -19,3 +19,4 @@ export type {
   MidnightChainAdapterConfig,
   WalletAddresses,
 } from "./adapters/midnight/src/midnight.js";
+export type { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
