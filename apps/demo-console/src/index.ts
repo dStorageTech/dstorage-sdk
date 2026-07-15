@@ -44,6 +44,7 @@ import {
 } from "@dstorage-tech/dstorage";
 import { ArweaveLocalStorageAdapter } from "@dstorage/storage";
 import { MidnightChainAdapter, NETWORKS } from "@dstorage/chain";
+import { NetworkId } from "@midnight-ntwrk/wallet-sdk";
 import {
   type EnvironmentConfiguration,
   resolveSeedHex,
@@ -123,11 +124,11 @@ async function main(): Promise<void> {
     ).trim();
     const networkName: NetworkName =
       networkInput === "2" || networkInput === "undeployed"
-        ? "undeployed"
+        ? NetworkId.NetworkId.Undeployed
         : networkInput === "" ||
             networkInput === "1" ||
             networkInput === "preprod"
-          ? "preprod"
+          ? NetworkId.NetworkId.PreProd
           : (() => {
               throw new Error(
                 `Unknown network "${networkInput}". Choose 1 (preprod) or 2 (undeployed).`,

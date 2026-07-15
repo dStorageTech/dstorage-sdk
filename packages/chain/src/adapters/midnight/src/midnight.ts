@@ -51,7 +51,7 @@ import type {
   DataRegistryCircuitKeys,
   AdapterWalletProvider,
 } from "./common-types.js";
-import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
 import { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
 const sleep = (ms: number) =>
@@ -737,7 +737,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     const { firstValueFrom } = await import("rxjs");
     const facadeState = await firstValueFrom(walletFacade.state());
     const { ShieldedAddress, UnshieldedAddress, DustAddress } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/wallet-sdk-address-format"
+      /* @vite-ignore */ "@midnight-ntwrk/wallet-sdk/address-format"
     );
     const { getNetworkId } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/midnight-js-network-id"

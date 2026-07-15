@@ -2,7 +2,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as Rx from "rxjs";
 import { MidnightChainAdapter } from "@dstorage/chain";
-import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
+import { NetworkId } from "@midnight-ntwrk/wallet-sdk";
 import type { IntegrationEnv } from "./env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -37,7 +38,9 @@ export async function createChainAdapter(
   const { midnight } = env;
 
   const walletNetworkId =
-    midnight.network === "undeployed" ? "undeployed" : "preprod";
+    midnight.network === "undeployed"
+      ? NetworkId.NetworkId.Undeployed
+      : NetworkId.NetworkId.PreProd;
 
   const { setNetworkId } =
     await import("@midnight-ntwrk/midnight-js-network-id");

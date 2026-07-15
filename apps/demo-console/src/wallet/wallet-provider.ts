@@ -16,19 +16,22 @@ import {
 } from "@midnight-ntwrk/midnight-js-types";
 import { ttlOneHour } from "@midnight-ntwrk/midnight-js-utils";
 import {
+  NetworkId,
+  NoOpTransactionHistoryStorage,
+} from "@midnight-ntwrk/wallet-sdk";
+import {
   WalletFacade,
   type DefaultConfiguration,
-} from "@midnight-ntwrk/wallet-sdk-facade";
-import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
+} from "@midnight-ntwrk/wallet-sdk/facade";
+import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk/shielded";
 import {
   createKeystore,
   PublicKey,
   type UnshieldedKeystore,
   UnshieldedWallet,
-} from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
-import { NoOpTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
-import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
-import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
+} from "@midnight-ntwrk/wallet-sdk/unshielded";
+import { DustWallet } from "@midnight-ntwrk/wallet-sdk/dust";
+import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk/hd";
 import { hexToBytes } from "@dstorage/crypto";
 
 // ── Wallet state cache ─────────────────────────────────────────────────────────
@@ -64,7 +67,7 @@ async function saveWalletCacheFile(
 
 // ── Local environment config type ─────────────────────────────────────────────
 export interface EnvironmentConfiguration {
-  networkId: string;
+  networkId: NetworkId.NetworkId;
   indexerHttp: string;
   indexerWs: string;
   nodeHttp: string;

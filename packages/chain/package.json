@@ -50,11 +50,7 @@
     "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
     "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
     "@midnight-ntwrk/midnight-js-protocol": "^4.1.1",
-    "@midnight-ntwrk/wallet-sdk-address-format": "^3.1.1",
-    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^4.0.0",
-    "@midnight-ntwrk/wallet-sdk-facade": "^4.0.0",
-    "@midnight-ntwrk/wallet-sdk-shielded": "^3.0.0",
-    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk": "^1.1.0",
     "rxjs": "^7.8.2"
   },
   "peerDependenciesMeta": {
@@ -85,19 +81,7 @@
     "@midnight-ntwrk/midnight-js-protocol": {
       "optional": true
     },
-    "@midnight-ntwrk/wallet-sdk-address-format": {
-      "optional": true
-    },
-    "@midnight-ntwrk/wallet-sdk-dust-wallet": {
-      "optional": true
-    },
-    "@midnight-ntwrk/wallet-sdk-facade": {
-      "optional": true
-    },
-    "@midnight-ntwrk/wallet-sdk-shielded": {
-      "optional": true
-    },
-    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": {
+    "@midnight-ntwrk/wallet-sdk": {
       "optional": true
     },
     "rxjs": {

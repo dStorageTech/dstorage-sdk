@@ -27,7 +27,23 @@ const sharedExternal: (string | RegExp)[] = [
 // code path. That path is never reached in connector (browser) mode, so leaving
 // it as an external dynamic import is safe — bundlers (Vite, webpack) stub it,
 // and the call is never executed at runtime in the browser.
-const browserOnlyExternal: (string | RegExp)[] = ["node:fs", "fs"];
+//
+// "path" and "url" are added for the same reason, one level removed: chain's own
+// build has no external config, so it fully inlines @midnight-ntwrk/ledger-v8's
+// WASM loader (including its Node-only midnight_ledger_wasm_fs.js variant, which
+// statically imports "path"/"url" even though that branch never runs in the
+// browser) into its compiled dist output. Since @dstorage/chain is noExternal
+// here, that already-bundled code — and its residual Node built-in imports —
+// gets inlined again into this package's output, where the /^@midnight-ntwrk\//
+// external regex above can no longer match it (the import specifier is long gone
+// by this point). Externalizing the bare built-ins directly is the only place
+// left to intervene.
+const browserOnlyExternal: (string | RegExp)[] = [
+  "node:fs",
+  "fs",
+  "path",
+  "url",
+];
 
 export default defineConfig([
   // Node.js build: mocks only, ESM + CJS.

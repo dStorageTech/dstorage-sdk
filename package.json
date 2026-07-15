@@ -50,6 +50,7 @@
     "@midnight-ntwrk/compact-js": "^2.5.1",
     "@midnight-ntwrk/compact-runtime": "^0.16.0",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.1.1",
+    "@midnight-ntwrk/wallet-sdk": "^1.1.0",
     "@typescript-eslint/eslint-plugin": "^8.59.3",
     "@typescript-eslint/parser": "^8.59.3",
     "@vitest/coverage-v8": "^4.1.6",

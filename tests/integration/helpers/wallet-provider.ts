@@ -12,22 +12,25 @@ import {
   type WalletProvider,
 } from "@midnight-ntwrk/midnight-js-types";
 import { ttlOneHour } from "@midnight-ntwrk/midnight-js-utils";
-import { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
+import { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
+import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk/shielded";
 import {
   createKeystore,
   PublicKey,
   type UnshieldedKeystore,
   UnshieldedWallet,
-} from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
-import { InMemoryTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
-import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
-import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk-hd";
+} from "@midnight-ntwrk/wallet-sdk/unshielded";
+import { DustWallet } from "@midnight-ntwrk/wallet-sdk/dust";
+import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk/hd";
+import {
+  NetworkId,
+  NoOpTransactionHistoryStorage,
+} from "@midnight-ntwrk/wallet-sdk";
 
 // ── Local environment config type ─────────────────────────────────────────────
 export interface EnvironmentConfiguration {
-  walletNetworkId: string;
-  networkId: string;
+  walletNetworkId: NetworkId.NetworkId;
+  networkId: NetworkId.NetworkId;
   indexer: string;
   indexerWS: string;
   node: string;
@@ -163,7 +166,7 @@ export class MidnightWalletProvider
       },
       relayURL: new URL(env.nodeWS),
       provingServerUrl: new URL(env.proofServer),
-      txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+      txHistoryStorage: new NoOpTransactionHistoryStorage(),
       costParameters: {
         additionalFeeOverhead,
         feeBlocksMargin: 5,

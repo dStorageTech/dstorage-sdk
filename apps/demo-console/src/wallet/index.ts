@@ -12,10 +12,10 @@ import {
 } from "./wallet-provider.js";
 import { bytesToBase64url } from "@dstorage/crypto";
 import { type UnshieldedTokenType } from "@midnight-ntwrk/midnight-js-protocol/ledger";
-import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
+import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
+import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk/unshielded";
 import * as Rx from "rxjs";
-import { UnshieldedAddress } from "@midnight-ntwrk/wallet-sdk-address-format";
+import { UnshieldedAddress } from "@midnight-ntwrk/wallet-sdk/address-format";
 import { getNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
 export type { MidnightWalletProvider, EnvironmentConfiguration };

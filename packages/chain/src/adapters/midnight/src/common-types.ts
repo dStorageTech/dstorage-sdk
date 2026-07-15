@@ -3,7 +3,7 @@ import {
   type MidnightProvider,
   type WalletProvider,
 } from "@midnight-ntwrk/midnight-js-types";
-import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
 import { type FoundContract } from "@midnight-ntwrk/midnight-js-contracts";
 import type {
   DataRegistryPrivateState,
