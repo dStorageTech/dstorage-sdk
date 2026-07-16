@@ -233,6 +233,7 @@ describe("HttpGatewayChainAdapter", () => {
         adapter.writeReference(makeRef("wr5")),
       ).rejects.toMatchObject({
         code: ChainErrorCode.GATEWAY_WRITE_HTTP_ERROR,
+        httpStatus: 500,
         message: expect.stringContaining(
           "[dStorage/http-gateway-chain] writeReference failed: HTTP 500",
         ),
@@ -313,6 +314,7 @@ describe("HttpGatewayChainAdapter", () => {
         adapter.updateReference("ref_err", makeUpdate()),
       ).rejects.toMatchObject({
         code: ChainErrorCode.GATEWAY_UPDATE_HTTP_ERROR,
+        httpStatus: 500,
         message: expect.stringContaining(
           "[dStorage/http-gateway-chain] updateReference failed: HTTP 500",
         ),
@@ -371,6 +373,7 @@ describe("HttpGatewayChainAdapter", () => {
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
       await expect(adapter.readReference("ref_missing")).rejects.toMatchObject({
         code: ChainErrorCode.GATEWAY_READ_HTTP_ERROR,
+        httpStatus: 404,
         message: expect.stringContaining(
           "[dStorage/http-gateway-chain] readReference failed: HTTP 404",
         ),
@@ -450,6 +453,7 @@ describe("HttpGatewayChainAdapter", () => {
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
       await expect(adapter.listReferences()).rejects.toMatchObject({
         code: ChainErrorCode.GATEWAY_LIST_HTTP_ERROR,
+        httpStatus: 503,
         message: expect.stringContaining(
           "[dStorage/http-gateway-chain] listReferences failed: HTTP 503",
         ),
@@ -594,6 +598,7 @@ describe("HttpGatewayChainAdapter", () => {
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
       await expect(adapter.removeReference("ref_del4")).rejects.toMatchObject({
         code: ChainErrorCode.GATEWAY_REMOVE_HTTP_ERROR,
+        httpStatus: 403,
         message: expect.stringContaining(
           "[dStorage/http-gateway-chain] removeReference failed: HTTP 403",
         ),

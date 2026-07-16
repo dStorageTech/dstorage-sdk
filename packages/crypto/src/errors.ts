@@ -1,10 +1,18 @@
 export class DStorageError extends Error {
   readonly code: number;
+  readonly httpStatus?: number;
 
-  constructor(code: number, message: string, options?: ErrorOptions) {
+  constructor(
+    code: number,
+    message: string,
+    options?: ErrorOptions & { httpStatus?: number },
+  ) {
     super(message, options);
     this.name = "DStorageError";
     this.code = code;
+    if (options?.httpStatus !== undefined) {
+      this.httpStatus = options.httpStatus;
+    }
   }
 }
 

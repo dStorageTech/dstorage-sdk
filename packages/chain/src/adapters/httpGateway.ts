@@ -102,6 +102,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_WRITE_HTTP_ERROR,
         `${COMPONENT} writeReference failed: HTTP ${res.status} ${res.statusText}`,
+        { httpStatus: res.status },
       );
     }
 
@@ -141,6 +142,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_UPDATE_HTTP_ERROR,
         `${COMPONENT} updateReference failed: HTTP ${res.status} ${res.statusText}`,
+        { httpStatus: res.status },
       );
     }
 
@@ -165,6 +167,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_READ_HTTP_ERROR,
         `${COMPONENT} readReference failed: HTTP ${res.status} ${res.statusText}`,
+        { httpStatus: res.status },
       );
     }
 
@@ -212,6 +215,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_LIST_HTTP_ERROR,
         `${COMPONENT} listReferences failed: HTTP ${res.status} ${res.statusText}`,
+        { httpStatus: res.status },
       );
     }
 
@@ -281,6 +285,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_REMOVE_HTTP_ERROR,
         `${COMPONENT} removeReference failed: HTTP ${res.status} ${res.statusText}`,
+        { httpStatus: res.status },
       );
     }
   }
