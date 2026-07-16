@@ -8,6 +8,22 @@ export type { ChunkManifest, ChunkEntry } from "./chunked.js";
 // Crypto + encryption (always browser-safe)
 export * from "@dstorage/crypto";
 export * from "@dstorage/encryption";
+// Explicit re-exports below: rollup-plugin-dts only inlines wildcard-exported
+// symbols that are transitively referenced by type elsewhere in the bundled
+// graph, so error codes with no other type reference get silently dropped
+// from the built .d.ts unless listed explicitly.
+export {
+  CryptoErrorCode,
+  DStorageError,
+  isDStorageError,
+} from "@dstorage/crypto";
+
+// Core: own error codes and partial-failure recovery error
+export {
+  CoreErrorCode,
+  StorePartialError,
+  isStorePartialError,
+} from "./errors.js";
 
 // Storage: types + all adapters.
 export type {
@@ -19,6 +35,7 @@ export type {
 } from "@dstorage/storage";
 export { MockStorageAdapter } from "@dstorage/storage";
 export type { MockStorageAdapterConfig } from "@dstorage/storage";
+export { StorageErrorCode } from "@dstorage/storage";
 export { ArweaveStorageAdapter } from "@dstorage/storage";
 export { ArweaveBundlerStorageAdapter } from "@dstorage/storage";
 export type { ArweaveBundlerAdapterConfig } from "@dstorage/storage";
@@ -58,3 +75,4 @@ export { ManagedPaymentAdapter } from "@dstorage/payment";
 // Chain: browser-safe entry (mocks + HttpGateway + MidnightChainAdapter connector mode).
 // MidnightChainAdapter provider/facade mode (uses node:fs) is excluded via the /browser subpath.
 export * from "@dstorage/chain/browser";
+export { ChainErrorCode } from "@dstorage/chain/browser";

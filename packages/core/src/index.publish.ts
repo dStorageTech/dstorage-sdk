@@ -8,6 +8,22 @@ export type { ChunkManifest, ChunkEntry } from "./chunked.js";
 // Crypto + encryption adapters (lightweight, no heavy deps)
 export * from "@dstorage/crypto";
 export * from "@dstorage/encryption";
+// Explicit re-exports below: rollup-plugin-dts only inlines wildcard-exported
+// symbols that are transitively referenced by type elsewhere in the bundled
+// graph, so error codes with no other type reference get silently dropped
+// from the built .d.ts unless listed explicitly.
+export {
+  CryptoErrorCode,
+  DStorageError,
+  isDStorageError,
+} from "@dstorage/crypto";
+
+// Core: own error codes and partial-failure recovery error
+export {
+  CoreErrorCode,
+  StorePartialError,
+  isStorePartialError,
+} from "./errors.js";
 
 // Storage: types + mock + arlocal only.
 // Full package imports (not subpaths) so dts.resolve can inline type declarations.
@@ -21,6 +37,7 @@ export type {
 } from "@dstorage/storage";
 export { MockStorageAdapter } from "@dstorage/storage";
 export type { MockStorageAdapterConfig } from "@dstorage/storage";
+export { StorageErrorCode } from "@dstorage/storage";
 // ArweaveLocalStorageAdapter: no node:http dependency — uses fetch() throughout. Node-safe.
 export {
   ArweaveLocalStorageAdapter,
@@ -70,6 +87,7 @@ export {
   MidnightChainAdapter,
   NETWORKS,
 } from "@dstorage/chain";
+export { ChainErrorCode } from "@dstorage/chain";
 export type {
   MidnightChainAdapterConfig,
   WalletAddresses,
