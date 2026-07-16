@@ -20,7 +20,12 @@ export default defineConfig([
   // directory under dist/ — e.g. src/adapters/mock.ts -> dist/adapters/mock.js
   // — matching the "./mock" export subpath in package.json.
   {
-    entry: ["src/index.ts", "src/types.ts", "src/adapters/mock.ts"],
+    entry: [
+      "src/index.ts",
+      "src/types.ts",
+      "src/adapters/mock.ts",
+      "src/errors.ts",
+    ],
     format: ["esm", "cjs"],
     dts: true,
     external,

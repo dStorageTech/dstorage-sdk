@@ -30,6 +30,19 @@ const sharedExternal: (string | RegExp)[] = [
 const browserOnlyExternal: (string | RegExp)[] = ["node:fs", "fs"];
 
 export default defineConfig([
+  // Dependency-free error codes/types entry. Bundled from src/errors.public.ts,
+  // which imports only pure "./errors" subpaths (chain, storage) and crypto's
+  // lightweight index — never adapter code. Safe for any bundler/environment.
+  {
+    entry: { errors: "src/errors.public.ts" },
+    format: ["esm", "cjs"],
+    dts: {
+      resolve: [/^@dstorage\/(crypto|storage|chain)/],
+    },
+    tsconfig: "tsconfig.build.json",
+    noExternal: sharedNoExternal,
+    external: sharedExternal,
+  },
   // Node.js build: mocks only, ESM + CJS.
   {
     entry: { index: "src/index.publish.ts" },
