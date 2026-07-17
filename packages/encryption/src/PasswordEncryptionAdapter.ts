@@ -344,6 +344,7 @@ export class PasswordEncryptionAdapter implements EncryptionAdapter {
    *
    * Same password + salt + variant always produces the same keypair.
    *
+   * @param context  Domain-separation string bound into the KEK derivation
    * @param variant  ML-KEM variant. Default: "mlkem768".
    */
   async intoKeypairEncryptionAdapter(
@@ -465,7 +466,7 @@ function hasKeyboardWalk(pw: string, minLen = 5): boolean {
  * @example
  * const password = generatePqsPassword(); // store this securely
  * const adapter = new PasswordEncryptionAdapter({ password, salt: "myapp:alice" });
- * const keypairAdapter = await adapter.intoKeypairEncryptionAdapter();
+ * const keypairAdapter = await adapter.intoKeypairEncryptionAdapter("myapp:v1");
  * await sdk.connect(keypairAdapter); // full 192-bit PQ security
  */
 export function generatePqsPassword(): string {

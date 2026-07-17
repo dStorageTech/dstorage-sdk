@@ -361,8 +361,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
    * POST the 48-byte ANS-104 deep_hash to the signing server via the shared sign-tx endpoint.
    *
    * Uses network: "arweave_bundler" so the server routes to the bundler-specific signing path.
-   * The `bytes` field lets the server estimate upload cost for user account deduction.
-   * Caches the server public key from the response to avoid a round-trip on the next upload.
+   * The `dataSizeBytes` field lets the server estimate and quote the upload cost.
    */
   private async _signHash(
     hash: Uint8Array,

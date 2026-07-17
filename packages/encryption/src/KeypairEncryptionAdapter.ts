@@ -21,18 +21,18 @@ import { EncryptionErrorCode } from "./errors.js";
  *
  * @example
  * // Generate a fresh keypair:
- * const { adapter, secretKey } = KeypairEncryptionAdapter.generateKeypair();
+ * const { adapter, secretKey } = KeypairEncryptionAdapter.generateKeypair("myapp:v1");
  * // Share adapter.publicKey with upload-only parties
  *
  * @example
  * // Deterministic keypair from a password (same inputs → same keypair):
- * const adapter = await KeypairEncryptionAdapter.fromPassword("s3cr3t!", "myapp:v1");
+ * const adapter = await KeypairEncryptionAdapter.fromPassword("s3cr3t!", "myapp:salt", "myapp:v1");
  *
  * @example
  * // Upload with PK only:
- * const uploader = KeypairEncryptionAdapter.fromPublicKey(pk);
+ * const uploader = KeypairEncryptionAdapter.fromPublicKey(pk, "myapp:v1");
  * // Retrieve with full keypair:
- * const reader = KeypairEncryptionAdapter.fromKeypair(pk, sk);
+ * const reader = KeypairEncryptionAdapter.fromKeypair(pk, sk, "myapp:v1");
  */
 
 import {
@@ -96,6 +96,7 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
    * Returns the adapter (with both PK+SK) plus the raw keys so the caller
    * can persist the secret key and share the public key separately.
    *
+   * @param context  Domain-separation string bound into the KEK derivation
    * @param variant  Default: "mlkem768".
    */
   static generateKeypair(
@@ -122,10 +123,11 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
    *
    * Same inputs + variant always produce the same keypair.
    *
-   * Note: 32-byte seedHex (64 hex characters) is not supported — use a mnemonic
-   * or a 64-byte seedHex (128 hex characters) instead.
+   * `seedHex` may be either 32 bytes (64 hex chars) or 64 bytes (128 hex chars) —
+   * both are expanded to the 64-byte ML-KEM seed via HKDF.
    *
-   * @param input    { mnemonic } or { seedHex } (64-byte hex, 128 chars)
+   * @param input    { mnemonic } (24-word BIP-39) or { seedHex } (32- or 64-byte hex)
+   * @param context  Domain-separation string bound into the KEK derivation
    * @param variant  Default: "mlkem768"
    */
   static async fromMnemonic(
@@ -150,6 +152,7 @@ export class KeypairEncryptionAdapter implements EncryptionAdapter {
    *
    * @param password  User password (validated for entropy)
    * @param salt      Domain salt — must not be empty
+   * @param context   Domain-separation string bound into the KEK derivation
    * @param variant   Default: "mlkem768"
    * @param params    Optional custom scrypt params
    */

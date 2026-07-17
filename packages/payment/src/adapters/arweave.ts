@@ -25,13 +25,8 @@
  *        posts it — no additional signing or wallet interaction needed.
  *
  * If provideUploadData() was not called (e.g. direct use outside MetaTransaction),
- * pay() falls back to the pass-through behaviour and upload() performs the full
+ * pay() falls back to the pass-through behaviour and store() performs the full
  * create → sign → post flow as before.
- *
- * ── Fiat conversion ───────────────────────────────────────────────────────────
- *
- * AR/USD price is approximated. Replace APPROX_AR_USD_PRICE with a live feed
- * (CoinGecko, etc.) for production dashboards.
  *
  * Docs: https://docs.arweave.org/developers
  */

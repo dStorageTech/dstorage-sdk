@@ -91,6 +91,7 @@ export class MnemonicEncryptionAdapter implements EncryptionAdapter {
    * symmetric KEK derivation path. The same derivation applies to all seed
    * types (mnemonic or hex), producing consistent, domain-separated keypairs.
    *
+   * @param context  Domain-separation string bound into the KEK derivation
    * @param variant  ML-KEM variant. Default: "mlkem768".
    */
   async intoKeypairEncryptionAdapter(

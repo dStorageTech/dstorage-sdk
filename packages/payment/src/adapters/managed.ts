@@ -7,8 +7,9 @@
  * PaymentQuote.network. All networks share the same endpoint:
  *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
  * Currently implemented:
- *   - "arweave" / "arlocal": remote Arweave signing via REST API
- *   - "midnight": placeholder — not yet implemented
+ *   - "arweave": remote Arweave signing via REST API
+ *   - "arweave_bundler": remote ANS-104 bundled-upload signing via REST API
+ *   - "midnight": remote Midnight transaction balancing/signing via REST API
  *
  * ── Arweave flow ──────────────────────────────────────────────────────────────
  *
@@ -285,8 +286,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   /**
    * Routes payment to the correct network-specific handler based on quote.network.
    *
-   * Falls back to the base-class pass-through if provideUploadData() was not called
-   * (Arweave path only) or if the network is unrecognised.
+   * The Arweave path falls back to the base-class pass-through if
+   * provideUploadData() was not called. An unrecognised network throws.
    */
   override async pay(
     instruction: PaymentInstruction,

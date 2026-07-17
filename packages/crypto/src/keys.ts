@@ -3,9 +3,8 @@
  * Provides seed-based key derivation utilities:
  *
  * - KeyDeriver: resolves a BIP-39 mnemonic or raw hex seed to raw bytes,
- *   importing seed bytes as a CryptoKey for use with deriveKek().
- * - deriveKek: derives a 32-byte Key Encryption Key (KEK) from a non-extractable
- *   HKDF CryptoKey, used to wrap per-upload random DEKs.
+ *   importing seed bytes as a CryptoKey for use with deriveKek() (keyEnvelope.ts).
+ * - hexToBytes: parses a hex string into a Uint8Array.
  */
 
 import { wordlist } from "@scure/bip39/wordlists/english.js";

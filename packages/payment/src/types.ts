@@ -182,7 +182,6 @@ export interface PaymentAdapter {
    * The returned quote is valid until quote.expiresAt — pass it to pay()
    * before that window closes to avoid repricing.
    *
-   * @param token          The token to denominate the quote in (e.g. "AR", "DUST").
    * @param dataSizeBytes  Size of the encrypted payload in bytes
    */
   estimateCost(dataSizeBytes: number): Promise<PaymentQuote>;

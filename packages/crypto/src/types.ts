@@ -24,7 +24,7 @@ export type EncryptionScheme = "xchacha20poly1305-v1" | "";
 
 /**
  * The result of wrapping a DEK under a provider's key material.
- * Returned by every EncryptionSeedProvider.wrapDek() implementation and
+ * Returned by every EncryptionAdapter.wrapDek() implementation and
  * stored as a KeyWrapper entry inside the on-chain KeyEnvelope.
  *
  * Symmetric providers set algorithm/kekDerivation for their own scheme and

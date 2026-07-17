@@ -174,13 +174,13 @@ export class DStorage implements DStorageContext {
    * Encrypt content client-side, store to decentralised storage,
    * and write a cryptographic reference on-chain.
    *
-   * Files larger than CHUNK_SIZE (5 MB) are automatically split into chunks,
+   * Files larger than CHUNK_SIZE (10 MB) are automatically split into chunks,
    * each encrypted and stored independently. A manifest file ties them together.
    * Only the manifest's storageId is written on-chain.
    *
-   * @param content  Uint8Array to store
+   * @param bytes    Uint8Array to store
    * @param options  Optional StoreOptions (metadata, onProgress, isPublic, refId)
-   * @returns        StoreResult containing the dataId needed to retrieve later
+   * @returns        StoreResult containing the chainRefId/storageId needed to retrieve later
    */
   async store(bytes: Uint8Array, options?: StoreOptions): Promise<StoreResult> {
     try {
@@ -213,7 +213,7 @@ export class DStorage implements DStorageContext {
         );
       }
 
-      // ── Single-shot path (files ≤ 5 MB) ────────────────────────────────────
+      // ── Single-shot path (files ≤ 10 MB) ───────────────────────────────────
 
       let uploadData: Uint8Array;
       let onChainStorageId: string;
@@ -797,7 +797,7 @@ export class DStorage implements DStorageContext {
    *
    * Automatically detects chunked manifests and reassembles the original file.
    *
-   * @param storageId  The storageId returned from upload()
+   * @param storageId  The storageId returned from store()
    */
   async retrieveByStorageId(
     storageId: string,
@@ -1055,10 +1055,10 @@ export class DStorage implements DStorageContext {
    *   2. Fetch the blob from the storage network.
    *   3. Decrypt locally if an encryption key is available.
    *
-   * Requires the chain adapter to support getReference() (MidnightChainAdapter)
-   * or readReference() (MockChainAdapter).
+   * Requires the chain adapter to implement readReference() (part of the
+   * ChainAdapter interface — shared by MidnightChainAdapter, MockChainAdapter, etc.).
    *
-   * @param refId  The refId returned from upload()
+   * @param refId  The chainRefId returned from store()
    */
   async retrieveByRefId(refId: string): Promise<RetrieveResult> {
     try {

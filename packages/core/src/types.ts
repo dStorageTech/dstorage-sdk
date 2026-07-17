@@ -241,7 +241,7 @@ export interface UpdateResult {
   storageId: string;
 }
 
-/** Result returned from dStorage.retrieve() */
+/** Result returned from dStorage.retrieveByRefId() / retrieveByStorageId() */
 export interface RetrieveResult {
   /** The raw decrypted bytes */
   bytes: Uint8Array;

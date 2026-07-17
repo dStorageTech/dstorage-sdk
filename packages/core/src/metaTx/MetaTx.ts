@@ -89,7 +89,7 @@ export class MetaTx {
         `${fileSizeDisplay} encrypted (${(uploadData.byteLength / 1024).toFixed(2)} KB ciphertext)`,
       );
 
-      // Build upload metadata once — used by both provideUploadData and upload().
+      // Build upload metadata once — used by both provideUploadData and store().
       const uploadMetadata: Record<string, string> = {
         "dstorage-version": "0.1.0",
         "dstorage-filename": file.name,
@@ -130,7 +130,7 @@ export class MetaTx {
       // ── Step 3: Upload ──────────────────────────────────────────────────
       this.startStep("upload", `Uploading to ${this.sdk.storageAdapter.name}…`);
 
-      // Pass the same metadata to upload(). Storage adapters that consumed a
+      // Pass the same metadata to store(). Storage adapters that consumed a
       // pre-signed transaction (Arweave sign-then-post flow) will ignore it;
       // others (Mock) use it to attach metadata to the upload.
       const uploadResult = await this.sdk.storageAdapter.store(

@@ -75,7 +75,7 @@ describe("upload → retrieveByRefId round-trip", () => {
 
   it("empty string is stored and retrieved correctly", async () => {
     // Note: empty file validation only applies to MetaTransaction (File API)
-    // The low-level upload() accepts any string including empty
+    // The low-level store() accepts any string including empty
     const alice = await makeUser("0xAlice_i4");
     // Non-empty string to avoid edge cases with encryption
     const { chainRefId } = await alice.store(enc("."));

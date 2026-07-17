@@ -140,6 +140,7 @@ export function mlkemGenerateKeypairFromSeed(
  *
  * @param dek      32-byte Data Encryption Key to protect
  * @param pk       ML-KEM public key
+ * @param context  Domain-separation string bound into the KEK derivation
  * @param variant  ML-KEM variant. Default: "mlkem768".
  */
 export async function mlkemWrapDek(
@@ -165,8 +166,10 @@ export async function mlkemWrapDek(
  * The ML-KEM variant is read from `data.algorithm` (e.g. "mlkem768-xchacha20poly1305-v1"),
  * so the caller does not need to supply it — the key envelope is self-describing.
  *
- * @param data  WrappedDekResult containing algorithm, kemCiphertext, and wrappedDek
- * @param sk    ML-KEM secret key
+ * @param data     WrappedDekResult containing algorithm, kemCiphertext, and wrappedDek
+ * @param sk       ML-KEM secret key
+ * @param context  Domain-separation string bound into the KEK derivation (must match
+ *                 the value used to wrap)
  */
 export async function mlkemUnwrapDek(
   data: WrappedDekResult,
