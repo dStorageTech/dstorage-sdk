@@ -7,7 +7,7 @@ import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
 import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
 import type { TokenSymbol } from "@dstorage/payment";
 import type { CryptoScheme } from "@dstorage/crypto";
-import type { EncryptionAdapter } from "./index.js";
+import type { EncryptionAdapter } from "@dstorage/encryption";
 
 /**
  * Minimal logger interface accepted by every SDK class.

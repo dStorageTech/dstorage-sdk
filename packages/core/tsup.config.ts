@@ -42,6 +42,12 @@ export default defineConfig([
     tsconfig: "tsconfig.build.json",
     noExternal: sharedNoExternal,
     external: sharedExternal,
+    esbuildOptions(options) {
+      // Chain's tsup build uses code-splitting, producing bare `import "./chunk.mjs"`
+      // lines in its dist. esbuild correctly ignores them under sideEffects:false but
+      // emits a warning each time. The tree-shaking is working as intended — silence it.
+      options.logOverride = { "ignored-bare-import": "silent" };
+    },
   },
   // Node.js build: mocks only, ESM + CJS.
   {
