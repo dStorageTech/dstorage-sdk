@@ -1,6 +1,6 @@
 {
   "name": "@dstorage-tech/dstorage-sdk",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Privacy-first decentralized storage SDK with pluggable adapters",
   "license": "MIT",
   "keywords": [

@@ -1,6 +1,6 @@
 {
   "name": "@dstorage/chain",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Pluggable blockchain adapters for dStorage SDK on-chain references",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
