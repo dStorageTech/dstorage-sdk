@@ -22,14 +22,14 @@ Most applications store user data on servers they control. That means users have
 
 The way it works is straightforward. When a user uploads something, the SDK encrypts it locally using a key derived from an encryption adapter — a key that only they can regenerate. The encrypted blob goes to a storage network (Arweave, Arweave Local, or a mock for development). A lightweight reference — just a storage ID — is then written to a blockchain, giving the owner a verifiable receipt. To retrieve the data, the process runs in reverse: look up the reference on-chain, fetch the blob/s, decrypt them locally. At no point does any server hold an unencrypted copy.
 
-For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, call `init()`, and use `upload` and `retrieveByRefId`. You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready.
+For developers, the SDK is designed to get out of the way. You configure it once with the storage and chain backends that fit your stack, call `init()`, and use `store` and `retrieveByRefId`. You can start entirely with in-memory mocks (no network, no tokens, no wallet extension), and swap in network-backed adapters when you are ready.
 
 ---
 
 ## SDK Usage
 
 ```sh
-npm install @dstorage-tech/dstorage
+npm install @dstorage-tech/dstorage-sdk
 ```
 
 ```typescript
@@ -38,7 +38,7 @@ import {
   MockStorageAdapter,
   MockChainAdapter,
   PasswordEncryptionAdapter,
-} from "@dstorage-tech/dstorage";
+} from "@dstorage-tech/dstorage-sdk";
 
 // 1. Configure the SDK with your chosen adapters and encryption adapter(s)
 const sdk = new DStorage({
@@ -90,19 +90,20 @@ const { chainRefId } = await sdk.store(bytes, {
 **Path A — auto-generated test wallet** (recommended for local dev and tests):
 
 ```typescript
-import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage";
+import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage-sdk";
 
 // Spins up a funded wallet against the running arlocal instance
-const storageAdapter = await ArweaveLocalStorageAdapter.createWithTestWallet({
-  fundAr: 10, // AR tokens to mint (default: 10)
-});
+const { adapter: storageAdapter } =
+  await ArweaveLocalStorageAdapter.createWithTestWallet({
+    fundAr: 10, // AR tokens to mint (default: 10)
+  });
 ```
 
 **Path B — existing wallet key file** (e.g. a pre-funded JWK on disk):
 
 ```typescript
 import fs from "node:fs";
-import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage";
+import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage-sdk";
 
 const walletKey = JSON.parse(fs.readFileSync("arweave-wallet.json", "utf8"));
 const storageAdapter = new ArweaveLocalStorageAdapter({ walletKey });
@@ -111,7 +112,7 @@ const storageAdapter = new ArweaveLocalStorageAdapter({ walletKey });
 **Path C — custom gateway host and port** (e.g. arlocal running on a different machine or port):
 
 ```typescript
-import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage";
+import { ArweaveLocalStorageAdapter } from "@dstorage-tech/dstorage-sdk";
 
 const storageAdapter = new ArweaveLocalStorageAdapter({
   gateway: { host: "192.168.1.42", port: 4000, protocol: "http" },
@@ -120,12 +121,41 @@ const storageAdapter = new ArweaveLocalStorageAdapter({
 
 ---
 
+## Browser Usage
+
+The same `npm install @dstorage-tech/dstorage-sdk` import works in the browser — no
+separate package, no subpath required:
+
+```typescript
+import { DStorage, ArweaveStorageAdapter } from "@dstorage-tech/dstorage-sdk";
+```
+
+Bundlers configured for a browser target (Vite, webpack 5+, Rollup, esbuild) resolve the
+plain import to a pre-built, minified, browser-safe bundle automatically via the
+`"browser"` condition in `package.json`'s `exports` map — it excludes all Node.js-only
+code (`node:fs`, LevelDB, etc.). For tooling that doesn't resolve conditional exports, or
+for explicit clarity, the same bundle is also available at the `/browser` subpath:
+
+```typescript
+import {
+  DStorage,
+  ArweaveStorageAdapter,
+} from "@dstorage-tech/dstorage-sdk/browser";
+```
+
+Only `MidnightChainAdapter`'s Node.js **provider/facade mode** (LevelDB private state,
+filesystem-based ZK artifacts) is unavailable in the browser bundle — **connector mode**
+(browser wallet extension) works normally. Every other adapter (storage, payment, mock,
+simulator, HTTP gateway) is fully included.
+
+---
+
 ## Error Handling
 
 Every error thrown by the SDK is a `DStorageError` — a subclass of `Error` that always carries a numeric `.code`. Use the `isDStorageError` type guard to distinguish SDK errors from unexpected runtime failures:
 
 ```typescript
-import { isDStorageError } from "@dstorage-tech/dstorage";
+import { isDStorageError } from "@dstorage-tech/dstorage-sdk";
 
 try {
   await sdk.store(bytes);
@@ -156,14 +186,15 @@ Code `10999` (`UNKNOWN_ERROR`) is a catch-all — it means an error escaped with
 `store()` uploads content first, then writes the on-chain reference. If the chain write fails after a successful storage upload, `store()` throws a `StorePartialError` — a `DStorageError` subclass with a `recovery` payload. Use it with `registerReference()` to retry only the chain write without re-uploading:
 
 ```typescript
-import { isStorePartialError } from "@dstorage-tech/dstorage";
+import { isStorePartialError } from "@dstorage-tech/dstorage-sdk";
 
 try {
   await sdk.store(bytes);
 } catch (err) {
   if (isStorePartialError(err)) {
     const { storageId, storageProvider, keyEnvelope } = err.recovery;
-    const { chainRefId } = await sdk.registerReference(storageId, {
+    const { chainRefId } = await sdk.registerReference({
+      storageId,
       storageProvider,
       keyEnvelope,
     });
@@ -223,7 +254,8 @@ In public mode **neither layer is encrypted**:
 
 - The data payload is stored as raw bytes on the storage network — anyone with the storageId can read it.
 - The storageId is written to the chain as plaintext — anyone watching the chain can see which storage resource belongs to which on-chain record.
-- `init()` is not required; no wallet or encryption key is needed.
+- `init()` is still required, same as private uploads.
+- When a `chainAdapter` is configured, at least one encryption adapter is still required even in public mode — it's used to derive the owner secret needed to later update or remove the reference, not to encrypt the payload. Configuring no encryption adapters at all only works in storage-only mode (no `chainAdapter`).
 - The on-chain `encryptionScheme` field is set to `""` (empty string), which the SDK uses on read to skip decryption entirely.
 
 > **Warning**: Public mode is a permanent, irreversible choice per upload. Once data is stored unencrypted on Arweave (or another permanent storage network) it cannot be made private retroactively. Only use `isPublic: true` for data you explicitly intend to be world-readable.
@@ -279,7 +311,7 @@ You can also mix in a post-quantum adapter — the uploader needs only the Publi
 
 ```typescript
 const { adapter: mlkemAdapter, secretKey } =
-  KeypairEncryptionAdapter.generateKeypair();
+  KeypairEncryptionAdapter.generateKeypair("myapp:v1");
 // Store `secretKey` bytes safely — needed to decrypt later.
 encryptionAdapters: [
   new PasswordEncryptionAdapter({ password, salt }), // symmetric fallback
@@ -303,21 +335,36 @@ encryptionAdapters: [
 **Usage patterns:**
 
 ```typescript
+// `context` is a domain-separation string binding the KEK derivation to your
+// application (and, for the deterministic factories, to this specific use — pick
+// a stable value and keep it consistent for any given adapter's data).
+
 // 1 — Fresh random keypair (store the SK):
 const { adapter, publicKey, secretKey } =
-  KeypairEncryptionAdapter.generateKeypair();
+  KeypairEncryptionAdapter.generateKeypair("myapp:v1");
 
 // 2 — PK-only uploader (no SK needed at upload time):
-const uploader = KeypairEncryptionAdapter.fromPublicKey(publicKey);
+const uploader = KeypairEncryptionAdapter.fromPublicKey(publicKey, "myapp:v1");
 
 // 3 — Full keypair reader:
-const reader = KeypairEncryptionAdapter.fromKeypair(publicKey, secretKey);
+const reader = KeypairEncryptionAdapter.fromKeypair(
+  publicKey,
+  secretKey,
+  "myapp:v1",
+);
 
 // 4 — Deterministic keypair from password (same inputs → same keypair, always):
-const adapter = await KeypairEncryptionAdapter.fromPassword(password, salt);
+const adapter = await KeypairEncryptionAdapter.fromPassword(
+  password,
+  salt,
+  "myapp:v1",
+);
 
 // 5 — Deterministic keypair from BIP-39 mnemonic:
-const adapter = await KeypairEncryptionAdapter.fromMnemonic({ mnemonic });
+const adapter = await KeypairEncryptionAdapter.fromMnemonic(
+  { mnemonic },
+  "myapp:v1",
+);
 ```
 
 #### Post-quantum safety across all adapters
@@ -347,17 +394,18 @@ If you want cross-device password recoverability **and** full ML-KEM post-quantu
 import {
   generatePqsPassword,
   KeypairEncryptionAdapter,
-} from "@dstorage/encryption";
+} from "@dstorage-tech/dstorage-sdk";
 
 // 32 random bytes → 43-char base64url string (256 bits of real entropy).
 // Store this string — it is the only secret needed to re-derive the keypair on any device.
 const password = generatePqsPassword();
 
 // Derives an ML-KEM keypair via scrypt → 64-byte seed → ML-KEM keygen.
-// Same password + salt → same keypair, always, on any device.
+// Same password + salt + context → same keypair, always, on any device.
 const adapter = await KeypairEncryptionAdapter.fromPassword(
   password,
-  "myapp:alice",
+  "myapp:v1:alice@example.com", // salt — domain separator
+  "myapp:v1", // context — binds the KEK derivation to this application
 );
 ```
 
@@ -389,10 +437,14 @@ const adapter = await KeypairEncryptionAdapter.fromPassword(
 
 #### On-chain storageId encryption layout
 
-**XChaCha20-Poly1305** (72 bytes, base64url-encoded → 96 chars):
+**XChaCha20-Poly1305** (JSON) — same wire format as the off-chain payload above, with a distinct associated data (AAD) label for domain separation. The plaintext is the storageId string's UTF-8 bytes (43 bytes for the standard base64url storage ID format), not raw decoded bytes:
 
-```
-[ nonce: 24 bytes | ciphertext: 32 bytes | Poly1305 tag: 16 bytes ]
+```json
+{
+  "ciphertext": "<base64 — XChaCha20 output: ciphertext || 16-byte Poly1305 tag>",
+  "nonce": "<base64 — 24-byte random nonce>",
+  "algorithm": "XChaCha20-Poly1305"
+}
 ```
 
 ### Scheme detection on read
@@ -408,7 +460,7 @@ const adapter = await KeypairEncryptionAdapter.fromPassword(
 
 ### Storage ID format
 
-All storage IDs are 43-character base64url strings — 32 random bytes encoded without padding. This matches the Arweave transaction ID format and guarantees a fixed-width 32-byte plaintext input for the storageId encryption functions.
+The SDK treats `storageId` as an opaque string — the crypto layer encrypts its UTF-8 bytes (see [Wire formats](#wire-formats) above), so there is no length or format requirement at the SDK level. Today's Arweave-family adapters (`ArweaveStorageAdapter`, `ArweaveLocalStorageAdapter`, `ArweaveBundlerStorageAdapter`) all return 43-character base64url strings — 32 random bytes encoded without padding, matching the Arweave transaction ID format — but a storage adapter for a different network (e.g. an IPFS CID or another content-addressed ID) can return any string shape without requiring changes to the encryption layer.
 
 ### Key loss and data recovery
 
@@ -419,3 +471,7 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
   - `PasswordEncryptionAdapter` — forgetting the password or losing the salt string makes data unrecoverable.
   - `MnemonicEncryptionAdapter` / wallet providers — losing the seed phrase or private key has the same effect. Follow standard seed-phrase backup practices.
   - `KeypairEncryptionAdapter` — if created with `generateKeypair()`, losing the SK bytes makes data unrecoverable. If created deterministically via `fromPassword()` or `fromMnemonic()`, the keypair can be re-derived from the original inputs.
+
+## License
+
+MIT

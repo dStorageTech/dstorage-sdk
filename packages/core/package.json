@@ -10,7 +10,9 @@
     "decentralized",
     "storage",
     "dapp",
-    "web3"
+    "web3",
+    "midnight",
+    "arweave"
   ],
   "repository": {
     "type": "git",

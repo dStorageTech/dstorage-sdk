@@ -20,7 +20,8 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Supported Providers](#supported-providers)
 - [Encryption Adapters](#encryption-adapters)
 - [Known Limitations](#known-limitations)
-- [High-Level Product Roadmap](#high-level-product-roadmap)
+- [Publishing](#publishing)
+- [License](#license)
 
 ## Mission
 
@@ -32,7 +33,7 @@ Instead of dApps collecting and storing user data on centralised servers, dStora
 
 - **Encrypts** data client-side using keys derived from a pluggable encryption adapter (password, wallet signature, mnemonic, or custom)
 - **Pays** storage and chain networks using adapter-defined tokens (MOCK, AR, DUST)
-- **Stores** encrypted blobs on decentralised storage (Arweave, Arweave Local, Mock, Autonomi)
+- **Stores** encrypted blobs on decentralised storage (Arweave, Arweave Local, Mock)
 - **Writes** cryptographic references on-chain (Mock, Midnight)
 - **Decrypts** locally on the user side — dApp operators and backend servers never see raw user data
 
@@ -188,7 +189,7 @@ import {
   ArweaveStorageAdapter,
   ArweavePaymentAdapter,
   MidnightChainAdapter,
-} from "@dstorage-tech/dstorage/browser";
+} from "@dstorage-tech/dstorage-sdk/browser";
 ```
 
 Works with Vite, webpack, rollup, esbuild, or any other bundler. Peer dependencies (`arweave`, `@midnight-ntwrk/*`, etc.) must be installed separately and will be resolved by your bundler.
@@ -198,7 +199,7 @@ Works with Vite, webpack, rollup, esbuild, or any other bundler. Peer dependenci
 When a bundler is configured for a browser target it automatically honours the `"browser"` condition in `package.json` exports. No subpath needed — normal imports just work:
 
 ```typescript
-import { DStorage } from "@dstorage-tech/dstorage";
+import { DStorage } from "@dstorage-tech/dstorage-sdk";
 // bundler auto-selects the browser-safe chain entry for @dstorage/chain
 ```
 
@@ -222,7 +223,6 @@ Reference `dist/browser.mjs` directly, or serve it from a CDN that supports impo
 | `MockStorageAdapter`                          |       ✅       |                                                                                            |
 | `ArweaveStorageAdapter`                       |       ✅       |                                                                                            |
 | `ArweaveBundlerStorageAdapter`                |       ✅       |                                                                                            |
-| `AutonomiStorageAdapter`                      |       ✅       |                                                                                            |
 | `ArweaveLocalStorageAdapter`                  |       ✅       | Requires arlocal running at a browser-reachable URL — see note below                       |
 | `MockPaymentAdapter`                          |       ✅       |                                                                                            |
 | `ArweavePaymentAdapter`                       |       ✅       |                                                                                            |
@@ -239,7 +239,7 @@ Reference `dist/browser.mjs` directly, or serve it from a CDN that supports impo
 import {
   ArweaveLocalStorageAdapter,
   ARWEAVE_LOCAL,
-} from "@dstorage-tech/dstorage/browser";
+} from "@dstorage-tech/dstorage-sdk/browser";
 
 const { adapter } = await ArweaveLocalStorageAdapter.createWithTestWallet();
 // or with a custom host/port:
@@ -256,7 +256,7 @@ If arlocal runs on a non-localhost host, verify that your reverse proxy or netwo
 import {
   MidnightChainAdapter,
   NETWORKS,
-} from "@dstorage-tech/dstorage/browser";
+} from "@dstorage-tech/dstorage-sdk/browser";
 
 const chain = new MidnightChainAdapter({
   walletMode: "connector",
@@ -339,13 +339,13 @@ npm run test:integration -- -t "uploads and retrieves private data"
 
 ## Reality Check (Current Support)
 
-| Area             | Current state                                                                                                                                  |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Storage adapters | `Mock`, `ArweaveLocal`, and `Arweave` are live; `ArweaveBundler` (ANS-104 bundled uploads, managed server-signing) is live; `Autonomi` is stub |
-| Chain adapters   | `Mock`, `MidnightSimulator`, and `Midnight` (connector + facade modes) are implemented                                                         |
-| Payment adapters | `Mock` is simulated by design; `Arweave` is live (JWK wallet); `Managed` (remote signing server) is live; Midnight fees handled by wallet      |
-| Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector, Arweave, and Arweave Local paths                                              |
-| Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                                                           |
+| Area             | Current state                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Storage adapters | `Mock`, `ArweaveLocal`, and `Arweave` are live; `ArweaveBundler` (ANS-104 bundled uploads, managed server-signing) is live                |
+| Chain adapters   | `Mock`, `MidnightSimulator`, and `Midnight` (connector + facade modes) are implemented                                                    |
+| Payment adapters | `Mock` is simulated by design; `Arweave` is live (JWK wallet); `Managed` (remote signing server) is live; Midnight fees handled by wallet |
+| Demo webapp      | End-to-end upload UX; supports mock, browser Midnight connector, Arweave, and Arweave Local paths                                         |
+| Console demo     | Uses Midnight Preprod chain + local Arweave flow for upload/list/retrieve operations                                                      |
 
 ---
 
@@ -354,7 +354,7 @@ npm run test:integration -- -t "uploads and retrieves private data"
 ## SDK Usage
 
 ```sh
-npm install @dstorage-tech/dstorage
+npm install @dstorage-tech/dstorage-sdk
 ```
 
 ```typescript
@@ -363,7 +363,7 @@ import {
   MockStorageAdapter,
   MockChainAdapter,
   PasswordEncryptionAdapter,
-} from "@dstorage-tech/dstorage";
+} from "@dstorage-tech/dstorage-sdk";
 
 // 1. Configure the SDK with your chosen adapters and encryption adapter(s)
 const sdk = new DStorage({
@@ -415,7 +415,7 @@ const { chainRefId } = await sdk.store(bytes, {
 Every error thrown by the SDK is a `DStorageError` — a subclass of `Error` that always carries a numeric `.code`. Use the `isDStorageError` type guard to distinguish SDK errors from unexpected runtime failures:
 
 ```typescript
-import { isDStorageError } from "@dstorage-tech/dstorage";
+import { isDStorageError } from "@dstorage-tech/dstorage-sdk";
 
 try {
   await sdk.store(bytes);
@@ -446,7 +446,7 @@ Code `10999` (`UNKNOWN_ERROR`) is a catch-all — it means an error escaped with
 `store()` uploads content first, then writes the on-chain reference. If the chain write fails after a successful storage upload, `store()` throws a `StorePartialError` — a `DStorageError` subclass with a `recovery` payload. Use it with `registerReference()` to retry only the chain write without re-uploading:
 
 ```typescript
-import { isStorePartialError } from "@dstorage-tech/dstorage";
+import { isStorePartialError } from "@dstorage-tech/dstorage-sdk";
 
 try {
   await sdk.store(bytes);
@@ -515,10 +515,10 @@ Tokens are selected automatically based on your chosen adapters.
 ## Architecture
 
 ```
-@dstorage-tech/dstorage     ← Developer-facing API (npm install @dstorage-tech/dstorage)
+@dstorage-tech/dstorage-sdk     ← Developer-facing API (npm install @dstorage-tech/dstorage-sdk)
     ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation       [bundled]
     ├── @dstorage/encryption    ← Encryption adapters: PasswordEncryptionAdapter | MnemonicEncryptionAdapter | KeypairEncryptionAdapter [bundled]
-    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveBundler | Arweave Local | Autonomi(stub) [bundled: Mock only]
+    ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveBundler | Arweave Local [bundled: Mock only]
     ├── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed           [bundled: Mock only]
     └── @dstorage/chain         ← Chain adapters:   Mock | MidnightSimulator | Midnight [bundled: Mock only]
 ```
@@ -535,7 +535,7 @@ User input
 [pay storage]  → adapter-defined token (commonly AR / MOCK)
     │
     ▼
-[store]        → Encrypted blob → Arweave / Arweave Local / Mock / Autonomi(stub)
+[store]        → Encrypted blob → Arweave / Arweave Local / Mock
     │
     ▼
 [pay chain]    → adapter-defined token (commonly DUST / MOCK)
@@ -728,7 +728,7 @@ If you want cross-device password recoverability **and** full ML-KEM post-quantu
 import {
   generatePqsPassword,
   KeypairEncryptionAdapter,
-} from "@dstorage/encryption";
+} from "@dstorage-tech/dstorage-sdk";
 
 // 32 random bytes → 43-char base64url string (256 bits of real entropy).
 // Store this string — it is the only secret needed to re-derive the keypair on any device.
@@ -833,7 +833,6 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
 | Arweave Local              | ✅ Live | Local arlocal integration testing                                                                        |
 | Arweave                    | ✅ Live | Requires `arweave` package + Wander wallet                                                               |
 | Arweave Bundler            | ✅ Live | Near-instant finality via ANS-104 bundled uploads and managed server-signing; no client AR wallet needed |
-| Autonomi                   | 🔵 Stub | Awaiting Autonomi JS SDK stability                                                                       |
 
 ### Blockchain
 
@@ -848,9 +847,58 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
 ## Known Limitations
 
 - Browser Midnight connector flows require wallet extension availability and compatible network configuration.
-- Autonomi adapter is currently a stub path.
 - **ManagedPaymentAdapter — no response MAC.**
   The signing server response (`txId`, `signature`) is validated for schema correctness and a `success: true` flag, but there is no cryptographic proof that the response originated from the legitimate signing server and was not modified in transit. The adapter relies solely on TLS for transport integrity. A network-level MITM or a compromised CDN could substitute a valid-shaped but malicious response (e.g. replacing `txId` or `signature` with attacker-controlled values) and schema validation would still pass.
   The signing key substitution attack (where a MITM replaces `publicKey` in the response to corrupt the on-chain ownership record) is mitigated: the expected RSA-4096 modulus is embedded in the auth token and pinned at construction time; each sign-tx request asserts the pinned key and the server rejects any mismatch.
   **Mitigation for the response MAC gap:** ensure `signingServerUrl` is always HTTPS with a valid certificate issued to the operator-controlled domain. Do not use this adapter over plain HTTP or with self-signed certificates in production.
   A proper fix requires the signing server to include an `HMAC-SHA256(sharedSecret, requestId ‖ txId ‖ signature)` MAC in its response, and the adapter to verify it before trusting any field. This is deferred pending a stable signing-server API.
+
+---
+
+## Publishing
+
+Only `packages/core` is published to npm, as **`@dstorage-tech/dstorage-sdk`** — the other 5 workspace packages (`crypto`, `encryption`, `payment`, `storage`, `chain`) are internal build-time sources bundled inline into `packages/core`'s output; they are never published standalone. There is no CI publish workflow — `.github/workflows/ci.yml` and `integration.yml` only build and test. Releasing is a manual process:
+
+1. **Log in to npm.** You must be a member of the `@dstorage-tech` npm org:
+
+   ```sh
+   npm login
+   ```
+
+2. **Bump the version.** `packages/core/package.json`'s `"version"` field is the one that matters — it's the only package that gets published. Either edit it directly, or from the repo root:
+
+   ```sh
+   npm version <patch|minor|major> --workspace packages/core --no-git-tag-version
+   ```
+
+3. **Build.**
+
+   ```sh
+   npm run build
+   ```
+
+4. **Sanity-check the tarball contents** before publishing for real:
+
+   ```sh
+   cd packages/core && npm pack --dry-run
+   ```
+
+5. **Publish.** `publishConfig.access: "public"` is already set in `packages/core/package.json`, so no `--access` flag is needed:
+
+   ```sh
+   cd packages/core && npm publish
+   ```
+
+6. **Tag and push the release:**
+
+   ```sh
+   git tag v<version> && git push origin v<version>
+   ```
+
+   Optionally cut a GitHub release from that tag.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
