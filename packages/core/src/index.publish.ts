@@ -10,12 +10,38 @@ export * from "@dstorage/crypto";
 export * from "@dstorage/encryption";
 // Explicit re-exports below: rollup-plugin-dts only inlines wildcard-exported
 // symbols that are transitively referenced by type elsewhere in the bundled
-// graph, so error codes with no other type reference get silently dropped
-// from the built .d.ts unless listed explicitly.
+// graph, so functions/classes with no other type reference get silently
+// dropped from the built .d.ts unless listed explicitly.
 export {
   CryptoErrorCode,
   DStorageError,
   isDStorageError,
+  computeBlake3,
+  computeBlake3Hex,
+  base64urlToBytes,
+  bytesToBase64url,
+  KeyDeriver,
+  hexToBytes,
+  mlkemGenerateKeypair,
+  mlkemGenerateKeypairFromSeed,
+  mlkemWrapDek,
+  mlkemUnwrapDek,
+  generateDek,
+  deriveKek,
+  wrapKey,
+  unwrapKey,
+  deriveOwnerSecret,
+  buildKeyEnvelope,
+  serializeKeyEnvelope,
+  parseKeyEnvelope,
+  findWrapper,
+  deriveSymmetricKeyFromSeed,
+  encryptXChaCha,
+  decryptXChaCha,
+  encryptStorageIdXChaCha,
+  decryptStorageIdXChaCha,
+  serializeXChaChaPayload,
+  deserializeXChaChaPayload,
 } from "@dstorage/crypto";
 
 // Core: own error codes and partial-failure recovery error
@@ -25,9 +51,8 @@ export {
   isStorePartialError,
 } from "./errors.js";
 
-// Storage: types + mock + arlocal only.
+// Storage: types + all adapters.
 // Full package imports (not subpaths) so dts.resolve can inline type declarations.
-// Tree-shaking via sideEffects:false drops unused adapters (arweave, autonomi, etc.).
 export type {
   StorageAdapter,
   StorageAdapterLogger,
@@ -38,6 +63,9 @@ export type {
 export { MockStorageAdapter } from "@dstorage/storage";
 export type { MockStorageAdapterConfig } from "@dstorage/storage";
 export { StorageErrorCode } from "@dstorage/storage";
+export { ArweaveStorageAdapter } from "@dstorage/storage";
+export { ArweaveBundlerStorageAdapter } from "@dstorage/storage";
+export type { ArweaveBundlerAdapterConfig } from "@dstorage/storage";
 // ArweaveLocalStorageAdapter: no node:http dependency — uses fetch() throughout. Node-safe.
 export {
   ArweaveLocalStorageAdapter,
@@ -53,7 +81,7 @@ export type {
   ArweaveLocalBalance,
 } from "@dstorage/storage";
 
-// Payment: types + mock only
+// Payment: types + all adapters
 export type {
   PaymentAdapter,
   PaymentAdapterLogger,
@@ -66,6 +94,8 @@ export type {
   MidnightWalletProvider,
 } from "@dstorage/payment";
 export { MockPaymentAdapter, TOKENS } from "@dstorage/payment";
+export { ArweavePaymentAdapter } from "@dstorage/payment";
+export { ManagedPaymentAdapter } from "@dstorage/payment";
 
 // Chain: types + mock + real Midnight adapter (Node.js provider mode).
 // Heavy @midnight-ntwrk/* peer deps are lazy-loaded via dynamic import at
@@ -85,12 +115,15 @@ export {
   MockChainAdapter,
   MidnightSimulatorChainAdapter,
   MidnightChainAdapter,
+  HttpGatewayChainAdapter,
   NETWORKS,
+  waitForFacadeSync,
 } from "@dstorage/chain";
 export { ChainErrorCode } from "@dstorage/chain";
 export type {
   MidnightChainAdapterConfig,
   WalletAddresses,
   AdapterWalletProvider,
+  HttpGatewayChainAdapterConfig,
   NetworkId,
 } from "@dstorage/chain";

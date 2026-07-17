@@ -10,12 +10,38 @@ export * from "@dstorage/crypto";
 export * from "@dstorage/encryption";
 // Explicit re-exports below: rollup-plugin-dts only inlines wildcard-exported
 // symbols that are transitively referenced by type elsewhere in the bundled
-// graph, so error codes with no other type reference get silently dropped
-// from the built .d.ts unless listed explicitly.
+// graph, so functions/classes with no other type reference get silently
+// dropped from the built .d.ts unless listed explicitly.
 export {
   CryptoErrorCode,
   DStorageError,
   isDStorageError,
+  computeBlake3,
+  computeBlake3Hex,
+  base64urlToBytes,
+  bytesToBase64url,
+  KeyDeriver,
+  hexToBytes,
+  mlkemGenerateKeypair,
+  mlkemGenerateKeypairFromSeed,
+  mlkemWrapDek,
+  mlkemUnwrapDek,
+  generateDek,
+  deriveKek,
+  wrapKey,
+  unwrapKey,
+  deriveOwnerSecret,
+  buildKeyEnvelope,
+  serializeKeyEnvelope,
+  parseKeyEnvelope,
+  findWrapper,
+  deriveSymmetricKeyFromSeed,
+  encryptXChaCha,
+  decryptXChaCha,
+  encryptStorageIdXChaCha,
+  decryptStorageIdXChaCha,
+  serializeXChaChaPayload,
+  deserializeXChaChaPayload,
 } from "@dstorage/crypto";
 
 // Core: own error codes and partial-failure recovery error
@@ -39,7 +65,6 @@ export { StorageErrorCode } from "@dstorage/storage";
 export { ArweaveStorageAdapter } from "@dstorage/storage";
 export { ArweaveBundlerStorageAdapter } from "@dstorage/storage";
 export type { ArweaveBundlerAdapterConfig } from "@dstorage/storage";
-export { AutonomiStorageAdapter } from "@dstorage/storage";
 // ArweaveLocalStorageAdapter: no node:http dependency — uses fetch() throughout.
 // Requires arlocal running at a browser-reachable URL (CORS enabled).
 export {
