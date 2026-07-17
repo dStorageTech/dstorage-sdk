@@ -53,87 +53,33 @@
   "engines": {
     "node": ">=22"
   },
+  "sideEffects": false,
   "scripts": {
     "build": "tsup && npm run copy:zk-artifacts",
     "copy:zk-artifacts": "mkdir -p dist/contracts/dataregistry/managed && cp -a ../chain/src/adapters/midnight/contracts/dataregistry/managed/keys dist/contracts/dataregistry/managed/ && cp -a ../chain/src/adapters/midnight/contracts/dataregistry/managed/zkir dist/contracts/dataregistry/managed/",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@noble/ciphers": "^2.2.0",
-    "@noble/hashes": "^1.5.0",
-    "@noble/post-quantum": "^0.6.1"
-  },
-  "peerDependencies": {
     "@ardrive/turbo-sdk": "^1.41.2",
     "@dha-team/arbundles": "^1.0.4",
-    "@midnight-ntwrk/compact-js": "^2.5.1",
-    "@midnight-ntwrk/compact-runtime": "^0.16.0",
-    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
-    "@midnight-ntwrk/midnight-js-contracts": "^4.1.1",
-    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "^4.1.1",
-    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.1.1",
-    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.1.1",
+    "@midnight-ntwrk/compact-js": "2.5.1",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/dapp-connector-api": "4.0.1",
+    "@midnight-ntwrk/midnight-js-contracts": "4.1.1",
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.1.1",
     "@midnight-ntwrk/midnight-js-level-private-state-provider": "4.1.1",
-    "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "4.1.1",
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "4.1.1",
-    "@midnight-ntwrk/midnight-js-protocol": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-protocol": "4.1.1",
     "@midnight-ntwrk/midnight-js-types": "4.1.1",
-    "@midnight-ntwrk/midnight-js-utils": "^4.1.1",
-    "@midnight-ntwrk/wallet-sdk": "^1.1.0",
+    "@midnight-ntwrk/midnight-js-utils": "4.1.1",
+    "@midnight-ntwrk/wallet-sdk": "1.1.0",
+    "@noble/ciphers": "^2.2.0",
+    "@noble/hashes": "^1.5.0",
+    "@noble/post-quantum": "^0.6.1",
     "arweave": "^1.15.7"
-  },
-  "peerDependenciesMeta": {
-    "@ardrive/turbo-sdk": {
-      "optional": true
-    },
-    "@dha-team/arbundles": {
-      "optional": true
-    },
-    "@midnight-ntwrk/compact-js": {
-      "optional": true
-    },
-    "@midnight-ntwrk/compact-runtime": {
-      "optional": true
-    },
-    "@midnight-ntwrk/dapp-connector-api": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-contracts": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-http-client-proof-provider": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-level-private-state-provider": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-network-id": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-node-zk-config-provider": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-protocol": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-types": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-utils": {
-      "optional": true
-    },
-    "@midnight-ntwrk/wallet-sdk": {
-      "optional": true
-    },
-    "arweave": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "typescript": "^6.0.3"

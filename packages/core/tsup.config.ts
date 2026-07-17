@@ -71,14 +71,19 @@ export default defineConfig([
       options.logOverride = { "ignored-bare-import": "silent" };
     },
   },
-  // Browser build: all browser-safe adapters, minified ESM only.
+  // Browser build: all browser-safe adapters, ESM only.
   // Heavy peer deps (arweave, @midnight-ntwrk/*, @noble/*, bip39) remain external
   // so users can resolve them via their bundler or a CDN import map.
+  // NOT minified: minification strips comments indiscriminately, including the
+  // /* @vite-ignore */ annotations on Node-only dynamic imports (e.g.
+  // NodeZkConfigProvider, node:fs) that tell a consumer's bundler to skip static
+  // analysis of code paths that are never reachable in connector (browser) mode.
+  // Without them, bundlers try to resolve/process those imports anyway and the
+  // build breaks for consumers who never touch facade/provider mode at all.
   {
     entry: { browser: "src/browser.ts" },
     format: ["esm"],
     platform: "browser",
-    minify: true,
     dts: {
       resolve: [/^@dstorage\/(crypto|payment|encryption|storage|chain)/],
     },
