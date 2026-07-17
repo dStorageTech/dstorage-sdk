@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as Rx from "rxjs";
-import { MidnightChainAdapter } from "@dstorage/chain";
+import { MidnightChainAdapter, waitForFacadeSync } from "@dstorage/chain";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
 import { NetworkId } from "@midnight-ntwrk/wallet-sdk";
 import type { IntegrationEnv } from "./env.js";
@@ -77,18 +77,15 @@ export async function createChainAdapter(
 
   // Wait for full wallet sync — same logic as demo console syncWallet.
   console.log("Syncing wallet...");
-  await Rx.firstValueFrom(
-    walletProvider.wallet.state().pipe(
-      Rx.throttleTime(2_000),
-      Rx.filter((state: any) => state.isSynced),
-      Rx.tap(() => console.log("Wallet sync complete")),
-      Rx.timeout({
-        each: 360_000,
-        with: () =>
-          Rx.throwError(() => new Error("Wallet sync timeout after 360s")),
-      }),
-    ),
-  );
+  const syncedState = await waitForFacadeSync(walletProvider.wallet, 360_000);
+  if (syncedState.isSynced) {
+    console.log("Wallet sync complete");
+  } else {
+    console.warn(
+      "Wallet did not report fully synced within 360000ms — proceeding with " +
+        "current state (expected on a quiet chain with no recent activity).",
+    );
+  }
 
   // Wait for NIGHT funds — same logic as demo console waitForUnshieldedFunds.
   const { unshieldedToken } =

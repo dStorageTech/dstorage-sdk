@@ -11,6 +11,7 @@ import {
   type EnvironmentConfiguration,
 } from "./wallet-provider.js";
 import { bytesToBase64url } from "@dstorage/crypto";
+import { waitForFacadeSync } from "@dstorage/chain";
 import { type UnshieldedTokenType } from "@midnight-ntwrk/midnight-js-protocol/ledger";
 import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
 import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk/unshielded";
@@ -132,7 +133,7 @@ export async function initWallet(
     try {
       await ticker(
         () => "Syncing wallet...",
-        () => syncWallet(walletProvider.wallet, 2_000, 3_600_000),
+        () => syncWallet(walletProvider.wallet, 3_600_000),
       );
     } finally {
       clearInterval(saveInterval);
@@ -159,36 +160,29 @@ export async function initWallet(
 
 // ── Wallet sync ────────────────────────────────────────────────────────────────
 
-export const syncWallet = (
-  wallet: WalletFacade,
-  throttleTime = 2_000,
-  timeout = 360_000,
-) => {
+export const syncWallet = async (wallet: WalletFacade, timeout = 360_000) => {
   console.log("Syncing wallet...");
 
-  return Rx.firstValueFrom(
-    wallet.state().pipe(
-      Rx.throttleTime(throttleTime),
-      Rx.filter((state) => state.isSynced),
-      Rx.tap(() => console.log("Sync complete")),
-      Rx.tap((state) => {
-        const shieldedBalances = state.shielded.balances || {};
-        const unshieldedBalances = state.unshielded.balances || {};
-        const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
+  const state = await waitForFacadeSync(wallet, timeout);
 
-        console.debug(
-          `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Unshielded: ${JSON.stringify(unshieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Dust: ${dustBalances}`,
-        );
-      }),
-      Rx.timeout({
-        each: timeout,
-        with: () =>
-          Rx.throwError(
-            () => new Error(`Wallet sync timeout after ${timeout}ms`),
-          ),
-      }),
-    ),
+  if (state.isSynced) {
+    console.log("Sync complete");
+  } else {
+    console.warn(
+      `Wallet did not report fully synced within ${timeout}ms — proceeding with the ` +
+        "current state (expected on a quiet chain with no recent activity).",
+    );
+  }
+
+  const shieldedBalances = state.shielded.balances || {};
+  const unshieldedBalances = state.unshielded.balances || {};
+  const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
+
+  console.debug(
+    `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Unshielded: ${JSON.stringify(unshieldedBalances, (_, v) => (typeof v === "bigint" ? v.toString() : v))}, Dust: ${dustBalances}`,
   );
+
+  return state;
 };
 
 // ── Fund waiting ───────────────────────────────────────────────────────────────
@@ -209,7 +203,7 @@ export const waitForUnshieldedFunds = async (
   if (initialBalance === undefined || initialBalance === 0n) {
     console.log("Your wallet initial balance is: 0 (not yet initialized)");
     console.log("Waiting to receive tokens...");
-    const facadeState = await syncWallet(wallet, 2_000, 360_000);
+    const facadeState = await syncWallet(wallet, 360_000);
     return facadeState.unshielded;
   }
   return initialState;

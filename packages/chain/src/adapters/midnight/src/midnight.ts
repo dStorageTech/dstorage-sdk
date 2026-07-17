@@ -53,6 +53,7 @@ import type {
 } from "./common-types.js";
 import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
 import { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
+import { waitForFacadeSync } from "./sync.js";
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -1364,7 +1365,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         );
       }
 
-      const state = await this.facade.waitForSyncedState();
+      const state = await waitForFacadeSync(this.facade);
       const nightToken = unshieldedToken();
 
       return {

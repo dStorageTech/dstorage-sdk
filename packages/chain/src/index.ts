@@ -8,3 +8,4 @@ export type { AdapterWalletProvider } from "./adapters/midnight/src/common-types
 export type { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
 export { NETWORKS } from "./adapters/midnight/src/midnight.js";
+export { waitForFacadeSync } from "./adapters/midnight/src/sync.js";
