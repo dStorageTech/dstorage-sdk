@@ -3,7 +3,7 @@ import { TOKENS } from "../types.js";
 import type { TokenSymbol } from "../types.js";
 
 describe("TOKENS registry", () => {
-  const expectedSymbols: TokenSymbol[] = ["AR", "ANT", "DUST", "MOCK"];
+  const expectedSymbols: TokenSymbol[] = ["AR", "DUST", "MOCK"];
 
   it("contains all expected token symbols", () => {
     for (const symbol of expectedSymbols) {
@@ -11,8 +11,8 @@ describe("TOKENS registry", () => {
     }
   });
 
-  it("has exactly 4 tokens", () => {
-    expect(Object.keys(TOKENS)).toHaveLength(4);
+  it("has exactly 3 tokens", () => {
+    expect(Object.keys(TOKENS)).toHaveLength(3);
   });
 
   // ── Per-token checks ───────────────────────────────────────────────────────
@@ -21,12 +21,6 @@ describe("TOKENS registry", () => {
     expect(TOKENS.AR.symbol).toBe("AR");
     expect(TOKENS.AR.name).toBe("Arweave");
     expect(TOKENS.AR.decimals).toBe(12);
-  });
-
-  it("ANT: symbol, name, 9 decimals, positive price", () => {
-    expect(TOKENS.ANT.symbol).toBe("ANT");
-    expect(TOKENS.ANT.name).toBe("Autonomi");
-    expect(TOKENS.ANT.decimals).toBe(9);
   });
 
   it("DUST: symbol, name, 6 decimals, positive price", () => {

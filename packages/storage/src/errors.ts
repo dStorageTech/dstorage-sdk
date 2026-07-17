@@ -2,9 +2,8 @@ export const StorageErrorCode = {
   // adapters/mock.ts (15000–15049)
   MOCK_AUTH_TOKEN_REQUIRED: 15001,
   MOCK_DATA_NOT_FOUND: 15002,
-  // adapters/integrity.ts / adapters/autonomi.ts (15050–15149)
+  // adapters/integrity.ts (15050–15149)
   CONTENT_HASH_MISMATCH: 15050,
-  AUTONOMI_DATA_NOT_FOUND: 15051,
   // adapters/arweave-local.ts (15150–15199)
   ARWEAVE_LOCAL_INVALID_ADDRESS: 15150,
   ARWEAVE_LOCAL_NOT_INSTALLED: 15151,

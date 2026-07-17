@@ -24,7 +24,7 @@ export type NetworkType = "storage" | "chain";
 // ── Token definitions ─────────────────────────────────────────────────────────
 
 /** All tokens the SDK knows about. MOCK is used for development and testing. */
-export type TokenSymbol = "AR" | "ANT" | "DUST" | "MOCK";
+export type TokenSymbol = "AR" | "DUST" | "MOCK";
 
 /** Display metadata about a token — used for labels and cost conversion. */
 export interface Token {
@@ -36,7 +36,6 @@ export interface Token {
 /** Registry of all tokens the SDK knows about. */
 export const TOKENS: Record<TokenSymbol, Token> = {
   AR: { symbol: "AR", name: "Arweave", decimals: 12 },
-  ANT: { symbol: "ANT", name: "Autonomi", decimals: 9 },
   DUST: { symbol: "DUST", name: "Midnight", decimals: 6 },
   MOCK: {
     symbol: "MOCK",
@@ -159,8 +158,8 @@ export interface MidnightWalletProvider {
  * Contract every payment adapter must satisfy.
  *
  * Adapters are plugged into DStorageConfig:
- *   storagePaymentAdapter — covers storage network fees (AR, ANT, MOCK)
- *   chainPaymentAdapter   — covers blockchain transaction fees (DUST, ETH, MOCK)
+ *   storagePaymentAdapter — covers storage network fees (AR, MOCK)
+ *   chainPaymentAdapter   — covers blockchain transaction fees (DUST, MOCK)
  *
  * The adapter pattern lets you swap real payment networks without touching
  * any orchestration code.
@@ -171,8 +170,8 @@ export interface PaymentAdapter {
 
   /**
    * What kind of payment this adapter handles.
-   * 'storage' — storage network fee (AR for Arweave, ANT for Autonomi).
-   * 'chain'   — blockchain transaction fee (DUST for Midnight, ETH for Ethereum).
+   * 'storage' — storage network fee (AR for Arweave).
+   * 'chain'   — blockchain transaction fee (DUST for Midnight).
    */
   readonly type: NetworkType;
 

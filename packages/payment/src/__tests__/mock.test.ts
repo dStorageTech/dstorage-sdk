@@ -48,7 +48,7 @@ describe("MockPaymentAdapter", () => {
     });
 
     it("accepts all token symbols", () => {
-      for (const token of ["AR", "ANT", "DUST", "MOCK"] as const) {
+      for (const token of ["AR", "DUST", "MOCK"] as const) {
         const adapter = new MockPaymentAdapter({ token, type: "chain" });
         expect(adapter.token).toBe(token);
       }

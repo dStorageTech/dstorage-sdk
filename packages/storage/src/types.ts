@@ -19,11 +19,7 @@ export interface StorageAdapterLogger {
 }
 
 /** Identifies which storage network an adapter represents. */
-export type StorageProviderName =
-  | "mock"
-  | "arweave"
-  | "autonomi"
-  | "arweave_bundler";
+export type StorageProviderName = "mock" | "arweave" | "arweave_bundler";
 
 /**
  * A cost quote returned by StorageAdapter.estimateCost().

@@ -93,10 +93,6 @@ describe("defaultChainToken", () => {
     expect(defaultChainToken("midnight")).toBe("DUST");
   });
 
-  it("ethereum → ETH", () => {
-    expect(defaultChainToken("ethereum")).toBe("MOCK");
-  });
-
   it("polygon → MATIC", () => {
     expect(defaultChainToken("polygon")).toBe("MOCK");
   });

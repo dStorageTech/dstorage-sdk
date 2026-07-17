@@ -6,7 +6,7 @@
  * Presents a single conceptual action to the user while internally executing:
  *   [0] Estimate   → compute storage + chain costs
  *   [1] Encrypt    → XChaCha20-Poly1305 encrypt the file client-side
- *   [2] PayStorage → simulate storage payment (AR / ANT / MOCK)
+ *   [2] PayStorage → simulate storage payment (AR / MOCK)
  *   [3] Upload     → upload encrypted blob to decentralised storage
  *   [4] Reference  → pay chain fee + write CID + metadata reference on-chain
  *   [✓] Complete   → return full receipt
@@ -132,7 +132,7 @@ export class MetaTx {
 
       // Pass the same metadata to upload(). Storage adapters that consumed a
       // pre-signed transaction (Arweave sign-then-post flow) will ignore it;
-      // others (Mock, Autonomi) use it to attach metadata to the upload.
+      // others (Mock) use it to attach metadata to the upload.
       const uploadResult = await this.sdk.storageAdapter.store(
         uploadData,
         uploadMetadata,
