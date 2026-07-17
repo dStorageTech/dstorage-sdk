@@ -1,6 +1,6 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface, type Interface } from "node:readline/promises";
-import { isDStorageError } from "@dstorage-tech/dstorage";
+import { isDStorageError } from "@dstorage-tech/dstorage-sdk";
 
 export async function withTicker<T>(
   statusLine: () => string,

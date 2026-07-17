@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@dstorage/chain": "*",
-    "@dstorage-tech/dstorage": "*",
+    "@dstorage-tech/dstorage-sdk": "*",
     "@dstorage/crypto": "*",
     "@dstorage/encryption": "*",
     "@dstorage/storage": "*",

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { DStorage } from "@dstorage-tech/dstorage";
+import { DStorage } from "@dstorage-tech/dstorage-sdk";
 import {
   MnemonicEncryptionAdapter,
   PasswordEncryptionAdapter,
@@ -14,7 +14,7 @@ import { INSURANCE_CLAIMS, simulateZkProof } from "./zkProof.js";
 import type {
   DataReferenceSummary,
   MetaTxProgress,
-} from "@dstorage-tech/dstorage";
+} from "@dstorage-tech/dstorage-sdk";
 import type { ZkProofResult, ZkProofProgress } from "./zkProof.js";
 import type {
   AppStep,

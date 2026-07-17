@@ -10,7 +10,7 @@
   "dependencies": {
     "@dstorage/chain": "*",
     "@dstorage/crypto": "*",
-    "@dstorage-tech/dstorage": "*",
+    "@dstorage-tech/dstorage-sdk": "*",
     "@dstorage/encryption": "*",
     "@dstorage/storage": "*",
     "@midnight-ntwrk/compact-runtime": "^0.16.0",

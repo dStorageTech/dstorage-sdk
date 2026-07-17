@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { type Interface } from "node:readline/promises";
 import path from "node:path";
-import { type DStorage } from "@dstorage-tech/dstorage";
+import { type DStorage } from "@dstorage-tech/dstorage-sdk";
 import { type ArweaveLocalStorageAdapter } from "@dstorage/storage";
 import { type MidnightChainAdapter } from "@dstorage/chain";
 import { withTicker, logError, promptMetadata } from "../common.js";

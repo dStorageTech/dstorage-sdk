@@ -1,5 +1,5 @@
 import { type Interface } from "node:readline/promises";
-import { type DStorage } from "@dstorage-tech/dstorage";
+import { type DStorage } from "@dstorage-tech/dstorage-sdk";
 import { type MidnightChainAdapter } from "@dstorage/chain";
 import { withTicker, logError } from "../common.js";
 

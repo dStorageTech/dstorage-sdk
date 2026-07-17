@@ -38,7 +38,7 @@ export default defineConfig({
         __dirname,
         "../../packages/payment/src/index.ts",
       ),
-      "@dstorage-tech/dstorage": resolve(
+      "@dstorage-tech/dstorage-sdk": resolve(
         __dirname,
         "../../packages/core/src/index.ts",
       ),

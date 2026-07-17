@@ -1,5 +1,5 @@
 import { type Interface } from "node:readline/promises";
-import { type DStorage } from "@dstorage-tech/dstorage";
+import { type DStorage } from "@dstorage-tech/dstorage-sdk";
 import { withTicker, logError, formatBytesForConsole } from "../common.js";
 
 export async function retrieveByRefId(

@@ -1,4 +1,4 @@
-import type { MetaTxProgress } from "@dstorage-tech/dstorage";
+import type { MetaTxProgress } from "@dstorage-tech/dstorage-sdk";
 import type { ZkProofProgress } from "../zkProof.js";
 import type {
   ChainAdapterKey,

@@ -5,7 +5,7 @@ import {
   ArweaveLocalStorageAdapter,
   MidnightSimulatorChainAdapter,
   MidnightChainAdapter,
-} from "@dstorage-tech/dstorage";
+} from "@dstorage-tech/dstorage-sdk";
 import { type EncryptionAdapter } from "@dstorage/encryption";
 import { PROOF_SERVER_ENDPOINT } from "./adapterConfigs";
 import type {

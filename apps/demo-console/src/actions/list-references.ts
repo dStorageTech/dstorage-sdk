@@ -1,4 +1,4 @@
-import { type DStorage } from "@dstorage-tech/dstorage";
+import { type DStorage } from "@dstorage-tech/dstorage-sdk";
 import { type MidnightChainAdapter } from "@dstorage/chain";
 import { logError } from "../common.js";
 
