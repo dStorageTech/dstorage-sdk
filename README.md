@@ -868,7 +868,7 @@ Only `packages/core` is published to npm, as **`@dstorage-tech/dstorage-sdk`** â
 2. **Bump the version.** `packages/core/package.json`'s `"version"` field is the one that matters â€” it's the only package that gets published. Either edit it directly, or from the repo root:
 
    ```sh
-   npm version <patch|minor|major> --workspace packages/core --no-git-tag-version
+   npm run version:bump
    ```
 
 3. **Build.**

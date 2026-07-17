@@ -56,10 +56,24 @@ for (const relativePath of TARGETS) {
 
   contents.version = newVersion;
   writeFileSync(filePath, `${JSON.stringify(contents, null, 2)}\n`);
-  updates.push({ name: contents.name ?? relativePath, relativePath, oldVersion, newVersion });
+  updates.push({
+    name: contents.name ?? relativePath,
+    relativePath,
+    oldVersion,
+    newVersion,
+  });
 }
 
-for (const { name, relativePath, oldVersion, newVersion: updatedVersion } of updates) {
-  console.log(`[dStorage] ${name} (${relativePath}): ${oldVersion} -> ${updatedVersion}`);
+for (const {
+  name,
+  relativePath,
+  oldVersion,
+  newVersion: updatedVersion,
+} of updates) {
+  console.log(
+    `[dStorage] ${name} (${relativePath}): ${oldVersion} -> ${updatedVersion}`,
+  );
 }
-console.log(`[dStorage] Bumped ${updates.length} package(s) to ${newVersion} (${bumpType})`);
+console.log(
+  `[dStorage] Bumped ${updates.length} package(s) to ${newVersion} (${bumpType})`,
+);
