@@ -150,6 +150,59 @@ simulator, HTTP gateway) is fully included.
 
 ---
 
+## Midnight ZK Artifacts
+
+`MidnightChainAdapter` writes on-chain references through dStorage's own `DataRegistry`
+contract — the same fixed contract for every consumer, not something you compile
+yourself. Its compiled ZK artifacts (prover/verifier keys and ZKIR) ship inside this
+package at `dist/contracts/dataregistry/managed/{keys,zkir}`.
+
+**Node.js (`walletMode: "provider"`)** — point `zkArtifactsPath` at the bundled copy.
+Resolving it via the package's own `package.json` (rather than hardcoding a
+`node_modules` path) works regardless of hoisting or package manager:
+
+```typescript
+import { createRequire } from "node:module";
+import path from "node:path";
+
+const pkgJsonPath = createRequire(import.meta.url).resolve(
+  "@dstorage-tech/dstorage-sdk/package.json",
+);
+const zkArtifactsPath = path.join(
+  path.dirname(pkgJsonPath),
+  "dist/contracts/dataregistry/managed",
+);
+
+const chainAdapter = new MidnightChainAdapter({
+  walletMode: "provider",
+  walletProvider,
+  privateStatePassword,
+  zkArtifactsPath,
+  // ...
+});
+```
+
+**Browser (`walletMode: "connector"`)** — the browser bundle can't read from
+`node_modules`, so copy the same directory into your app's own static assets as part of
+your build (mirroring how any Midnight dApp serves its compiled contract artifacts —
+see the [Midnight docs](https://docs.midnight.network/) for the general pattern), then
+point `zkConfigBaseUrl` at wherever you serve it from:
+
+```sh
+cp -a node_modules/@dstorage-tech/dstorage-sdk/dist/contracts/dataregistry/managed/keys ./public/
+cp -a node_modules/@dstorage-tech/dstorage-sdk/dist/contracts/dataregistry/managed/zkir ./public/
+```
+
+```typescript
+const chainAdapter = new MidnightChainAdapter({
+  walletMode: "connector",
+  zkConfigBaseUrl: window.location.origin, // serves keys/ and zkir/ from public/
+  // ...
+});
+```
+
+---
+
 ## Error Handling
 
 Every error thrown by the SDK is a `DStorageError` — a subclass of `Error` that always carries a numeric `.code`. Use the `isDStorageError` type guard to distinguish SDK errors from unexpected runtime failures:

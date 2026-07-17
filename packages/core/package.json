@@ -35,6 +35,7 @@
       "types": "./dist/browser.d.mts",
       "import": "./dist/browser.mjs"
     },
+    "./package.json": "./package.json",
     "./errors": {
       "types": "./dist/errors.d.ts",
       "import": "./dist/errors.mjs",
@@ -53,7 +54,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && npm run copy:zk-artifacts",
+    "copy:zk-artifacts": "mkdir -p dist/contracts/dataregistry/managed && cp -a ../chain/src/adapters/midnight/contracts/dataregistry/managed/keys dist/contracts/dataregistry/managed/ && cp -a ../chain/src/adapters/midnight/contracts/dataregistry/managed/zkir dist/contracts/dataregistry/managed/",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
