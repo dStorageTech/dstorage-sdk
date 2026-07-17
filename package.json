@@ -20,6 +20,7 @@
     "lint": "eslint packages/*/src apps/*/src --ext .ts,.tsx",
     "format": "prettier --write .",
     "check": "npm run format || npm run build && npm run test",
+    "version:bump": "node tools/bump-version.mjs",
     "clean": "find . -type d \\( -name node_modules -o -name dist \\) -prune -exec rm -rf {} +"
   },
   "overrides": {
