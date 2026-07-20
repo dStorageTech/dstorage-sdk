@@ -133,10 +133,14 @@ import { DStorage, ArweaveStorageAdapter } from "@dstorage-tech/dstorage-sdk";
 ```
 
 Bundlers configured for a browser target (Vite, webpack 5+, Rollup, esbuild) resolve the
-plain import to a pre-built, minified, browser-safe bundle automatically via the
-`"browser"` condition in `package.json`'s `exports` map — it excludes all Node.js-only
-code (`node:fs`, LevelDB, etc.). For tooling that doesn't resolve conditional exports, or
-for explicit clarity, the same bundle is also available at the `/browser` subpath:
+plain import to a pre-built, browser-safe bundle automatically via the `"browser"`
+condition in `package.json`'s `exports` map. It is not minified — minification strips
+the `/* @vite-ignore */` comments that tell a bundler to skip static analysis of
+Node-only code paths (e.g. `MidnightChainAdapter`'s facade/provider mode, which
+dynamically imports `fs` and LevelDB). Those Node-only paths are present in the bundle
+but statically unreachable in connector mode. For tooling that doesn't resolve
+conditional exports, or for explicit clarity, the same bundle is also available at the
+`/browser` subpath:
 
 ```typescript
 import {
@@ -512,6 +516,20 @@ const adapter = await KeypairEncryptionAdapter.fromPassword(
 ### Tamper detection
 
 **Authenticated Encryption with Associated Data (AEAD)**. The Poly1305 tag covers the ciphertext. Any bit-flip in the on-chain encrypted pointer causes decryption to throw before the SDK ever attempts to fetch from storage.
+
+**AAD context binding**. Beyond integrity, each ciphertext is bound to its _role and position_ via Additional Authenticated Data (AAD). The AAD is not encrypted — it is a plain label passed alongside the ciphertext — but the Poly1305 MAC covers it, so any mismatch causes decryption to fail. The SDK uses four distinct labels:
+
+| Label      | Value                         | Purpose                                                      |
+| ---------- | ----------------------------- | ------------------------------------------------------------ |
+| Payload    | `"dstorage:payload:v1"`       | Single-shot file uploads (non-chunked user content)          |
+| Manifest   | `"dstorage:manifest:v1"`      | The chunked upload manifest (distinct from user content)     |
+| Chunk      | `"dstorage:chunk:v1:<i>/<n>"` | Each chunk in a chunked upload, bound to its index and total |
+| Storage ID | `"dstorage:storageId:v1"`     | The storage pointer encrypted on-chain                       |
+
+This means a ciphertext produced for one role cannot be silently substituted into another. In particular:
+
+- A storage gateway that reorders or swaps chunk blobs causes decryption to throw — the MAC was computed with a different index label.
+- A user file whose plaintext happens to look like a manifest JSON cannot be misinterpreted as one — a payload ciphertext (encrypted with `"dstorage:payload:v1"`) will fail MAC verification when the SDK attempts to decrypt it as a manifest (with `"dstorage:manifest:v1"`). Manifest detection is cryptographic, not JSON-shape-based.
 
 ### Storage ID format
 
