@@ -1,5 +1,7 @@
 # dStorage SDK
 
+> ⚠️ **Active development (v0.0.x)**: APIs may still change. It's safe to follow the guides, but hold off on production use for now.
+
 > Privacy-first data layer for dApps — client-side encryption + decentralised storage + on-chain coordination in a single SDK.
 
 For teams building privacy-sensitive dApps (health, identity, finance, and enterprise workflows) that need strong client-side confidentiality without operating plaintext data infrastructure.
