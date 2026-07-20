@@ -1,6 +1,6 @@
 {
   "name": "@dstorage/encryption",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Pluggable encryption adapters for dStorage SDK",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
