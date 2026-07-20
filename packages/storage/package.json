@@ -8,6 +8,10 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "browser": {
+        "types": "./dist/browser.d.mts",
+        "default": "./dist/browser.mjs"
+      },
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
@@ -29,7 +33,7 @@
   },
   "sideEffects": false,
   "scripts": {
-    "build": "tsup src/index.ts src/types.ts src/adapters/mock.ts src/errors.ts --format esm,cjs --dts"
+    "build": "tsup"
   },
   "dependencies": {
     "@dstorage/crypto": "*",

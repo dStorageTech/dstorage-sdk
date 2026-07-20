@@ -56,6 +56,7 @@ import {
 } from "./integrity.js";
 import { DStorageError } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
+import { getTurboFactory } from "./turbo-factory.js";
 
 const ARWEAVE_GATEWAY_URL = "https://turbo-gateway.com";
 
@@ -303,7 +304,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
   // ── estimateCost ───────────────────────────────────────────────────────────────
 
   async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {
-    const { TurboFactory } = await import("@ardrive/turbo-sdk");
+    const TurboFactory = await getTurboFactory();
     const turbo = TurboFactory.unauthenticated();
     let costs: Awaited<ReturnType<typeof turbo.getUploadCosts>>;
     try {
@@ -431,7 +432,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
       `Uploading ${dataItemBuffer.byteLength}-byte signed data item to bundler…`,
     );
 
-    const { TurboFactory } = await import("@ardrive/turbo-sdk");
+    const TurboFactory = await getTurboFactory();
     const turbo = TurboFactory.unauthenticated();
     try {
       const result = await turbo.uploadSignedDataItem({
