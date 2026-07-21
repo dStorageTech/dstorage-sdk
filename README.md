@@ -349,14 +349,16 @@ const bytes = new TextEncoder().encode("Hello dStorage!");
 const estimate = await sdk.estimateCost(bytes.byteLength);
 // -> { storageCost: { amount, token }, chainCost: { amount, token }, fileSizeBytes }
 
-// Execute the full meta-transaction (estimate → encrypt → pay storage → upload → write reference)
-const receipt = await sdk.executeMetaTransaction(file, (progress) => {
-  console.log(progress.currentStepId); // 'estimate' | 'encrypt' | 'payment_storage' | 'upload' | 'chain_reference' | 'complete'
+// Encrypt, upload, and pay storage + chain costs in one call
+const result = await sdk.store(bytes, {
+  onProgress: (progress) => {
+    console.log(progress.phase); // 'encrypting' | 'uploading' | 'stored' | 'finalizing'
+  },
 });
 
-console.log(receipt.storagePayment); // Payment receipt for storage
-console.log(receipt.chainPayment); // Payment receipt for chain tx
-console.log(receipt.chainRefId); // On-chain reference ID
+console.log(result.costEstimate.storageCost); // Amount + token paid for storage
+console.log(result.costEstimate.chainCost); // Amount + token paid for the chain tx
+console.log(result.chainRefId); // On-chain reference ID
 ```
 
 ### Supported tokens

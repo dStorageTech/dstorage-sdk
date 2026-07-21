@@ -48,10 +48,6 @@ export const CoreErrorCode = {
   REMOVE_REF_REQUIRES_CHAIN: 10070,
   REMOVE_REF_NOT_SUPPORTED: 10071,
 
-  // executeMetaTransaction / prepareUploadCrypto — 10080-10089
-  META_TX_REQUIRES_ENCRYPTION: 10080,
-  PREPARE_UPLOAD_NO_PROVIDERS: 10081,
-
   // manifest / chunking — 10090-10099
   MANIFEST_INVALID_STRUCTURE: 10090,
   MANIFEST_CHUNK_COUNT_MISMATCH: 10091,
@@ -62,9 +58,6 @@ export const CoreErrorCode = {
 
   // init state — 10100-10109
   NOT_INITIALIZED: 10100,
-
-  // MetaTx — 10200-10209
-  META_TX_UNKNOWN_STEP: 10200,
 
   // generic catch-all — 10999
   UNKNOWN_ERROR: 10999,

@@ -1,9 +1,9 @@
-import type { MetaTxProgress } from "@dstorage-tech/dstorage-sdk";
 import type { ZkProofProgress } from "../zkProof.js";
 import type {
   ChainAdapterKey,
   PaymentAdapterKey,
   StorageAdapterKey,
+  UploadProgress,
 } from "../types";
 import {
   ADAPTER_CONFIGS,
@@ -13,8 +13,8 @@ import {
 
 interface Props {
   open: boolean;
-  mode: "metatx" | "zkproof";
-  metaTxProgress: MetaTxProgress | null;
+  mode: "upload" | "zkproof";
+  uploadProgress: UploadProgress | null;
   zkProgress: ZkProofProgress | null;
   storageAdapterKey: StorageAdapterKey;
   chainAdapterKey: ChainAdapterKey;
@@ -25,7 +25,7 @@ interface Props {
 export function SdkDrawer({
   open,
   mode,
-  metaTxProgress,
+  uploadProgress,
   zkProgress,
   storageAdapterKey,
   chainAdapterKey,
@@ -35,7 +35,7 @@ export function SdkDrawer({
   const storageAdapter = ADAPTER_CONFIGS[storageAdapterKey];
   const chainAdapter = CHAIN_ADAPTER_CONFIGS[chainAdapterKey];
   const paymentAdapter = PAYMENT_ADAPTER_CONFIGS[paymentAdapterKey];
-  const hasActivity = !!(metaTxProgress || zkProgress);
+  const hasActivity = !!(uploadProgress || zkProgress);
 
   return (
     <div className={`sdk-drawer ${open ? "open" : ""}`}>
@@ -46,7 +46,7 @@ export function SdkDrawer({
           <span className="sdk-tab-title">dStorage SDK</span>
           {hasActivity && (
             <span className="sdk-tab-badge">
-              {mode === "metatx" ? "Meta-Transaction" : "ZK Proof Pipeline"}
+              {mode === "upload" ? "Upload" : "ZK Proof Pipeline"}
             </span>
           )}
         </div>
@@ -67,8 +67,8 @@ export function SdkDrawer({
 
       {/* ── Content ── */}
       <div className="sdk-drawer-body">
-        {mode === "metatx" && metaTxProgress && (
-          <MetaTxView progress={metaTxProgress} />
+        {mode === "upload" && uploadProgress && (
+          <UploadView progress={uploadProgress} />
         )}
         {mode === "zkproof" && zkProgress && (
           <ZkProofView progress={zkProgress} />
@@ -119,22 +119,32 @@ export function SdkDrawer({
   );
 }
 
-// ── Meta-transaction view ─────────────────────────────────────────────────────
+// ── Upload view ────────────────────────────────────────────────────────────────
 
-function MetaTxView({ progress }: { progress: MetaTxProgress }) {
-  const icons: Record<string, string> = {
-    estimate: "⊙",
-    encrypt: "🔒",
-    payment_storage: "💳",
-    upload: "↑",
-    chain_reference: "⛓",
-    complete: "✓",
-  };
+const UPLOAD_STEP_ICONS: Record<string, string> = {
+  estimate: "⊙",
+  store: "🔒",
+  chain_reference: "⛓",
+  complete: "✓",
+};
+
+const UPLOAD_STEP_LABELS: Record<string, string> = {
+  estimate: "Estimate Costs",
+  store: "Encrypt & Upload to Storage",
+  chain_reference: "Write On-Chain Reference",
+  complete: "Complete",
+};
+
+function UploadView({ progress }: { progress: UploadProgress }) {
+  const chainCost =
+    progress.result?.costEstimate.chainCost ?? progress.estimate?.chainCost;
+  const storageCost =
+    progress.result?.costEstimate.storageCost ?? progress.estimate?.storageCost;
 
   return (
     <div className="sdk-view">
       <div className="sdk-view-header">
-        <span className="sdk-view-label">Meta-Transaction Pipeline</span>
+        <span className="sdk-view-label">Upload Pipeline</span>
         <span className={`sdk-view-status status-${progress.overallStatus}`}>
           {progress.overallStatus === "running"
             ? "⟳ Running"
@@ -146,26 +156,22 @@ function MetaTxView({ progress }: { progress: MetaTxProgress }) {
         </span>
       </div>
 
-      {(progress.receipt || progress.estimate) && (
+      {(storageCost || chainCost) && (
         <div className="sdk-cost-row">
           <span className="sdk-cost-item">
             Storage:{" "}
             <strong>
-              {progress.receipt
-                ? `${progress.receipt.storagePayment.amount} ${progress.receipt.storagePayment.token}`
-                : `${progress.estimate!.storageCost.amount} ${progress.estimate!.storageCost.token}`}
+              {storageCost ? `${storageCost.amount} ${storageCost.token}` : "—"}
             </strong>
           </span>
           <span className="sdk-cost-sep">·</span>
           <span className="sdk-cost-item">
             Chain:{" "}
             <strong>
-              {progress.receipt
-                ? `${progress.receipt.chainPayment.amount} ${progress.receipt.chainPayment.token}`
-                : `${progress.estimate!.chainCost.amount} ${progress.estimate!.chainCost.token}`}
+              {chainCost ? `${chainCost.amount} ${chainCost.token}` : "—"}
             </strong>
           </span>
-          {progress.receipt ? null : (
+          {progress.result ? null : (
             <span className="sdk-sim-badge">estimate</span>
           )}
         </div>
@@ -190,34 +196,26 @@ function MetaTxView({ progress }: { progress: MetaTxProgress }) {
             )}
             <div className="sdk-step-content">
               <div className="sdk-step-name">
-                <span className="sdk-step-icon">{icons[step.id]}</span>
-                <span className={`sdk-step-label sdk-label-${step.status}`}>
-                  {step.label}
+                <span className="sdk-step-icon">
+                  {UPLOAD_STEP_ICONS[step.id]}
                 </span>
-                {step.durationMs !== undefined && (
-                  <span className="sdk-step-ms">{step.durationMs}ms</span>
-                )}
+                <span className={`sdk-step-label sdk-label-${step.status}`}>
+                  {UPLOAD_STEP_LABELS[step.id]}
+                </span>
               </div>
-              {step.detail && (
-                <div className={`sdk-step-detail sdk-detail-${step.status}`}>
-                  {step.detail}
-                </div>
-              )}
             </div>
           </div>
         ))}
       </div>
 
-      {progress.receipt && (
+      {progress.dataId && (
         <div className="sdk-receipt">
           <span className="sdk-receipt-label">DataId</span>
           <span
             className="sdk-receipt-id"
-            onClick={() =>
-              navigator.clipboard.writeText(progress.receipt!.dataId)
-            }
+            onClick={() => navigator.clipboard.writeText(progress.dataId!)}
           >
-            {progress.receipt.dataId} <span className="sdk-copy">copy</span>
+            {progress.dataId} <span className="sdk-copy">copy</span>
           </span>
         </div>
       )}

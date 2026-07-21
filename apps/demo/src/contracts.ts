@@ -9,7 +9,7 @@
  * addresses to demonstrate the full selection flow.
  *
  * Each contract exposes a set of circuits (Midnight) / functions (EVM) —
- * these are the operations the user is invoking as part of the meta-transaction.
+ * these are the operations the user is invoking as part of the upload flow.
  */
 
 import type { ChainProviderName } from "@dstorage/chain";

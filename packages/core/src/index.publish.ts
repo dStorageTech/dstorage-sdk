@@ -1,7 +1,6 @@
 // Core SDK
 export * from "./types.js";
 export * from "./dStorage.js";
-export * from "./metaTx/index.js";
 export { CHUNK_SIZE, isManifest } from "./chunked.js";
 export type { ChunkManifest, ChunkEntry } from "./chunked.js";
 

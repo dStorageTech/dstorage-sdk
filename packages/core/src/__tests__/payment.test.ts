@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { TOKENS, defaultChainToken } from "../metaTx/index.js";
 import type { CostEstimate } from "../types.js";
 import type { StorageQuote } from "@dstorage/storage";
 import type { ChainQuote } from "@dstorage/chain";
@@ -39,15 +38,6 @@ function makeChainQuote(overrides: Partial<ChainQuote> = {}): ChainQuote {
   };
 }
 
-// ── TOKENS re-export ──────────────────────────────────────────────────────────
-
-describe("TOKENS re-export from @dstorage/payment", () => {
-  it("TOKENS is an object with at least AR and DUST", () => {
-    expect(TOKENS).toHaveProperty("AR");
-    expect(TOKENS).toHaveProperty("DUST");
-  });
-});
-
 // ── buildCostEstimate ─────────────────────────────────────────────────────────
 
 describe("buildCostEstimate", () => {
@@ -83,29 +73,5 @@ describe("buildCostEstimate", () => {
       2048,
     );
     expect(estimate.fileSizeBytes).toBe(2048);
-  });
-});
-
-// ── defaultChainToken ─────────────────────────────────────────────────────────
-
-describe("defaultChainToken", () => {
-  it("midnight → DUST", () => {
-    expect(defaultChainToken("midnight")).toBe("DUST");
-  });
-
-  it("polygon → MATIC", () => {
-    expect(defaultChainToken("polygon")).toBe("MOCK");
-  });
-
-  it("mock → MOCK", () => {
-    expect(defaultChainToken("mock")).toBe("MOCK");
-  });
-
-  it("unknown provider → MOCK", () => {
-    expect(defaultChainToken("solana")).toBe("MOCK");
-  });
-
-  it("empty string → MOCK", () => {
-    expect(defaultChainToken("")).toBe("MOCK");
   });
 });

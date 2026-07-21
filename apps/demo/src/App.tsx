@@ -11,10 +11,7 @@ import {
   getPrfSeed,
 } from "./lib/webAuthnPrf";
 import { INSURANCE_CLAIMS, simulateZkProof } from "./zkProof.js";
-import type {
-  DataReferenceSummary,
-  MetaTxProgress,
-} from "@dstorage-tech/dstorage-sdk";
+import type { DataReferenceSummary } from "@dstorage-tech/dstorage-sdk";
 import type { ZkProofResult, ZkProofProgress } from "./zkProof.js";
 import type {
   AppStep,
@@ -24,9 +21,16 @@ import type {
   StorageAdapterKey,
   ChainAdapterKey,
   PaymentAdapterKey,
+  UploadProgress,
 } from "./types";
 import { CHAIN_ADAPTER_CONFIGS } from "./adapterConfigs";
 import { buildSDK } from "./buildSDK";
+import {
+  buildInitialUploadSteps,
+  updateStep,
+  completeUpload,
+  markUploadError,
+} from "./uploadProgress.js";
 import { PatientPanel } from "./components/PatientPanel.tsx";
 import { VerifierPanel } from "./components/VerifierPanel.tsx";
 import { SdkDrawer } from "./components/SdkDrawer.tsx";
@@ -54,11 +58,11 @@ export default function App() {
   const [verifying, setVerifying] = useState(false);
   const [verified, setVerified] = useState<boolean | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [metaTxProgress, setMetaTxProgress] = useState<MetaTxProgress | null>(
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(
     null,
   );
   const [zkProgress, setZkProgress] = useState<ZkProofProgress | null>(null);
-  const [drawerMode, setDrawerMode] = useState<"metatx" | "zkproof">("metatx");
+  const [drawerMode, setDrawerMode] = useState<"upload" | "zkproof">("upload");
   const [storageAdapterKey, setStorageAdapterKey] =
     useState<StorageAdapterKey>("mock");
   const [chainAdapterKey, setChainAdapterKey] =
@@ -329,28 +333,53 @@ export default function App() {
 
   const handleUpload = async (file: File) => {
     if (!dstorage) return;
-    setDrawerMode("metatx");
-    setMetaTxProgress(null);
+    setDrawerMode("upload");
     setDrawerOpen(true);
-    const receipt = await dstorage.executeMetaTransaction(
-      file,
-      (p) => setMetaTxProgress({ ...p }),
-      {
-        contractAddress: "midnight:contract",
-        contractName: "Midnight Data Registry",
-        metadata: { "record-type": "insurance", app: "healthvault" },
-      },
-    );
-    setRecord({
-      dataId: receipt.dataId,
-      storageId: receipt.storageId,
-      refId: receipt.chainRefId,
-      fileName: receipt.file.name,
-      uploadedAt: receipt.completedAt,
-      chainRefId: receipt.chainRefId,
+    setUploadProgress({
+      steps: buildInitialUploadSteps(),
+      overallStatus: "running",
     });
-    await refreshExistingReferences(dstorage);
-    setStep("uploaded");
+
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+
+      const estimate = await dstorage.estimateCost(bytes.length);
+      setUploadProgress((p) =>
+        p ? updateStep(p, "estimate", { estimate }) : p,
+      );
+
+      const result = await dstorage.store(bytes, {
+        metadata: { "record-type": "insurance", app: "healthvault" },
+        onProgress: (sp) => {
+          if (sp.phase === "stored") {
+            setUploadProgress((p) => (p ? updateStep(p, "store") : p));
+          }
+        },
+      });
+
+      const dataId = result.chainRefId
+        ? `${result.storageId}::${result.chainRefId}`
+        : result.storageId;
+      setUploadProgress((p) =>
+        p
+          ? completeUpload(updateStep(p, "chain_reference", { result, dataId }))
+          : p,
+      );
+
+      setRecord({
+        dataId,
+        storageId: result.storageId,
+        refId: result.chainRefId ?? "",
+        fileName: file.name,
+        uploadedAt: result.uploadedAt,
+        chainRefId: result.chainRefId ?? "",
+      });
+      await refreshExistingReferences(dstorage);
+      setStep("uploaded");
+    } catch (err) {
+      setUploadProgress((p) => (p ? markUploadError(p) : p));
+      showError(err);
+    }
   };
 
   const handleContinueToProof = () => {
@@ -386,7 +415,7 @@ export default function App() {
     setProof(null);
     setVerified(null);
     setDrawerOpen(false);
-    setMetaTxProgress(null);
+    setUploadProgress(null);
     setZkProgress(null);
     setMnemonic("");
     setPendingCertificate((previous) => {
@@ -602,7 +631,7 @@ export default function App() {
       <SdkDrawer
         open={drawerOpen}
         mode={drawerMode}
-        metaTxProgress={metaTxProgress}
+        uploadProgress={uploadProgress}
         zkProgress={zkProgress}
         storageAdapterKey={storageAdapterKey}
         chainAdapterKey={chainAdapterKey}

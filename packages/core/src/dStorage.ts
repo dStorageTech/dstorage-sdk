@@ -34,7 +34,6 @@ import {
 import { CoreErrorCode, StorePartialError } from "./errors.js";
 
 import type { CryptoScheme } from "@dstorage/crypto";
-import type { UploadCrypto } from "./metaTx/index.js";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import corePackageJson from "../package.json";
@@ -61,13 +60,6 @@ import {
   METADATA_ONLY_OWNER_SECRET_SALT,
   chunkAad,
 } from "./types.js";
-import { MetaTx } from "./metaTx/index.js";
-import type {
-  DStorageContext,
-  MetaTxConfig,
-  MetaTxProgress,
-  MetaTxReceipt,
-} from "./metaTx/index.js";
 import type { DataReferenceSummary, EncryptionScheme } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
@@ -97,7 +89,7 @@ function wrapError(err: unknown): never {
   );
 }
 
-export class DStorage implements DStorageContext {
+export class DStorage {
   private config: DStorageConfig;
   private wallet: WalletInfo | null = null;
   /** Encryption adapters — each wraps/unwraps per-upload DEKs using its own algorithm. */
@@ -111,7 +103,7 @@ export class DStorage implements DStorageContext {
     this.logger = config.logger;
   }
 
-  // ── DStorageContext interface — public accessors ───────────────────────────
+  // ── Public accessors ─────────────────────────────────────────────────────
 
   get storageAdapter(): StorageAdapter {
     return this.config.storageAdapter;
@@ -1321,98 +1313,6 @@ export class DStorage implements DStorageContext {
             }
           : {}),
         fileSizeBytes: sizeBytes,
-      };
-    } catch (err) {
-      wrapError(err);
-    }
-  }
-
-  /**
-   * Execute a full meta-transaction for a file:
-   * estimate → encrypt → pay storage → upload → pay chain → write reference
-   *
-   * Presents the entire flow as a single action with step-by-step progress.
-   *
-   * @param file        The File to encrypt and store
-   * @param onProgress  Callback fired on every step state change
-   * @param config      Optional token overrides and metadata
-   */
-  async executeMetaTransaction(
-    file: File,
-    onProgress: (progress: MetaTxProgress) => void,
-    config: MetaTxConfig = {},
-  ): Promise<MetaTxReceipt> {
-    try {
-      this.assertConnected();
-
-      if (this._encryptionProviders.length === 0) {
-        throw new DStorageError(
-          CoreErrorCode.META_TX_REQUIRES_ENCRYPTION,
-          "[dStorage] executeMetaTransaction() requires at least one encryption provider.",
-        );
-      }
-
-      const metaTx = new MetaTx(this);
-      metaTx.onProgress(onProgress);
-      return metaTx.execute(file, config);
-    } catch (err) {
-      wrapError(err);
-    }
-  }
-
-  /**
-   * Generate a fresh random DEK, wrap it under the KEK(s), and return the crypto
-   * materials needed by MetaTx to encrypt payload and storageId.
-   *
-   * For private stores: the DEK is wrapped under every available KEK. The ownerSecret
-   * can later be re-derived as HKDF(dek, rawStorageId) by any KEK holder.
-   * For public stores: a random ownerSeed is generated and wrapped under all KEKs (same pattern).
-   */
-  async prepareUploadCrypto(isPublic = false): Promise<UploadCrypto> {
-    try {
-      if (this._encryptionProviders.length === 0) {
-        throw new DStorageError(
-          CoreErrorCode.PREPARE_UPLOAD_NO_PROVIDERS,
-          "[dStorage] Cannot prepare upload crypto: no encryption providers. Call init() first.",
-        );
-      }
-
-      if (isPublic) {
-        const ownerSeed = generateDek();
-        const ownerSeedWrappers = await Promise.all(
-          this._encryptionProviders.map(async (provider) => ({
-            wrapKeyName: provider.name,
-            ...(await provider.wrapDek(ownerSeed)),
-          })),
-        );
-        const keyEnvelope = serializeKeyEnvelope(
-          buildKeyEnvelope(ownerSeedWrappers),
-        );
-        return {
-          uploadScheme: null,
-          keyEnvelope,
-          encryptionScheme: "",
-          ownerSeed,
-        };
-      }
-
-      // Private: generate a fresh DEK for this upload.
-      const dek = generateDek();
-      const uploadScheme = XChaChaScheme.fromKey(dek);
-      const wrapperEntries = await Promise.all(
-        this._encryptionProviders.map(async (provider) => ({
-          wrapKeyName: provider.name,
-          ...(await provider.wrapDek(dek)),
-        })),
-      );
-      const keyEnvelope = serializeKeyEnvelope(
-        buildKeyEnvelope(wrapperEntries),
-      );
-      return {
-        uploadScheme,
-        keyEnvelope,
-        encryptionScheme: "xchacha20poly1305-v1",
-        dek,
       };
     } catch (err) {
       wrapError(err);
