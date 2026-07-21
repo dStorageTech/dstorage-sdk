@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { type Interface } from "node:readline/promises";
 import path from "node:path";
-import { type DStorage } from "@dstorage-tech/dstorage-sdk";
-import { type ArweaveLocalStorageAdapter } from "@dstorage/storage";
-import { type MidnightChainAdapter } from "@dstorage/chain";
+import {
+  type DStorage,
+  type ArweaveLocalStorageAdapter,
+  type MidnightChainAdapter,
+} from "@dstorage-tech/dstorage-sdk";
 import { withTicker, logError, promptMetadata } from "../common.js";
 
 export async function uploadFile(

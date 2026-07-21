@@ -16,32 +16,13 @@ export default defineConfig({
   resolve: {
     // Prefer browser-specific builds for packages that ship both Node.js and browser versions.
     mainFields: ["browser", "module", "main"],
+    // @dstorage-tech/dstorage-sdk resolves through the npm workspace like any other
+    // dependency, picking up packages/core's own exports.browser -> dist/browser.mjs
+    // (which already bundles the other @dstorage/* packages inline, using each of
+    // their own correct browser builds). Don't alias straight to source here — that
+    // bypasses each package's own build-time platform swaps (e.g. turbo-sdk's Node
+    // vs. browser entry) and breaks in ways the published package never would.
     alias: {
-      "@dstorage/crypto": resolve(
-        __dirname,
-        "../../packages/crypto/src/index.ts",
-      ),
-      "@dstorage/encryption": resolve(
-        __dirname,
-        "../../packages/encryption/src/index.ts",
-      ),
-      "@dstorage/storage": resolve(
-        __dirname,
-        "../../packages/storage/src/index.ts",
-      ),
-      // Browser-safe chain entry: mock adapters + MidnightChainAdapter (connector mode only).
-      "@dstorage/chain": resolve(
-        __dirname,
-        "../../packages/chain/src/browser.ts",
-      ),
-      "@dstorage/payment": resolve(
-        __dirname,
-        "../../packages/payment/src/index.ts",
-      ),
-      "@dstorage-tech/dstorage-sdk": resolve(
-        __dirname,
-        "../../packages/core/src/index.ts",
-      ),
       // Node.js built-ins — polyfill with empty stubs.
       // More-specific entries MUST come before less-specific ones (first-match wins).
       "node:fs/promises": resolve(__dirname, "src/polyfills/empty.js"),
@@ -50,11 +31,6 @@ export default defineConfig({
       "fs/promises": resolve(__dirname, "src/polyfills/empty.js"),
       fs: resolve(__dirname, "src/polyfills/empty.js"),
       path: resolve(__dirname, "src/polyfills/empty.js"),
-      // turbo-sdk has no "browser" export condition — alias to its web entry explicitly.
-      "@ardrive/turbo-sdk": resolve(
-        __dirname,
-        "../../node_modules/@ardrive/turbo-sdk/lib/esm/web/index.js",
-      ),
     },
   },
   build: {

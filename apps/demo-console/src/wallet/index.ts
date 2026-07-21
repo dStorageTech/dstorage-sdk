@@ -10,8 +10,10 @@ import {
   MidnightWalletProvider,
   type EnvironmentConfiguration,
 } from "./wallet-provider.js";
-import { bytesToBase64url } from "@dstorage/crypto";
-import { waitForFacadeSync } from "@dstorage/chain";
+import {
+  bytesToBase64url,
+  waitForFacadeSync,
+} from "@dstorage-tech/dstorage-sdk";
 import { type UnshieldedTokenType } from "@midnight-ntwrk/midnight-js-protocol/ledger";
 import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
 import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk/unshielded";
@@ -79,7 +81,7 @@ export async function resolveSeedHex(credentials: {
 }): Promise<string | undefined> {
   if (credentials.seedHex) return credentials.seedHex;
   if (credentials.mnemonic) {
-    const { KeyDeriver } = await import("@dstorage/crypto");
+    const { KeyDeriver } = await import("@dstorage-tech/dstorage-sdk");
     const deriver = new KeyDeriver({ mnemonic: credentials.mnemonic });
     const seed = await deriver.getSeed();
     return Array.from(seed)

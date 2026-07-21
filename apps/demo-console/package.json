@@ -8,14 +8,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@dstorage/chain": "*",
-    "@dstorage/crypto": "*",
     "@dstorage-tech/dstorage-sdk": "*",
-    "@dstorage/encryption": "*",
-    "@dstorage/storage": "*",
-    "@midnight-ntwrk/compact-runtime": "^0.16.0",
-    "@midnight-ntwrk/midnight-js-contracts": "^4.1.1",
-    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.1.1",
     "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
     "@midnight-ntwrk/midnight-js-protocol": "^4.1.1",
     "@midnight-ntwrk/wallet-sdk": "^1.1.0",

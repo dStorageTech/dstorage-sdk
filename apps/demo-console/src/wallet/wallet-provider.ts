@@ -32,7 +32,7 @@ import {
 } from "@midnight-ntwrk/wallet-sdk/unshielded";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk/dust";
 import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk/hd";
-import { hexToBytes } from "@dstorage/crypto";
+import { hexToBytes } from "@dstorage-tech/dstorage-sdk";
 
 // ── Wallet state cache ─────────────────────────────────────────────────────────
 

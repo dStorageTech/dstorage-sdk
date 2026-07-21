@@ -1,5 +1,7 @@
-import { type DStorage } from "@dstorage-tech/dstorage-sdk";
-import { type MidnightChainAdapter } from "@dstorage/chain";
+import {
+  type DStorage,
+  type MidnightChainAdapter,
+} from "@dstorage-tech/dstorage-sdk";
 import { logError } from "../common.js";
 
 export async function listReferences(

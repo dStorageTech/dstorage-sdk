@@ -41,9 +41,10 @@ import {
   PasswordEncryptionAdapter,
   MidnightSimulatorChainAdapter,
   MockStorageAdapter,
+  ArweaveLocalStorageAdapter,
+  MidnightChainAdapter,
+  NETWORKS,
 } from "@dstorage-tech/dstorage-sdk";
-import { ArweaveLocalStorageAdapter } from "@dstorage/storage";
-import { MidnightChainAdapter, NETWORKS } from "@dstorage/chain";
 import { NetworkId } from "@midnight-ntwrk/wallet-sdk";
 import {
   type EnvironmentConfiguration,
