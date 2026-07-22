@@ -8,8 +8,15 @@ services:
       - "6300:6300"
 
   indexer:
-    image: "midnightntwrk/indexer-standalone:4.0.0"
+    image: "midnightntwrk/indexer-standalone:4.3.3"
     container_name: indexer
+    # On a fresh "undeployed" chain the SPO sub-service can start before the
+    # node has produced block 1 ("Cannot construct OnlineClientAtBlock: block
+    # number 1 not found"), which is fatal to the whole indexer process.
+    # Restarting recovers automatically once the node has block 1 — a fixed
+    # retry cap can be exhausted before that (restarts land faster than the
+    # node's block time), so retry indefinitely instead.
+    restart: unless-stopped
     ports:
       - "8088:8088"
     environment:
@@ -18,6 +25,14 @@ services:
       # Only needed to satisfy the config schema – not meant for secure use.
       APP__INFRA__SECRET: "303132333435363738393031323334353637383930313233343536373839303132"
       APP__INFRA__NODE__URL: "ws://node:9944"
+      # Mandatory since indexer-standalone 4.3.2 for the SPO/Cardano bridge
+      # config section. Not used by this local devnet — placeholder only.
+      APP__INFRA__SPO_NODE__BLOCKFROST_ID: "dummy-not-using-spo"
+      # spo_node.url defaults to ws://localhost:9944, which inside the
+      # indexer container is itself, not the node service — leaving it
+      # unset makes the SPO client's connection attempt fail and crash the
+      # whole indexer process a few minutes after startup.
+      APP__INFRA__SPO_NODE__URL: "ws://node:9944"
     healthcheck:
       test: ["CMD-SHELL", "cat /var/run/indexer-standalone/running"]
       start_interval: "5s"
@@ -30,7 +45,7 @@ services:
         condition: service_started
 
   node:
-    image: "midnightntwrk/midnight-node:0.22.1"
+    image: "midnightntwrk/midnight-node:1.0.1"
     container_name: node
     ports:
       - "9944:9944"
