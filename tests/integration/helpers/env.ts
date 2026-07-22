@@ -29,14 +29,14 @@ export function readEnv(): IntegrationEnv {
       ? {
           node: "http://127.0.0.1:9944",
           nodeWs: "ws://127.0.0.1:9944",
-          indexer: "http://127.0.0.1:8088/api/v3/graphql",
-          indexerWs: "ws://127.0.0.1:8088/api/v3/graphql/ws",
+          indexer: "http://127.0.0.1:8088/api/v4/graphql",
+          indexerWs: "ws://127.0.0.1:8088/api/v4/graphql/ws",
         }
       : {
           node: "https://rpc.preprod.midnight.network",
           nodeWs: "wss://rpc.preprod.midnight.network",
-          indexer: "https://indexer.preprod.midnight.network/api/v3/graphql",
-          indexerWs: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
+          indexer: "https://indexer.preprod.midnight.network/api/v4/graphql",
+          indexerWs: "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
         };
 
   return {
