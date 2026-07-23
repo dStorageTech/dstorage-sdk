@@ -50,6 +50,21 @@ describe("KeyDeriver", () => {
     });
   });
 
+  it("rejects a mnemonic whose last word is a valid wordlist word but fails the BIP-39 checksum", async () => {
+    // Every word is a real wordlist entry (passes a membership-only check), but
+    // "zoo" doesn't satisfy the checksum bits for this entropy — a single-word
+    // typo landing on another real word must still be caught, since it would
+    // otherwise silently derive a different, wrong seed.
+    const wrongChecksum = Array(23).fill("abandon").join(" ") + " zoo";
+    const deriver = new KeyDeriver({ mnemonic: wrongChecksum });
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.MNEMONIC_INVALID,
+      message: expect.stringContaining(
+        "[dStorage/crypto] Invalid BIP-39 mnemonic phrase.",
+      ),
+    });
+  });
+
   // ── Security: mnemonic word-count enforcement ────────────────────────────────
   //
   // A 12-word BIP-39 mnemonic provides only 128-bit classical / 64-bit

@@ -8,9 +8,8 @@
  */
 
 import { wordlist } from "@scure/bip39/wordlists/english.js";
+import { validateMnemonic } from "@scure/bip39";
 import { DStorageError, CryptoErrorCode } from "./errors.js";
-
-const ENGLISH_WORD_SET = new Set(wordlist);
 
 // BIP-39: PBKDF2-HMAC-SHA512, 2048 iterations, 64-byte output.
 // Uses Web Crypto API — no @noble/hashes dep required.
@@ -86,12 +85,14 @@ export class KeyDeriver {
       return bytes;
     }
 
-    // mnemonic path — validate then convert
-    const words = this.input.mnemonic!.trim().split(/\s+/);
-    if (!words.every((w) => ENGLISH_WORD_SET.has(w))) {
+    // mnemonic path — validate (word membership + BIP-39 checksum) then convert.
+    // A single-word typo that still lands on a valid wordlist word would otherwise
+    // be silently accepted and derive a different seed — validateMnemonic() rejects
+    // it via the checksum bits encoded in the phrase.
+    if (!validateMnemonic(this.input.mnemonic!, wordlist)) {
       throw new DStorageError(
         CryptoErrorCode.MNEMONIC_INVALID,
-        "[dStorage/crypto] Invalid BIP-39 mnemonic phrase.",
+        "[dStorage/crypto] Invalid BIP-39 mnemonic phrase. Unrecognized word or failed checksum.",
       );
     }
     return mnemonicToSeed(this.input.mnemonic!);
