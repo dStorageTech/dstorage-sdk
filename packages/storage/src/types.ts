@@ -40,6 +40,19 @@ export interface StorageQuote {
   expiresAt: number;
 }
 
+/** Optional parameters accepted by StorageAdapter.retrieve(). */
+export interface RetrieveOptions {
+  /**
+   * Chain-anchored BLAKE3 hash (hex) to verify retrieved bytes against.
+   * Adapters that support it MUST verify against this value instead of
+   * relying solely on gateway-supplied metadata (e.g. a hash tag returned
+   * in the same response as the data) — that anchor is expected to come
+   * from an independent, tamper-evident source such as the on-chain
+   * ChainReference.contentHash, not from the storage gateway itself.
+   */
+  expectedContentHash?: string;
+}
+
 /** Metadata returned after a successful upload. */
 export interface StorageUploadResult {
   /** Unique content identifier on the storage network */
@@ -80,10 +93,19 @@ export interface StorageAdapter {
    * those encrypted bytes as-is. If plaintext bytes were stored, this returns
    * plaintext bytes as-is. Callers are responsible for decryption when needed and can
    * use the @dstorage/crypto package or public APIs for that purpose.
+   *
+   * When `options.expectedContentHash` is supplied, adapters that verify content
+   * integrity MUST check retrieved bytes against that anchor rather than trusting
+   * gateway-supplied metadata alone — a gateway that controls both the bytes and its
+   * own integrity tag can otherwise fabricate an internally-consistent pair. Without
+   * an anchor, adapters fall back to whatever gateway-native check they support,
+   * which only catches non-adversarial corruption, not a fully malicious gateway.
+   *
    * @returns The exact bytes stored by store(), plus any unencrypted tags attached at store time
    */
   retrieve(
     id: string,
+    options?: RetrieveOptions,
   ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }>;
 
   /**

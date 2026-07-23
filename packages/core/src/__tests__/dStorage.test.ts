@@ -1544,6 +1544,24 @@ describe("contentHash", () => {
     expect(new TextDecoder().decode(result.bytes)).toBe("matching hash");
   });
 
+  it("retrieveByRefId() passes the on-chain contentHash as an expectedContentHash anchor to storageAdapter.retrieve()", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const retrieveSpy = vi.spyOn(storage, "retrieve");
+    const { chainRefId, storageId } = await ds.store(enc("anchor threading"));
+    const ref = await chain.readReference(chainRefId!);
+
+    await ds.retrieveByRefId(chainRefId!);
+
+    expect(retrieveSpy).toHaveBeenCalledWith(storageId, {
+      expectedContentHash: ref.contentHash,
+    });
+  });
+
   it("retrieveByRefId() throws CONTENT_HASH_MISMATCH when storage bytes are tampered", async () => {
     const config = makeConfig();
     const storage = config.storageAdapter as MockStorageAdapter;

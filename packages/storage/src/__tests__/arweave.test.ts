@@ -24,6 +24,8 @@ const TX_HUGE = "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH";
 const TX_BIG = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII";
 const TX_BIG_SKIP = "JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
 const TX_OK = "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK";
+const TX_ANCHOR_OVERRIDE = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+const TX_ANCHOR_NO_TAG = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 
 // ── arweave-js mock ───────────────────────────────────────────────────────────
 
@@ -449,6 +451,38 @@ describe("ArweaveStorageAdapter", () => {
         code: StorageErrorCode.ARWEAVE_HASH_TAG_MISSING,
         message: expect.stringContaining("[dStorage/arweave]"),
       });
+    });
+
+    it("expectedContentHash anchor overrides a colluding gateway's self-consistent (tampered bytes, forged tag) pair", async () => {
+      const originalData = enc("original bytes");
+      const tamperedData = enc("tampered bytes");
+      // Gateway serves tampered bytes AND a tag that matches those tampered
+      // bytes — internally consistent, so the gateway-tag-only check would pass.
+      mockArweave.transactions.getData.mockResolvedValueOnce(tamperedData);
+      mockArweave.transactions.get.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": hexOf(tamperedData) }),
+      );
+      const err = await nodeAdapter()
+        .retrieve(TX_ANCHOR_OVERRIDE, {
+          expectedContentHash: hexOf(originalData),
+        })
+        .catch((e: unknown) => e);
+      expect(err).toMatchObject({
+        code: StorageErrorCode.CONTENT_HASH_MISMATCH,
+        message: expect.stringMatching(/hash mismatch/i),
+      });
+    });
+
+    it("expectedContentHash anchor allows retrieve to succeed when the X-Content-Hash tag is absent", async () => {
+      const data = enc("retrieved-data");
+      mockArweave.transactions.get.mockResolvedValueOnce(
+        makeMockTxWithTags({}),
+      );
+      await expect(
+        nodeAdapter().retrieve(TX_ANCHOR_NO_TAG, {
+          expectedContentHash: hexOf(data),
+        }),
+      ).resolves.toBeDefined();
     });
 
     it("retrieve skips hash verification when skipIntegrityCheck is true", async () => {

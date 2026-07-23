@@ -18,6 +18,11 @@
  *
  * ── Retrieve flow ─────────────────────────────────────────────────────────────
  *   Standard Arweave gateway fetch (identical to ArweaveStorageAdapter.retrieve).
+ *   Its content-hash check only defends against a malicious gateway when called
+ *   with an `expectedContentHash` anchor sourced independently of this gateway
+ *   (see skipIntegrityCheck below) — @dstorage/core supplies this automatically
+ *   from the on-chain reference. Without an anchor, the check falls back to a
+ *   gateway-supplied tag and only catches non-adversarial corruption.
  *
  * ── Peer dependency ───────────────────────────────────────────────────────────
  *   No extra install needed — @dha-team/arbundles ships as a dependency of @ardrive/turbo-sdk.
@@ -45,6 +50,7 @@ import type {
   StorageUploadResult,
   StorageAdapterLogger,
   StorageQuote,
+  RetrieveOptions,
 } from "../types.js";
 import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
@@ -93,8 +99,17 @@ export interface ArweaveBundlerAdapterConfig {
   maxRetrieveSizeBytes?: number;
   /**
    * Skip BLAKE3 content-hash verification on retrieve.
+   * By default (false) the adapter verifies retrieved bytes against a content hash.
+   * The strength of that guarantee depends on the hash's source:
+   *   - When retrieve() is called with `options.expectedContentHash` (as
+   *     `@dstorage/core` does automatically, from the on-chain ChainReference),
+   *     verification is anchored to that chain-committed value and holds even
+   *     against a fully malicious/colluding gateway.
+   *   - Without an anchor, the adapter falls back to the `X-Content-Hash` tag
+   *     fetched from this same gateway — that only catches non-adversarial
+   *     corruption in transit, since a malicious gateway controls both the tag
+   *     and the bytes and can make them consistent with each other.
    * Only set to true when connecting to a fully trusted gateway.
-   * Defaults to false.
    */
   skipIntegrityCheck?: boolean;
   /**
@@ -219,6 +234,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
 
   async retrieve(
     id: string,
+    options?: RetrieveOptions,
   ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
       throw new DStorageError(
@@ -248,10 +264,11 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
         tags[name] = value;
         if (name === CONTENT_HASH_TAG) storedHash = value;
       }
-      if (!storedHash) {
+      if (!options?.expectedContentHash && !storedHash) {
         throw new DStorageError(
           StorageErrorCode.ARWEAVE_BUNDLER_HASH_TAG_MISSING,
-          `[dStorage/arweave-bundler] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
+          `[dStorage/arweave-bundler] Cannot verify content integrity for txId: ${id} — ` +
+            `no expectedContentHash anchor was provided and the ${CONTENT_HASH_TAG} tag was not found.\n` +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
       }
@@ -293,8 +310,17 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
     }
 
     // ── Content hash verification ─────────────────────────────────────────────
-    if (!this.skipIntegrityCheck && storedHash) {
-      await assertContentHash(id, bytes, storedHash, "arweave-bundler");
+    // Prefer a chain-anchored expectedContentHash (independent of this gateway) over
+    // the gateway-supplied X-Content-Hash tag — a gateway that controls both the bytes
+    // and the tag could otherwise fabricate an internally-consistent pair.
+    const anchorHash = options?.expectedContentHash;
+    if (!this.skipIntegrityCheck && (anchorHash || storedHash)) {
+      await assertContentHash(
+        id,
+        bytes,
+        anchorHash ?? storedHash!,
+        "arweave-bundler",
+      );
     }
 
     this.logger?.log("dStorage/arweave-bundler", `Retrieved txId: ${id}`);

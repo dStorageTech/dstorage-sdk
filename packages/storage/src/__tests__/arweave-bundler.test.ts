@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { blake3 } from "@noble/hashes/blake3.js";
 import { ArweaveBundlerStorageAdapter } from "../adapters/arweave-bundler.js";
 import { StorageErrorCode } from "../errors.js";
 
@@ -104,6 +105,110 @@ describe("ArweaveBundlerStorageAdapter — retrieve ID validation", () => {
     await expect(adapter().retrieve(TX_VALID + "A")).rejects.toMatchObject({
       code: StorageErrorCode.ARWEAVE_BUNDLER_INVALID_TX_ID,
       message: expect.stringContaining("Invalid transaction ID"),
+    });
+  });
+});
+
+// ── retrieve: content-hash integrity (expectedContentHash anchor) ────────────
+//
+// The gateway serves both the X-Content-Hash tag AND the data bytes in this
+// adapter's retrieve() flow, so a colluding gateway can fabricate an
+// internally-consistent (bytes, tag) pair. These tests confirm that supplying
+// an expectedContentHash anchor (as @dstorage/core does, from the on-chain
+// ChainReference) is verified against instead of trusting the gateway alone.
+
+describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHash anchor)", () => {
+  const TX_ID = "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"; // 43 chars
+
+  function adapter() {
+    return new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+    });
+  }
+
+  function hexOf(data: Uint8Array): string {
+    return Array.from(blake3(data))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  function toB64Url(str: string): string {
+    return Buffer.from(str, "utf-8").toString("base64url");
+  }
+
+  function metaResponse(tags: Record<string, string>) {
+    return {
+      ok: true,
+      json: async () => ({
+        tags: Object.entries(tags).map(([name, value]) => ({
+          name: toB64Url(name),
+          value: toB64Url(value),
+        })),
+      }),
+    };
+  }
+
+  function dataResponse(bytes: Uint8Array) {
+    return {
+      ok: true,
+      headers: { get: () => null },
+      arrayBuffer: async () =>
+        bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ),
+    };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("expectedContentHash anchor overrides a colluding gateway's self-consistent (tampered bytes, forged tag) pair", async () => {
+    const originalData = new TextEncoder().encode("original bytes");
+    const tamperedData = new TextEncoder().encode("tampered bytes");
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        metaResponse({ "X-Content-Hash": hexOf(tamperedData) }),
+      )
+      .mockResolvedValueOnce(dataResponse(tamperedData));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const err = await adapter()
+      .retrieve(TX_ID, { expectedContentHash: hexOf(originalData) })
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      code: StorageErrorCode.CONTENT_HASH_MISMATCH,
+      message: expect.stringMatching(/hash mismatch/i),
+    });
+  });
+
+  it("expectedContentHash anchor allows retrieve to succeed when the X-Content-Hash tag is absent", async () => {
+    const data = new TextEncoder().encode("retrieved-data");
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(metaResponse({}))
+      .mockResolvedValueOnce(dataResponse(data));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      adapter().retrieve(TX_ID, { expectedContentHash: hexOf(data) }),
+    ).resolves.toBeDefined();
+  });
+
+  it("without an anchor, retrieve still throws when the X-Content-Hash tag is absent", async () => {
+    const data = new TextEncoder().encode("retrieved-data");
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(metaResponse({}))
+      .mockResolvedValueOnce(dataResponse(data));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(adapter().retrieve(TX_ID)).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_HASH_TAG_MISSING,
+      message: expect.stringContaining("[dStorage/arweave-bundler]"),
     });
   });
 });

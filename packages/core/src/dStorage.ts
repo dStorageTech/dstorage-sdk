@@ -800,7 +800,12 @@ export class DStorage {
       this.assertConnected();
 
       const { bytes: rawBytes, tags } =
-        await this.config.storageAdapter.retrieve(storageId);
+        await this.config.storageAdapter.retrieve(
+          storageId,
+          contentHash !== undefined
+            ? { expectedContentHash: contentHash }
+            : undefined,
+        );
 
       if (contentHash) {
         const computed = await computeBlake3Hex(rawBytes);

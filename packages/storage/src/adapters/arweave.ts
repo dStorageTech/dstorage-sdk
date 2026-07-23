@@ -36,6 +36,12 @@
  *
  *   • storageId (txId) is PUBLIC on Arweave. Data security relies entirely on
  *     the XChaCha20-Poly1305 encryption applied by @dstorage/crypto before reaching here.
+ *
+ *   • retrieve()'s content-hash check only defends against a malicious gateway when
+ *     called with an `expectedContentHash` anchor sourced independently of this
+ *     gateway (see skipIntegrityCheck below) — @dstorage/core supplies this
+ *     automatically from the on-chain reference. Without an anchor, the check falls
+ *     back to a gateway-supplied tag and only catches non-adversarial corruption.
  */
 
 import type Arweave from "arweave";
@@ -45,6 +51,7 @@ import type {
   StorageProviderName,
   StorageUploadResult,
   StorageQuote,
+  RetrieveOptions,
 } from "../types.js";
 import {
   PaymentAdapter,
@@ -138,9 +145,17 @@ export interface ArweaveAdapterConfig {
   confirmationTimeoutMs?: number;
   /**
    * When true, skip the BLAKE3 content-hash check on retrieve.
-   * By default (false) the adapter fetches the transaction metadata and verifies
-   * that the `X-Content-Hash` tag recorded at upload time matches the retrieved
-   * bytes. Set to true only if you trust the gateway entirely or are using an
+   * By default (false) the adapter verifies retrieved bytes against a content hash.
+   * The strength of that guarantee depends on the hash's source:
+   *   - When retrieve() is called with `options.expectedContentHash` (as
+   *     `@dstorage/core` does automatically, from the on-chain ChainReference),
+   *     verification is anchored to that chain-committed value and holds even
+   *     against a fully malicious/colluding gateway.
+   *   - Without an anchor, the adapter falls back to the `X-Content-Hash` tag
+   *     fetched from this same gateway — that only catches non-adversarial
+   *     corruption in transit, since a malicious gateway controls both the tag
+   *     and the bytes and can make them consistent with each other.
+   * Set to true only if you trust the gateway entirely or are using an
    * Arweave node that does not expose the transaction metadata endpoint.
    */
   skipIntegrityCheck?: boolean;
@@ -343,6 +358,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
   async retrieve(
     id: string,
+    options?: RetrieveOptions,
   ): Promise<{ bytes: Uint8Array; tags: Record<string, string> }> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(id)) {
       throw new DStorageError(
@@ -426,15 +442,20 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     }
 
     // ── Content hash verification ─────────────────────────────────────────────
+    // Prefer a chain-anchored expectedContentHash (independent of this gateway) over
+    // the gateway-supplied X-Content-Hash tag — a gateway that controls both the bytes
+    // and the tag could otherwise fabricate an internally-consistent pair.
     if (!this.skipIntegrityCheck) {
-      if (!storedHash) {
+      const anchorHash = options?.expectedContentHash;
+      if (!anchorHash && !storedHash) {
         throw new DStorageError(
           StorageErrorCode.ARWEAVE_HASH_TAG_MISSING,
-          `[dStorage/arweave] ${CONTENT_HASH_TAG} tag not found for txId: ${id}.\n` +
+          `[dStorage/arweave] Cannot verify content integrity for txId: ${id} — ` +
+            `no expectedContentHash anchor was provided and the ${CONTENT_HASH_TAG} tag was not found.\n` +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
       }
-      await assertContentHash(id, bytes, storedHash, "arweave");
+      await assertContentHash(id, bytes, anchorHash ?? storedHash!, "arweave");
     }
 
     this.logger?.log("dStorage/arweave", `Retrieved txId: ${id}`);
