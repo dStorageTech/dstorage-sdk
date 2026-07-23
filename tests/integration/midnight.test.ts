@@ -336,7 +336,7 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     const PASSWORD_ADAPTER = new PasswordEncryptionAdapter({
       password: "dstorage-multikey-integration-test-v1!",
       salt: "dstorage:multikey:integration:v1",
-      params: { N: 1024, r: 8, p: 1 },
+      params: { N: 32768, r: 8, p: 1 },
     });
     // Reuse ALICE_SEED so the mnemonic adapter matches what Alice's sdk already uses.
     const MNEMONIC_ADAPTER = new MnemonicEncryptionAdapter({

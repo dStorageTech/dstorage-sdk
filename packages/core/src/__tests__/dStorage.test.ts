@@ -27,7 +27,7 @@ function makeConfig(address = "0xTestUser"): DStorageConfig {
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
         salt: address,
-        params: { N: 1024, r: 8, p: 1 },
+        params: { N: 32768, r: 8, p: 1 },
       }),
     ],
   };
@@ -234,7 +234,7 @@ describe("retrieveByRefId", () => {
     const encryption = new PasswordEncryptionAdapter({
       password: "dstorage-test-passphrase-v1!",
       salt: "mismatch-test",
-      params: { N: 1024, r: 8, p: 1 },
+      params: { N: 32768, r: 8, p: 1 },
     });
 
     // Upload via "mock" storage adapter.
@@ -295,7 +295,7 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
           salt: "envelope-test",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -351,7 +351,7 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
         new PasswordEncryptionAdapter({
           password: "alice-passphrase-ec",
           salt: "0xAlice_ec",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -362,7 +362,7 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
         new PasswordEncryptionAdapter({
           password: "bob-passphrase-ec",
           salt: "0xBob_ec",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -512,7 +512,7 @@ describe("public store and retrieve", () => {
           new PasswordEncryptionAdapter({
             password: "dstorage-test-passphrase-v1!",
             salt: address,
-            params: { N: 1024, r: 8, p: 1 },
+            params: { N: 32768, r: 8, p: 1 },
           }),
         ],
       });
@@ -558,7 +558,7 @@ describe("listReferences", () => {
         new PasswordEncryptionAdapter({
           password: "alice-passphrase-lr",
           salt: "0xAlice_lr",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -569,7 +569,7 @@ describe("listReferences", () => {
         new PasswordEncryptionAdapter({
           password: "bob-passphrase-lr",
           salt: "0xBob_lr",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -611,7 +611,7 @@ describe("listReferences", () => {
         new PasswordEncryptionAdapter({
           password: "alice-passphrase",
           salt: "alice",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -621,7 +621,7 @@ describe("listReferences", () => {
         new PasswordEncryptionAdapter({
           password: "bob-passphrase",
           salt: "bob",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -701,7 +701,7 @@ describe("store metadata option", () => {
         new PasswordEncryptionAdapter({
           password: "alice-passphrase-meta",
           salt: "alice-meta",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -712,7 +712,7 @@ describe("store metadata option", () => {
         new PasswordEncryptionAdapter({
           password: "bob-passphrase-meta",
           salt: "bob-meta",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -908,7 +908,7 @@ describe("registerReference", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
           salt: "s",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -1001,7 +1001,7 @@ describe("update", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
           salt: "s",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -1024,7 +1024,7 @@ describe("update", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
           salt: "s",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -1098,7 +1098,7 @@ describe("update", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
           salt: "s",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -1124,7 +1124,7 @@ describe("store() refId option", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
           salt: "s",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });

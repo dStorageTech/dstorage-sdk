@@ -14,7 +14,7 @@ function makeConfig(): DStorageConfig {
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
         salt: "storage-only-test",
-        params: { N: 1024, r: 8, p: 1 },
+        params: { N: 32768, r: 8, p: 1 },
       }),
     ],
   };

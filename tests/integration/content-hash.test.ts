@@ -46,7 +46,7 @@ describe.skipIf(!arlocalOk)("content hash — arlocal + mock chain", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-content-hash-test-v1!",
           salt: "dstorage:integration-test:content-hash",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });

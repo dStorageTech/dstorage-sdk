@@ -153,6 +153,12 @@ export interface PasswordEncryptionAdapterConfig {
   /**
    * Custom scrypt parameters. Only used when `preset` is not provided.
    * Prefer `preset` for well-known configurations.
+   *
+   * `N` is rejected if it is below 32768 (OWASP 2024 minimum, 32 MB
+   * memory-hard) or is not a power of two — this floor also applies when
+   * reconstructing via `fromKdfParams()`, since a downgraded or corrupted
+   * stored value could otherwise collapse the KDF to something trivially
+   * brute-forceable.
    */
   params?: {
     N?: number;
@@ -394,10 +400,34 @@ function resolveSalt(salt: string | Uint8Array): Uint8Array {
   return bytes;
 }
 
+// OWASP 2024 minimum scrypt cost factor (32 MB memory-hard). Enforced on every
+// resolved N regardless of source — a caller (or a downgraded/corrupted stored
+// value loaded via fromKdfParams()) could otherwise collapse the KDF to
+// something trivially brute-forceable.
+const MIN_SCRYPT_N = 32768;
+
+function assertScryptCost(N: number): void {
+  if (!Number.isInteger(N) || N < 2 || (N & (N - 1)) !== 0) {
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_SCRYPT_N_NOT_POWER_OF_TWO,
+      `[dStorage] PasswordEncryptionAdapter: scrypt N must be a power of two >= 2 (got ${N}).`,
+    );
+  }
+  if (N < MIN_SCRYPT_N) {
+    throw new DStorageError(
+      EncryptionErrorCode.PASSWORD_SCRYPT_N_TOO_LOW,
+      `[dStorage] PasswordEncryptionAdapter: scrypt N=${N} is below the minimum cost floor ` +
+        `of ${MIN_SCRYPT_N} (OWASP 2024 minimum, 32 MB memory-hard). A lower N makes the KDF ` +
+        'cheap enough to brute-force offline. Use a preset ("v1" or "v1-lite") or a custom N >= 32768.',
+    );
+  }
+}
+
 function resolveParams(
   preset: KdfPreset | undefined,
   params: PasswordEncryptionAdapterConfig["params"],
 ): ScryptParams {
+  let resolved: ScryptParams;
   if (preset !== undefined) {
     if (!(preset in KDF_PRESETS)) {
       throw new DStorageError(
@@ -406,13 +436,16 @@ function resolveParams(
           `Valid presets: ${Object.keys(KDF_PRESETS).join(", ")}.`,
       );
     }
-    return KDF_PRESETS[preset];
+    resolved = KDF_PRESETS[preset];
+  } else {
+    resolved = {
+      N: params?.N ?? KDF_PRESETS["v1"].N,
+      r: params?.r ?? KDF_PRESETS["v1"].r,
+      p: params?.p ?? KDF_PRESETS["v1"].p,
+    };
   }
-  return {
-    N: params?.N ?? KDF_PRESETS["v1"].N,
-    r: params?.r ?? KDF_PRESETS["v1"].r,
-    p: params?.p ?? KDF_PRESETS["v1"].p,
-  };
+  assertScryptCost(resolved.N);
+  return resolved;
 }
 
 function estimateEntropyBits(password: string): number {

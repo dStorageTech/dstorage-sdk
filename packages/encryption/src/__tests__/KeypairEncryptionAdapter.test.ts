@@ -187,7 +187,7 @@ describe("cross-variant unwrap (variant auto-detected from key envelope)", () =>
 // ── fromPassword — determinism ────────────────────────────────────────────────
 
 describe("fromPassword", () => {
-  const FAST_PARAMS = { N: 1024, r: 8, p: 1 };
+  const FAST_PARAMS = { N: 32768, r: 8, p: 1 };
   const PASSWORD = "Str0ng-PaSSw0rd!XY9";
   const SALT = "dstorage:test:mlkem:v1";
 

@@ -43,7 +43,7 @@ describe.skipIf(!arlocalOk)(
           new PasswordEncryptionAdapter({
             password: "dstorage-recovery-integration-test!",
             salt: "dstorage:recovery:integration:v1",
-            params: { N: 1024, r: 8, p: 1 },
+            params: { N: 32768, r: 8, p: 1 },
           }),
         ],
       });
@@ -122,7 +122,7 @@ describe.skipIf(!arlocalOk)(
           new PasswordEncryptionAdapter({
             password: "dstorage-retryupdate-integration-test!",
             salt: "dstorage:retryupdate:integration:v1",
-            params: { N: 1024, r: 8, p: 1 },
+            params: { N: 32768, r: 8, p: 1 },
           }),
         ],
       });

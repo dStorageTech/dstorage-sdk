@@ -42,7 +42,7 @@ describe.skipIf(!arlocalOk)("storage transaction tags on arlocal", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-integration-tags-test-v1!",
           salt: "dstorage:integration-test:tags",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });

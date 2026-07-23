@@ -39,7 +39,7 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-integration-test-v1!",
           salt: "dstorage:integration-test:arlocal",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });

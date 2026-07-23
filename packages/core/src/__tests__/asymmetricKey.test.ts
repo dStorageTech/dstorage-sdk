@@ -105,7 +105,7 @@ describe("ML-KEM upload and retrieve", () => {
   });
 
   it("fromPassword: deterministic keypair enables round-trip", async () => {
-    const FAST_PARAMS = { N: 1024, r: 8, p: 1 };
+    const FAST_PARAMS = { N: 32768, r: 8, p: 1 };
     const adapters = sharedAdapters();
 
     const writerProvider = await KeypairEncryptionAdapter.fromPassword(
@@ -156,7 +156,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
     const passwordProvider = new PasswordEncryptionAdapter({
       password: "dstorage-asym-test-passphrase!",
       salt: "dstorage:asym:test:v1",
-      params: { N: 1024, r: 8, p: 1 },
+      params: { N: 32768, r: 8, p: 1 },
     });
 
     // Upload with both adapters
@@ -187,7 +187,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-asym-test-passphrase!",
           salt: "dstorage:asym:test:v1",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -203,7 +203,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
     const passwordProvider = new PasswordEncryptionAdapter({
       password: "dstorage-asym-test-passphrase!",
       salt: "dstorage:asym:test:v1",
-      params: { N: 1024, r: 8, p: 1 },
+      params: { N: 32768, r: 8, p: 1 },
     });
 
     const sdk = new DStorage({

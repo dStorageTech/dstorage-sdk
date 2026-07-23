@@ -43,7 +43,7 @@ function makeConfig(address = "0xTestUser"): DStorageConfig {
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
         salt: address,
-        params: { N: 1024, r: 8, p: 1 },
+        params: { N: 32768, r: 8, p: 1 },
       }),
     ],
   };
@@ -301,7 +301,7 @@ describe("chunked manifest fields are correct in storage", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
           salt: "manifest-field-test",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });

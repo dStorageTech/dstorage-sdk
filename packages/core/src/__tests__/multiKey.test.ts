@@ -32,7 +32,7 @@ const passwordProvider = () =>
   new PasswordEncryptionAdapter({
     password: "dstorage-multikey-test-passphrase!",
     salt: "dstorage:multikey:test:v1",
-    params: { N: 1024, r: 8, p: 1 },
+    params: { N: 32768, r: 8, p: 1 },
   });
 
 const mnemonicProvider = () =>
@@ -120,7 +120,7 @@ describe("multi-key wrapping — upload with two providers", () => {
         new PasswordEncryptionAdapter({
           password: "completely-different-passphrase!",
           salt: "dstorage:multikey:test:v1",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });
@@ -479,7 +479,7 @@ const newPasswordProvider = () =>
   new PasswordEncryptionAdapter({
     password: "dstorage-NEW-passphrase-after-rotation!",
     salt: "dstorage:multikey:test:v1",
-    params: { N: 1024, r: 8, p: 1 },
+    params: { N: 32768, r: 8, p: 1 },
   });
 
 describe("rotateKeys — password rotation via mnemonic recovery", () => {
@@ -639,7 +639,7 @@ describe("rotateKeys — password rotation via mnemonic recovery", () => {
         new PasswordEncryptionAdapter({
           password: "completely-different-passphrase!",
           salt: "dstorage:multikey:test:v1",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });

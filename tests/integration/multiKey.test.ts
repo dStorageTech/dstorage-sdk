@@ -42,7 +42,7 @@ const passwordProvider = () =>
   new PasswordEncryptionAdapter({
     password: "dstorage-multikey-integration-test!",
     salt: "dstorage:multikey:integration:v1",
-    params: { N: 1024, r: 8, p: 1 },
+    params: { N: 32768, r: 8, p: 1 },
   });
 
 const mnemonicProvider = () =>
@@ -53,7 +53,7 @@ const newPasswordProvider = () =>
   new PasswordEncryptionAdapter({
     password: "dstorage-multikey-integration-ROTATED!",
     salt: "dstorage:multikey:integration:v1",
-    params: { N: 1024, r: 8, p: 1 },
+    params: { N: 32768, r: 8, p: 1 },
   });
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ describe.skipIf(!arlocalOk)(
           new PasswordEncryptionAdapter({
             password: "completely-different-passphrase!",
             salt: "dstorage:multikey:integration:v1",
-            params: { N: 1024, r: 8, p: 1 },
+            params: { N: 32768, r: 8, p: 1 },
           }),
         ],
       });
@@ -336,7 +336,7 @@ describe.skipIf(!arlocalOk)(
             new PasswordEncryptionAdapter({
               password: "completely-different-passphrase!",
               salt: "dstorage:multikey:integration:v1",
-              params: { N: 1024, r: 8, p: 1 },
+              params: { N: 32768, r: 8, p: 1 },
             }),
           ],
         });

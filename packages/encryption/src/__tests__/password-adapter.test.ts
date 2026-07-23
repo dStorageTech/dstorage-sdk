@@ -300,12 +300,12 @@ describe("KDF presets", () => {
     const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
-      params: { N: 2048, r: 4, p: 1 },
+      params: { N: 32768, r: 4, p: 1 },
     });
     const b = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
-      params: { N: 2048, r: 4, p: 1 },
+      params: { N: 32768, r: 4, p: 1 },
     });
     const wrapped = await a.wrapDek(dek);
     expect(await b.unwrapDek(wrapped)).toEqual(dek);
@@ -316,12 +316,12 @@ describe("KDF presets", () => {
     const a = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
-      params: { N: 1024, r: 8, p: 1 },
+      params: { N: 32768, r: 8, p: 1 },
     });
     const b = new PasswordEncryptionAdapter({
       password: GOOD_PASSWORD,
       salt: GOOD_SALT,
-      params: { N: 2048, r: 8, p: 1 },
+      params: { N: 65536, r: 8, p: 1 },
     });
     const wrapped = await a.wrapDek(dek);
     await expect(b.unwrapDek(wrapped)).rejects.toMatchObject({
@@ -344,6 +344,69 @@ describe("KDF presets", () => {
       code: EncryptionErrorCode.PASSWORD_UNKNOWN_PRESET,
       message: expect.stringContaining('unknown preset "v99"'),
     });
+  });
+
+  // ── minimum scrypt cost floor ────────────────────────────────────────────
+
+  it("custom N below the 32768 floor → throws PASSWORD_SCRYPT_N_TOO_LOW", () => {
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: GOOD_PASSWORD,
+        salt: GOOD_SALT,
+        params: { N: 16384, r: 8, p: 1 },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_SCRYPT_N_TOO_LOW,
+      message: expect.stringContaining("[dStorage]"),
+    });
+  });
+
+  it("custom N that is not a power of two → throws PASSWORD_SCRYPT_N_NOT_POWER_OF_TWO", () => {
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: GOOD_PASSWORD,
+        salt: GOOD_SALT,
+        params: { N: 3000, r: 8, p: 1 },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_SCRYPT_N_NOT_POWER_OF_TWO,
+      message: expect.stringContaining("[dStorage]"),
+    });
+  });
+
+  it("custom N above the floor but not a power of two → still throws PASSWORD_SCRYPT_N_NOT_POWER_OF_TWO", () => {
+    let err: unknown;
+    try {
+      new PasswordEncryptionAdapter({
+        password: GOOD_PASSWORD,
+        salt: GOOD_SALT,
+        params: { N: 100000, r: 8, p: 1 },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_SCRYPT_N_NOT_POWER_OF_TWO,
+    });
+  });
+
+  it("custom N exactly at the 32768 floor → succeeds", () => {
+    expect(
+      () =>
+        new PasswordEncryptionAdapter({
+          password: GOOD_PASSWORD,
+          salt: GOOD_SALT,
+          params: { N: 32768, r: 8, p: 1 },
+        }),
+    ).not.toThrow();
   });
 });
 
@@ -465,6 +528,25 @@ describe("fromKdfParams", () => {
     expect(err).toMatchObject({
       code: EncryptionErrorCode.PASSWORD_TOO_SHORT,
       message: expect.stringContaining("too short"),
+    });
+  });
+
+  it("rejects a stored N below the 32768 floor — guards against a downgraded/corrupted persisted value", () => {
+    let err: unknown;
+    try {
+      PasswordEncryptionAdapter.fromKdfParams({
+        password: GOOD_PASSWORD,
+        salt: GOOD_SALT,
+        kdf: "scrypt",
+        N: 8192,
+        r: 8,
+        p: 1,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      code: EncryptionErrorCode.PASSWORD_SCRYPT_N_TOO_LOW,
     });
   });
 });

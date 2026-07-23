@@ -36,7 +36,7 @@ describe.skipIf(!arlocalOk)("storage-only mode with real Arweave", () => {
         new PasswordEncryptionAdapter({
           password: "dstorage-storageonly-integration-v1!",
           salt: "dstorage:storageonly:integration:v1",
-          params: { N: 1024, r: 8, p: 1 },
+          params: { N: 32768, r: 8, p: 1 },
         }),
       ],
     });

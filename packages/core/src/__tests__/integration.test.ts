@@ -15,7 +15,7 @@ import type { DStorageConfig } from "../types.js";
 const enc = (s: string) => new TextEncoder().encode(s);
 
 // Fast scrypt params for tests — never use in production.
-const TEST_SCRYPT = { N: 1024, r: 8, p: 1 };
+const TEST_SCRYPT = { N: 32768, r: 8, p: 1 };
 const testSeedProvider = (salt: string) =>
   new PasswordEncryptionAdapter({
     password: "dstorage-test-passphrase-v1!",
