@@ -10,10 +10,23 @@ import {
 import { PasswordEncryptionAdapter } from "@dstorage/encryption";
 import type { DStorageConfig } from "../types.js";
 import {
+  MANIFEST_AAD,
+  METADATA_AAD,
+  METADATA_ONLY_OWNER_SECRET_SALT,
+} from "../types.js";
+import {
   CoreErrorCode,
   StorePartialError,
   isStorePartialError,
 } from "../errors.js";
+import {
+  generateDek,
+  buildKeyEnvelope,
+  serializeKeyEnvelope,
+  deriveOwnerSecret,
+  XChaChaScheme,
+  bytesToBase64url,
+} from "@dstorage/crypto";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -1811,6 +1824,75 @@ describe("contentHash", () => {
     await expect(ds.retrieveByRefId(chainRefId!)).rejects.toMatchObject({
       code: CoreErrorCode.CONTENT_HASH_MISMATCH,
       message: expect.stringContaining("[dStorage] Content hash mismatch"),
+    });
+  });
+});
+
+// ── JSON.parse error handling on authenticated data ───────────────────────────
+//
+// AEAD authentication proves the bytes are exactly what was encrypted — but
+// that doesn't guarantee they're valid JSON (e.g. a corrupted-but-authentic
+// blob). These construct that scenario directly using exported crypto
+// primitives, bypassing the SDK's own encryption so the ciphertext is
+// authentic garbage rather than a real manifest/metadata payload.
+
+describe("JSON.parse error handling on authenticated data", () => {
+  it("retrieveByStorageId() throws MANIFEST_PARSE_FAILED for authenticated-but-invalid-JSON manifest bytes", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const dek = generateDek();
+    const scheme = XChaChaScheme.fromKey(dek);
+    const garbage = enc("not valid json {");
+    const ciphertext = await scheme.encryptPayload(garbage, MANIFEST_AAD);
+    const { id: storageId } = await storage.store(ciphertext);
+
+    await expect(
+      ds.retrieveByStorageId(storageId, scheme),
+    ).rejects.toMatchObject({
+      code: CoreErrorCode.MANIFEST_PARSE_FAILED,
+      message: expect.stringContaining("[dStorage]"),
+    });
+  });
+
+  it("retrieveByRefId() throws METADATA_PARSE_FAILED for authenticated-but-invalid-JSON metadata", async () => {
+    const config = makeConfig();
+    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const passwordAdapter = config
+      .encryptionAdapters![0] as PasswordEncryptionAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const dek = generateDek();
+    const wrapped = await passwordAdapter.wrapDek(dek);
+    const keyEnvelope = serializeKeyEnvelope(
+      buildKeyEnvelope([{ wrapKeyName: passwordAdapter.name, ...wrapped }]),
+    );
+    const scheme = XChaChaScheme.fromKey(dek);
+    const garbage = enc("not valid json {");
+    const encryptedMetadata = bytesToBase64url(
+      await scheme.encryptPayload(garbage, METADATA_AAD),
+    );
+    const ownerSecret = await deriveOwnerSecret(
+      dek,
+      METADATA_ONLY_OWNER_SECRET_SALT,
+    );
+
+    const { refId } = await chain.writeReference({
+      refId: `ref_metadata_parse_${Math.random().toString(36).slice(2)}`,
+      storageProvider: "mock",
+      encryptionScheme: "xchacha20poly1305-v1",
+      writtenAt: Date.now(),
+      keyEnvelope,
+      encryptedMetadata,
+      ownerSecret,
+    });
+
+    await expect(ds.retrieveByRefId(refId!)).rejects.toMatchObject({
+      code: CoreErrorCode.METADATA_PARSE_FAILED,
+      message: expect.stringContaining("[dStorage]"),
     });
   });
 });

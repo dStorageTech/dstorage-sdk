@@ -998,9 +998,16 @@ export class DStorage {
       }
 
       if (manifestBytes !== null) {
-        const parsed: unknown = JSON.parse(
-          new TextDecoder().decode(manifestBytes),
-        );
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(new TextDecoder().decode(manifestBytes));
+        } catch (err) {
+          throw new DStorageError(
+            CoreErrorCode.MANIFEST_PARSE_FAILED,
+            `[dStorage] Payload authenticated as manifest but is not valid JSON: ${err}`,
+            { cause: err },
+          );
+        }
         if (!isManifest(parsed)) {
           throw new DStorageError(
             CoreErrorCode.MANIFEST_INVALID_STRUCTURE,
@@ -1153,10 +1160,18 @@ export class DStorage {
           base64urlToBytes(ref.encryptedMetadata),
           METADATA_AAD,
         );
-        metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
-          string,
-          string
-        >;
+        try {
+          metadata = JSON.parse(new TextDecoder().decode(raw)) as Record<
+            string,
+            string
+          >;
+        } catch (err) {
+          throw new DStorageError(
+            CoreErrorCode.METADATA_PARSE_FAILED,
+            `[dStorage] Decrypted metadata is not valid JSON: ${err}`,
+            { cause: err },
+          );
+        }
       }
 
       return { bytes: contentBytes, tags: contentTags, metadata };
