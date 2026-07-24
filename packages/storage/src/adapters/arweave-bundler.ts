@@ -219,6 +219,13 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): Promise<StorageUploadResult> {
+    if (CONTENT_HASH_TAG in metadata) {
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_BUNDLER_RESERVED_TAG_KEY,
+        `[dStorage/arweave-bundler] metadata key "${CONTENT_HASH_TAG}" is reserved ` +
+          "for the SDK's own content-hash tag and cannot be set by the caller.",
+      );
+    }
     const { createData } = await import("@dha-team/arbundles");
 
     // The signer only sends the 48-byte deep_hash to the server; data stays local.

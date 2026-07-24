@@ -191,6 +191,13 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     data: Uint8Array,
     metadata: Record<string, string> = {},
   ): void {
+    if (CONTENT_HASH_TAG in metadata) {
+      throw new DStorageError(
+        PaymentErrorCode.ARWEAVE_RESERVED_TAG_KEY,
+        `[dStorage/arweave-payment] metadata key "${CONTENT_HASH_TAG}" is reserved ` +
+          "for the SDK's own content-hash tag and cannot be set by the caller.",
+      );
+    }
     const hashHex = Array.from(blake3(data))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");

@@ -9,6 +9,27 @@ const MODULUS_683 = "A".repeat(683);
 
 const SIGNING_URL = "https://signing.test";
 
+// ── store: reserved tag key ────────────────────────────────────────────────────
+
+describe("ArweaveBundlerStorageAdapter — store() reserved tag key", () => {
+  function adapter() {
+    return new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+    });
+  }
+
+  it("throws ARWEAVE_BUNDLER_RESERVED_TAG_KEY when caller metadata sets X-Content-Hash", async () => {
+    const data = new TextEncoder().encode("hello");
+    await expect(
+      adapter().store(data, { "X-Content-Hash": "spoofed-hash" }),
+    ).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_RESERVED_TAG_KEY,
+      message: expect.stringContaining("[dStorage/arweave-bundler]"),
+    });
+  });
+});
+
 // ── authToken: compound token parsing ──────────────────────────────────────────
 //
 // The adapter splits on lastIndexOf('.') so the credential part (everything

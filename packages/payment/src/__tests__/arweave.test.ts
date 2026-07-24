@@ -68,6 +68,18 @@ describe("ArweavePaymentAdapter — provideUploadData content hash", () => {
     expect(pending.metadata["dstorage-version"]).toBe("0.1.0");
     expect(pending.metadata["X-Content-Hash"]).toBeDefined();
   });
+
+  it("throws ARWEAVE_RESERVED_TAG_KEY when caller metadata sets X-Content-Hash", () => {
+    const adapter = makeAdapter();
+    const data = new TextEncoder().encode("test");
+    expect(() =>
+      adapter.provideUploadData(data, { "X-Content-Hash": "spoofed-hash" }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: PaymentErrorCode.ARWEAVE_RESERVED_TAG_KEY,
+      }),
+    );
+  });
 });
 
 // ── Quote TTL enforcement ─────────────────────────────────────────────────────
