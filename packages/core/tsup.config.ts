@@ -13,12 +13,25 @@ const sharedNoExternal = [
 // sub-condition, producing __commonJS + __require("crypto") wrappers that throw
 // "Dynamic require of 'crypto' is not supported" at runtime in Node.js ESM.
 // Keeping them external lets Node.js resolve them correctly via the "import" path.
+//
+// @scure/bip39 must also stay external, for a different reason: @dstorage/crypto
+// is inlined from source (noExternal, below), and @scure/bip39@2.x's own code
+// imports the v2-only "@noble/hashes/webcrypto.js" subpath. If @scure/bip39 were
+// inlined too, that nested import would still resolve externally (since @noble/*
+// stays external either way) and leak into this package's published dist as a
+// bare `require("@noble/hashes/webcrypto.js")` — which 404s for any consumer
+// whose hoisted @noble/hashes is v1.x (the common case; @dstorage/crypto's own
+// direct usage still targets v1). Keeping @scure/bip39 external — and declaring
+// it as a real dependency in package.json (below) — restores normal npm nesting,
+// so @scure/bip39's own correctly-declared @noble/hashes@2.x gets installed and
+// resolved underneath it regardless of what's hoisted at the top level.
 const sharedExternal: (string | RegExp)[] = [
   /^@midnight-ntwrk\//,
   "arweave",
   /^@ardrive\//,
   /^@dha-team\//,
   /^@noble\//,
+  /^@scure\/bip39/,
   "bip39",
 ];
 

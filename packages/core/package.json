@@ -80,6 +80,7 @@
     "@noble/ciphers": "^2.2.0",
     "@noble/hashes": "^1.5.0",
     "@noble/post-quantum": "^0.6.1",
+    "@scure/bip39": "^2.0.1",
     "arweave": "^1.15.7"
   },
   "devDependencies": {
