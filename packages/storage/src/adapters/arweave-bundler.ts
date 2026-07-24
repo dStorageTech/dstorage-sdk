@@ -60,11 +60,18 @@ import {
   computeBlake3Hex,
   assertContentHash,
 } from "./integrity.js";
-import { DStorageError } from "@dstorage/crypto";
+import { DStorageError, readResponseTextWithLimit } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
 import { getTurboFactory } from "./turbo-factory.js";
 
 const ARWEAVE_GATEWAY_URL = "https://turbo-gateway.com";
+
+/** Default request timeout — matches the convention used by managed.ts. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+/** Default max size for the metadata/tags JSON response (always tiny in practice). */
+const DEFAULT_MAX_METADATA_RESPONSE_BYTES = 1024 * 1024; // 1 MiB
+/** Default max size for the retrieved blob body. */
+const DEFAULT_MAX_RETRIEVE_SIZE_BYTES = 256 * 1024 * 1024; // 256 MiB
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -113,6 +120,19 @@ export interface ArweaveBundlerAdapterConfig {
    */
   skipIntegrityCheck?: boolean;
   /**
+   * Maximum time in milliseconds to wait for any single retrieve() request
+   * (metadata or data fetch) before aborting. Defaults to 30_000 ms (30 s).
+   * Pass `0` to disable the timeout entirely (not recommended for production).
+   */
+  requestTimeoutMs?: number;
+  /**
+   * Maximum number of bytes allowed in the transaction metadata/tags JSON
+   * response fetched during retrieve(). Guards against a hostile or
+   * misbehaving gateway returning an oversized body to exhaust memory.
+   * Defaults to 1_048_576 (1 MiB) — metadata/tags are always tiny in practice.
+   */
+  maxMetadataResponseBytes?: number;
+  /**
    * Optional logger for SDK operational output.
    */
   logger?: StorageAdapterLogger;
@@ -144,6 +164,8 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
   private readonly gateway: string;
   private readonly maxRetrieveSizeBytes: number;
   private readonly skipIntegrityCheck: boolean;
+  private readonly requestTimeoutMs: number;
+  private readonly maxMetadataResponseBytes: number;
   protected readonly logger: StorageAdapterLogger | undefined;
 
   /** RSA-4096 public key modulus (512 bytes) parsed from the auth token at construction time. */
@@ -155,8 +177,12 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
       : null;
     this.gateway = config.gateway ?? ARWEAVE_GATEWAY_URL;
     this.maxRetrieveSizeBytes =
-      config.maxRetrieveSizeBytes ?? 256 * 1024 * 1024;
+      config.maxRetrieveSizeBytes ?? DEFAULT_MAX_RETRIEVE_SIZE_BYTES;
     this.skipIntegrityCheck = config.skipIntegrityCheck ?? false;
+    this.requestTimeoutMs =
+      config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.maxMetadataResponseBytes =
+      config.maxMetadataResponseBytes ?? DEFAULT_MAX_METADATA_RESPONSE_BYTES;
     this.logger = config.logger;
 
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
@@ -230,6 +256,15 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
     return { id: txId, provider: this.name, url, uploadedAt: Date.now() };
   }
 
+  /** Adds an AbortSignal.timeout() to a fetch init object (when requestTimeoutMs > 0). */
+  private _withTimeout(init: RequestInit = {}): RequestInit {
+    const signal =
+      this.requestTimeoutMs > 0
+        ? AbortSignal.timeout(this.requestTimeoutMs)
+        : undefined;
+    return { ...init, ...(signal !== undefined ? { signal } : {}) };
+  }
+
   // ── retrieve ───────────────────────────────────────────────────────────────────
 
   async retrieve(
@@ -246,7 +281,10 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
     let storedHash: string | undefined;
     const tags: Record<string, string> = {};
     if (!this.skipIntegrityCheck) {
-      const metaResp = await fetch(`${this.gateway}/tx/${id}`);
+      const metaResp = await fetch(
+        `${this.gateway}/tx/${id}`,
+        this._withTimeout(),
+      );
       if (!metaResp.ok) {
         throw new DStorageError(
           StorageErrorCode.ARWEAVE_BUNDLER_TX_METADATA_FAILED,
@@ -255,7 +293,12 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
         );
       }
-      const tx = (await metaResp.json()) as {
+      const metaText = await readResponseTextWithLimit(metaResp, {
+        maxBytes: this.maxMetadataResponseBytes,
+        code: StorageErrorCode.ARWEAVE_BUNDLER_METADATA_TOO_LARGE,
+        component: `[dStorage/arweave-bundler] retrieve(${id}) metadata`,
+      });
+      const tx = JSON.parse(metaText) as {
         tags?: Array<{ name: string; value: string }>;
       };
       for (const tag of tx.tags ?? []) {
@@ -275,7 +318,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
     }
 
     // ── Download data ─────────────────────────────────────────────────────────
-    const resp = await fetch(`${this.gateway}/${id}`);
+    const resp = await fetch(`${this.gateway}/${id}`, this._withTimeout());
     if (!resp.ok) {
       throw new DStorageError(
         StorageErrorCode.ARWEAVE_BUNDLER_RETRIEVE_HTTP_ERROR,

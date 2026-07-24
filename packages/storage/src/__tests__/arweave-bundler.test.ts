@@ -137,15 +137,27 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     return Buffer.from(str, "utf-8").toString("base64url");
   }
 
-  function metaResponse(tags: Record<string, string>) {
+  function metaResponse(
+    tags: Record<string, string>,
+    opts: { contentLength?: string | null } = {},
+  ) {
+    const text = JSON.stringify({
+      tags: Object.entries(tags).map(([name, value]) => ({
+        name: toB64Url(name),
+        value: toB64Url(value),
+      })),
+    });
     return {
       ok: true,
-      json: async () => ({
-        tags: Object.entries(tags).map(([name, value]) => ({
-          name: toB64Url(name),
-          value: toB64Url(value),
-        })),
-      }),
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === "content-length"
+            ? (opts.contentLength ?? null)
+            : null,
+      },
+      // No `.body` stream on this plain mock, so readResponseTextWithLimit()
+      // takes its res.text() fallback path.
+      text: async () => text,
     };
   }
 
@@ -209,6 +221,126 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     await expect(adapter().retrieve(TX_ID)).rejects.toMatchObject({
       code: StorageErrorCode.ARWEAVE_BUNDLER_HASH_TAG_MISSING,
       message: expect.stringContaining("[dStorage/arweave-bundler]"),
+    });
+  });
+
+  // ── request timeout ─────────────────────────────────────────────────────────
+
+  it("passes an AbortSignal on both the metadata and data fetch when requestTimeoutMs > 0", async () => {
+    const data = new TextEncoder().encode("retrieved-data");
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(metaResponse({ "X-Content-Hash": hexOf(data) }))
+      .mockResolvedValueOnce(dataResponse(data));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const timeoutAdapter = new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+      requestTimeoutMs: 5_000,
+    });
+    await timeoutAdapter.retrieve(TX_ID);
+
+    const [, metaInit] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const [, dataInit] = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(metaInit.signal).toBeInstanceOf(AbortSignal);
+    expect(dataInit.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("omits signal on both fetches when requestTimeoutMs is 0", async () => {
+    const data = new TextEncoder().encode("retrieved-data");
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(metaResponse({ "X-Content-Hash": hexOf(data) }))
+      .mockResolvedValueOnce(dataResponse(data));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const noTimeoutAdapter = new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+      requestTimeoutMs: 0,
+    });
+    await noTimeoutAdapter.retrieve(TX_ID);
+
+    const [, metaInit] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const [, dataInit] = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(metaInit.signal).toBeUndefined();
+    expect(dataInit.signal).toBeUndefined();
+  });
+
+  // ── metadata response size limit ────────────────────────────────────────────
+
+  function metaStreamResponse(
+    tags: Record<string, string>,
+    opts: { chunkSize?: number; contentLength?: string | null } = {},
+  ) {
+    const text = JSON.stringify({
+      tags: Object.entries(tags).map(([name, value]) => ({
+        name: toB64Url(name),
+        value: toB64Url(value),
+      })),
+    });
+    const bytes = new TextEncoder().encode(text);
+    const chunkSize = opts.chunkSize ?? 16;
+    const chunks: Uint8Array[] = [];
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      chunks.push(bytes.slice(i, i + chunkSize));
+    }
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(c);
+        controller.close();
+      },
+    });
+    return {
+      ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === "content-length"
+            ? (opts.contentLength ?? null)
+            : null,
+      },
+      body: stream,
+      text: async () => text,
+    };
+  }
+
+  it("throws ARWEAVE_BUNDLER_METADATA_TOO_LARGE when Content-Length exceeds maxMetadataResponseBytes", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        metaStreamResponse(
+          { "X-Content-Hash": "a".repeat(64) },
+          { contentLength: "99999999" },
+        ),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const cappedAdapter = new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+      maxMetadataResponseBytes: 100,
+    });
+    await expect(cappedAdapter.retrieve(TX_ID)).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_METADATA_TOO_LARGE,
+    });
+  });
+
+  it("throws ARWEAVE_BUNDLER_METADATA_TOO_LARGE mid-stream when the metadata body exceeds the cap, even with no Content-Length", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        metaStreamResponse({ "X-Content-Hash": "a".repeat(64) }),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const cappedAdapter = new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+      maxMetadataResponseBytes: 50,
+    });
+    await expect(cappedAdapter.retrieve(TX_ID)).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_METADATA_TOO_LARGE,
     });
   });
 });

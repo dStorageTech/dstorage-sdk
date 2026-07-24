@@ -42,6 +42,12 @@ function mockFetch(body: unknown, status = 200): ReturnType<typeof vi.fn> {
     status,
     statusText: status === 200 ? "OK" : "Error",
     json: () => Promise.resolve(body),
+    // No `.body` stream on this plain mock, so readResponseTextWithLimit()
+    // takes its res.text() fallback path — keeps every existing call site
+    // below working unchanged after readReference/listReferences switched
+    // from res.json() to a bounded text read + JSON.parse.
+    headers: { get: () => null },
+    text: () => Promise.resolve(JSON.stringify(body)),
   });
 }
 
@@ -409,7 +415,8 @@ describe("HttpGatewayChainAdapter", () => {
           ok: true,
           status: 200,
           statusText: "OK",
-          json: () => Promise.reject(new SyntaxError("Unexpected token")),
+          headers: { get: () => null },
+          text: () => Promise.resolve("not valid json"),
         }),
       );
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
@@ -548,7 +555,8 @@ describe("HttpGatewayChainAdapter", () => {
           ok: true,
           status: 200,
           statusText: "OK",
-          json: () => Promise.reject(new SyntaxError("Unexpected token")),
+          headers: { get: () => null },
+          text: () => Promise.resolve("not valid json"),
         }),
       );
       const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
@@ -603,6 +611,183 @@ describe("HttpGatewayChainAdapter", () => {
           "[dStorage/http-gateway-chain] removeReference failed: HTTP 403",
         ),
       });
+    });
+  });
+
+  // ── request timeout ─────────────────────────────────────────────────────────
+
+  describe("request timeout", () => {
+    const CASES: Array<{
+      name: string;
+      body: unknown;
+      run: (adapter: HttpGatewayChainAdapter) => Promise<unknown>;
+    }> = [
+      {
+        name: "writeReference",
+        body: {},
+        run: (a) => a.writeReference({ ...makeRef("to1"), refId: "ref_to1" }),
+      },
+      {
+        name: "updateReference",
+        body: {},
+        run: (a) =>
+          a.updateReference("ref_to2", {
+            storageId: "s",
+            encryptionScheme: "",
+            storageProvider: "mock",
+            writtenAt: 0,
+            keyEnvelope: "{}",
+          }),
+      },
+      {
+        name: "readReference",
+        body: makeRef("to3"),
+        run: (a) => a.readReference("ref_to3"),
+      },
+      { name: "listReferences", body: [], run: (a) => a.listReferences() },
+      {
+        name: "removeReference",
+        body: null,
+        run: (a) => a.removeReference("ref_to4"),
+      },
+    ];
+
+    it.each(CASES)(
+      "$name: passes an AbortSignal when requestTimeoutMs > 0",
+      async ({ body, run }) => {
+        const fetchMock = mockFetch(body);
+        vi.stubGlobal("fetch", fetchMock);
+        const adapter = new HttpGatewayChainAdapter({
+          ...BASE_CONFIG,
+          requestTimeoutMs: 5_000,
+        });
+        await run(adapter);
+        const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+      },
+    );
+
+    it.each(CASES)(
+      "$name: omits signal when requestTimeoutMs is 0",
+      async ({ body, run }) => {
+        const fetchMock = mockFetch(body);
+        vi.stubGlobal("fetch", fetchMock);
+        const adapter = new HttpGatewayChainAdapter({
+          ...BASE_CONFIG,
+          requestTimeoutMs: 0,
+        });
+        await run(adapter);
+        const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(init.signal).toBeUndefined();
+      },
+    );
+
+    it("defaults requestTimeoutMs to 30s when not specified", async () => {
+      const fetchMock = mockFetch(makeRef("to5"));
+      vi.stubGlobal("fetch", fetchMock);
+      const adapter = new HttpGatewayChainAdapter(BASE_CONFIG);
+      await adapter.readReference("ref_to5");
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+  });
+
+  // ── response size limit ──────────────────────────────────────────────────────
+
+  describe("response size limit", () => {
+    function makeStreamResponse(
+      json: unknown,
+      opts: { chunkSize?: number; contentLength?: string | null } = {},
+    ) {
+      const text = JSON.stringify(json);
+      const bytes = new TextEncoder().encode(text);
+      const chunkSize = opts.chunkSize ?? 16;
+      const chunks: Uint8Array[] = [];
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        chunks.push(bytes.slice(i, i + chunkSize));
+      }
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const c of chunks) controller.enqueue(c);
+          controller.close();
+        },
+      });
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: {
+          get: (name: string) =>
+            name.toLowerCase() === "content-length"
+              ? (opts.contentLength ?? null)
+              : null,
+        },
+        body: stream,
+        text: () => Promise.resolve(text),
+      };
+    }
+
+    it("readReference throws GATEWAY_READ_RESPONSE_TOO_LARGE when Content-Length exceeds maxResponseBytes", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(
+            makeStreamResponse(makeRef("big"), { contentLength: "99999999" }),
+          ),
+      );
+      const adapter = new HttpGatewayChainAdapter({
+        ...BASE_CONFIG,
+        maxResponseBytes: 100,
+      });
+      await expect(adapter.readReference("ref_big")).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_READ_RESPONSE_TOO_LARGE,
+      });
+    });
+
+    it("readReference throws GATEWAY_READ_RESPONSE_TOO_LARGE mid-stream when the body exceeds the cap, even with no Content-Length", async () => {
+      const bigRef = { ...makeRef("huge"), keyEnvelope: "x".repeat(1000) };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(makeStreamResponse(bigRef)),
+      );
+      const adapter = new HttpGatewayChainAdapter({
+        ...BASE_CONFIG,
+        maxResponseBytes: 50,
+      });
+      await expect(adapter.readReference("ref_huge")).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_READ_RESPONSE_TOO_LARGE,
+      });
+    });
+
+    it("listReferences throws GATEWAY_LIST_RESPONSE_TOO_LARGE when Content-Length exceeds maxResponseBytes", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(
+            makeStreamResponse([], { contentLength: "99999999" }),
+          ),
+      );
+      const adapter = new HttpGatewayChainAdapter({
+        ...BASE_CONFIG,
+        maxResponseBytes: 100,
+      });
+      await expect(adapter.listReferences()).rejects.toMatchObject({
+        code: ChainErrorCode.GATEWAY_LIST_RESPONSE_TOO_LARGE,
+      });
+    });
+
+    it("succeeds when the response is within maxResponseBytes", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(makeStreamResponse(makeRef("ok"))),
+      );
+      const adapter = new HttpGatewayChainAdapter({
+        ...BASE_CONFIG,
+        maxResponseBytes: 10 * 1024 * 1024,
+      });
+      await expect(adapter.readReference("ref_ok")).resolves.toBeDefined();
     });
   });
 });

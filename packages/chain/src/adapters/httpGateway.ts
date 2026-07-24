@@ -16,10 +16,19 @@ import type {
   DataReferenceSummary,
   ChainQuote,
 } from "../types.js";
-import { bytesToBase64url, DStorageError } from "@dstorage/crypto";
+import {
+  bytesToBase64url,
+  DStorageError,
+  readResponseTextWithLimit,
+} from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
 
 const COMPONENT = "[dStorage/http-gateway-chain]";
+
+/** Default request timeout — matches the convention used by managed.ts. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+/** Default max JSON response size — generous for reference/list payloads. */
+const DEFAULT_MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MiB
 
 function generateRefId(): string {
   const id =
@@ -53,6 +62,19 @@ export interface HttpGatewayChainAdapterConfig {
    */
   customFetch?: typeof fetch;
   logger?: ChainAdapterLogger;
+  /**
+   * Maximum time in milliseconds to wait for any single request before aborting.
+   * Defaults to 30_000 ms (30 s). Pass `0` to disable the timeout entirely
+   * (not recommended for production).
+   */
+  requestTimeoutMs?: number;
+  /**
+   * Maximum number of bytes allowed in a `readReference`/`listReferences`
+   * JSON response body. Guards against a hostile or misbehaving gateway
+   * returning an oversized body to exhaust memory. Defaults to 10_485_760
+   * (10 MiB) — generous for reference/list JSON payloads.
+   */
+  maxResponseBytes?: number;
 }
 
 export class HttpGatewayChainAdapter implements ChainAdapter {
@@ -66,6 +88,8 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   private readonly readUrl: string;
   private readonly listUrl: string;
   private readonly deleteUrl: string;
+  private readonly requestTimeoutMs: number;
+  private readonly maxResponseBytes: number;
 
   constructor(config: HttpGatewayChainAdapterConfig) {
     this.logger = config.logger;
@@ -75,6 +99,19 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
     this.readUrl = `${config.baseUrl}${config.readPath}`;
     this.listUrl = `${config.baseUrl}${config.listPath}`;
     this.deleteUrl = `${config.baseUrl}${config.deletePath}`;
+    this.requestTimeoutMs =
+      config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.maxResponseBytes =
+      config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+  }
+
+  /** Adds an AbortSignal.timeout() to a fetch init object (when requestTimeoutMs > 0). */
+  private _withTimeout(init: RequestInit): RequestInit {
+    const signal =
+      this.requestTimeoutMs > 0
+        ? AbortSignal.timeout(this.requestTimeoutMs)
+        : undefined;
+    return { ...init, ...(signal !== undefined ? { signal } : {}) };
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
@@ -85,11 +122,17 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await this.fetchFn(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...this.extraHeaders },
-        body: JSON.stringify(payload),
-      });
+      res = await this.fetchFn(
+        url,
+        this._withTimeout({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...this.extraHeaders,
+          },
+          body: JSON.stringify(payload),
+        }),
+      );
     } catch (err) {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_WRITE_FAILED,
@@ -125,11 +168,17 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await this.fetchFn(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...this.extraHeaders },
-        body: JSON.stringify(update),
-      });
+      res = await this.fetchFn(
+        url,
+        this._withTimeout({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...this.extraHeaders,
+          },
+          body: JSON.stringify(update),
+        }),
+      );
     } catch (err) {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_UPDATE_FAILED,
@@ -154,7 +203,10 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await this.fetchFn(url, { headers: { ...this.extraHeaders } });
+      res = await this.fetchFn(
+        url,
+        this._withTimeout({ headers: { ...this.extraHeaders } }),
+      );
     } catch (err) {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_READ_FAILED,
@@ -171,9 +223,14 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       );
     }
 
+    const text = await readResponseTextWithLimit(res, {
+      maxBytes: this.maxResponseBytes,
+      code: ChainErrorCode.GATEWAY_READ_RESPONSE_TOO_LARGE,
+      component: `${COMPONENT} readReference`,
+    });
     let data: unknown;
     try {
-      data = await res.json();
+      data = JSON.parse(text);
     } catch {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_READ_INVALID_JSON,
@@ -200,9 +257,10 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   async listReferences(): Promise<DataReferenceSummary[]> {
     let res: Response;
     try {
-      res = await this.fetchFn(this.listUrl, {
-        headers: { ...this.extraHeaders },
-      });
+      res = await this.fetchFn(
+        this.listUrl,
+        this._withTimeout({ headers: { ...this.extraHeaders } }),
+      );
     } catch (err) {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_LIST_FAILED,
@@ -219,9 +277,14 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
       );
     }
 
+    const text = await readResponseTextWithLimit(res, {
+      maxBytes: this.maxResponseBytes,
+      code: ChainErrorCode.GATEWAY_LIST_RESPONSE_TOO_LARGE,
+      component: `${COMPONENT} listReferences`,
+    });
     let data: unknown;
     try {
-      data = await res.json();
+      data = JSON.parse(text);
     } catch {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_LIST_INVALID_JSON,
@@ -268,11 +331,17 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
 
     let res: Response;
     try {
-      res = await this.fetchFn(url, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", ...this.extraHeaders },
-        body: JSON.stringify(body),
-      });
+      res = await this.fetchFn(
+        url,
+        this._withTimeout({
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...this.extraHeaders,
+          },
+          body: JSON.stringify(body),
+        }),
+      );
     } catch (err) {
       throw new DStorageError(
         ChainErrorCode.GATEWAY_REMOVE_FAILED,

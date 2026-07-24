@@ -5,3 +5,4 @@ export * from "./xchacha.js";
 export * from "./keyEnvelope.js";
 export * from "./mlkem.js";
 export * from "./blake3.js";
+export * from "./boundedFetch.js";
