@@ -93,6 +93,29 @@ describe("init / destroy", () => {
     await ds.init();
     expect(ds.isConnected).toBe(true);
   });
+
+  it("destroy() calls destroy() on every encryption adapter that implements it", async () => {
+    const destroySpy = vi.fn();
+    const mockAdapter = {
+      name: "mock-destroyable",
+      wrapDek: vi.fn(),
+      unwrapDek: vi.fn(),
+      destroy: destroySpy,
+    };
+    const ds = new DStorage({
+      storageAdapter: new MockStorageAdapter(),
+      chainAdapter: new MidnightSimulatorChainAdapter(),
+      encryptionAdapters: [mockAdapter],
+    });
+    await ds.init();
+    ds.destroy();
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("destroy() does not throw when an adapter has no destroy() method", async () => {
+    const ds = await makeInitedDStorage("0xAlice_ds3");
+    expect(() => ds.destroy()).not.toThrow();
+  });
 });
 
 // ── assertConnected guard ─────────────────────────────────────────────────────

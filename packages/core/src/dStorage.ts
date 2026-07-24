@@ -143,6 +143,9 @@ export class DStorage {
 
   /** Tear down active state and clear all in-memory key material. */
   destroy(): void {
+    for (const provider of this._encryptionProviders) {
+      provider.destroy?.();
+    }
     this.wallet = null;
     this._encryptionProviders = [];
     this._initialized = false;
@@ -271,20 +274,26 @@ export class DStorage {
             );
           }
           const ownerSeed = generateDek();
-          const ownerSeedWrappers = await Promise.all(
-            this._encryptionProviders.map(async (provider) => ({
-              wrapKeyName: provider.name,
-              ...(await provider.wrapDek(ownerSeed)),
-            })),
-          );
-          keyEnvelope = serializeKeyEnvelope(
-            buildKeyEnvelope(ownerSeedWrappers),
-          );
-          ownerSecret = await deriveOwnerSecret(
-            ownerSeed,
-            new TextEncoder().encode(storageResult.id),
-            "dstorage:owner-secret:public:v1",
-          );
+          try {
+            const ownerSeedWrappers = await Promise.all(
+              this._encryptionProviders.map(async (provider) => ({
+                wrapKeyName: provider.name,
+                ...(await provider.wrapDek(ownerSeed)),
+              })),
+            );
+            keyEnvelope = serializeKeyEnvelope(
+              buildKeyEnvelope(ownerSeedWrappers),
+            );
+            ownerSecret = await deriveOwnerSecret(
+              ownerSeed,
+              new TextEncoder().encode(storageResult.id),
+              "dstorage:owner-secret:public:v1",
+            );
+          } finally {
+            // Never embedded in a returned scheme (public uploads never set
+            // uploadScheme), so it's always safe to wipe once used.
+            ownerSeed.fill(0);
+          }
         }
         // Write storageId as-is on-chain.
         onChainStorageId = storageResult.id;
@@ -374,6 +383,12 @@ export class DStorage {
           };
         } catch {
           throw new StorePartialError(storeRecovery);
+        } finally {
+          // Safe unconditionally here: this branch never returns uploadScheme
+          // (which would alias the same underlying buffer) to the caller —
+          // unlike the storage-only branch below, which hands uploadScheme
+          // back as cryptoScheme and must NOT have its key wiped.
+          dek?.fill(0);
         }
       }
 
@@ -1576,6 +1591,13 @@ export class DStorage {
         };
       } catch {
         throw new StorePartialError(storeRecovery);
+      } finally {
+        // Safe here: unlike store()'s single-shot path, _uploadChunked never
+        // returns uploadScheme (aliasing the same buffer) to the caller in
+        // either branch, and this runs after encryptedMetadata — the last
+        // use of the key material — has already completed above.
+        chunkDek?.fill(0);
+        ownerSeed?.fill(0);
       }
     }
 
@@ -1583,6 +1605,9 @@ export class DStorage {
       "dStorage",
       `Chunked upload complete (storage-only) → ${totalChunks} chunks + manifest, storageId: ${manifestResult.id}`,
     );
+
+    chunkDek?.fill(0);
+    ownerSeed?.fill(0);
 
     return {
       storageId: manifestResult.id,

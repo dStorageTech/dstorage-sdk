@@ -90,9 +90,11 @@ import { DStorageError, CryptoErrorCode } from "./errors.js";
 /** Decode a base64url string to a Uint8Array. */
 export function base64urlToBytes(b64url: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]*$/.test(b64url)) {
+    // Never echo the input itself — this decodes wrapped-key material and KEM
+    // ciphertext, and fragments of it could otherwise reach logs/error trackers.
     throw new DStorageError(
       CryptoErrorCode.BASE64URL_INVALID,
-      `[dStorage/crypto] malformed base64url input — unexpected characters in "${b64url.slice(0, 32)}${b64url.length > 32 ? "…" : ""}"`,
+      `[dStorage/crypto] malformed base64url input — unexpected characters (length: ${b64url.length})`,
     );
   }
   const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
