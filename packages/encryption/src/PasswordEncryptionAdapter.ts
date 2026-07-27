@@ -487,22 +487,34 @@ function hasKeyboardWalk(pw: string, minLen = 5): boolean {
 }
 
 /**
- * Generate a cryptographically random password suitable for use with
- * `PasswordEncryptionAdapter` when post-quantum-safe key derivation is required.
+ * Generate a cryptographically random password with enough entropy for
+ * post-quantum-safe key derivation.
  *
- * Produces 32 random bytes (256 bits of real entropy) encoded as a 43-character
- * base64url string. When combined with `intoKeypairEncryptionAdapter()`, this
- * provides a fully recoverable path to ML-KEM 192-bit post-quantum security:
- * the password is the only secret needed to re-derive the same ML-KEM keypair
- * on any device, without storing the private key itself.
+ * Produces 32 random bytes (256 bits of real CSPRNG entropy) encoded as a
+ * 43-character base64url string. 256 bits is the level a KDF input needs to
+ * retain 128-bit security against a quantum brute-force (Grover's algorithm
+ * halves it), meeting the NIST SP 800-131A post-quantum minimum — a level no
+ * human-chosen password can reach.
+ *
+ * Security level: ~128-bit post-quantum (NIST category 1), whether the password
+ * is used directly with `PasswordEncryptionAdapter` (symmetric) or to derive an
+ * ML-KEM keypair via `intoKeypairEncryptionAdapter()` /
+ * `KeypairEncryptionAdapter.fromPassword()`. The ML-KEM path does NOT reach
+ * ML-KEM-768's ~192-bit lattice strength: because the keypair is a deterministic
+ * function of the password, a quantum attacker can Grover-search the password
+ * (~2^128) and re-derive it, which is cheaper than attacking the lattice. The
+ * benefit of the ML-KEM path is a fully recoverable asymmetric adapter (no
+ * secret key to store), not a higher bit level. Full ~192-bit PQ requires a
+ * randomly generated `KeypairEncryptionAdapter.generateKeypair()` whose secret
+ * key is backed up separately and never derived from a password.
  *
  * @example
- * const password = generatePqsPassword(); // store this securely
+ * const password = generateHighEntropyPassword(); // store this securely
  * const adapter = new PasswordEncryptionAdapter({ password, salt: "myapp:alice" });
  * const keypairAdapter = await adapter.intoKeypairEncryptionAdapter("myapp:v1");
- * await sdk.connect(keypairAdapter); // full 192-bit PQ security
+ * await sdk.connect(keypairAdapter); // 128-bit PQ (NIST category 1), password-recoverable
  */
-export function generatePqsPassword(): string {
+export function generateHighEntropyPassword(): string {
   while (true) {
     const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const b64 = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));

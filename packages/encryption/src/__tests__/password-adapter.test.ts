@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   PasswordEncryptionAdapter,
-  generatePqsPassword,
+  generateHighEntropyPassword,
   KDF_PRESETS,
   type KdfPreset,
 } from "../PasswordEncryptionAdapter.js";
@@ -682,22 +682,24 @@ describe("weak-pattern rejection", () => {
 });
 
 // ---------------------------------------------------------------------------
-// generatePqsPassword
+// generateHighEntropyPassword
 // ---------------------------------------------------------------------------
 
-describe("generatePqsPassword", () => {
+describe("generateHighEntropyPassword", () => {
   it("returns a 43-character base64url string", () => {
-    const pw = generatePqsPassword();
+    const pw = generateHighEntropyPassword();
     expect(pw).toHaveLength(43);
     expect(pw).toMatch(/^[A-Za-z0-9\-_]+$/);
   });
 
   it("two calls return different passwords", () => {
-    expect(generatePqsPassword()).not.toBe(generatePqsPassword());
+    expect(generateHighEntropyPassword()).not.toBe(
+      generateHighEntropyPassword(),
+    );
   });
 
   it("result passes PasswordEncryptionAdapter construction", () => {
-    const pw = generatePqsPassword();
+    const pw = generateHighEntropyPassword();
     expect(
       () =>
         new PasswordEncryptionAdapter({
@@ -709,7 +711,7 @@ describe("generatePqsPassword", () => {
   });
 
   it("result + intoKeypairEncryptionAdapter() produces a keypair adapter", async () => {
-    const pw = generatePqsPassword();
+    const pw = generateHighEntropyPassword();
     const adapter = new PasswordEncryptionAdapter({
       password: pw,
       salt: GOOD_SALT,
@@ -722,7 +724,7 @@ describe("generatePqsPassword", () => {
   });
 
   it("ML-KEM seed is domain-separated from the raw scrypt output", async () => {
-    const pw = generatePqsPassword();
+    const pw = generateHighEntropyPassword();
 
     // Compute the raw scrypt output independently (without going through the adapter).
     const passwordBytes = new TextEncoder().encode(pw);
@@ -759,7 +761,7 @@ describe("generatePqsPassword", () => {
   });
 
   it("ML-KEM seed is derived via HKDF with info='dstorage:mlkem-seed:v1'", async () => {
-    const pw = generatePqsPassword();
+    const pw = generateHighEntropyPassword();
 
     // Compute expected ML-KEM seed independently: scrypt → HKDF(sha256, salt=32zeros, info).
     const passwordBytes = new TextEncoder().encode(pw);
@@ -801,7 +803,7 @@ describe("generatePqsPassword", () => {
   });
 
   it("same password + same salt → same keypair adapter (deterministic)", async () => {
-    const pw = generatePqsPassword();
+    const pw = generateHighEntropyPassword();
     const make = () =>
       new PasswordEncryptionAdapter({
         password: pw,

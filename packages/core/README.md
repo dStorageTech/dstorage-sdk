@@ -336,11 +336,11 @@ The raw seed bytes returned by the `EncryptionAdapter` are used to derive a Key 
 
 The `@dstorage/encryption` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
 
-| Adapter                     | Seed source                                                        | Post-quantum safety                                                                                                                                                     | Cross-device portability                                                                                            |
-| --------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `PasswordEncryptionAdapter` | scrypt(password, caller-supplied salt)                             | ⚠️ 128-bit PQ at the data layer (NIST minimum). Key encapsulation safety depends on password entropy — use `generatePqsPassword()` for machine-generated PQ-safe input. | ✅ Same seed on any device — depends only on password + salt                                                        |
-| `MnemonicEncryptionAdapter` | BIP-39 mnemonic phrase (**24 words required**) or 64-byte hex seed | ✅ 128-bit PQ — unconditional (CSPRNG-generated 256-bit entropy; Grover's halves to 128-bit). Fewer than 24 words is rejected at construction.                          | ✅ Same seed wherever the same mnemonic/hex is imported                                                             |
-| `KeypairEncryptionAdapter`  | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum)       | ✅ 192-bit PQ via ML-KEM768 — unconditional, no password or entropy requirement.                                                                                        | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()` |
+| Adapter                     | Seed source                                                        | Post-quantum safety                                                                                                                                                                                                                      | Cross-device portability                                                                                            |
+| --------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `PasswordEncryptionAdapter` | scrypt(password, caller-supplied salt)                             | ⚠️ 128-bit PQ at the data layer (NIST minimum). Key encapsulation safety depends on password entropy — use `generateHighEntropyPassword()` for a machine-generated 256-bit password (128-bit PQ, NIST category 1).                       | ✅ Same seed on any device — depends only on password + salt                                                        |
+| `MnemonicEncryptionAdapter` | BIP-39 mnemonic phrase (**24 words required**) or 64-byte hex seed | ✅ 128-bit PQ — unconditional (CSPRNG-generated 256-bit entropy; Grover's halves to 128-bit). Fewer than 24 words is rejected at construction.                                                                                           | ✅ Same seed wherever the same mnemonic/hex is imported                                                             |
+| `KeypairEncryptionAdapter`  | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum)       | ✅ 192-bit PQ via ML-KEM768 for a randomly generated keypair (`generateKeypair()`). A keypair **derived** from a password/mnemonic (`fromPassword()` / `fromMnemonic()`) is capped at ~128-bit by the derivation input's Grover ceiling. | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()` |
 
 #### Cross-device portability
 
@@ -437,27 +437,27 @@ Every private upload has two independently protected layers:
 
 The **key encapsulation layer** is where adapters differ:
 
-| Adapter                     | Key encapsulation mechanism                 | PQ safety                                                                                                                                                                                                                                     |
-| --------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PasswordEncryptionAdapter` | scrypt(password) → HKDF-SHA-256 → KEK       | ⚠️ Conditional on password entropy. A quantum attacker can brute-force the password; human-chosen passwords cannot reach the 256-bit entropy required for PQ-safe key encapsulation. Use `generatePqsPassword()` for machine-generated input. |
-| `MnemonicEncryptionAdapter` | BIP-39(mnemonic) → HKDF-SHA-256 → KEK       | ✅ 128-bit PQ — a 24-word BIP-39 mnemonic is CSPRNG-generated (256 bits of entropy); Grover's halves this to 128-bit. Unconditional and enforced: the adapter rejects mnemonics shorter than 24 words at construction time.                   |
-| `KeypairEncryptionAdapter`  | ML-KEM encapsulate(PK) → HKDF-SHA-256 → KEK | ✅ 192-bit PQ — security rests on the LWE problem; no known quantum speedup exists. Highest level available.                                                                                                                                  |
+| Adapter                     | Key encapsulation mechanism                 | PQ safety                                                                                                                                                                                                                                                                            |
+| --------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PasswordEncryptionAdapter` | scrypt(password) → HKDF-SHA-256 → KEK       | ⚠️ Conditional on password entropy. A quantum attacker can brute-force the password; human-chosen passwords cannot reach the 256-bit entropy required for PQ-safe key encapsulation. Use `generateHighEntropyPassword()` for machine-generated input.                                |
+| `MnemonicEncryptionAdapter` | BIP-39(mnemonic) → HKDF-SHA-256 → KEK       | ✅ 128-bit PQ — a 24-word BIP-39 mnemonic is CSPRNG-generated (256 bits of entropy); Grover's halves this to 128-bit. Unconditional and enforced: the adapter rejects mnemonics shorter than 24 words at construction time.                                                          |
+| `KeypairEncryptionAdapter`  | ML-KEM encapsulate(PK) → HKDF-SHA-256 → KEK | ✅ 192-bit PQ for a randomly generated keypair (`generateKeypair()`) — rests on the module-LWE problem; no known quantum speedup. A keypair **derived** from a password/mnemonic (`fromPassword()` / `fromMnemonic()`) is capped at ~128-bit by the derivation input's Grover bound. |
 
-For **"harvest now, decrypt later"** threat models, both `MnemonicEncryptionAdapter` (128-bit PQ, unconditional) and `KeypairEncryptionAdapter` (192-bit PQ, unconditional) provide solid post-quantum guarantees at the key encapsulation level. `PasswordEncryptionAdapter` with a human-chosen password does not — use `generatePqsPassword()` to close that gap.
+For **"harvest now, decrypt later"** threat models, both `MnemonicEncryptionAdapter` (128-bit PQ, unconditional) and a randomly generated `KeypairEncryptionAdapter` (`generateKeypair()`, 192-bit PQ) provide solid post-quantum guarantees at the key encapsulation level. `PasswordEncryptionAdapter` with a human-chosen password does not — use `generateHighEntropyPassword()` to raise it to the 128-bit NIST-minimum PQ level.
 
 #### Machine-generated PQ-safe passwords
 
-If you want cross-device password recoverability **and** full ML-KEM post-quantum security, use `generatePqsPassword()`:
+If you want cross-device password recoverability at the 128-bit (NIST-minimum) post-quantum level, use `generateHighEntropyPassword()`:
 
 ```typescript
 import {
-  generatePqsPassword,
+  generateHighEntropyPassword,
   KeypairEncryptionAdapter,
 } from "@dstorage-tech/dstorage-sdk";
 
 // 32 random bytes → 43-char base64url string (256 bits of real entropy).
 // Store this string — it is the only secret needed to re-derive the keypair on any device.
-const password = generatePqsPassword();
+const password = generateHighEntropyPassword();
 
 // Derives an ML-KEM keypair via scrypt → 64-byte seed → ML-KEM keygen.
 // Same password + salt + context → same keypair, always, on any device.
@@ -468,15 +468,19 @@ const adapter = await KeypairEncryptionAdapter.fromPassword(
 );
 ```
 
+A password-derived keypair is bounded at ~128-bit PQ (the password's Grover ceiling), **not** ML-KEM-768's ~192-bit — deriving ML-KEM from a password gives recoverability (no secret key to store), not a higher bit level than using the same password symmetrically. For the full ~192-bit PQ, use a randomly generated `KeypairEncryptionAdapter.generateKeypair()` and back up its secret key separately.
+
 > **Warning — human-chosen passwords are not PQ-safe at the key encapsulation layer.**
 > No human-memorable password or passphrase can reach the 256-bit entropy required to
 > resist a Grover's-algorithm brute-force. Human passwords still provide 128-bit PQ
 > security at the _data_ layer (NIST minimum, sufficient for most applications) but a
-> quantum attacker could recover the password and rederive the KEK. Use
-> `generatePqsPassword()` with `KeypairEncryptionAdapter.fromPassword()`, or
-> `MnemonicEncryptionAdapter` with a 24-word BIP-39 mnemonic (12-word mnemonics are
-> rejected — they give only 64-bit PQ security), if key-encapsulation-level PQ safety
-> is required.
+> quantum attacker could recover the password and rederive the KEK. For
+> key-encapsulation-level PQ safety, use `generateHighEntropyPassword()` with
+> `KeypairEncryptionAdapter.fromPassword()` (128-bit PQ — the derived keypair is bounded
+> by the password's Grover ceiling, not ML-KEM's 192-bit), or `MnemonicEncryptionAdapter`
+> with a 24-word BIP-39 mnemonic (12-word mnemonics are rejected — they give only 64-bit
+> PQ security). For the full ~192-bit, use a randomly generated `generateKeypair()` with
+> a separately backed-up secret key.
 
 ---
 
