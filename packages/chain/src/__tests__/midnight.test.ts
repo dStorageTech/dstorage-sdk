@@ -361,4 +361,236 @@ describe("MidnightChainAdapter", () => {
       });
     });
   });
+
+  // ── _initConnector wallet selection ───────────────────────────────────────
+
+  describe("_initConnector wallet selection", () => {
+    type FakeWallet = {
+      name?: string;
+      rdns?: string;
+      apiVersion?: string;
+      connect: ReturnType<typeof vi.fn>;
+    };
+
+    const FAKE_CONNECTED_API = {
+      getConfiguration: vi.fn().mockRejectedValue(new Error("no config")),
+      getShieldedAddresses: vi.fn().mockResolvedValue({
+        shieldedAddress: "fake-shielded-address",
+        shieldedCoinPublicKey: "fake-coin-pk",
+        shieldedEncryptionPublicKey: "fake-enc-pk",
+      }),
+      getUnshieldedAddress: vi
+        .fn()
+        .mockRejectedValue(new Error("no unshielded address")),
+      getDustAddress: vi.fn().mockRejectedValue(new Error("no dust address")),
+    };
+
+    function makeFakeWallet(
+      opts: { name?: string; rdns?: string } = {},
+    ): FakeWallet {
+      return {
+        ...opts,
+        apiVersion: "4.0.0",
+        connect: vi.fn().mockResolvedValue(FAKE_CONNECTED_API),
+      };
+    }
+
+    function makeMockLogger() {
+      return {
+        log: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      };
+    }
+
+    function stubWindowMidnight(wallets: Record<string, FakeWallet>) {
+      vi.stubGlobal("window", { midnight: wallets });
+    }
+
+    function makeConnectorAdapter(
+      connectorName: string | undefined,
+      logger: ReturnType<typeof makeMockLogger>,
+    ) {
+      return new MidnightChainAdapter({
+        contractAddress: VALID_ADDR,
+        network: MOCK_NETWORK,
+        proofServerEndpoint: "http://localhost:6300",
+        walletMode: "connector",
+        ...(connectorName !== undefined ? { connectorName } : {}),
+        logger,
+      });
+    }
+
+    it("selects the wallet whose rdns matches connectorName", async () => {
+      const lace = makeFakeWallet({ name: "lace", rdns: "io.lace.wallet" });
+      const oneAm = makeFakeWallet({
+        name: "1AM",
+        rdns: "com.midnight.1am",
+      });
+      stubWindowMidnight({
+        "37e66147-8d22-48f5-94d2-784a7dd8963f": lace,
+        "1am": oneAm,
+      });
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter("io.lace.wallet", logger);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (adapter as any)._initConnector();
+
+      expect(lace.connect).toHaveBeenCalledTimes(1);
+      expect(oneAm.connect).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        "dStorage/midnight",
+        expect.stringContaining("not found"),
+      );
+    });
+
+    it("selects the wallet whose name matches connectorName (no rdns match)", async () => {
+      const lace = makeFakeWallet({ name: "lace", rdns: "io.lace.wallet" });
+      const oneAm = makeFakeWallet({
+        name: "1AM",
+        rdns: "com.midnight.1am",
+      });
+      stubWindowMidnight({
+        "37e66147-8d22-48f5-94d2-784a7dd8963f": lace,
+        "1am": oneAm,
+      });
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter("1AM", logger);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (adapter as any)._initConnector();
+
+      expect(oneAm.connect).toHaveBeenCalledTimes(1);
+      expect(lace.connect).not.toHaveBeenCalled();
+    });
+
+    it("selects the wallet whose injected key matches connectorName (no rdns/name match)", async () => {
+      const lace = makeFakeWallet({ name: "lace", rdns: "io.lace.wallet" });
+      const oneAm = makeFakeWallet({
+        name: "1AM",
+        rdns: "com.midnight.1am",
+      });
+      stubWindowMidnight({
+        "37e66147-8d22-48f5-94d2-784a7dd8963f": lace,
+        "1am": oneAm,
+      });
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter("1am", logger);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (adapter as any)._initConnector();
+
+      expect(oneAm.connect).toHaveBeenCalledTimes(1);
+      expect(lace.connect).not.toHaveBeenCalled();
+    });
+
+    it("prefers an rdns match over an id/name match on a different wallet", async () => {
+      // Wallet A's id/name equals connectorName, but wallet B's rdns also
+      // equals connectorName — the rdns match must win.
+      const walletA = makeFakeWallet({ name: "io.lace.wallet" });
+      const walletB = makeFakeWallet({ rdns: "io.lace.wallet" });
+      stubWindowMidnight({
+        "io.lace.wallet": walletA,
+        "some-other-key": walletB,
+      });
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter("io.lace.wallet", logger);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (adapter as any)._initConnector();
+
+      expect(walletB.connect).toHaveBeenCalledTimes(1);
+      expect(walletA.connect).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the first wallet and warns when connectorName matches nothing", async () => {
+      const lace = makeFakeWallet({ name: "lace", rdns: "io.lace.wallet" });
+      const oneAm = makeFakeWallet({
+        name: "1AM",
+        rdns: "com.midnight.1am",
+      });
+      stubWindowMidnight({
+        "37e66147-8d22-48f5-94d2-784a7dd8963f": lace,
+        "1am": oneAm,
+      });
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter("nonexistent-wallet", logger);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (adapter as any)._initConnector();
+
+      expect(lace.connect).toHaveBeenCalledTimes(1);
+      expect(oneAm.connect).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "dStorage/midnight",
+        expect.stringContaining(
+          'Configured wallet "nonexistent-wallet" not found',
+        ),
+      );
+      expect(logger.warn).toHaveBeenCalledWith(
+        "dStorage/midnight",
+        expect.stringContaining("Using first available"),
+      );
+    });
+
+    it("uses the first discovered wallet when connectorName is not set", async () => {
+      const lace = makeFakeWallet({ name: "lace", rdns: "io.lace.wallet" });
+      const oneAm = makeFakeWallet({
+        name: "1AM",
+        rdns: "com.midnight.1am",
+      });
+      stubWindowMidnight({
+        "37e66147-8d22-48f5-94d2-784a7dd8963f": lace,
+        "1am": oneAm,
+      });
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter(undefined, logger);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (adapter as any)._initConnector();
+
+      expect(lace.connect).toHaveBeenCalledTimes(1);
+      expect(oneAm.connect).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        "dStorage/midnight",
+        expect.stringContaining("not found"),
+      );
+    });
+
+    it("throws MIDNIGHT_WALLET_NOT_FOUND when window.midnight is absent", async () => {
+      vi.stubGlobal("window", {});
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter(undefined, logger);
+
+      let err: unknown;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (adapter as any)._initConnector();
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_WALLET_NOT_FOUND,
+      });
+    });
+
+    it("throws MIDNIGHT_NO_WALLETS_FOUND when window.midnight has no connect-shaped entries", async () => {
+      vi.stubGlobal("window", { midnight: { notAWallet: {} } });
+      const logger = makeMockLogger();
+      const adapter = makeConnectorAdapter(undefined, logger);
+
+      let err: unknown;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (adapter as any)._initConnector();
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_NO_WALLETS_FOUND,
+      });
+    });
+  });
 });

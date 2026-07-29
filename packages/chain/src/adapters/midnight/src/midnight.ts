@@ -44,7 +44,10 @@ import type {
   ChainQuote,
 } from "../../../types.js";
 
-import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
+import type {
+  ConnectedAPI,
+  InitialAPI,
+} from "@midnight-ntwrk/dapp-connector-api";
 import type { DataRegistryAPI } from "./contract-api.js";
 import type {
   DataRegistryProviders,
@@ -193,8 +196,17 @@ export type MidnightChainAdapterConfig = BaseConfig &
          */
         walletMode: "connector";
         /**
-         * Wallet connector name. Default: 'mnLace' (Midnight Lace).
-         * Example: window.midnight.mnLace
+         * Wallet to prefer when multiple wallets are injected under window.midnight.
+         * Matched in order of reliability against each wallet's:
+         *   1. `rdns` — the spec-recommended stable identifier (reverse-DNS style),
+         *      e.g. 'io.lace.wallet' for Midnight Lace, 'com.midnight.1am' for the
+         *      1AM wallet. Recommended, since the injected window.midnight key is
+         *      not guaranteed to be stable (Lace injects under a random UUID;
+         *      other wallets, e.g. 1AM, use a fixed key).
+         *   2. declared `name` (e.g. 'lace' for Midnight Lace, '1AM' for the 1AM
+         *      wallet — casing varies by wallet and is not normalized).
+         *   3. injected window.midnight key, e.g. '1am' for the 1AM wallet.
+         * Default: use the first wallet discovered.
          */
         connectorName?: string;
         /**
@@ -1160,11 +1172,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       )
       .map(([id, v]) => ({
         id,
-        wallet: v as {
-          name?: string;
-          apiVersion?: string;
-          connect: (networkId: string) => Promise<ConnectedAPI>;
-        },
+        wallet: v as Partial<Omit<InitialAPI, "connect">> &
+          Pick<InitialAPI, "connect">,
       }));
 
     if (availableWallets.length === 0) {
@@ -1177,18 +1186,24 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     this.logger?.log(
       "dStorage/midnight",
-      `Found ${availableWallets.length} wallet(s): ${availableWallets.map((w) => `${w.id} (${w.wallet.name ?? "unknown"})`).join(", ")}`,
+      `Found ${availableWallets.length} wallet(s): ${availableWallets
+        .map(
+          (w) =>
+            `${w.id} (name: ${w.wallet.name ?? "unknown"}, rdns: ${w.wallet.rdns ?? "unknown"})`,
+        )
+        .join(", ")}`,
     );
 
-    // Select the wallet: prefer the configured connectorName (matched against
-    // the injected key, falling back to the wallet's declared name), otherwise
-    // use the first available.
+    // Select the wallet: prefer the configured connectorName, matched — in order
+    // of reliability — against the wallet's `rdns` (the spec-recommended stable
+    // identifier, e.g. 'io.lace.wallet'), then its declared `name`, then the
+    // injected window.midnight key. Falls back to the first available wallet.
     let selected = availableWallets[0]!;
     if (this.connectorName) {
-      const connectorFound = availableWallets.find(
-        (w) =>
-          w.id === this.connectorName || w.wallet.name === this.connectorName,
-      );
+      const connectorFound =
+        availableWallets.find((w) => w.wallet.rdns === this.connectorName) ??
+        availableWallets.find((w) => w.wallet.name === this.connectorName) ??
+        availableWallets.find((w) => w.id === this.connectorName);
       if (connectorFound) {
         selected = connectorFound;
       } else {
@@ -1201,7 +1216,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     this.logger?.log(
       "dStorage/midnight",
-      `Connecting to wallet "${selected.id}" (name: ${selected.wallet.name ?? "unknown"}, apiVersion: ${selected.wallet.apiVersion ?? "unknown"}) on network "${this.config.networkId}"...`,
+      `Connecting to wallet "${selected.id}" (name: ${selected.wallet.name ?? "unknown"}, rdns: ${selected.wallet.rdns ?? "unknown"}, apiVersion: ${selected.wallet.apiVersion ?? "unknown"}) on network "${this.config.networkId}"...`,
     );
 
     // Step 1: Connect to the wallet extension
