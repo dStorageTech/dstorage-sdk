@@ -33,6 +33,7 @@
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import type { CryptoScheme } from "./types.js";
 import { DStorageError, CryptoErrorCode } from "./errors.js";
+import { getCrypto } from "./webcrypto.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,14 +48,6 @@ export interface XChaChaPayload {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getCrypto(): Crypto {
-  if (typeof globalThis.crypto !== "undefined") return globalThis.crypto;
-  throw new DStorageError(
-    CryptoErrorCode.WEBCRYPTO_NOT_AVAILABLE,
-    "[dStorage/crypto] WebCrypto not available in this environment.",
-  );
-}
 
 function bufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);

@@ -82,6 +82,7 @@ export class KeyDeriver {
           "[dStorage/crypto] seedHex must be 32 bytes (64 hex chars) or 64 bytes (128 hex chars).",
         );
       }
+      assertSeedNotDegenerate(bytes);
       return bytes;
     }
 
@@ -100,6 +101,31 @@ export class KeyDeriver {
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
+
+/**
+ * Reject structurally degenerate seeds — every byte identical, which covers
+ * all-zeros, all-0xff, and placeholder values pasted from documentation.
+ *
+ * The mnemonic path is already protected by the BIP-39 checksum, which a
+ * degenerate phrase cannot satisfy. The raw-hex path has no such guard, so a
+ * caller can otherwise hand over a seed with no entropy at all and derive a
+ * valid, fully reproducible keyspace without any error.
+ *
+ * Deliberately narrow. A statistical randomness test is not attempted: it would
+ * falsely reject legitimate seeds and still could not tell a weak generator from
+ * a strong one. This catches the values a human types by hand, not weak entropy
+ * in general — seed quality remains the caller's responsibility.
+ */
+function assertSeedNotDegenerate(bytes: Uint8Array): void {
+  const first = bytes[0]!;
+  if (bytes.every((b) => b === first)) {
+    throw new DStorageError(
+      CryptoErrorCode.SEED_LOW_ENTROPY,
+      `[dStorage/crypto] seedHex has no entropy — all ${bytes.length} bytes are identical. ` +
+        `Generate a real seed with \`openssl rand -hex 32\` or supply a 24-word BIP-39 mnemonic.`,
+    );
+  }
+}
 
 export function hexToBytes(
   hex: string,

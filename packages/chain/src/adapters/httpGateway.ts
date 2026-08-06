@@ -19,6 +19,7 @@ import type {
 import {
   bytesToBase64url,
   DStorageError,
+  getCrypto,
   readResponseTextWithLimit,
 } from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
@@ -30,12 +31,15 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** Default max JSON response size — generous for reference/list payloads. */
 const DEFAULT_MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MiB
 
+/**
+ * Generate an unguessable reference id.
+ *
+ * Uses `getRandomValues` rather than `randomUUID` — the former is available in
+ * strictly more runtimes — and has no non-cryptographic fallback: a predictable
+ * refId would let a third party guess or collide with gateway references.
+ */
 function generateRefId(): string {
-  const id =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `ref_${id}`;
+  return `ref_${bytesToBase64url(getCrypto().getRandomValues(new Uint8Array(16)))}`;
 }
 
 export interface HttpGatewayChainAdapterConfig {

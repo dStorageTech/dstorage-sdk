@@ -161,6 +161,22 @@ describe("deriveOwnerSecret", () => {
     const secret = await deriveOwnerSecret(dek, enc("some-tx-id"));
     expect(secret).not.toEqual(dek);
   });
+
+  it("rejects an empty rawStorageId rather than falling back to a zero salt", async () => {
+    const dek = new Uint8Array(32).fill(0x07);
+    await expect(
+      deriveOwnerSecret(dek, new Uint8Array(0)),
+    ).rejects.toMatchObject({
+      code: CryptoErrorCode.OWNER_SECRET_EMPTY_SALT,
+      message: expect.stringContaining("[dStorage/crypto]"),
+    });
+  });
+
+  it("still derives for a single-byte rawStorageId", async () => {
+    const dek = new Uint8Array(32).fill(0x08);
+    const secret = await deriveOwnerSecret(dek, new Uint8Array([0x41]));
+    expect(secret.byteLength).toBe(32);
+  });
 });
 
 // ── buildKeyEnvelope ──────────────────────────────────────────────────────────

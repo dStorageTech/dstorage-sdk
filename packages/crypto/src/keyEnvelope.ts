@@ -41,6 +41,7 @@ import {
   type WrappedDekResult,
 } from "./types.js";
 import { DStorageError, CryptoErrorCode } from "./errors.js";
+import { getCrypto } from "./webcrypto.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,10 +67,17 @@ export interface KeyEnvelope {
 /**
  * Generate a cryptographically random 32-byte Data Encryption Key.
  * Uses the platform CSPRNG (`crypto.getRandomValues`) — safe in both
- * browser and Node.js 19+.
+ * browser and Node.js 19+. Throws rather than degrading if it is unavailable.
+ *
+ * Residual risk, stated plainly: the confidentiality of every private upload
+ * reduces to the quality of the platform CSPRNG. If `getRandomValues` is
+ * stubbed, backdoored, or under-seeded by the host, this function returns
+ * predictable DEKs and nothing downstream can detect it. No output check can
+ * distinguish a weak CSPRNG from a strong one, so the control is the
+ * availability guard plus trusting a vetted runtime.
  */
 export function generateDek(): Uint8Array {
-  return globalThis.crypto.getRandomValues(new Uint8Array(32));
+  return getCrypto().getRandomValues(new Uint8Array(32));
 }
 
 // ── KEK derivation ────────────────────────────────────────────────────────────
@@ -189,6 +197,14 @@ export async function deriveOwnerSecret(
   rawStorageId: Uint8Array,
   info: string = OWNER_SECRET_DOMAIN,
 ): Promise<Uint8Array> {
+  // An empty salt makes HKDF-Extract fall back to an all-zero salt block (RFC 5869
+  // §2.2), silently collapsing the per-upload separation this salt exists to provide.
+  if (rawStorageId.length === 0) {
+    throw new DStorageError(
+      CryptoErrorCode.OWNER_SECRET_EMPTY_SALT,
+      "[dStorage/crypto] rawStorageId must be non-empty — it is the HKDF salt binding the ownerSecret to a specific upload.",
+    );
+  }
   // Uint8Array.from() produces Uint8Array<ArrayBuffer> which is required by WebCrypto.
   const keyMaterial = await globalThis.crypto.subtle.importKey(
     "raw",

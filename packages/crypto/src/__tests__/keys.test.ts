@@ -134,6 +134,60 @@ describe("KeyDeriver", () => {
     });
   });
 
+  it("rejects an all-zero 32-byte seedHex", async () => {
+    const deriver = new KeyDeriver({ seedHex: "00".repeat(32) });
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.SEED_LOW_ENTROPY,
+      message: expect.stringContaining(
+        "[dStorage/crypto] seedHex has no entropy",
+      ),
+    });
+  });
+
+  it("rejects an all-zero 64-byte seedHex", async () => {
+    const deriver = new KeyDeriver({ seedHex: "00".repeat(64) });
+    await expect(deriver.getSeed()).rejects.toMatchObject({
+      code: CryptoErrorCode.SEED_LOW_ENTROPY,
+    });
+  });
+
+  it("rejects a seedHex whose bytes are all identical but non-zero", async () => {
+    for (const byte of ["ff", "42"]) {
+      const deriver = new KeyDeriver({ seedHex: byte.repeat(32) });
+      await expect(deriver.getSeed()).rejects.toMatchObject({
+        code: CryptoErrorCode.SEED_LOW_ENTROPY,
+      });
+    }
+  });
+
+  it("accepts a seedHex that differs in only one byte", async () => {
+    // The degenerate check is deliberately narrow — it rejects hand-typed
+    // placeholder values, not low entropy in general. Seed quality past this
+    // point is the caller's responsibility.
+    const deriver = new KeyDeriver({ seedHex: "00".repeat(31) + "01" });
+    await expect(deriver.getSeed()).resolves.toBeInstanceOf(Uint8Array);
+  });
+
+  it("accepts a real random seedHex at both accepted lengths", async () => {
+    for (const len of [32, 64]) {
+      const hex = Array.from(crypto.getRandomValues(new Uint8Array(len)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      await expect(
+        new KeyDeriver({ seedHex: hex }).getSeed(),
+      ).resolves.toHaveLength(len);
+    }
+  });
+
+  it("does not apply the degenerate-seed check to the mnemonic path", async () => {
+    // A degenerate phrase cannot satisfy the BIP-39 checksum, so the mnemonic
+    // path needs no extra guard — and the standard all-abandon test vector,
+    // which looks degenerate, must keep deriving.
+    const mnemonic24 = Array(23).fill("abandon").join(" ") + " art";
+    const seed = await new KeyDeriver({ mnemonic: mnemonic24 }).getSeed();
+    expect(seed).toHaveLength(64);
+  });
+
   it("does not silently produce an all-zero seed for invalid hex input", async () => {
     const invalid = "G".repeat(64);
     const deriver = new KeyDeriver({ seedHex: invalid });
