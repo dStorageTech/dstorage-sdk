@@ -63,7 +63,33 @@ type PrfExtOutput = {
   results?: { first?: ArrayBuffer; second?: ArrayBuffer };
 };
 
-export interface WebAuthnPrfRegisterOptions {
+/**
+ * Options shared by register() and authenticate() that control internal
+ * derivation steps normally fixed by the SDK. Defaults reproduce today's
+ * behavior exactly; only set these to interoperate with a pre-existing,
+ * non-SDK derivation scheme. Values must match between register() and
+ * authenticate() for the same credential — and, for the two share* fields,
+ * on the fromPublicKey() side too.
+ */
+interface WebAuthnPrfDerivationOptions {
+  /** Default "hkdf-expand" (current behavior). "raw" uses the 32-byte PRF
+   *  output directly as the MnemonicEncryptionAdapter seed, skipping the
+   *  internal HKDF-expand-to-64-bytes step. */
+  seedDerivation?: "hkdf-expand" | "raw";
+  /** Overrides the HKDF info string used when seedDerivation is
+   *  "hkdf-expand" (ignored in "raw" mode). Default: the SDK's own fixed
+   *  label. */
+  seedExpandInfo?: Uint8Array;
+  /** Overrides the context bound into the internally-derived ML-KEM sharing
+   *  keypair (.publicKey / the asymmetric half of unwrapDek()). Default:
+   *  the SDK's own fixed label. */
+  shareContext?: string;
+  /** Overrides the ML-KEM variant for the same sharing keypair. Default:
+   *  "mlkem768". */
+  shareVariant?: MLKemVariant;
+}
+
+export interface WebAuthnPrfRegisterOptions extends WebAuthnPrfDerivationOptions {
   rpId?: string;
   rpName?: string;
   userId?: Uint8Array;
@@ -76,11 +102,29 @@ export interface WebAuthnPrfRegisterOptions {
   salt?: Uint8Array;
 }
 
-export interface WebAuthnPrfAuthenticateOptions {
+export interface WebAuthnPrfAuthenticateOptions extends WebAuthnPrfDerivationOptions {
   rpId?: string;
   userVerification?: UserVerificationRequirement;
   challenge?: Uint8Array;
   salt?: Uint8Array;
+  /**
+   * When true, omits allowCredentials from the WebAuthn get() call entirely
+   * — rather than restricting to credentialIds — so the browser shows its
+   * native picker across any discoverable (resident) passkey for this
+   * origin. Requires the credential to have been registered with
+   * residentKey: "required" (or "preferred", authenticator-dependent).
+   * credentialIds may be passed as [] in this mode; its contents are
+   * ignored. Default: false (current behavior — allowCredentials is always
+   * built from credentialIds, which must be non-empty).
+   */
+  discoverable?: boolean;
+}
+
+/** Options for fromPublicKey() — must match the owner's register()/authenticate()
+ *  shareContext/shareVariant, if they were customized away from the defaults. */
+export interface WebAuthnPrfPublicKeyOptions {
+  shareContext?: string;
+  shareVariant?: MLKemVariant;
 }
 
 export class WebAuthnPrfEncryptionAdapter implements EncryptionAdapter {
@@ -203,12 +247,12 @@ export class WebAuthnPrfEncryptionAdapter implements EncryptionAdapter {
         })
       ).prfOutput;
 
-    const seed = await expandPrfOutputToSeed(prfOutput);
+    const seed = await buildSeed(prfOutput, options);
     const mnemonicAdapter = buildMnemonicAdapter(seed);
     seed.fill(0);
     const keypairAdapter = await mnemonicAdapter.intoKeypairEncryptionAdapter(
-      SHARE_CONTEXT,
-      SHARE_VARIANT,
+      options.shareContext ?? SHARE_CONTEXT,
+      options.shareVariant ?? SHARE_VARIANT,
     );
 
     return new WebAuthnPrfEncryptionAdapter(
@@ -227,11 +271,12 @@ export class WebAuthnPrfEncryptionAdapter implements EncryptionAdapter {
     credentialIds: Uint8Array[],
     options: WebAuthnPrfAuthenticateOptions = {},
   ): Promise<WebAuthnPrfEncryptionAdapter> {
-    if (credentialIds.length === 0) {
+    if (credentialIds.length === 0 && !options.discoverable) {
       throw new DStorageError(
         EncryptionErrorCode.WEBAUTHN_PRF_EMPTY_CREDENTIAL_IDS,
-        "[dStorage] WebAuthnPrfEncryptionAdapter: authenticate() requires at least one credential ID. " +
-          "Pass the credentialId returned by a previous register() call.",
+        "[dStorage] WebAuthnPrfEncryptionAdapter: authenticate() requires at least one credential ID, " +
+          "unless options.discoverable is true. Pass the credentialId returned by a previous register() call, " +
+          "or set discoverable: true to let the browser pick from any resident passkey for this origin.",
       );
     }
     assertWebAuthnAvailable();
@@ -241,19 +286,23 @@ export class WebAuthnPrfEncryptionAdapter implements EncryptionAdapter {
       options.challenge ??
       globalThis.crypto.getRandomValues(new Uint8Array(32));
 
-    const { prfOutput, rawId } = await evaluatePrfAssertion(credentialIds, {
-      ...(options.rpId !== undefined ? { rpId: options.rpId } : {}),
-      salt,
-      userVerification: options.userVerification ?? "required",
-      challenge,
-    });
+    const { prfOutput, rawId } = await evaluatePrfAssertion(
+      options.discoverable ? [] : credentialIds,
+      {
+        ...(options.rpId !== undefined ? { rpId: options.rpId } : {}),
+        salt,
+        userVerification: options.userVerification ?? "required",
+        challenge,
+        discoverable: options.discoverable ?? false,
+      },
+    );
 
-    const seed = await expandPrfOutputToSeed(prfOutput);
+    const seed = await buildSeed(prfOutput, options);
     const mnemonicAdapter = buildMnemonicAdapter(seed);
     seed.fill(0);
     const keypairAdapter = await mnemonicAdapter.intoKeypairEncryptionAdapter(
-      SHARE_CONTEXT,
-      SHARE_VARIANT,
+      options.shareContext ?? SHARE_CONTEXT,
+      options.shareVariant ?? SHARE_VARIANT,
     );
 
     return new WebAuthnPrfEncryptionAdapter(
@@ -288,11 +337,14 @@ export class WebAuthnPrfEncryptionAdapter implements EncryptionAdapter {
    * backend. `.name` matches the owner's adapter so that, on the owner's
    * side, a single authenticate()d adapter can unwrap data wrapped here.
    */
-  static fromPublicKey(publicKey: Uint8Array): EncryptionAdapter {
+  static fromPublicKey(
+    publicKey: Uint8Array,
+    options: WebAuthnPrfPublicKeyOptions = {},
+  ): EncryptionAdapter {
     const keypairAdapter = KeypairEncryptionAdapter.fromPublicKey(
       publicKey,
-      SHARE_CONTEXT,
-      SHARE_VARIANT,
+      options.shareContext ?? SHARE_CONTEXT,
+      options.shareVariant ?? SHARE_VARIANT,
     );
     return {
       name: "webauthn-prf",
@@ -341,16 +393,24 @@ async function evaluatePrfAssertion(
     salt: Uint8Array;
     userVerification: UserVerificationRequirement;
     challenge: Uint8Array;
+    discoverable?: boolean;
   },
 ): Promise<{ prfOutput: ArrayBuffer; rawId: Uint8Array }> {
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: Uint8Array.from(params.challenge),
       ...(params.rpId !== undefined ? { rpId: params.rpId } : {}),
-      allowCredentials: credentialIds.map((id) => ({
-        type: "public-key" as const,
-        id: Uint8Array.from(id),
-      })),
+      // Omitted entirely (not just []) in discoverable mode, so the browser
+      // shows its native picker across any resident passkey for this origin
+      // instead of restricting to credentialIds.
+      ...(params.discoverable
+        ? {}
+        : {
+            allowCredentials: credentialIds.map((id) => ({
+              type: "public-key" as const,
+              id: Uint8Array.from(id),
+            })),
+          }),
       userVerification: params.userVerification,
       extensions: {
         prf: {
@@ -386,6 +446,7 @@ async function evaluatePrfAssertion(
 
 async function expandPrfOutputToSeed(
   prfOutput: ArrayBuffer,
+  info: Uint8Array,
 ): Promise<Uint8Array> {
   const keyMaterial = await globalThis.crypto.subtle.importKey(
     "raw",
@@ -399,12 +460,33 @@ async function expandPrfOutputToSeed(
       name: "HKDF",
       hash: "SHA-256",
       salt: new Uint8Array(32),
-      info: SEED_EXPAND_INFO,
+      info: Uint8Array.from(info),
     },
     keyMaterial,
     512, // 64 bytes
   );
   return new Uint8Array(bits);
+}
+
+/**
+ * Dispatches on options.seedDerivation: "raw" (default "hkdf-expand") uses
+ * the 32-byte PRF output directly as the seed, bypassing expandPrfOutputToSeed
+ * entirely — for byte-for-byte compatibility with a pre-existing non-SDK
+ * derivation scheme that did the same.
+ */
+async function buildSeed(
+  prfOutput: ArrayBuffer,
+  options: WebAuthnPrfDerivationOptions,
+): Promise<Uint8Array> {
+  if (options.seedDerivation === "raw") {
+    // Copy, not a view — the caller fills the returned seed with zeros after
+    // use, which must not reach back into the original PRF-output buffer.
+    return Uint8Array.from(new Uint8Array(prfOutput));
+  }
+  return expandPrfOutputToSeed(
+    prfOutput,
+    options.seedExpandInfo ?? SEED_EXPAND_INFO,
+  );
 }
 
 function buildMnemonicAdapter(seed: Uint8Array): MnemonicEncryptionAdapter {

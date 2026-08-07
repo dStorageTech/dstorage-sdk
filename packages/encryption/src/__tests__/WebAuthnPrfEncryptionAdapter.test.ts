@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebAuthnPrfEncryptionAdapter } from "../WebAuthnPrfEncryptionAdapter.js";
 import { EncryptionErrorCode } from "../errors.js";
+import { CryptoErrorCode } from "@dstorage/crypto";
 
 // A deterministic fake PRF output so registration + authentication produce
 // the same seed, and wrapDek()/unwrapDek() actually round-trip across
-// separately-constructed adapter instances.
-const FAKE_PRF_OUTPUT = new Uint8Array(32).fill(7).buffer;
+// separately-constructed adapter instances. Non-degenerate (not all-same-byte,
+// unlike a real WebAuthn PRF output) so it also passes as a raw seed in
+// seedDerivation: "raw" mode.
+const FAKE_PRF_OUTPUT = Uint8Array.from(
+  { length: 32 },
+  (_, i) => (i * 7 + 1) % 256,
+).buffer;
 const FAKE_CREDENTIAL_ID = new Uint8Array([1, 2, 3, 4]).buffer;
 
 interface FakeAuthenticatorOptions {
@@ -281,5 +287,156 @@ describe("WebAuthnPrfEncryptionAdapter — 3rd-party public-key sharing", () => 
     await expect(uploaderAdapter.unwrapDek(wrapped)).rejects.toMatchObject({
       code: EncryptionErrorCode.KEYPAIR_MISSING_SECRET_KEY,
     });
+  });
+});
+
+describe("WebAuthnPrfEncryptionAdapter — configurable derivation", () => {
+  it('seedDerivation: "raw" round-trips', async () => {
+    stubFakeAuthenticator();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const owner = await WebAuthnPrfEncryptionAdapter.register({
+      seedDerivation: "raw",
+    });
+    const wrapped = await owner.wrapDek(dek);
+    const reader = await WebAuthnPrfEncryptionAdapter.authenticate(
+      [owner.credentialId],
+      { seedDerivation: "raw" },
+    );
+    const recovered = await reader.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
+  });
+
+  it('"raw" mode is cryptographically distinct from the default "hkdf-expand" mode', async () => {
+    stubFakeAuthenticator();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const rawOwner = await WebAuthnPrfEncryptionAdapter.register({
+      seedDerivation: "raw",
+    });
+    const wrapped = await rawOwner.wrapDek(dek);
+    const defaultReader = await WebAuthnPrfEncryptionAdapter.authenticate([
+      rawOwner.credentialId,
+    ]);
+    await expect(defaultReader.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
+  });
+
+  it("seedExpandInfo override round-trips when matching on both sides", async () => {
+    stubFakeAuthenticator();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const customInfo = new TextEncoder().encode("custom:seed-info:v1");
+    const owner = await WebAuthnPrfEncryptionAdapter.register({
+      seedExpandInfo: customInfo,
+    });
+    const wrapped = await owner.wrapDek(dek);
+    const reader = await WebAuthnPrfEncryptionAdapter.authenticate(
+      [owner.credentialId],
+      { seedExpandInfo: customInfo },
+    );
+    const recovered = await reader.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
+  });
+
+  it("seedExpandInfo override is non-interoperable with the default info string", async () => {
+    stubFakeAuthenticator();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const customInfo = new TextEncoder().encode("custom:seed-info:v1");
+    const owner = await WebAuthnPrfEncryptionAdapter.register({
+      seedExpandInfo: customInfo,
+    });
+    const wrapped = await owner.wrapDek(dek);
+    const defaultReader = await WebAuthnPrfEncryptionAdapter.authenticate([
+      owner.credentialId,
+    ]);
+    await expect(defaultReader.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
+  });
+
+  it("shareContext/shareVariant round-trip between register() and fromPublicKey()", async () => {
+    stubFakeAuthenticator();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const owner = await WebAuthnPrfEncryptionAdapter.register({
+      shareContext: "custom:share:v1",
+    });
+    const uploaderAdapter = WebAuthnPrfEncryptionAdapter.fromPublicKey(
+      owner.publicKey,
+      { shareContext: "custom:share:v1" },
+    );
+    const wrapped = await uploaderAdapter.wrapDek(dek);
+    const reader = await WebAuthnPrfEncryptionAdapter.authenticate(
+      [owner.credentialId],
+      { shareContext: "custom:share:v1" },
+    );
+    const recovered = await reader.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
+  });
+
+  it("mismatched shareContext between owner and fromPublicKey() fails to unwrap", async () => {
+    stubFakeAuthenticator();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const owner = await WebAuthnPrfEncryptionAdapter.register({
+      shareContext: "custom:share:v1",
+    });
+    const uploaderAdapter = WebAuthnPrfEncryptionAdapter.fromPublicKey(
+      owner.publicKey,
+      { shareContext: "a-different-context:v1" },
+    );
+    const wrapped = await uploaderAdapter.wrapDek(dek);
+    const reader = await WebAuthnPrfEncryptionAdapter.authenticate(
+      [owner.credentialId],
+      { shareContext: "custom:share:v1" },
+    );
+    await expect(reader.unwrapDek(wrapped)).rejects.toMatchObject({
+      code: CryptoErrorCode.XCHACHA_STORAGE_ID_MALFORMED,
+    });
+  });
+});
+
+describe("WebAuthnPrfEncryptionAdapter — discoverable-credential authenticate()", () => {
+  it("authenticate([], { discoverable: true }) succeeds and round-trips", async () => {
+    stubFakeAuthenticator();
+    const dek = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const owner = await WebAuthnPrfEncryptionAdapter.register();
+    const wrapped = await owner.wrapDek(dek);
+
+    const reader = await WebAuthnPrfEncryptionAdapter.authenticate([], {
+      discoverable: true,
+    });
+    const recovered = await reader.unwrapDek(wrapped);
+    expect(recovered).toEqual(dek);
+  });
+
+  it("discoverable: true omits allowCredentials from the get() call", async () => {
+    const { get } = stubFakeAuthenticator();
+    await WebAuthnPrfEncryptionAdapter.authenticate([], { discoverable: true });
+
+    const callArgs = (get.mock.calls[0] as unknown as unknown[])[0] as {
+      publicKey: { allowCredentials?: unknown };
+    };
+    expect(callArgs.publicKey.allowCredentials).toBeUndefined();
+    expect("allowCredentials" in callArgs.publicKey).toBe(false);
+  });
+
+  it("without discoverable, allowCredentials is still populated from credentialIds", async () => {
+    const { get } = stubFakeAuthenticator();
+    await WebAuthnPrfEncryptionAdapter.authenticate([
+      new Uint8Array(FAKE_CREDENTIAL_ID),
+    ]);
+
+    const callArgs = (get.mock.calls[0] as unknown as unknown[])[0] as {
+      publicKey: { allowCredentials?: unknown[] };
+    };
+    expect(callArgs.publicKey.allowCredentials).toHaveLength(1);
+  });
+
+  it("authenticate([]) without discoverable still throws (unchanged default behavior)", async () => {
+    const { get } = stubFakeAuthenticator();
+    await expect(
+      WebAuthnPrfEncryptionAdapter.authenticate([]),
+    ).rejects.toMatchObject({
+      code: EncryptionErrorCode.WEBAUTHN_PRF_EMPTY_CREDENTIAL_IDS,
+    });
+    expect(get).not.toHaveBeenCalled();
   });
 });
