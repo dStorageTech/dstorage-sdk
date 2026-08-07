@@ -291,7 +291,8 @@ function findErrorDetail(
 
 function describeConnectorError(err: unknown): string {
   const detail = findErrorDetail(err);
-  if (detail) return detail.tag ? `${detail.message} (${detail.tag})` : detail.message;
+  if (detail)
+    return detail.tag ? `${detail.message} (${detail.tag})` : detail.message;
   if (typeof err === "string" && err) return err;
   try {
     return `wallet threw with no diagnosable message: ${JSON.stringify(err)}`;
