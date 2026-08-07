@@ -3,12 +3,12 @@ import { DStorage } from "@dstorage-tech/dstorage-sdk";
 import {
   MnemonicEncryptionAdapter,
   PasswordEncryptionAdapter,
+  WebAuthnPrfEncryptionAdapter,
 } from "@dstorage/encryption";
 import {
-  isPrfSupported,
   hasCredential,
-  createPrfCredential,
-  getPrfSeed,
+  loadCredentialIds,
+  saveCredentialId,
 } from "./lib/webAuthnPrf";
 import { INSURANCE_CLAIMS, simulateZkProof } from "./zkProof.js";
 import type { DataReferenceSummary } from "@dstorage-tech/dstorage-sdk";
@@ -100,7 +100,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    isPrfSupported().then(setPrfSupported);
+    WebAuthnPrfEncryptionAdapter.isSupported().then(setPrfSupported);
   }, []);
 
   const releasePendingCertificate = useCallback(
@@ -123,14 +123,16 @@ export default function App() {
 
       let encryptionAdapter;
       if (keySource === "webauthn-prf") {
-        const seed =
-          !forceRegisterPrf && hasCredential()
-            ? await getPrfSeed()
-            : await createPrfCredential();
-        const seedHex = Array.from(seed, (b) =>
-          b.toString(16).padStart(2, "0"),
-        ).join("");
-        encryptionAdapter = new MnemonicEncryptionAdapter({ seedHex });
+        if (!forceRegisterPrf && hasCredential()) {
+          encryptionAdapter =
+            await WebAuthnPrfEncryptionAdapter.authenticate(
+              loadCredentialIds(),
+            );
+        } else {
+          const adapter = await WebAuthnPrfEncryptionAdapter.register();
+          saveCredentialId(adapter.credentialId);
+          encryptionAdapter = adapter;
+        }
       } else if (keySource === "mnemonic") {
         encryptionAdapter = new MnemonicEncryptionAdapter({ mnemonic });
       } else {
