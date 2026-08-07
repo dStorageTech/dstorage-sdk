@@ -260,6 +260,46 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Wallet errors arrive in incompatible shapes depending on wallet internals:
+ *   - DApp Connector spec: { type: "DAppConnectorAPIError", code, reason }
+ *   - Plain Error: { message }
+ *   - Effect-TS FiberFailure (observed from Lace, whose wallet core is built
+ *     on Effect): a bare Error with an empty .message, carrying the real
+ *     failure nested at .cause.failure.message (e.g. "Insufficient Funds:
+ *     could not balance dust").
+ * Rather than hand-checking each shape, walk the object for the first
+ * `reason`/`message` string, recursing into common wrapper fields.
+ */
+function findErrorDetail(
+  err: unknown,
+  depth = 0,
+): { message: string; tag?: string } | undefined {
+  if (depth > 5 || typeof err !== "object" || err === null) return undefined;
+  const obj = err as Record<string, unknown>;
+  const message = obj["reason"] ?? obj["message"];
+  if (typeof message === "string" && message) {
+    const tag = obj["_tag"];
+    return typeof tag === "string" ? { message, tag } : { message };
+  }
+  for (const key of ["failure", "cause", "error"]) {
+    const nested = findErrorDetail(obj[key], depth + 1);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function describeConnectorError(err: unknown): string {
+  const detail = findErrorDetail(err);
+  if (detail) return detail.tag ? `${detail.message} (${detail.tag})` : detail.message;
+  if (typeof err === "string" && err) return err;
+  try {
+    return `wallet threw with no diagnosable message: ${JSON.stringify(err)}`;
+  } catch {
+    return `wallet threw with no diagnosable message: ${String(err)}`;
+  }
+}
+
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MidnightChainAdapter implements ChainAdapter {
@@ -704,8 +744,17 @@ export class MidnightChainAdapter implements ChainAdapter {
           "dStorage/midnight",
           `balanceTx: serialized tx length=${serializedTx.length}`,
         );
-        const received =
-          await connectorAPI.balanceUnsealedTransaction(serializedTx);
+        let received: { tx: string };
+        try {
+          received =
+            await connectorAPI.balanceUnsealedTransaction(serializedTx);
+        } catch (err) {
+          throw new DStorageError(
+            ChainErrorCode.MIDNIGHT_BALANCE_TX_FAILED,
+            `[dStorage/midnight] Wallet failed to balance the transaction: ${describeConnectorError(err)}`,
+            { cause: err },
+          );
+        }
         const balancedHex = received.tx;
         logger?.log(
           "dStorage/midnight",
@@ -728,7 +777,15 @@ export class MidnightChainAdapter implements ChainAdapter {
           "dStorage/midnight",
           `submitTx: submitting tx length=${serializedTx.length}`,
         );
-        await connectorAPI.submitTransaction(serializedTx);
+        try {
+          await connectorAPI.submitTransaction(serializedTx);
+        } catch (err) {
+          throw new DStorageError(
+            ChainErrorCode.MIDNIGHT_SUBMIT_TX_FAILED,
+            `[dStorage/midnight] Wallet failed to submit the transaction: ${describeConnectorError(err)}`,
+            { cause: err },
+          );
+        }
         return tx.identifiers()[0] ?? "";
       },
     };
@@ -824,6 +881,31 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     const { DataRegistryAPI } = await import("./contract-api.js");
     if (!this._contractAddress) {
+      // Deploying/writing costs DUST fees. A zero or low balance is the most
+      // common cause of an opaque balanceTx failure from the wallet, so log it
+      // up front rather than leaving the user to guess after a cryptic error.
+      if (this.walletMode === "connector" && this.connectorAPI) {
+        try {
+          const { balance, cap } = await this.connectorAPI.getDustBalance();
+          this.logger?.log(
+            "dStorage/midnight",
+            `Wallet DUST balance: ${balance} (cap: ${cap})`,
+          );
+          if (balance <= 0n) {
+            this.logger?.warn(
+              "dStorage/midnight",
+              "Wallet DUST balance is 0 — the deploy transaction will likely " +
+                "fail to balance. Delegate NIGHT in your wallet and wait for " +
+                "DUST to accumulate before retrying.",
+            );
+          }
+        } catch (err) {
+          this.logger?.debug?.(
+            "dStorage/midnight",
+            `Could not read DUST balance before deploy: ${describeConnectorError(err)}`,
+          );
+        }
+      }
       this.logger?.log("dStorage/midnight", "Deploying DataRegistry contract…");
       this._api = await DataRegistryAPI.deploy(providers, this.logger);
       this._contractAddress = this._api.deployedContractAddress;
@@ -1236,7 +1318,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_WALLET_CONNECT_FAILED,
         `[dStorage/midnight] Failed to connect to wallet "${selected.id}": ` +
-          (err instanceof Error ? err.message : String(err)),
+          describeConnectorError(err),
         { cause: err },
       );
     }
