@@ -71,7 +71,7 @@ export interface WalletAddresses {
 
 // ── Network default endpoints ──────────────────────────────────────────────────
 type SUPPORTED_NETWORKS = {
-  [K in "preprod" | "undeployed"]: EnvironmentConfiguration;
+  [K in "preprod" | "preview" | "undeployed"]: EnvironmentConfiguration;
 };
 export const NETWORKS: SUPPORTED_NETWORKS = {
   preprod: {
@@ -80,6 +80,14 @@ export const NETWORKS: SUPPORTED_NETWORKS = {
     nodeWs: "wss://rpc.preprod.midnight.network",
     indexerHttp: "https://indexer.preprod.midnight.network/api/v4/graphql",
     indexerWs: "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
+  },
+  preview: {
+    networkId: "preview",
+    nodeHttp: "https://rpc.preview.midnight.network",
+    nodeWs: "wss://rpc.preview.midnight.network",
+    indexerHttp: "https://indexer.preview.midnight.network/api/v4/graphql",
+    indexerWs: "wss://indexer.preview.midnight.network/api/v4/graphql/ws",
     proofServer: "http://127.0.0.1:6300",
   },
   undeployed: {
