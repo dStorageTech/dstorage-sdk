@@ -378,7 +378,7 @@ Tokens are selected automatically based on your chosen adapters.
 ```
 @dstorage-tech/dstorage-sdk     ← Developer-facing API (npm install @dstorage-tech/dstorage-sdk)
     ├── @dstorage/crypto        ← XChaCha20-Poly1305 encryption, key derivation
-    ├── @dstorage/encryption    ← Encryption adapters: PasswordEncryptionAdapter | MnemonicEncryptionAdapter | KeypairEncryptionAdapter
+    ├── @dstorage/encryption    ← Encryption adapters: PasswordEncryptionAdapter | MnemonicEncryptionAdapter | KeypairEncryptionAdapter | WebAuthnPrfEncryptionAdapter
     ├── @dstorage/storage       ← Storage adapters: Mock | Arweave | ArweaveBundler | Arweave Local
     ├── @dstorage/payment       ← Payment adapters: Mock | Arweave | Managed
     └── @dstorage/chain         ← Chain adapters:   Mock | MidnightSimulator | Midnight
@@ -430,13 +430,13 @@ from here aren't covered there:
 
 Quick reference for all hash functions and KDFs used across the SDK:
 
-| Algorithm          | Library / source       | Used for                                                                                                                                                  | PQ-safe            |
-| ------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| **BLAKE3**         | `@noble/hashes/blake3` | Content hash stored on-chain; verified on every `retrieve()` call to detect storage-layer tampering                                                       | ✅ Yes (symmetric) |
-| **HKDF-SHA-256**   | Web Crypto API         | KEK derivation from adapter seed; `ownerSecret` derivation (`HKDF(dek, storageId, "dstorage:owner-secret:v1")`); KEK derivation from ML-KEM shared secret | ✅ Yes (symmetric) |
-| **PBKDF2-SHA-512** | Web Crypto API         | BIP-39 mnemonic → 64-byte seed (standard BIP-39, 2048 iterations) — used by `MnemonicEncryptionAdapter`                                                   | ✅ Yes (symmetric) |
-| **Scrypt**         | `@noble/hashes/scrypt` | Password → 64-byte seed (memory-hard, GPU/ASIC-resistant) — used by `PasswordEncryptionAdapter` and `KeypairEncryptionAdapter.fromPassword()`             | ✅ Yes (symmetric) |
-| **SHA-256 digest** | Web Crypto API         | Owner commitment in `MockChainAdapter` only — not used in production (Midnight uses ZK proofs instead)                                                    | ✅ Yes (symmetric) |
+| Algorithm          | Library / source       | Used for                                                                                                                                                                                                                                   | PQ-safe            |
+| ------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
+| **BLAKE3**         | `@noble/hashes/blake3` | Content hash stored on-chain; verified on every `retrieve()` call to detect storage-layer tampering                                                                                                                                        | ✅ Yes (symmetric) |
+| **HKDF-SHA-256**   | Web Crypto API         | KEK derivation from adapter seed; `ownerSecret` derivation (`HKDF(dek, storageId, "dstorage:owner-secret:v1")`); KEK derivation from ML-KEM shared secret; WebAuthn PRF output → 64-byte seed expansion for `WebAuthnPrfEncryptionAdapter` | ✅ Yes (symmetric) |
+| **PBKDF2-SHA-512** | Web Crypto API         | BIP-39 mnemonic → 64-byte seed (standard BIP-39, 2048 iterations) — used by `MnemonicEncryptionAdapter`                                                                                                                                    | ✅ Yes (symmetric) |
+| **Scrypt**         | `@noble/hashes/scrypt` | Password → 64-byte seed (memory-hard, GPU/ASIC-resistant) — used by `PasswordEncryptionAdapter` and `KeypairEncryptionAdapter.fromPassword()`                                                                                              | ✅ Yes (symmetric) |
+| **SHA-256 digest** | Web Crypto API         | Owner commitment in `MockChainAdapter` only — not used in production (Midnight uses ZK proofs instead)                                                                                                                                     | ✅ Yes (symmetric) |
 
 ### Public-mode integrity
 

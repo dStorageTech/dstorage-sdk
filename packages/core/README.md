@@ -336,22 +336,27 @@ The raw seed bytes returned by the `EncryptionAdapter` are used to derive a Key 
 
 The `@dstorage/encryption` package is responsible for producing the raw seed bytes that feed the key-derivation functions above.
 
-| Adapter                     | Seed source                                                        | Post-quantum safety                                                                                                                                                                                                                      | Cross-device portability                                                                                            |
-| --------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `PasswordEncryptionAdapter` | scrypt(password, caller-supplied salt)                             | ⚠️ 128-bit PQ at the data layer (NIST minimum). Key encapsulation safety depends on password entropy — use `generateHighEntropyPassword()` for a machine-generated 256-bit password (128-bit PQ, NIST category 1).                       | ✅ Same seed on any device — depends only on password + salt                                                        |
-| `MnemonicEncryptionAdapter` | BIP-39 mnemonic phrase (**24 words required**) or 64-byte hex seed | ✅ 128-bit PQ — unconditional (CSPRNG-generated 256-bit entropy; Grover's halves to 128-bit). Fewer than 24 words is rejected at construction.                                                                                           | ✅ Same seed wherever the same mnemonic/hex is imported                                                             |
-| `KeypairEncryptionAdapter`  | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum)       | ✅ 192-bit PQ via ML-KEM768 for a randomly generated keypair (`generateKeypair()`). A keypair **derived** from a password/mnemonic (`fromPassword()` / `fromMnemonic()`) is capped at ~128-bit by the derivation input's Grover ceiling. | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()` |
+| Adapter                        | Seed source                                                                                                        | Post-quantum safety                                                                                                                                                                                                                      | Cross-device portability                                                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PasswordEncryptionAdapter`    | scrypt(password, caller-supplied salt)                                                                             | ⚠️ 128-bit PQ at the data layer (NIST minimum). Key encapsulation safety depends on password entropy — use `generateHighEntropyPassword()` for a machine-generated 256-bit password (128-bit PQ, NIST category 1).                       | ✅ Same seed on any device — depends only on password + salt                                                                                                     |
+| `MnemonicEncryptionAdapter`    | BIP-39 mnemonic phrase (**24 words required**) or 64-byte hex seed                                                 | ✅ 128-bit PQ — unconditional (CSPRNG-generated 256-bit entropy; Grover's halves to 128-bit). Fewer than 24 words is rejected at construction.                                                                                           | ✅ Same seed wherever the same mnemonic/hex is imported                                                                                                          |
+| `KeypairEncryptionAdapter`     | ML-KEM public/secret key pair (NIST FIPS 203 — post-quantum)                                                       | ✅ 192-bit PQ via ML-KEM768 for a randomly generated keypair (`generateKeypair()`). A keypair **derived** from a password/mnemonic (`fromPassword()` / `fromMnemonic()`) is capped at ~128-bit by the derivation input's Grover ceiling. | ⚠️ Requires the Secret Key for decryption — not re-derivable unless created via `fromPassword()` / `fromMnemonic()`                                              |
+| `WebAuthnPrfEncryptionAdapter` | WebAuthn PRF extension output (passkey — platform authenticator or CTAP2 `hmac-secret` security key, e.g. YubiKey) | ✅ 128-bit PQ — unconditional (authenticator-generated 256-bit PRF output, not human-chosen; Grover's halves it to 128-bit).                                                                                                             | ⚠️ Requires the same physical passkey — portable across devices only if the passkey syncs (e.g. platform passkey sync) or the same hardware key is carried along |
 
 #### Cross-device portability
 
-| Scenario                                                                              | Expected outcome                                                                                              |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Same password + same salt on a different device (`PasswordEncryptionAdapter`)         | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required.              |
-| BIP-39 mnemonic imported on a different machine (`MnemonicEncryptionAdapter`)         | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                            |
-| Different password, same salt (`PasswordEncryptionAdapter`)                           | ❌ Different seed — intentional; each password produces an independent key.                                   |
-| ML-KEM keypair from `generateKeypair()` re-imported (`KeypairEncryptionAdapter`)      | ✅ Same keypair wherever the SK bytes are imported — but the SK must be stored; it cannot be re-derived.      |
-| ML-KEM keypair from `fromPassword()` or `fromMnemonic()` (`KeypairEncryptionAdapter`) | ✅ Same keypair — deterministic; no key storage needed, re-derive from password+salt or mnemonic at any time. |
-| `KeypairEncryptionAdapter.fromPublicKey(pk)` (upload-only)                            | 🔒 PK-only — can wrap DEK for upload; unwrapping requires the matching SK.                                    |
+| Scenario                                                                                       | Expected outcome                                                                                                                               |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same password + same salt on a different device (`PasswordEncryptionAdapter`)                  | ✅ Same seed — scrypt output depends only on password, salt, and KDF params; no wallet required.                                               |
+| BIP-39 mnemonic imported on a different machine (`MnemonicEncryptionAdapter`)                  | ✅ Same seed — the mnemonic is the only input; derivation is purely deterministic.                                                             |
+| Different password, same salt (`PasswordEncryptionAdapter`)                                    | ❌ Different seed — intentional; each password produces an independent key.                                                                    |
+| ML-KEM keypair from `generateKeypair()` re-imported (`KeypairEncryptionAdapter`)               | ✅ Same keypair wherever the SK bytes are imported — but the SK must be stored; it cannot be re-derived.                                       |
+| ML-KEM keypair from `fromPassword()` or `fromMnemonic()` (`KeypairEncryptionAdapter`)          | ✅ Same keypair — deterministic; no key storage needed, re-derive from password+salt or mnemonic at any time.                                  |
+| `KeypairEncryptionAdapter.fromPublicKey(pk)` (upload-only)                                     | 🔒 PK-only — can wrap DEK for upload; unwrapping requires the matching SK.                                                                     |
+| Same synced platform passkey used on a different device (`WebAuthnPrfEncryptionAdapter`)       | ✅ Same seed — the underlying credential secret is identical across the user's synced devices (e.g. iCloud Keychain, Google Password Manager). |
+| Same roaming hardware security key used on a different device (`WebAuthnPrfEncryptionAdapter`) | ✅ Same seed — the credential secret lives on the physical key, not the device; carry the key with you.                                        |
+| A new, unsynced passkey registered on a different device (`WebAuthnPrfEncryptionAdapter`)      | ❌ Different seed — a different WebAuthn credential has an independent, unrelated secret.                                                      |
+| `WebAuthnPrfEncryptionAdapter.fromPublicKey(pk)` (upload-only)                                 | 🔒 PK-only — can wrap DEK for upload; unwrapping still requires re-authenticating with the owner's original passkey.                           |
 
 #### Multi-key encryption
 
@@ -426,6 +431,41 @@ const adapter = await KeypairEncryptionAdapter.fromMnemonic(
 );
 ```
 
+#### Passkeys (WebAuthn PRF)
+
+`WebAuthnPrfEncryptionAdapter` derives the encryption seed from a passkey via the WebAuthn PRF extension — supported by platform authenticators (Touch ID, Windows Hello, Face ID) and hardware security keys implementing the CTAP2 `hmac-secret` extension (e.g. YubiKey 5 series). No password or mnemonic to remember; the authenticator itself holds the secret.
+
+```typescript
+// 1 — Register a new passkey (prompts the authenticator) and persist the
+// credential ID yourself (localStorage, a database, ...) — the adapter
+// never stores it:
+const adapter = await WebAuthnPrfEncryptionAdapter.register();
+saveCredentialId(adapter.credentialId);
+
+// 2 — On a later visit, re-authenticate with the same passkey:
+const adapter =
+  await WebAuthnPrfEncryptionAdapter.authenticate(loadCredentialIds());
+
+// 3 — Or let the browser show its native picker across any resident passkey
+// for this origin, with no credential ID persisted at all:
+const adapter = await WebAuthnPrfEncryptionAdapter.authenticate([], {
+  discoverable: true,
+});
+```
+
+**Public-key sharing.** Every `WebAuthnPrfEncryptionAdapter` also exposes an internally-derived ML-KEM public key (`.publicKey`) — share it with a 3rd party so they can encrypt data _for_ the owner without ever touching WebAuthn themselves:
+
+```typescript
+// 3rd party — only needs the raw public key bytes, no passkey of their own:
+const uploader = WebAuthnPrfEncryptionAdapter.fromPublicKey(owner.publicKey);
+
+// Owner — a single authenticate()d adapter decrypts both their own direct
+// uploads and anything wrapped for them via fromPublicKey():
+const reader = await WebAuthnPrfEncryptionAdapter.authenticate(credentialIds);
+```
+
+For a custom ML-KEM context/variant beyond the default sharing keypair, or to derive a standalone `KeypairEncryptionAdapter` under your own domain-separation string, use the `intoKeypairEncryptionAdapter(context, variant?)` escape hatch — same pattern as `MnemonicEncryptionAdapter`/`PasswordEncryptionAdapter` above. `register()`/`authenticate()` also accept advanced options (`seedDerivation`, `seedExpandInfo`, `shareContext`, `shareVariant`) for interoperating with a pre-existing, non-SDK passkey derivation scheme — see the adapter's own doc comments for details.
+
 #### Post-quantum safety across all adapters
 
 Every private upload has two independently protected layers:
@@ -437,11 +477,12 @@ Every private upload has two independently protected layers:
 
 The **key encapsulation layer** is where adapters differ:
 
-| Adapter                     | Key encapsulation mechanism                 | PQ safety                                                                                                                                                                                                                                                                            |
-| --------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PasswordEncryptionAdapter` | scrypt(password) → HKDF-SHA-256 → KEK       | ⚠️ Conditional on password entropy. A quantum attacker can brute-force the password; human-chosen passwords cannot reach the 256-bit entropy required for PQ-safe key encapsulation. Use `generateHighEntropyPassword()` for machine-generated input.                                |
-| `MnemonicEncryptionAdapter` | BIP-39(mnemonic) → HKDF-SHA-256 → KEK       | ✅ 128-bit PQ — a 24-word BIP-39 mnemonic is CSPRNG-generated (256 bits of entropy); Grover's halves this to 128-bit. Unconditional and enforced: the adapter rejects mnemonics shorter than 24 words at construction time.                                                          |
-| `KeypairEncryptionAdapter`  | ML-KEM encapsulate(PK) → HKDF-SHA-256 → KEK | ✅ 192-bit PQ for a randomly generated keypair (`generateKeypair()`) — rests on the module-LWE problem; no known quantum speedup. A keypair **derived** from a password/mnemonic (`fromPassword()` / `fromMnemonic()`) is capped at ~128-bit by the derivation input's Grover bound. |
+| Adapter                        | Key encapsulation mechanism                 | PQ safety                                                                                                                                                                                                                                                                            |
+| ------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PasswordEncryptionAdapter`    | scrypt(password) → HKDF-SHA-256 → KEK       | ⚠️ Conditional on password entropy. A quantum attacker can brute-force the password; human-chosen passwords cannot reach the 256-bit entropy required for PQ-safe key encapsulation. Use `generateHighEntropyPassword()` for machine-generated input.                                |
+| `MnemonicEncryptionAdapter`    | BIP-39(mnemonic) → HKDF-SHA-256 → KEK       | ✅ 128-bit PQ — a 24-word BIP-39 mnemonic is CSPRNG-generated (256 bits of entropy); Grover's halves this to 128-bit. Unconditional and enforced: the adapter rejects mnemonics shorter than 24 words at construction time.                                                          |
+| `KeypairEncryptionAdapter`     | ML-KEM encapsulate(PK) → HKDF-SHA-256 → KEK | ✅ 192-bit PQ for a randomly generated keypair (`generateKeypair()`) — rests on the module-LWE problem; no known quantum speedup. A keypair **derived** from a password/mnemonic (`fromPassword()` / `fromMnemonic()`) is capped at ~128-bit by the derivation input's Grover bound. |
+| `WebAuthnPrfEncryptionAdapter` | WebAuthn PRF output → HKDF-SHA-256 → KEK    | ✅ 128-bit PQ — unconditional, like `MnemonicEncryptionAdapter`. The PRF output is generated by the authenticator's own hardware-backed secret, not human-chosen; Grover's halves the 256-bit output to 128-bit.                                                                     |
 
 For **"harvest now, decrypt later"** threat models, both `MnemonicEncryptionAdapter` (128-bit PQ, unconditional) and a randomly generated `KeypairEncryptionAdapter` (`generateKeypair()`, 192-bit PQ) provide solid post-quantum guarantees at the key encapsulation level. `PasswordEncryptionAdapter` with a human-chosen password does not — use `generateHighEntropyPassword()` to raise it to the 128-bit NIST-minimum PQ level.
 
@@ -548,6 +589,7 @@ Encryption keys are derived deterministically from the encryption adapter's inpu
   - `PasswordEncryptionAdapter` — forgetting the password or losing the salt string makes data unrecoverable.
   - `MnemonicEncryptionAdapter` / wallet providers — losing the seed phrase or private key has the same effect. Follow standard seed-phrase backup practices.
   - `KeypairEncryptionAdapter` — if created with `generateKeypair()`, losing the SK bytes makes data unrecoverable. If created deterministically via `fromPassword()` or `fromMnemonic()`, the keypair can be re-derived from the original inputs.
+  - `WebAuthnPrfEncryptionAdapter` — losing the passkey (the device, or the physical security key) without another registered credential or platform sync makes data unrecoverable. Platform passkeys that sync via the OS's passkey manager (iCloud Keychain, Google Password Manager) provide recovery across the user's own devices; a roaming hardware key has no such sync — register a second key as a backup if you rely on one.
 
 ## License
 
