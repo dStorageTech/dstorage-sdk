@@ -41,6 +41,9 @@
       "elliptic": "6.6.1",
       "secp256k1": "5.0.1",
       "ws": "8.21.0"
+    },
+    "@midnight-ntwrk/wallet-sdk": {
+      "@substrate/connect": "2.1.8"
     }
   },
   "dependencies": {
