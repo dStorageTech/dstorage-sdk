@@ -123,6 +123,77 @@ const storageAdapter = new ArweaveLocalStorageAdapter({
 
 ---
 
+## Managing References
+
+Beyond `store()` and `retrieveByRefId()`/`retrieveByStorageId()`, the SDK exposes lifecycle operations for references you've already written on-chain. All of these require a `chainAdapter` — they throw if the SDK is configured in storage-only mode.
+
+### Listing references
+
+```typescript
+// All references the chain adapter can enumerate (requires listReferences() support —
+// e.g. MockChainAdapter, MidnightChainAdapter)
+const refs = await sdk.listReferences();
+
+// Or a targeted lookup by refId — skips the full on-chain scan
+const refs = await sdk.listReferences({ refIds: [chainRefId] });
+
+for (const ref of refs) {
+  if (ref.decryptionError) {
+    // Not owned by any of your configured encryption adapters — someone else's
+    // reference, or the key has since been rotated away from you.
+    continue;
+  }
+  console.log(ref.refId, ref.storageId, ref.metadata);
+}
+```
+
+Each `DataReferenceSummary` carries `decryptionError` when none of your configured encryption adapters can unwrap its key envelope — absence of that field means you can decrypt (and therefore manage) the reference. The targeted `refIds` form doesn't populate `ownerCommitment` (left as `""`) since it reads each reference directly rather than via the chain adapter's full listing.
+
+### Updating content in place
+
+```typescript
+const { chainRefId, storageId } = await sdk.update(existingRefId, newBytes, {
+  metadata: { version: "3" },
+});
+```
+
+`update()` re-derives the `ownerSecret` from the existing reference to prove ownership, encrypts the new content under a fresh DEK, and replaces the reference's on-chain fields — `refId` stays the same. **The old content is not deleted or overwritten in storage**; if you retained the previous `storageId`, it remains independently decryptable. Only the chain reference now points at the new version.
+
+> **Warning**: `update()` always encrypts, even if the original reference (or the `options` you pass) used `isPublic: true` — the `isPublic` field on `StoreOptions` is silently ignored by `update()`. There is currently no way to update a reference back into public mode; if you need that, `removeReference()` the old one and `store()` a new public upload.
+
+Requires a chain adapter whose `ChainAdapter` implementation supports `updateReference()` — not all adapters do (throws if unsupported).
+
+### Removing a reference
+
+```typescript
+await sdk.removeReference(chainRefId);
+```
+
+Deletes the on-chain reference only — the underlying content in storage is untouched (decentralised storage networks like Arweave are generally append-only/permanent, so there is nothing for the SDK to delete there). Ownership is enforced by the chain (via a ZK proof over the witness-derived `ownerSecret`) — only whoever can re-derive that secret from one of their configured encryption adapters can successfully remove a reference.
+
+### Rotating encryption keys
+
+```typescript
+// e.g. changing a password: configure both the new and the still-valid old
+// adapter, then rotate — the old wrapper is dropped from the envelope.
+const sdk = new DStorage({
+  storageAdapter,
+  chainAdapter,
+  encryptionAdapters: [
+    new PasswordEncryptionAdapter({ password: newPassword, salt }),
+    new MnemonicEncryptionAdapter({ mnemonic: backupPhrase }), // proves ownership
+  ],
+});
+await sdk.init();
+await sdk.rotateKeys(chainRefId);
+// From this point, the old password's wrapper is gone — only the adapters
+// configured on this SDK instance (new password + mnemonic) can decrypt.
+```
+
+`rotateKeys()` re-wraps the existing DEK under exactly the encryption adapters currently configured on the SDK instance — content in storage is never touched or re-uploaded, only the on-chain `keyEnvelope` changes. Any single adapter that matches a wrapper already in the reference's envelope is sufficient to authorise the rotation (it proves ownership by unwrapping the existing DEK). Use it to change a password, swap in a new device's keypair, or drop an adapter you no longer want to be able to decrypt this reference — whatever `encryptionAdapters` the SDK is configured with at call time becomes the new, complete set.
+
+---
+
 ## Browser Usage
 
 The same `npm install @dstorage-tech/dstorage-sdk` import works in the browser — no
@@ -275,6 +346,24 @@ localStorage.removeItem("pending-store"); // clear on success
 ```
 
 `keyEnvelope` is the DEK already wrapped under your KEK — safe to persist. The raw DEK is never exposed.
+
+### Handling partial update failures
+
+`update()` follows the identical pattern: content is stored first, then the on-chain reference is rewritten. If the chain write fails after the new content is already stored, `update()` throws the same `StorePartialError`. Recover with `retryUpdate()` instead of `registerReference()` — it targets the existing `refId` rather than creating a new reference:
+
+```typescript
+import { isStorePartialError } from "@dstorage-tech/dstorage-sdk";
+
+try {
+  await sdk.update(existingRefId, newBytes);
+} catch (err) {
+  if (isStorePartialError(err)) {
+    const { chainRefId } = await sdk.retryUpdate(existingRefId, err.recovery);
+  }
+}
+```
+
+As with `store()`, persist `err.recovery` (or the `recovery` payload from the `"stored"` `onProgress` phase) if you need resilience against a crash between the storage upload and the chain write.
 
 ---
 
