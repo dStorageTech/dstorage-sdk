@@ -66,5 +66,18 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.6"
+  },
+  "allowScripts": {
+    "keccak@3.0.2": true,
+    "keccak@3.0.4": true,
+    "utf-8-validate@5.0.10": true,
+    "utf-8-validate@6.0.6": true,
+    "@swc/core@1.15.21": true,
+    "bigint-buffer@1.1.5": true,
+    "bufferutil@4.1.0": true,
+    "classic-level@3.0.0": true,
+    "esbuild@0.27.4": true,
+    "msgpackr-extract@3.0.3": true,
+    "secp256k1@5.0.1": true
   }
 }
