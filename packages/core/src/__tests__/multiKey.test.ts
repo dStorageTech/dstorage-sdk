@@ -649,3 +649,126 @@ describe("rotateKeys — password rotation via mnemonic recovery", () => {
     });
   });
 });
+
+// ── same-named adapter collision ────────────────────────────────────────────
+//
+// Multiple configured providers can share the same `.name` — e.g. two
+// MnemonicEncryptionAdapter instances during a seed-rotation window, or two
+// PasswordEncryptionAdapter instances during a password-rotation window. A
+// name match on a wrapper doesn't guarantee that specific provider holds the
+// KEK for that wrapper, so the SDK must try every same-named candidate
+// against a wrapper before giving up on it — not just the first one found.
+
+// A second, distinct seed for MnemonicEncryptionAdapter, via seedHex to avoid
+// needing a second checksummed BIP-39 phrase. 32 non-uniform bytes.
+const OTHER_SEED_HEX = "0123456789abcdef".repeat(4);
+
+const otherMnemonicProvider = () =>
+  new MnemonicEncryptionAdapter({ seedHex: OTHER_SEED_HEX });
+
+describe("same-named adapter collision — mnemonic", () => {
+  it("retrieve succeeds when the matching adapter is first in the array", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider()],
+    });
+    await storeSdk.init();
+    const content = "rotated-seed content";
+    const { chainRefId } = await storeSdk.store(enc(content));
+
+    const retrieveSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider(), otherMnemonicProvider()],
+    });
+    await retrieveSdk.init();
+    const result = await retrieveSdk.retrieveByRefId(chainRefId);
+    expect(dec(result.bytes)).toBe(content);
+  });
+
+  it("retrieve succeeds when the matching adapter is NOT first in the array", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider()],
+    });
+    await storeSdk.init();
+    const content = "rotated-seed content, wrong order";
+    const { chainRefId } = await storeSdk.store(enc(content));
+
+    // The provider that can actually decrypt this reference (mnemonicProvider)
+    // is listed second, behind a same-named provider (otherMnemonicProvider)
+    // that cannot. Before the fix, name-based `.find()` always resolved to the
+    // first same-named provider and never retried with the second.
+    const retrieveSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [otherMnemonicProvider(), mnemonicProvider()],
+    });
+    await retrieveSdk.init();
+    const result = await retrieveSdk.retrieveByRefId(chainRefId);
+    expect(dec(result.bytes)).toBe(content);
+  });
+
+  it("rotateKeys with old and new same-named mnemonic adapters configured together works regardless of order", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider()],
+    });
+    await storeSdk.init();
+    const content = "content protected by rotated mnemonic";
+    const { chainRefId } = await storeSdk.store(enc(content));
+
+    // Documented rotateKeys pattern: configure both the old and new adapters
+    // together so the old one can authorise the rotation. Both are
+    // MnemonicEncryptionAdapter instances, so both share name "mnemonic".
+    const rotateKeysSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [mnemonicProvider(), otherMnemonicProvider()],
+    });
+    await rotateKeysSdk.init();
+    await expect(rotateKeysSdk.rotateKeys(chainRefId)).resolves.toBeUndefined();
+
+    // New seed alone must now decrypt it.
+    const newOnlySdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [otherMnemonicProvider()],
+    });
+    await newOnlySdk.init();
+    const byNew = await newOnlySdk.retrieveByRefId(chainRefId);
+    expect(dec(byNew.bytes)).toBe(content);
+
+    // A fresh SDK with the new adapter listed FIRST (wrong-order relative to
+    // the store-time array) must also succeed post-fix.
+    const wrongOrderSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [otherMnemonicProvider(), mnemonicProvider()],
+    });
+    await wrongOrderSdk.init();
+    const byWrongOrder = await wrongOrderSdk.retrieveByRefId(chainRefId);
+    expect(dec(byWrongOrder.bytes)).toBe(content);
+  });
+});
+
+describe("same-named adapter collision — password", () => {
+  it("retrieve succeeds when the matching password adapter is NOT first in the array", async () => {
+    const adapters = sharedAdapters();
+    const storeSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [passwordProvider()],
+    });
+    await storeSdk.init();
+    const content = "rotated-password content, wrong order";
+    const { chainRefId } = await storeSdk.store(enc(content));
+
+    // newPasswordProvider() and passwordProvider() both have name "password".
+    // The one that can actually decrypt (passwordProvider) is listed second.
+    const retrieveSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [newPasswordProvider(), passwordProvider()],
+    });
+    await retrieveSdk.init();
+    const result = await retrieveSdk.retrieveByRefId(chainRefId);
+    expect(dec(result.bytes)).toBe(content);
+  });
+});

@@ -8,7 +8,6 @@ import {
   buildKeyEnvelope,
   serializeKeyEnvelope,
   parseKeyEnvelope,
-  findWrapper,
   type KeyWrapper,
 } from "../keyEnvelope.js";
 import { CryptoErrorCode } from "../errors.js";
@@ -275,25 +274,5 @@ describe("parseKeyEnvelope", () => {
     const result = parseKeyEnvelope(json);
     expect(result).not.toBeNull();
     expect(result!.wrappers).toHaveLength(1);
-  });
-});
-
-// ── findWrapper ───────────────────────────────────────────────────────────────
-
-describe("findWrapper", () => {
-  it("returns the wrapper matching the given wrapKeyName", () => {
-    const envelope = buildKeyEnvelope([
-      symWrapper("a".repeat(96), "password"),
-      symWrapper("b".repeat(96), "mnemonic"),
-    ]);
-    const found = findWrapper(envelope, "mnemonic");
-    expect(found).not.toBeNull();
-    expect(found!.wrapKeyName).toBe("mnemonic");
-    expect(found!.wrappedDek).toBe("b".repeat(96));
-  });
-
-  it("returns null when the name is not found", () => {
-    const envelope = buildKeyEnvelope([symWrapper("a".repeat(96), "password")]);
-    expect(findWrapper(envelope, "biometric")).toBeNull();
   });
 });

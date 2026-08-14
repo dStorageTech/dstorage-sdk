@@ -33,7 +33,6 @@ export {
   buildKeyEnvelope,
   serializeKeyEnvelope,
   parseKeyEnvelope,
-  findWrapper,
   deriveSymmetricKeyFromSeed,
   encryptXChaCha,
   decryptXChaCha,

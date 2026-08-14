@@ -288,13 +288,3 @@ export function parseKeyEnvelope(raw: string): KeyEnvelope | null {
     return null;
   }
 }
-
-/**
- * Find a wrapper by its wrapKeyName. Returns null if not found.
- */
-export function findWrapper(
-  envelope: KeyEnvelope,
-  wrapKeyName: string,
-): KeyWrapper | null {
-  return envelope.wrappers.find((w) => w.wrapKeyName === wrapKeyName) ?? null;
-}

@@ -201,3 +201,42 @@ describe("WebAuthnPrfEncryptionAdapter — DStorage store/retrieve round trip", 
     });
   });
 });
+
+// ── same-named adapter collision ────────────────────────────────────────────
+//
+// Every WebAuthnPrfEncryptionAdapter instance has `.name === "webauthn-prf"`
+// regardless of which passkey identity registered it — so two different
+// registered identities share the same provider name.
+
+describe("same-named adapter collision — webauthn-prf", () => {
+  it("retrieve succeeds when the matching adapter is NOT first in the array", async () => {
+    stubFakeAuthenticator();
+    const adapters = sharedAdapters();
+    const owner = await WebAuthnPrfEncryptionAdapter.register();
+
+    const uploaderSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [owner],
+    });
+    await uploaderSdk.init();
+    const content = "webauthn-prf collision content";
+    const { chainRefId } = await uploaderSdk.store(enc(content));
+
+    // A second, distinct passkey identity — register() eagerly derives and
+    // caches its key material, so this adapter works independently of which
+    // fake authenticator is stubbed afterwards.
+    stubFakeAuthenticator(OTHER_PRF_OUTPUT, OTHER_CREDENTIAL_ID);
+    const otherOwner = await WebAuthnPrfEncryptionAdapter.register();
+    expect(otherOwner.name).toBe(owner.name);
+
+    // otherOwner (cannot decrypt this reference) is listed first; owner
+    // (can) is listed second, both sharing name "webauthn-prf".
+    const retrieveSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [otherOwner, owner],
+    });
+    await retrieveSdk.init();
+    const { bytes } = await retrieveSdk.retrieveByRefId(chainRefId);
+    expect(dec(bytes)).toBe(content);
+  });
+});

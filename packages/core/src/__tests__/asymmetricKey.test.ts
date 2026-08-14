@@ -254,3 +254,36 @@ describe("mixed symmetric + asymmetric envelope", () => {
     });
   });
 });
+
+// ── same-named adapter collision ────────────────────────────────────────────
+//
+// Every KeypairEncryptionAdapter factory defaults to variant "mlkem768",
+// which is also its `.name` — so two independently generated keypairs share
+// the same provider name even though they hold unrelated key material.
+
+describe("same-named adapter collision — keypair", () => {
+  it("retrieve succeeds when the matching keypair adapter is NOT first in the array", async () => {
+    const adapters = sharedAdapters();
+    const { adapter: adapterA } = KeypairEncryptionAdapter.generateKeypair(CTX);
+    const { adapter: adapterB } = KeypairEncryptionAdapter.generateKeypair(CTX);
+    expect(adapterA.name).toBe(adapterB.name);
+
+    const sdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [adapterA],
+    });
+    await sdk.init();
+    const content = "keypair collision content";
+    const { chainRefId } = await sdk.store(enc(content));
+
+    // adapterA can decrypt this reference; adapterB cannot. adapterB (wrong
+    // one) is listed first, both share the same `.name`.
+    const retrieveSdk = new DStorage({
+      ...adapters,
+      encryptionAdapters: [adapterB, adapterA],
+    });
+    await retrieveSdk.init();
+    const { bytes } = await retrieveSdk.retrieveByRefId(chainRefId);
+    expect(dec(bytes)).toBe(content);
+  });
+});

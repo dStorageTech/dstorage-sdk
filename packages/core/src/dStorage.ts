@@ -33,7 +33,7 @@ import {
 } from "@dstorage/crypto";
 import { CoreErrorCode, StorePartialError } from "./errors.js";
 
-import type { CryptoScheme } from "@dstorage/crypto";
+import type { CryptoScheme, KeyEnvelope } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
 import type { ChainAdapter } from "@dstorage/chain";
 import corePackageJson from "../package.json";
@@ -842,6 +842,33 @@ export class DStorage {
   }
 
   /**
+   * Try every provider whose name matches a wrapper's wrapKeyName against that
+   * wrapper, for every wrapper in the envelope, in order. Multiple configured
+   * providers can share the same `.name` (e.g. two MnemonicEncryptionAdapter
+   * instances during a seed rotation window) — a name match doesn't guarantee
+   * that provider holds the KEK for that specific wrapper, so every same-named
+   * candidate must get a chance before moving on to the next wrapper. Returns
+   * null if nothing in the envelope could be unwrapped by any provider.
+   */
+  private async _tryUnwrapDek(
+    envelope: KeyEnvelope,
+  ): Promise<Uint8Array | null> {
+    for (const wrapper of envelope.wrappers) {
+      const candidates = this._encryptionProviders.filter(
+        (p) => p.name === wrapper.wrapKeyName,
+      );
+      for (const provider of candidates) {
+        try {
+          return await provider.unwrapDek(wrapper);
+        } catch {
+          // This same-named provider didn't match this wrapper — try the next one.
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Unwrap the data DEK from a key envelope and return an XChaChaScheme built from it.
    * Throws if the KEK is not available or the envelope cannot be parsed.
    * Only valid for private uploads (envelope.wrappers must be present).
@@ -869,17 +896,9 @@ export class DStorage {
         { cause: { code: "envelope_malformed" } },
       );
     }
-    for (const wrapper of envelope.wrappers) {
-      const provider = this._encryptionProviders.find(
-        (p) => p.name === wrapper.wrapKeyName,
-      );
-      if (!provider) continue;
-      try {
-        const dek = await provider.unwrapDek(wrapper);
-        return XChaChaScheme.fromKey(dek);
-      } catch {
-        // Wrapper didn't match — try the next one.
-      }
+    const dek = await this._tryUnwrapDek(envelope);
+    if (dek) {
+      return XChaChaScheme.fromKey(dek);
     }
     throw new DStorageError(
       CoreErrorCode.DECRYPT_NO_WRAPPER_MATCHED,
@@ -917,16 +936,9 @@ export class DStorage {
         { cause: { code: "envelope_malformed" } },
       );
     }
-    for (const wrapper of envelope.wrappers) {
-      const provider = this._encryptionProviders.find(
-        (p) => p.name === wrapper.wrapKeyName,
-      );
-      if (!provider) continue;
-      try {
-        return await provider.unwrapDek(wrapper);
-      } catch {
-        // Wrapper didn't match — try the next one.
-      }
+    const dek = await this._tryUnwrapDek(envelope);
+    if (dek) {
+      return dek;
     }
     throw new DStorageError(
       CoreErrorCode.UNWRAP_DEK_NO_WRAPPER_MATCHED,
