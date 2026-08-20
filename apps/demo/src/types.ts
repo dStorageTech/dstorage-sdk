@@ -1,12 +1,7 @@
 import type { CostEstimate, StoreResult } from "@dstorage-tech/dstorage-sdk";
 
 export type AppStep =
-  | "connect"
-  | "ready"
-  | "upload"
-  | "uploaded"
-  | "prove"
-  | "done";
+  "connect" | "ready" | "upload" | "uploaded" | "prove" | "done";
 
 export interface StoredRecord {
   dataId: string;
@@ -38,10 +33,7 @@ export type PaymentAdapterKey = "local" | "managed";
 // ── Upload pipeline (drawer UI) ────────────────────────────────────────────────
 
 export type UploadStepId =
-  | "estimate"
-  | "store"
-  | "chain_reference"
-  | "complete";
+  "estimate" | "store" | "chain_reference" | "complete";
 export type UploadStepStatus = "pending" | "running" | "done" | "error";
 
 export interface UploadStepState {

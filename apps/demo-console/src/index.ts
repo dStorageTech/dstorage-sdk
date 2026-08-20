@@ -92,9 +92,7 @@ type NetworkName = keyof typeof NETWORKS;
 async function main(): Promise<void> {
   let rl = createInterface({ input, output });
   let chainAdapter:
-    | MidnightChainAdapter
-    | MidnightSimulatorChainAdapter
-    | undefined;
+    MidnightChainAdapter | MidnightSimulatorChainAdapter | undefined;
 
   try {
     console.log("\n=== dStorage Midnight Console Demo ===\n");

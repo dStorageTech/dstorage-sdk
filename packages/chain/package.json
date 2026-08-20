@@ -1,6 +1,6 @@
 {
   "name": "@dstorage/chain",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "Pluggable blockchain adapters for dStorage SDK on-chain references",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -43,7 +43,7 @@
     "@dstorage/payment": "*"
   },
   "peerDependencies": {
-    "@midnight-ntwrk/compact-js": "^2.5.1",
+    "@midnight-ntwrk/compact-js": "2.5.1",
     "@midnight-ntwrk/midnight-js-contracts": "^4.1.1",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.1.1",
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.1.1",
