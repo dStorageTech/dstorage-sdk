@@ -347,6 +347,8 @@ localStorage.removeItem("pending-store"); // clear on success
 
 `keyEnvelope` is the DEK already wrapped under your KEK — safe to persist. The raw DEK is never exposed.
 
+`StorePartialError`'s message also appends the underlying chain-write failure (e.g. a payment adapter's HTTP error), and sets it as the standard `.cause` — so `err.message` and `err.cause` both carry the real reason the write failed, not just the generic "on-chain reference write failed" text.
+
 ### Handling partial update failures
 
 `update()` follows the identical pattern: content is stored first, then the on-chain reference is rewritten. If the chain write fails after the new content is already stored, `update()` throws the same `StorePartialError`. Recover with `retryUpdate()` instead of `registerReference()` — it targets the existing `refId` rather than creating a new reference:
