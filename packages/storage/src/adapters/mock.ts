@@ -19,7 +19,7 @@ import {
   ManagedPaymentAdapter,
   PaymentAdapter,
 } from "@dstorage/payment";
-import { DStorageError } from "@dstorage/crypto";
+import { DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
 
 export interface MockStorageAdapterConfig {
@@ -99,6 +99,7 @@ export class MockStorageAdapter implements StorageAdapter {
   private readonly logger: StorageAdapterLogger | undefined;
 
   constructor(config: MockStorageAdapterConfig = {}) {
+    assertValidLogger(config.logger, "MockStorageAdapter");
     this.logger = config.logger;
     if (config.signingServerUrl) {
       if (!config.authToken?.trim()) {

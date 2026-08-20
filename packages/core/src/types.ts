@@ -8,18 +8,14 @@ import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
 import type { TokenSymbol } from "@dstorage/payment";
 import type { CryptoScheme } from "@dstorage/crypto";
 import type { EncryptionAdapter } from "@dstorage/encryption";
+import type { MinimalLogger } from "@dstorage/crypto";
 
 /**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
  * Omit the field entirely to suppress all SDK output.
  */
-export interface Logger {
-  log(component: string, msg: string): void;
-  warn(component: string, msg: string): void;
-  error(component: string, msg: string): void;
-  debug?(component: string, msg: string): void;
-}
+export type Logger = MinimalLogger;
 
 /** Wallet connection info returned after connecting */
 export interface WalletInfo {

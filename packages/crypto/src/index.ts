@@ -1,4 +1,5 @@
 export * from "./errors.js";
+export * from "./logger.js";
 export * from "./webcrypto.js";
 export * from "./types.js";
 export * from "./keys.js";

@@ -17,6 +17,7 @@ import type {
   ChainQuote,
 } from "../types.js";
 import {
+  assertValidLogger,
   bytesToBase64url,
   DStorageError,
   getCrypto,
@@ -96,6 +97,7 @@ export class HttpGatewayChainAdapter implements ChainAdapter {
   private readonly maxResponseBytes: number;
 
   constructor(config: HttpGatewayChainAdapterConfig) {
+    assertValidLogger(config.logger, "HttpGatewayChainAdapter");
     this.logger = config.logger;
     this.fetchFn = config.customFetch ?? globalThis.fetch.bind(globalThis);
     this.extraHeaders = config.headers ?? {};

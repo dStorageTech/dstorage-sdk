@@ -43,7 +43,7 @@ import type {
   TokenSymbol,
   NetworkType,
 } from "../types.js";
-import { DStorageError } from "@dstorage/crypto";
+import { DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { PaymentErrorCode } from "../errors.js";
 
 import type Transaction from "arweave/node/lib/transaction";
@@ -130,6 +130,7 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     };
     this.walletKey = config.walletKey;
     this.quoteValidityMs = config.quoteValidityMs ?? DEFAULT_QUOTE_VALIDITY_MS;
+    assertValidLogger(config.logger, "ArweavePaymentAdapter");
     this.logger = config.logger;
   }
 

@@ -21,6 +21,7 @@ import {
   DStorageError,
   isDStorageError,
   computeBlake3Hex,
+  assertValidLogger,
 } from "@dstorage/crypto";
 import {
   generateDek,
@@ -100,6 +101,7 @@ export class DStorage {
 
   constructor(config: DStorageConfig) {
     this.config = config;
+    assertValidLogger(config.logger, "DStorage");
     this.logger = config.logger;
   }
 

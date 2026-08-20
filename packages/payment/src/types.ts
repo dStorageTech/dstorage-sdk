@@ -7,17 +7,14 @@
  * Token definitions live here and are re-exported from @dstorage/core.
  */
 
+import type { MinimalLogger } from "@dstorage/crypto";
+
 /**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
  * Omit the field entirely to suppress all SDK output.
  */
-export interface PaymentAdapterLogger {
-  log(component: string, msg: string): void;
-  warn(component: string, msg: string): void;
-  error(component: string, msg: string): void;
-  debug?(component: string, msg: string): void;
-}
+export type PaymentAdapterLogger = MinimalLogger;
 
 export type NetworkType = "storage" | "chain";
 

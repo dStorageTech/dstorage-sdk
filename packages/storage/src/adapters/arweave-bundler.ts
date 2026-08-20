@@ -60,7 +60,11 @@ import {
   computeBlake3Hex,
   assertContentHash,
 } from "./integrity.js";
-import { DStorageError, readResponseTextWithLimit } from "@dstorage/crypto";
+import {
+  DStorageError,
+  assertValidLogger,
+  readResponseTextWithLimit,
+} from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
 import { getTurboFactory } from "./turbo-factory.js";
 
@@ -183,6 +187,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
       config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.maxMetadataResponseBytes =
       config.maxMetadataResponseBytes ?? DEFAULT_MAX_METADATA_RESPONSE_BYTES;
+    assertValidLogger(config.logger, "ArweaveBundlerStorageAdapter");
     this.logger = config.logger;
 
     // When a signing server URL is provided, use the ManagedPaymentAdapter:

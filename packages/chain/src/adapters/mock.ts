@@ -20,7 +20,7 @@ import type {
   ChainQuote,
 } from "../types.js";
 import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
-import { DStorageError } from "@dstorage/crypto";
+import { DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
 
 // ── Storage helpers ──
@@ -77,6 +77,7 @@ export class MockChainAdapter implements ChainAdapter {
   private readonly logger: ChainAdapterLogger | undefined;
 
   constructor(logger?: ChainAdapterLogger) {
+    assertValidLogger(logger, "MockChainAdapter");
     this.logger = logger;
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
     const savedRefs = load<Record<string, ChainReference>>(

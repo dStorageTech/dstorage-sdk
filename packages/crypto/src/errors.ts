@@ -47,6 +47,7 @@ export const CryptoErrorCode = {
   MLKEM_UNKNOWN_VARIANT: 12018,
   SEED_LOW_ENTROPY: 12019,
   OWNER_SECRET_EMPTY_SALT: 12020,
+  LOGGER_INVALID: 12021,
 } as const;
 
 export type CryptoErrorCode =

@@ -28,6 +28,24 @@ describe("MidnightSimulatorChainAdapter", () => {
     expect(makeAdapter().name).toBe("midnight");
   });
 
+  describe("logger validation", () => {
+    it("accepts logger: console", () => {
+      expect(
+        () => new MidnightSimulatorChainAdapter({ logger: console }),
+      ).not.toThrow();
+    });
+
+    it("rejects logger: console.log (common typo for logger: console)", () => {
+      expect(
+        () =>
+          new MidnightSimulatorChainAdapter({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            logger: console.log as any,
+          }),
+      ).toThrow(/logger must be an object/);
+    });
+  });
+
   // ── writeReference ────────────────────────────────────────────────────────
 
   describe("writeReference", () => {

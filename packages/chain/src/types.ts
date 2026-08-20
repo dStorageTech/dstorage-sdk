@@ -17,17 +17,14 @@ export type { EncryptionScheme } from "@dstorage/crypto";
  */
 export const CONTRACT_VERSION = 0;
 
+import type { MinimalLogger } from "@dstorage/crypto";
+
 /**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
  * Omit the field entirely to suppress all SDK output.
  */
-export interface ChainAdapterLogger {
-  log(component: string, msg: string): void;
-  warn(component: string, msg: string): void;
-  error(component: string, msg: string): void;
-  debug?(component: string, msg: string): void;
-}
+export type ChainAdapterLogger = MinimalLogger;
 
 export type ChainProviderName = "mock" | "midnight" | "httpgateway";
 

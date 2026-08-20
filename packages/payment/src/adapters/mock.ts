@@ -26,6 +26,7 @@ import type {
   NetworkType,
 } from "../types.js";
 import { TOKENS } from "../types.js";
+import { assertValidLogger } from "@dstorage/crypto";
 
 export interface MockPaymentAdapterConfig {
   /**
@@ -60,6 +61,7 @@ export class MockPaymentAdapter implements PaymentAdapter {
     this.token = config.token ?? "MOCK";
     this.type = config.type;
     this.quoteValidityMs = config.quoteValidityMs ?? 600_000;
+    assertValidLogger(config.logger, "MockPaymentAdapter");
     this.logger = config.logger;
   }
 

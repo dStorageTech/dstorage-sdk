@@ -26,7 +26,7 @@ import type {
 import type { EncryptionScheme } from "../types.js";
 import { ManagedPaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
 import type { PaymentAdapter } from "@dstorage/payment";
-import { DStorageError, hexToBytes } from "@dstorage/crypto";
+import { DStorageError, assertValidLogger, hexToBytes } from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
 import type { DataRegistrySimulator } from "./midnight/contracts/src/test/dataregistry-simulator.js";
 
@@ -61,6 +61,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       | { signingServerUrl?: never; authToken?: never }
     ) = {},
   ) {
+    assertValidLogger(options.logger, "MidnightSimulatorChainAdapter");
     this.logger = options.logger;
     this.senderPk = options.senderPk ?? "00".repeat(32);
 

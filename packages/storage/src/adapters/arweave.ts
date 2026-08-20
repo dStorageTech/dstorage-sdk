@@ -63,7 +63,7 @@ import type {
   SignedArweaveUpload,
 } from "@dstorage/payment";
 import { CONTENT_HASH_TAG, assertContentHash } from "./integrity.js";
-import { DStorageError } from "@dstorage/crypto";
+import { DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
 
 import type Transaction from "arweave/node/lib/transaction";
@@ -221,6 +221,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     this.skipIntegrityCheck = config.skipIntegrityCheck ?? false;
     this.maxRetrieveSizeBytes =
       config.maxRetrieveSizeBytes ?? 256 * 1024 * 1024;
+    assertValidLogger(config.logger, "ArweaveStorageAdapter");
     this.logger = config.logger;
 
     // When a signing server URL is provided, use the ManagedPaymentAdapter:

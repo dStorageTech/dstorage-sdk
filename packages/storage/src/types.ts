@@ -5,18 +5,14 @@
  */
 
 import type { PaymentAdapter, TokenSymbol } from "@dstorage/payment";
+import type { MinimalLogger } from "@dstorage/crypto";
 
 /**
  * Minimal logger interface accepted by every SDK class.
  * Compatible with `console` — pass `logger: console` for zero-boilerplate logging.
  * Omit the field entirely to suppress all SDK output.
  */
-export interface StorageAdapterLogger {
-  log(component: string, msg: string): void;
-  warn(component: string, msg: string): void;
-  error(component: string, msg: string): void;
-  debug?(component: string, msg: string): void;
-}
+export type StorageAdapterLogger = MinimalLogger;
 
 /** Identifies which storage network an adapter represents. */
 export type StorageProviderName = "mock" | "arweave" | "arweave_bundler";

@@ -23,7 +23,7 @@
 
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { PaymentReceipt } from "@dstorage/payment";
-import { hexToBytes, DStorageError } from "@dstorage/crypto";
+import { hexToBytes, DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { ChainErrorCode } from "../../../errors.js";
 import {
   type WalletProvider,
@@ -375,6 +375,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       this._injectedPrivateStatePassword = providerConfig.privateStatePassword;
     }
 
+    assertValidLogger(config.logger, "MidnightChainAdapter");
     this.logger = config.logger;
     this.walletMode = walletMode;
     this.connectorName =
