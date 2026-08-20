@@ -66,6 +66,12 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
     this.senderPk = options.senderPk ?? "00".repeat(32);
 
     if (options.signingServerUrl) {
+      if (!options.authToken?.trim()) {
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_SIMULATOR_AUTH_TOKEN_REQUIRED,
+          "[dStorage/midnight-simulator] authToken is required when signingServerUrl is provided.",
+        );
+      }
       this.paymentAdapter = new ManagedPaymentAdapter({
         network: "managedmock",
         type: "chain",

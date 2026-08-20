@@ -218,4 +218,35 @@ describe("MockStorageAdapter", () => {
       expect(all).toContain(r2.id);
     });
   });
+
+  describe("managed payment", () => {
+    it("defaults to a local MockPaymentAdapter with network mock", () => {
+      const adapter = new MockStorageAdapter();
+      expect(adapter.paymentAdapter.network).toBe("mock");
+      expect(adapter.paymentAdapter.type).toBe("storage");
+    });
+
+    it("signingServerUrl + authToken switches to ManagedPaymentAdapter with network managedmock", () => {
+      const adapter = new MockStorageAdapter({
+        signingServerUrl: "https://signing.example.com",
+        authToken: "tok_abc123",
+      });
+      expect(adapter.paymentAdapter.network).toBe("managedmock");
+      expect(adapter.paymentAdapter.type).toBe("storage");
+    });
+
+    it("signingServerUrl without authToken throws MOCK_AUTH_TOKEN_REQUIRED", () => {
+      expect(
+        () =>
+          new MockStorageAdapter({
+            signingServerUrl: "https://signing.example.com",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any),
+      ).toThrow(
+        expect.objectContaining({
+          code: StorageErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
+        }),
+      );
+    });
+  });
 });

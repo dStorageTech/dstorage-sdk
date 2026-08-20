@@ -19,7 +19,11 @@ import type {
   DataReferenceSummary,
   ChainQuote,
 } from "../types.js";
-import { PaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
+import {
+  PaymentAdapter,
+  MockPaymentAdapter,
+  ManagedPaymentAdapter,
+} from "@dstorage/payment";
 import { DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
 
@@ -65,20 +69,47 @@ function load<T>(key: string): T | null {
   return null;
 }
 
+export type MockChainAdapterConfig = {
+  /**
+   * Optional logger for SDK operational output.
+   */
+  logger?: ChainAdapterLogger;
+} & (
+  | { signingServerUrl: string; authToken: string }
+  | { signingServerUrl?: never; authToken?: never }
+);
+
 // ── Mock Adapter ──
 export class MockChainAdapter implements ChainAdapter {
   readonly name: ChainProviderName = "mock";
   readonly providerName: string = "Mock-Chain-Adapter";
-  readonly paymentAdapter: PaymentAdapter = new MockPaymentAdapter({
-    type: "chain",
-  });
+  readonly paymentAdapter: PaymentAdapter;
 
   private contractAddress: string;
   private readonly logger: ChainAdapterLogger | undefined;
 
-  constructor(logger?: ChainAdapterLogger) {
-    assertValidLogger(logger, "MockChainAdapter");
-    this.logger = logger;
+  constructor(config: MockChainAdapterConfig = {}) {
+    assertValidLogger(config.logger, "MockChainAdapter");
+    this.logger = config.logger;
+
+    if (config.signingServerUrl) {
+      if (!config.authToken?.trim()) {
+        throw new DStorageError(
+          ChainErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
+          "[dStorage/mock-chain] authToken is required when signingServerUrl is provided.",
+        );
+      }
+      this.paymentAdapter = new ManagedPaymentAdapter({
+        network: "managedmock",
+        type: "chain",
+        signingServerUrl: config.signingServerUrl,
+        authToken: config.authToken,
+        ...(config.logger !== undefined ? { logger: config.logger } : {}),
+      });
+    } else {
+      this.paymentAdapter = new MockPaymentAdapter({ type: "chain" });
+    }
+
     // Rehydrate from localStorage if available (browser only; no-op in Node.js)
     const savedRefs = load<Record<string, ChainReference>>(
       "dstorage:chain:refs",
@@ -99,6 +130,16 @@ export class MockChainAdapter implements ChainAdapter {
   }
 
   async writeReference(ref: ChainReference): Promise<ChainWriteResult> {
+    this.logger?.log(
+      "dStorage/mock-chain",
+      "Sending request to balance Tx to remote service…",
+    );
+    const paymentReceipt = await this.paymentAdapter.pay({
+      network: this.name,
+      dataSizeBytes: 0,
+      expiresAt: Date.now() + 60_000,
+    });
+
     const refId = ref.refId ?? generateRefId();
     refs.set(refId, ref);
     if (ref.ownerSecret) {
@@ -113,7 +154,12 @@ export class MockChainAdapter implements ChainAdapter {
       "dStorage/mock-chain",
       `Reference written → refId: ${refId}`,
     );
-    return { refId, provider: this.name, writtenAt: ref.writtenAt };
+    return {
+      refId,
+      provider: this.name,
+      writtenAt: ref.writtenAt,
+      paymentReceipt,
+    };
   }
 
   async readReference(refId: string): Promise<ChainReference> {

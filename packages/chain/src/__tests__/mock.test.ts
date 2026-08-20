@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { MockChainAdapter } from "../adapters/mock.js";
 import type { ChainReferenceUpdate } from "../types.js";
 import { ChainErrorCode } from "../errors.js";
@@ -373,6 +373,68 @@ describe("MockChainAdapter", () => {
       const all = await adapter.listReferences();
       const found = all.find((r) => r.refId === refId);
       expect(found?.ownerCommitment).toBe("");
+    });
+  });
+
+  describe("managed payment", () => {
+    it("defaults to a local MockPaymentAdapter with network mock", () => {
+      const adapter = new MockChainAdapter();
+      expect(adapter.paymentAdapter.network).toBe("mock");
+      expect(adapter.paymentAdapter.type).toBe("chain");
+    });
+
+    it("signingServerUrl + authToken switches to ManagedPaymentAdapter with network managedmock", () => {
+      const adapter = new MockChainAdapter({
+        signingServerUrl: "https://signing.example.com",
+        authToken: "tok_abc123",
+      });
+      expect(adapter.paymentAdapter.network).toBe("managedmock");
+      expect(adapter.paymentAdapter.type).toBe("chain");
+    });
+
+    it("signingServerUrl without authToken throws MOCK_AUTH_TOKEN_REQUIRED", () => {
+      expect(
+        () =>
+          new MockChainAdapter({
+            signingServerUrl: "https://signing.example.com",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any),
+      ).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
+        }),
+      );
+    });
+
+    it("writeReference calls paymentAdapter.pay() and returns a paymentReceipt (local MockPaymentAdapter)", async () => {
+      const adapter = new MockChainAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      const result = await adapter.writeReference(uniqueRef("pay1"));
+      expect(paySpy).toHaveBeenCalledTimes(1);
+      expect(paySpy).toHaveBeenCalledWith(
+        expect.objectContaining({ network: "mock", dataSizeBytes: 0 }),
+      );
+      expect(result.paymentReceipt).toBeDefined();
+    });
+
+    it("writeReference calls paymentAdapter.pay() through the managed payment adapter", async () => {
+      const adapter = new MockChainAdapter({
+        signingServerUrl: "https://signing.example.com",
+        authToken: "tok_abc123",
+      });
+      const fakeReceipt = {
+        txHash: "tx123",
+        token: "MOCK",
+        amount: "0.001",
+        type: "chain" as const,
+        paidAt: Date.now(),
+      };
+      const paySpy = vi
+        .spyOn(adapter.paymentAdapter, "pay")
+        .mockResolvedValue(fakeReceipt);
+      const result = await adapter.writeReference(uniqueRef("pay2"));
+      expect(paySpy).toHaveBeenCalledTimes(1);
+      expect(result.paymentReceipt).toEqual(fakeReceipt);
     });
   });
 });

@@ -22,11 +22,12 @@ import {
 import { DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
 
-export interface MockStorageAdapterConfig {
+export type MockStorageAdapterConfig = {
   logger?: StorageAdapterLogger;
-  signingServerUrl?: string;
-  authToken?: string;
-}
+} & (
+  | { signingServerUrl: string; authToken: string }
+  | { signingServerUrl?: never; authToken?: never }
+);
 
 // In Node.js (no localStorage), fall back to an in-memory map.
 const memoryStore = new Map<string, string>();
