@@ -644,6 +644,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       throw new DStorageError(
         PaymentErrorCode.MANAGED_SIGN_HTTP_ERROR,
         `[dStorage/managed-payment] POST ${POST_SIGN_TX_API_PATH} failed: HTTP ${signResp.status}${body ? ` — ${body}` : ""}`,
+        { httpStatus: signResp.status },
       );
     }
 

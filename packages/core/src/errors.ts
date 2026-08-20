@@ -75,11 +75,16 @@ export type CoreErrorCode = (typeof CoreErrorCode)[keyof typeof CoreErrorCode];
 export class StorePartialError extends DStorageError {
   readonly recovery: StoreRecovery;
 
-  constructor(recovery: StoreRecovery) {
+  constructor(recovery: StoreRecovery, cause?: unknown) {
+    const causeMsg =
+      cause !== undefined
+        ? `: ${cause instanceof Error ? cause.message : String(cause)}`
+        : "";
     super(
       CoreErrorCode.CHAIN_WRITE_FAILED,
-      `[dStorage] Content stored (storageId: ${recovery.storageId}) but the on-chain reference write failed. ` +
+      `[dStorage] Content stored (storageId: ${recovery.storageId}) but the on-chain reference write failed${causeMsg}. ` +
         `Use err.recovery with registerReference() to retry without re-uploading.`,
+      cause !== undefined ? { cause } : undefined,
     );
     this.name = "StorePartialError";
     this.recovery = recovery;

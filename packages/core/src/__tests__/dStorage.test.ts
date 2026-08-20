@@ -1223,6 +1223,20 @@ describe("update() StorePartialError recovery", () => {
     );
   });
 
+  it("StorePartialError from update() carries the underlying error as cause and in its message", async () => {
+    const ds = await makeInitedDStorage();
+    const { chainRefId: refId } = await ds.store(enc("v1"));
+    const underlying = new Error(
+      "[dStorage/managed-payment] POST /api/service/sign-tx failed: HTTP 500 — insufficient funds",
+    );
+    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+      underlying,
+    );
+    const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
+    expect((err as StorePartialError).cause).toBe(underlying);
+    expect((err as StorePartialError).message).toContain(underlying.message);
+  });
+
   it("StorePartialError.recovery.storageId is a non-empty string", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1"));
@@ -1332,6 +1346,19 @@ describe("StorePartialError recovery", () => {
     expect((err as StorePartialError).code).toBe(
       CoreErrorCode.CHAIN_WRITE_FAILED,
     );
+  });
+
+  it("StorePartialError from store() carries the underlying error as cause and in its message", async () => {
+    const ds = await makeInitedDStorage();
+    const underlying = new Error(
+      "[dStorage/managed-payment] POST /api/service/sign-tx failed: HTTP 500 — insufficient funds",
+    );
+    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+      underlying,
+    );
+    const err = await ds.store(enc("hello")).catch((e: unknown) => e);
+    expect((err as StorePartialError).cause).toBe(underlying);
+    expect((err as StorePartialError).message).toContain(underlying.message);
   });
 
   it("StorePartialError.recovery.storageId is a non-empty string", async () => {

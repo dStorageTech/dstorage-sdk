@@ -381,8 +381,8 @@ export class DStorage {
               fileSizeBytes: uploadData.length,
             },
           };
-        } catch {
-          throw new StorePartialError(storeRecovery);
+        } catch (err) {
+          throw new StorePartialError(storeRecovery, err);
         } finally {
           // Safe unconditionally here: this branch never returns uploadScheme
           // (which would alias the same underlying buffer) to the caller —
@@ -626,8 +626,8 @@ export class DStorage {
             ownerSecret,
             newOwnerSecret,
           );
-        } catch {
-          throw new StorePartialError(storeRecovery);
+        } catch (err) {
+          throw new StorePartialError(storeRecovery, err);
         }
         return { chainRefId: refId, storageId: storageResult.id };
       } finally {
@@ -1616,8 +1616,8 @@ export class DStorage {
             fileSizeBytes: bytes.length,
           },
         };
-      } catch {
-        throw new StorePartialError(storeRecovery);
+      } catch (err) {
+        throw new StorePartialError(storeRecovery, err);
       } finally {
         // Safe here: unlike store()'s single-shot path, _uploadChunked never
         // returns uploadScheme (aliasing the same buffer) to the caller in
