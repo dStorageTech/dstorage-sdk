@@ -552,13 +552,25 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    *   identifier "TEST" — the server treats this as a sandbox/test flow with no
    *   real funds involved. The SDK-side network name is "managedmock" to follow
    *   the lowercase naming convention; the server-side string is always "TEST".
+   *
+   *   txData is prefixed with "{type}:{adapter name}:" (e.g. "chain:mock:",
+   *   "chain:midnight:", "storage:mock:") so that a single store() call —
+   *   which pays once via the storage adapter and once via the chain
+   *   adapter, both hashing the same underlying bytes — sends two
+   *   distinguishable requests instead of two byte-identical ones, and so
+   *   different adapters of the same type (e.g. MockChainAdapter vs.
+   *   MidnightSimulatorChainAdapter) are distinguishable too. The adapter
+   *   name comes from instruction.network — every caller already sets it to
+   *   its own provider name; managedmock otherwise ignores that field.
    */
   private async _payManagedMock(
     instruction: PaymentInstruction,
     onStatus?: (message: string) => void,
   ): Promise<PaymentReceipt> {
     const body = JSON.stringify({
-      txData: instruction.txData || "mock",
+      txData: instruction.txData
+        ? `${this.type}:${instruction.network}:${instruction.txData}`
+        : "mock",
       network: "TEST",
     });
 

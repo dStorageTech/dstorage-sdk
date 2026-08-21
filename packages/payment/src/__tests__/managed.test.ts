@@ -510,3 +510,110 @@ describe("ManagedPaymentAdapter — quote TTL", () => {
     }
   });
 });
+
+// ── managedmock: txData prefixing ─────────────────────────────────────────────
+//
+// A single store() call pays once via the storage adapter and once via the
+// chain adapter, both hashing the same underlying bytes — without a prefix
+// the two signing-server requests would be byte-identical. txData is
+// prefixed with "{type}:{adapter name}:" so the two legs (and different
+// adapters of the same type, e.g. MockChainAdapter vs.
+// MidnightSimulatorChainAdapter) are distinguishable on the wire.
+
+describe("ManagedPaymentAdapter — managedmock txData prefixing", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubSuccessResponseCapturingBody(): { body: () => string } {
+    let capturedBody = "";
+    vi.stubGlobal("fetch", (_url: string, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? "");
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: true,
+            txId: "a".repeat(43),
+            signature: "c2lnbmF0dXJl",
+            publicKey: "cHVibGljS2V5",
+            txAmount: "0.001",
+            serviceFee: "0.0001",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+    return { body: () => capturedBody };
+  }
+
+  it("prefixes txData with type and adapter name for a chain adapter", async () => {
+    const capture = stubSuccessResponseCapturingBody();
+    const adapter = new ManagedPaymentAdapter({
+      network: "managedmock",
+      type: "chain",
+      signingServerUrl: "https://signing.example.com",
+      authToken: "tok_test",
+    });
+    await adapter.pay({
+      network: "mock",
+      txData: "deadbeef",
+      dataSizeBytes: 0,
+      expiresAt: Date.now() + 60_000,
+    });
+    const sent = JSON.parse(capture.body()) as { txData: string };
+    expect(sent.txData).toBe("chain:mock:deadbeef");
+  });
+
+  it("prefixes txData with type and adapter name for a storage adapter", async () => {
+    const capture = stubSuccessResponseCapturingBody();
+    const adapter = new ManagedPaymentAdapter({
+      network: "managedmock",
+      type: "storage",
+      signingServerUrl: "https://signing.example.com",
+      authToken: "tok_test",
+    });
+    await adapter.pay({
+      network: "mock",
+      txData: "deadbeef",
+      dataSizeBytes: 0,
+      expiresAt: Date.now() + 60_000,
+    });
+    const sent = JSON.parse(capture.body()) as { txData: string };
+    expect(sent.txData).toBe("storage:mock:deadbeef");
+  });
+
+  it("distinguishes different chain adapter names sharing the same type", async () => {
+    const capture = stubSuccessResponseCapturingBody();
+    const adapter = new ManagedPaymentAdapter({
+      network: "managedmock",
+      type: "chain",
+      signingServerUrl: "https://signing.example.com",
+      authToken: "tok_test",
+    });
+    await adapter.pay({
+      network: "midnight",
+      txData: "deadbeef",
+      dataSizeBytes: 0,
+      expiresAt: Date.now() + 60_000,
+    });
+    const sent = JSON.parse(capture.body()) as { txData: string };
+    expect(sent.txData).toBe("chain:midnight:deadbeef");
+  });
+
+  it("falls back to the literal string 'mock' when no txData is provided", async () => {
+    const capture = stubSuccessResponseCapturingBody();
+    const adapter = new ManagedPaymentAdapter({
+      network: "managedmock",
+      type: "chain",
+      signingServerUrl: "https://signing.example.com",
+      authToken: "tok_test",
+    });
+    await adapter.pay({
+      network: "mock",
+      dataSizeBytes: 0,
+      expiresAt: Date.now() + 60_000,
+    });
+    const sent = JSON.parse(capture.body()) as { txData: string };
+    expect(sent.txData).toBe("mock");
+  });
+});

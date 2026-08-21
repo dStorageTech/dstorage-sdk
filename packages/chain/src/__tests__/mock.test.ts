@@ -436,5 +436,39 @@ describe("MockChainAdapter", () => {
       expect(paySpy).toHaveBeenCalledTimes(1);
       expect(result.paymentReceipt).toEqual(fakeReceipt);
     });
+
+    it("writeReference passes ref.contentHash as txData", async () => {
+      const adapter = new MockChainAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.writeReference({
+        ...uniqueRef("pay3"),
+        contentHash: "a".repeat(64),
+      });
+      expect(paySpy).toHaveBeenCalledWith(
+        expect.objectContaining({ txData: "a".repeat(64) }),
+      );
+    });
+
+    it("writeReference sends different txData for different contentHash values", async () => {
+      const adapter = new MockChainAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.writeReference({
+        ...uniqueRef("pay4a"),
+        contentHash: "a".repeat(64),
+      });
+      await adapter.writeReference({
+        ...uniqueRef("pay4b"),
+        contentHash: "b".repeat(64),
+      });
+      const txDataValues = paySpy.mock.calls.map((call) => call[0].txData);
+      expect(txDataValues[0]).not.toBe(txDataValues[1]);
+    });
+
+    it("writeReference omits txData when ref.contentHash is not set", async () => {
+      const adapter = new MockChainAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.writeReference(uniqueRef("pay5"));
+      expect(paySpy.mock.calls[0]?.[0]).not.toHaveProperty("txData");
+    });
   });
 });

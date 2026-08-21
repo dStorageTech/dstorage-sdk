@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { MockStorageAdapter } from "../adapters/mock.js";
 import { StorageErrorCode } from "../errors.js";
 
@@ -247,6 +247,34 @@ describe("MockStorageAdapter", () => {
           code: StorageErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
         }),
       );
+    });
+
+    it("store() passes a BLAKE3 hash of the content as txData", async () => {
+      const adapter = new MockStorageAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.store(enc("hello world"));
+      expect(paySpy).toHaveBeenCalledTimes(1);
+      const txData = paySpy.mock.calls[0]?.[0].txData;
+      expect(typeof txData).toBe("string");
+      expect(txData).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("store() sends the same txData for identical content", async () => {
+      const adapter = new MockStorageAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.store(enc("same content"));
+      await adapter.store(enc("same content"));
+      const [first, second] = paySpy.mock.calls.map((call) => call[0].txData);
+      expect(first).toBe(second);
+    });
+
+    it("store() sends different txData for different content", async () => {
+      const adapter = new MockStorageAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.store(enc("content A"));
+      await adapter.store(enc("content B"));
+      const [first, second] = paySpy.mock.calls.map((call) => call[0].txData);
+      expect(first).not.toBe(second);
     });
   });
 });

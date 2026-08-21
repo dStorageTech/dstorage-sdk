@@ -75,6 +75,40 @@ describe("MidnightSimulatorChainAdapter", () => {
         }),
       );
     });
+
+    it("writeReference passes ref.contentHash as txData", async () => {
+      const adapter = makeAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.writeReference({
+        ...uniqueRef("pay1"),
+        contentHash: "a".repeat(64),
+      });
+      expect(paySpy).toHaveBeenCalledWith(
+        expect.objectContaining({ txData: "a".repeat(64) }),
+      );
+    });
+
+    it("writeReference sends different txData for different contentHash values", async () => {
+      const adapter = makeAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.writeReference({
+        ...uniqueRef("pay2a"),
+        contentHash: "a".repeat(64),
+      });
+      await adapter.writeReference({
+        ...uniqueRef("pay2b"),
+        contentHash: "b".repeat(64),
+      });
+      const txDataValues = paySpy.mock.calls.map((call) => call[0].txData);
+      expect(txDataValues[0]).not.toBe(txDataValues[1]);
+    });
+
+    it("writeReference omits txData when ref.contentHash is not set", async () => {
+      const adapter = makeAdapter();
+      const paySpy = vi.spyOn(adapter.paymentAdapter, "pay");
+      await adapter.writeReference(uniqueRef("pay3"));
+      expect(paySpy.mock.calls[0]?.[0]).not.toHaveProperty("txData");
+    });
   });
 
   // ── writeReference ────────────────────────────────────────────────────────

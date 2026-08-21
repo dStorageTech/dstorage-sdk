@@ -19,7 +19,11 @@ import {
   ManagedPaymentAdapter,
   PaymentAdapter,
 } from "@dstorage/payment";
-import { DStorageError, assertValidLogger } from "@dstorage/crypto";
+import {
+  DStorageError,
+  assertValidLogger,
+  computeBlake3Hex,
+} from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
 
 export type MockStorageAdapterConfig = {
@@ -127,11 +131,13 @@ export class MockStorageAdapter implements StorageAdapter {
   ): Promise<StorageUploadResult> {
     const id = generateId();
     const cost = await this.estimateCost(data.byteLength);
+    const contentHash = await computeBlake3Hex(data);
 
     await this.paymentAdapter.pay({
       network: this.name,
       dataSizeBytes: data.byteLength,
       expiresAt: Date.now() + 600_000,
+      txData: contentHash,
     });
 
     const entry = JSON.stringify({
