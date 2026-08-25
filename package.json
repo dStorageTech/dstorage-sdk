@@ -24,8 +24,8 @@
     "clean": "find . -type d \\( -name node_modules -o -name dist \\) -prune -exec rm -rf {} +"
   },
   "overrides": {
-    "bn.js": "5.2.3",
-    "@midnight-ntwrk/ledger-v8": "8.1.0",
+    "bn.js": "5.2.5",
+    "@midnight-ntwrk/ledger-v8": "8.1.1",
     "@midnight-ntwrk/compact-js": "2.5.1",
     "@midnight-ntwrk/onchain-runtime-v3": "3.0.0",
     "elliptic": "6.6.1",
@@ -50,7 +50,7 @@
     }
   },
   "dependencies": {
-    "bn.js": "5.2.3",
+    "bn.js": "5.2.5",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3"
   },
