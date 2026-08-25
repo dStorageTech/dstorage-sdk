@@ -59,6 +59,14 @@ else
   fi
 fi
 
+# node_modules can go missing even when the checkout is present (e.g. a
+# workspace-wide clean sweep, or manual pruning) -- reinstall rather than
+# fail with a confusing ERR_MODULE_NOT_FOUND deep inside the tool.
+if [[ ! -d "$MLD_DIR/node_modules" ]]; then
+  echo "node_modules missing in $MLD_DIR — reinstalling dependencies..."
+  (cd "$MLD_DIR" && npm install)
+fi
+
 # Build a temporary accounts.json from the given mnemonics -- the tool's
 # non-interactive mode (--fund-config) always funds NIGHT + registers DUST
 # for every account listed in the file. The config path must resolve inside
