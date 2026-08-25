@@ -29,21 +29,21 @@
     "@midnight-ntwrk/compact-js": "2.5.1",
     "@midnight-ntwrk/onchain-runtime-v3": "3.0.0",
     "elliptic": "6.6.1",
-    "secp256k1": "5.0.1",
-    "ws": "8.21.0",
-    "uuid": "14.0.1",
+    "secp256k1": "5.0.2",
+    "ws": "8.21.3",
+    "uuid": "14.0.2",
     "axios": "^1.18.1",
     "esbuild": "0.28.2",
     "@ardrive/turbo-sdk": {
       "elliptic": "6.6.1",
-      "ws": "8.21.0",
-      "uuid": "14.0.1",
+      "ws": "8.21.3",
+      "uuid": "14.0.2",
       "axios": "^1.18.1"
     },
     "@dha-team/arbundles": {
       "elliptic": "6.6.1",
-      "secp256k1": "5.0.1",
-      "ws": "8.21.0"
+      "secp256k1": "5.0.2",
+      "ws": "8.21.3"
     },
     "@midnight-ntwrk/wallet-sdk": {
       "@substrate/connect": "2.1.8"
@@ -78,7 +78,7 @@
     "bigint-buffer@1.1.5": true,
     "bufferutil@4.1.0": true,
     "classic-level@3.0.0": true,
-    "secp256k1@5.0.1": true,
+    "secp256k1@5.0.2": true,
     "esbuild@0.28.2": true,
     "@swc/core@1.16.1": true,
     "msgpackr-extract@3.0.4": true
