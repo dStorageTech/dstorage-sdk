@@ -2,31 +2,30 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MLN_REPO="https://github.com/bricktowers/midnight-local-network.git"
+MLD_REPO="https://github.com/midnightntwrk/midnight-local-dev.git"
+MLD_COMMIT="8b44aabc5ea65e4c5d4cd855017517600bc90e8a"
 
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") <mnemonic|address>
-      Fund a wallet with ~31 NIGHT tokens.
-      Accepts a BIP-39 mnemonic (derives both shielded and unshielded addresses),
-      a shielded address (mn_shield-addr_undeployed…), or
-      an unshielded address (mn_addr_undeployed…).
-
-  $(basename "$0") --dust <mnemonic>
-      Fund the unshielded address AND register UTXOs for DUST generation.
-      Requires a BIP-39 mnemonic (needs private key to sign the registration).
+  $(basename "$0") <mnemonic> [<mnemonic> ...]
+      Fund one or more BIP-39 mnemonics with 50,000 NIGHT each and register
+      each for DUST generation. NIGHT and DUST always happen together --
+      the official tooling's non-interactive mode has no NIGHT-only option.
 
 Options:
   -h, --help    Show this help message
 
 Environment:
-  MIDNIGHT_LOCAL_NETWORK_DIR   Path to an existing midnight-local-network checkout.
-                               When unset the repo is cloned automatically into
-                               tools/midnight-local-network on first run.
+  MIDNIGHT_LOCAL_DEV_DIR   Path to an existing midnight-local-dev checkout.
+                           When unset the repo is cloned automatically into
+                           tools/midnight-local-dev on first run.
 
 Prerequisites:
-  The undeployed stack must be running:
+  The undeployed stack must already be running, with container names
+  midnight-node / midnight-indexer / midnight-proof-server (the tool
+  detects and reuses an already-running stack by those names -- otherwise
+  it starts its own, which would port-collide with this one):
     docker compose -f tools/compose-undeployed.yml up -d
 EOF
 }
@@ -36,48 +35,43 @@ if [[ $# -eq 0 || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-# Resolve the midnight-local-network directory.
-# If MIDNIGHT_LOCAL_NETWORK_DIR is set, use it directly.
-# Otherwise clone the repo into tools/midnight-local-network on first run.
-if [[ -n "${MIDNIGHT_LOCAL_NETWORK_DIR:-}" ]]; then
-  MLN_DIR="$MIDNIGHT_LOCAL_NETWORK_DIR"
-  if [[ ! -d "$MLN_DIR" ]]; then
-    echo "Error: MIDNIGHT_LOCAL_NETWORK_DIR does not exist: $MLN_DIR"
+# Resolve the midnight-local-dev directory.
+# If MIDNIGHT_LOCAL_DEV_DIR is set, use it directly.
+# Otherwise clone the repo into tools/midnight-local-dev on first run.
+if [[ -n "${MIDNIGHT_LOCAL_DEV_DIR:-}" ]]; then
+  MLD_DIR="$MIDNIGHT_LOCAL_DEV_DIR"
+  if [[ ! -d "$MLD_DIR" ]]; then
+    echo "Error: MIDNIGHT_LOCAL_DEV_DIR does not exist: $MLD_DIR"
     exit 1
   fi
 else
-  MLN_DIR="$SCRIPT_DIR/midnight-local-network"
-  if [[ ! -d "$MLN_DIR" ]]; then
-    echo "midnight-local-network not found — cloning into $MLN_DIR ..."
-    # Pinned to the latest tagged release (as of writing, also the tip of
-    # main — bricktowers hasn't cut a newer tag) so this clone is
-    # reproducible instead of silently tracking whatever main is at clone
-    # time. Its bundled Midnight stack (proof-server 8.0.3, indexer 4.0.0,
-    # node 0.22.1) trails the official support matrix; bump this ref if
-    # bricktowers cuts a newer tag that catches up.
-    git clone --branch 4.0.0 "$MLN_REPO" "$MLN_DIR"
+  MLD_DIR="$SCRIPT_DIR/midnight-local-dev"
+  if [[ ! -d "$MLD_DIR" ]]; then
+    echo "midnight-local-dev not found — cloning into $MLD_DIR ..."
+    # This is midnightntwrk's own official local-network tool (replaces the
+    # third-party bricktowers/midnight-local-network this repo used before).
+    # It has no tags yet -- pin to a specific commit for reproducibility
+    # instead of tracking main.
+    git clone "$MLD_REPO" "$MLD_DIR"
+    (cd "$MLD_DIR" && git checkout "$MLD_COMMIT")
     echo "Installing dependencies..."
-    # The repo declares packageManager: yarn@x.y.z — use corepack to get the
-    # exact version, which respects the yarn.lock and avoids version skew.
-    (cd "$MLN_DIR" && corepack yarn install)
+    (cd "$MLD_DIR" && npm install)
   fi
 fi
 
-cd "$MLN_DIR"
+# Build a temporary accounts.json from the given mnemonics -- the tool's
+# non-interactive mode (--fund-config) always funds NIGHT + registers DUST
+# for every account listed in the file. The config path must resolve inside
+# the tool's own working directory (it rejects paths outside process.cwd()),
+# so the temp file is created inside $MLD_DIR rather than under /tmp.
+ACCOUNTS_FILE="$(mktemp -p "$MLD_DIR" --suffix=.json)"
+trap 'rm -f "$ACCOUNTS_FILE"' EXIT
 
-# Always run via corepack yarn so the version declared in package.json is used.
-run_fund()      { exec corepack yarn fund "$@"; }
-run_fund_dust() { exec corepack yarn fund-and-register-dust "$@"; }
+node -e '
+const mnemonics = process.argv.slice(1);
+const accounts = mnemonics.map((mnemonic, i) => ({ name: `acct${i}`, mnemonic }));
+process.stdout.write(JSON.stringify({ accounts }));
+' "$@" >"$ACCOUNTS_FILE"
 
-if [[ "${1:-}" == "--dust" ]]; then
-  shift
-  if [[ $# -eq 0 ]]; then
-    echo "Error: --dust requires a BIP-39 mnemonic argument."
-    echo
-    usage
-    exit 1
-  fi
-  run_fund_dust "$@"
-else
-  run_fund "$@"
-fi
+cd "$MLD_DIR"
+node --experimental-specifier-resolution=node --loader ts-node/esm src/index.ts --fund-config "$ACCOUNTS_FILE"

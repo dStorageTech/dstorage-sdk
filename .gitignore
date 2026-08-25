@@ -39,4 +39,4 @@ midnight-level-db
 Thumbs.db
 .vscode/
 .idea/
-tools/midnight-local-network/
+tools/midnight-local-dev/

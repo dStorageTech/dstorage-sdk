@@ -59,17 +59,18 @@ jobs:
             sleep 5
           done
           echo "ERROR: proof server did not become ready within 180s"
-          docker logs proof-server --tail 50 || true
+          docker logs midnight-proof-server --tail 50 || true
           exit 1
 
       - name: Fund test wallet (NIGHT + DUST)
-        # fund-wallet.sh auto-clones bricktowers/midnight-local-network and
-        # installs deps via corepack yarn when the directory is absent.
+        # fund-wallet.sh auto-clones midnightntwrk/midnight-local-dev (the
+        # official tool) and installs deps via npm when the directory is
+        # absent. It always funds NIGHT + registers DUST together.
         run: |
           MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
           for attempt in 1 2 3; do
             echo "Fund attempt $attempt/3..."
-            if ./tools/fund-wallet.sh --dust "$MNEMONIC"; then
+            if ./tools/fund-wallet.sh "$MNEMONIC"; then
               exit 0
             fi
             if [ "$attempt" -lt 3 ]; then

@@ -3,13 +3,13 @@ services:
 
   proof-server:
     image: "midnightntwrk/proof-server:8.1.0"
-    container_name: proof-server
+    container_name: midnight-proof-server
     ports:
       - "6300:6300"
 
   indexer:
     image: "midnightntwrk/indexer-standalone:4.3.5"
-    container_name: indexer
+    container_name: midnight-indexer
     # On a fresh "undeployed" chain the SPO sub-service can start before the
     # node has produced block 1 ("Cannot construct OnlineClientAtBlock: block
     # number 1 not found"), which is fatal to the whole indexer process.
@@ -46,7 +46,7 @@ services:
 
   node:
     image: "midnightntwrk/midnight-node:1.0.1"
-    container_name: node
+    container_name: midnight-node
     ports:
       - "9944:9944"
     healthcheck:
