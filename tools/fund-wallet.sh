@@ -49,7 +49,13 @@ else
   MLN_DIR="$SCRIPT_DIR/midnight-local-network"
   if [[ ! -d "$MLN_DIR" ]]; then
     echo "midnight-local-network not found — cloning into $MLN_DIR ..."
-    git clone "$MLN_REPO" "$MLN_DIR"
+    # Pinned to the latest tagged release (as of writing, also the tip of
+    # main — bricktowers hasn't cut a newer tag) so this clone is
+    # reproducible instead of silently tracking whatever main is at clone
+    # time. Its bundled Midnight stack (proof-server 8.0.3, indexer 4.0.0,
+    # node 0.22.1) trails the official support matrix; bump this ref if
+    # bricktowers cuts a newer tag that catches up.
+    git clone --branch 4.0.0 "$MLN_REPO" "$MLN_DIR"
     echo "Installing dependencies..."
     # The repo declares packageManager: yarn@x.y.z — use corepack to get the
     # exact version, which respects the yarn.lock and avoids version skew.

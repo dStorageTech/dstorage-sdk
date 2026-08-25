@@ -8,7 +8,7 @@ services:
       - "6300:6300"
 
   indexer:
-    image: "midnightntwrk/indexer-standalone:4.3.3"
+    image: "midnightntwrk/indexer-standalone:4.3.5"
     container_name: indexer
     # On a fresh "undeployed" chain the SPO sub-service can start before the
     # node has produced block 1 ("Cannot construct OnlineClientAtBlock: block
