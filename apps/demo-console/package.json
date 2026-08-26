@@ -12,14 +12,14 @@
     "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
     "@midnight-ntwrk/midnight-js-protocol": "^4.1.1",
     "@midnight-ntwrk/wallet-sdk": "^1.2.0",
-    "axios": "^1.16.0",
+    "axios": "^1.19.0",
     "dotenv": "^17.4.2",
     "rxjs": "^7.8.2",
-    "ws": "^8.21.0"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.3"
   }
 }

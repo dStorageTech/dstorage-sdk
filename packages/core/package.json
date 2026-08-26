@@ -61,7 +61,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ardrive/turbo-sdk": "^1.41.2",
+    "@ardrive/turbo-sdk": "^1.42.0",
     "@dha-team/arbundles": "^1.0.4",
     "@midnight-ntwrk/compact-js": "2.5.1",
     "@midnight-ntwrk/compact-runtime": "0.16.0",
@@ -77,10 +77,10 @@
     "@midnight-ntwrk/midnight-js-types": "4.1.1",
     "@midnight-ntwrk/midnight-js-utils": "4.1.1",
     "@midnight-ntwrk/wallet-sdk": "1.2.0",
-    "@noble/ciphers": "^2.2.0",
+    "@noble/ciphers": "^2.3.0",
     "@noble/hashes": "^2.3.0",
     "@noble/post-quantum": "^0.7.0",
-    "@scure/bip39": "^2.0.1",
+    "@scure/bip39": "^2.3.0",
     "arweave": "^1.15.7"
   },
   "devDependencies": {

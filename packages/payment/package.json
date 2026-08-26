@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@dstorage/crypto": "*",
-    "@noble/hashes": "^2.2.0"
+    "@noble/hashes": "^2.3.0"
   },
   "devDependencies": {
     "arweave": "^1.15.7",
