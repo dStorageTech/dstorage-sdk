@@ -365,3 +365,287 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     });
   });
 });
+
+// ── estimateCost: direct fetch to the bundler payment service ────────────────
+//
+// estimateCost() talks to ArDrive's bundler payment service directly via
+// fetch (GET /v1/price/bytes/:n) rather than through @ardrive/turbo-sdk.
+// global.fetch is fully stubbed in every test below (vi.stubGlobal) — no
+// real network call ever reaches payment.ardrive.io or upload.ardrive.io.
+
+describe("ArweaveBundlerStorageAdapter — estimateCost()", () => {
+  const PAYMENT_SERVICE_URL = "https://payment.ardrive.io";
+
+  function adapter() {
+    return new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+    });
+  }
+
+  function jsonResponse(
+    body: unknown,
+    opts: { ok?: boolean; status?: number } = {},
+  ) {
+    const text = JSON.stringify(body);
+    return {
+      ok: opts.ok ?? true,
+      status: opts.status ?? 200,
+      statusText: "",
+      headers: { get: () => null },
+      text: async () => text,
+    };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("GETs /v1/price/bytes/:n on the bundler payment service and returns a StorageQuote", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ winc: "123456" }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const quote = await adapter().estimateCost(2048);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${PAYMENT_SERVICE_URL}/v1/price/bytes/2048`);
+    expect(quote).toMatchObject({
+      token: "AR",
+      amount: "123456",
+      provider: "arweave_bundler",
+      dataSizeBytes: 2048,
+    });
+    expect(quote.expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it("throws ARWEAVE_BUNDLER_COST_ESTIMATE_FAILED on a non-ok HTTP response", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({}, { ok: false, status: 500 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(adapter().estimateCost(2048)).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_COST_ESTIMATE_FAILED,
+      message: expect.stringContaining("HTTP 500"),
+    });
+  });
+
+  it("throws ARWEAVE_BUNDLER_COST_ESTIMATE_FAILED when the fetch itself rejects", async () => {
+    const mockFetch = vi.fn().mockRejectedValueOnce(new Error("network down"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(adapter().estimateCost(2048)).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_COST_ESTIMATE_FAILED,
+      message: expect.stringContaining("network down"),
+    });
+  });
+
+  it("throws ARWEAVE_BUNDLER_NO_COST_ESTIMATE when the response has no winc field", async () => {
+    const mockFetch = vi.fn().mockResolvedValueOnce(jsonResponse({}));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(adapter().estimateCost(2048)).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_NO_COST_ESTIMATE,
+    });
+  });
+});
+
+// ── store(): full upload flow via direct fetch calls ──────────────────────────
+//
+// Exercises the whole @dha-team/arbundles signing pipeline end-to-end: store()
+// creates and signs an ANS-104 data item (deep_hash sent to the signing server
+// via ManagedPaymentAdapter), then POSTs the signed item directly to the
+// bundler upload service. Three fetch calls happen in order:
+//   1. GET  payment.ardrive.io/v1/price/bytes/:n     (estimateCost, via _signHash)
+//   2. POST {signingServerUrl}/api/service/sign-tx   (ManagedPaymentAdapter.pay)
+//   3. POST upload.ardrive.io/v1/tx/arweave          (_uploadToBundler)
+// This is the code path that previously ran entirely through @ardrive/turbo-sdk
+// and had zero automated coverage. global.fetch is fully stubbed (vi.stubGlobal)
+// in every test below — no real network call ever reaches any of these hosts.
+
+describe("ArweaveBundlerStorageAdapter — store() full upload flow", () => {
+  const UPLOAD_SERVICE_URL = "https://upload.ardrive.io";
+  // 512 zero-bytes base64url-encoded — a structurally valid RSA-4096 (owner
+  // key/signature) length; arbundles' local sign()/getRaw() only checks byte
+  // length, not cryptographic validity (real validation happens server-side).
+  const SIGNATURE_683 = "A".repeat(683);
+
+  function adapter() {
+    return new ArweaveBundlerStorageAdapter({
+      signingServerUrl: SIGNING_URL,
+      authToken: `ds_tok.${MODULUS_683}`,
+    });
+  }
+
+  function okJson(body: unknown) {
+    const text = JSON.stringify(body);
+    return {
+      ok: true,
+      status: 200,
+      statusText: "",
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === "content-type" ? "application/json" : null,
+      },
+      text: async () => text,
+      json: async () => body,
+    };
+  }
+
+  function errJson(status: number, body: unknown = {}) {
+    const text = JSON.stringify(body);
+    return {
+      ok: false,
+      status,
+      statusText: "",
+      headers: { get: () => null },
+      text: async () => text,
+      json: async () => body,
+    };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("signs locally then POSTs the signed data item directly to the bundler upload service", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(okJson({ winc: "999" })) // 1. cost estimate
+      .mockResolvedValueOnce(
+        // 2. signing server sign-tx response
+        okJson({
+          success: true,
+          txId: "server-tx-id",
+          signature: SIGNATURE_683,
+          publicKey: MODULUS_683,
+          txAmount: "999",
+          serviceFee: "0",
+        }),
+      )
+      .mockResolvedValueOnce(
+        // 3. bundler upload response
+        okJson({
+          id: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          dataCaches: ["cache.example"],
+        }),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const data = new TextEncoder().encode("hello world");
+    const result = await adapter().store(data, {
+      "Content-Type": "text/plain",
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+
+    const [priceUrl] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(priceUrl).toBe(
+      `https://payment.ardrive.io/v1/price/bytes/${data.byteLength}`,
+    );
+
+    const [signUrl, signInit] = mockFetch.mock.calls[1] as [
+      string,
+      RequestInit,
+    ];
+    expect(signUrl).toBe(`${SIGNING_URL}/api/service/sign-tx`);
+    expect(signInit.method).toBe("POST");
+
+    const [uploadUrl, uploadInit] = mockFetch.mock.calls[2] as [
+      string,
+      RequestInit,
+    ];
+    expect(uploadUrl).toBe(`${UPLOAD_SERVICE_URL}/v1/tx/arweave`);
+    expect(uploadInit.method).toBe("POST");
+    expect((uploadInit.headers as Record<string, string>)["content-type"]).toBe(
+      "application/octet-stream",
+    );
+    expect(uploadInit.body).toBeInstanceOf(Buffer);
+
+    expect(result).toMatchObject({
+      id: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      provider: "arweave_bundler",
+      url: "https://cache.example/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    });
+  });
+
+  it("falls back to the gateway URL when the upload response has no dataCaches", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(okJson({ winc: "999" }))
+      .mockResolvedValueOnce(
+        okJson({
+          success: true,
+          txId: "server-tx-id",
+          signature: SIGNATURE_683,
+          publicKey: MODULUS_683,
+          txAmount: "999",
+          serviceFee: "0",
+        }),
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          id: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+          dataCaches: [],
+        }),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await adapter().store(new TextEncoder().encode("data"));
+    expect(result.url).toBe(
+      "https://turbo-gateway.com/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    );
+  });
+
+  it("throws ARWEAVE_BUNDLER_UPLOAD_FAILED when the bundler upload responds with a non-ok status", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(okJson({ winc: "999" }))
+      .mockResolvedValueOnce(
+        okJson({
+          success: true,
+          txId: "server-tx-id",
+          signature: SIGNATURE_683,
+          publicKey: MODULUS_683,
+          txAmount: "999",
+          serviceFee: "0",
+        }),
+      )
+      .mockResolvedValueOnce(errJson(502, "bad gateway"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      adapter().store(new TextEncoder().encode("data")),
+    ).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_UPLOAD_FAILED,
+      message: expect.stringContaining("HTTP 502"),
+    });
+  });
+
+  it("throws ARWEAVE_BUNDLER_NO_TX_ID_RETURNED when the bundler upload response has no id", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(okJson({ winc: "999" }))
+      .mockResolvedValueOnce(
+        okJson({
+          success: true,
+          txId: "server-tx-id",
+          signature: SIGNATURE_683,
+          publicKey: MODULUS_683,
+          txAmount: "999",
+          serviceFee: "0",
+        }),
+      )
+      .mockResolvedValueOnce(okJson({ dataCaches: [] }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      adapter().store(new TextEncoder().encode("data")),
+    ).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_NO_TX_ID_RETURNED,
+    });
+  });
+});

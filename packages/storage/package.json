@@ -41,19 +41,14 @@
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "arweave": "^1.15.7",
-    "@ardrive/turbo-sdk": "^1.42.0"
+    "arweave": "^1.15.7"
   },
   "peerDependencies": {
     "arweave": "^1.15.7",
-    "@ardrive/turbo-sdk": "^1.42.0",
     "@dha-team/arbundles": "^1.0.4"
   },
   "peerDependenciesMeta": {
     "arweave": {
-      "optional": true
-    },
-    "@ardrive/turbo-sdk": {
       "optional": true
     },
     "@dha-team/arbundles": {

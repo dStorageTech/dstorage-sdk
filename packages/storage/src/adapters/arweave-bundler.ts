@@ -25,7 +25,9 @@
  *   gateway-supplied tag and only catches non-adversarial corruption.
  *
  * ── Peer dependency ───────────────────────────────────────────────────────────
- *   No extra install needed — @dha-team/arbundles ships as a dependency of @ardrive/turbo-sdk.
+ *   @dha-team/arbundles (ANS-104 data item construction — the only network calls
+ *   this adapter makes are plain `fetch` requests to the ArDrive Turbo payment/
+ *   upload services below; no @ardrive/turbo-sdk dependency).
  *
  * ── Server requirements ───────────────────────────────────────────────────────
  *   The dStorage API server must expose (auth-protected via Bearer token):
@@ -66,9 +68,17 @@ import {
   readResponseTextWithLimit,
 } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
-import { getTurboFactory } from "./turbo-factory.js";
 
 const ARWEAVE_GATEWAY_URL = "https://turbo-gateway.com";
+/**
+ * ArDrive's bundler payment and upload services. Talked to directly via `fetch`
+ * (GET /v1/price/bytes/:n for cost estimates, POST /v1/tx/arweave for signed
+ * data item uploads) rather than through the @ardrive/turbo-sdk package —
+ * that SDK statically pulls in a large, unused multi-chain (Cosmos/Solana/EVM)
+ * dependency tree even for these two unauthenticated Arweave-only calls.
+ */
+const BUNDLER_PAYMENT_SERVICE_URL = "https://payment.ardrive.io";
+const BUNDLER_UPLOAD_SERVICE_URL = "https://upload.ardrive.io";
 
 /** Default request timeout — matches the convention used by managed.ts. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
@@ -385,11 +395,12 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
   // ── estimateCost ───────────────────────────────────────────────────────────────
 
   async estimateCost(dataSizeBytes: number): Promise<StorageQuote> {
-    const TurboFactory = await getTurboFactory();
-    const turbo = TurboFactory.unauthenticated();
-    let costs: Awaited<ReturnType<typeof turbo.getUploadCosts>>;
+    let resp: Response;
     try {
-      costs = await turbo.getUploadCosts({ bytes: [dataSizeBytes] });
+      resp = await fetch(
+        `${BUNDLER_PAYMENT_SERVICE_URL}/v1/price/bytes/${dataSizeBytes}`,
+        this._withTimeout(),
+      );
     } catch (err) {
       throw new DStorageError(
         StorageErrorCode.ARWEAVE_BUNDLER_COST_ESTIMATE_FAILED,
@@ -397,8 +408,27 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
         { cause: err },
       );
     }
-    const cost = costs[0];
-    if (!cost) {
+    if (!resp.ok) {
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_BUNDLER_COST_ESTIMATE_FAILED,
+        `[dStorage/arweave-bundler] Failed to fetch upload cost estimate from Arweave bundler: HTTP ${resp.status}`,
+      );
+    }
+    const text = await readResponseTextWithLimit(resp, {
+      maxBytes: this.maxMetadataResponseBytes,
+      code: StorageErrorCode.ARWEAVE_BUNDLER_METADATA_TOO_LARGE,
+      component: `[dStorage/arweave-bundler] estimateCost(${dataSizeBytes})`,
+    });
+    let cost: { winc?: string };
+    try {
+      cost = JSON.parse(text) as { winc?: string };
+    } catch {
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_BUNDLER_NO_COST_ESTIMATE,
+        "[dStorage/arweave-bundler] Arweave bundler returned a malformed cost estimate response.",
+      );
+    }
+    if (!cost.winc) {
       throw new DStorageError(
         StorageErrorCode.ARWEAVE_BUNDLER_NO_COST_ESTIMATE,
         "[dStorage/arweave-bundler] Arweave bundler returned no cost estimate for the given data size.",
@@ -513,22 +543,17 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
       `Uploading ${dataItemBuffer.byteLength}-byte signed data item to bundler…`,
     );
 
-    const TurboFactory = await getTurboFactory();
-    const turbo = TurboFactory.unauthenticated();
+    let resp: Response;
     try {
-      const result = await turbo.uploadSignedDataItem({
-        dataItemStreamFactory: () => Buffer.from(dataItemBuffer),
-        dataItemSizeFactory: () => dataItemBuffer.byteLength,
+      resp = await fetch(`${BUNDLER_UPLOAD_SERVICE_URL}/v1/tx/arweave`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-length": `${dataItemBuffer.byteLength}`,
+        },
+        body: Buffer.from(dataItemBuffer),
         signal: AbortSignal.timeout(10_000),
       });
-      if (!result.id) {
-        throw new DStorageError(
-          StorageErrorCode.ARWEAVE_BUNDLER_NO_TX_ID_RETURNED,
-          "[dStorage/arweave-bundler] Arweave bundler did not return a transaction id.",
-        );
-      }
-
-      return { txId: result.id, dataCaches: result.dataCaches };
     } catch (err) {
       throw new DStorageError(
         StorageErrorCode.ARWEAVE_BUNDLER_UPLOAD_FAILED,
@@ -536,6 +561,35 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
         { cause: err },
       );
     }
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => resp.statusText);
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_BUNDLER_UPLOAD_FAILED,
+        `[dStorage/arweave-bundler] Upload to Arweave bundler failed: HTTP ${resp.status}${errText ? ` — ${errText}` : ""}`,
+      );
+    }
+    const text = await readResponseTextWithLimit(resp, {
+      maxBytes: this.maxMetadataResponseBytes,
+      code: StorageErrorCode.ARWEAVE_BUNDLER_METADATA_TOO_LARGE,
+      component: "[dStorage/arweave-bundler] upload response",
+    });
+    let result: { id?: string; dataCaches?: string[] };
+    try {
+      result = JSON.parse(text) as { id?: string; dataCaches?: string[] };
+    } catch {
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_BUNDLER_NO_TX_ID_RETURNED,
+        "[dStorage/arweave-bundler] Arweave bundler returned a malformed upload response.",
+      );
+    }
+    if (!result.id) {
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_BUNDLER_NO_TX_ID_RETURNED,
+        "[dStorage/arweave-bundler] Arweave bundler did not return a transaction id.",
+      );
+    }
+
+    return { txId: result.id, dataCaches: result.dataCaches ?? [] };
   }
 }
 

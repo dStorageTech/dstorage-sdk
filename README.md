@@ -178,7 +178,7 @@ import {
 } from "@dstorage-tech/dstorage-sdk/browser";
 ```
 
-Works with Vite, webpack, rollup, esbuild, or any other bundler. All adapters' dependencies (`arweave`, `@midnight-ntwrk/*`, `@ardrive/turbo-sdk`, etc.) are real dependencies of `@dstorage-tech/dstorage-sdk` — `npm install @dstorage-tech/dstorage-sdk` alone pulls in everything, nothing extra to install.
+Works with Vite, webpack, rollup, esbuild, or any other bundler. All adapters' dependencies (`arweave`, `@midnight-ntwrk/*`, `@dha-team/arbundles`, etc.) are real dependencies of `@dstorage-tech/dstorage-sdk` — `npm install @dstorage-tech/dstorage-sdk` alone pulls in everything, nothing extra to install.
 
 **Option 2 — Auto-resolution via the `"browser"` condition (zero config)**
 
@@ -386,7 +386,7 @@ Tokens are selected automatically based on your chosen adapters.
 
 All 5 workspace packages are bundled inline into `packages/core`'s output — every
 adapter above is resolvable from a single `npm install @dstorage-tech/dstorage-sdk`,
-not just the Mock ones. (`arweave`, `@midnight-ntwrk/*`, `@ardrive/turbo-sdk`, etc. are
+not just the Mock ones. (`arweave`, `@midnight-ntwrk/*`, `@dha-team/arbundles`, etc. are
 real dependencies of the published package — see [Browser Bundle](#browser-bundle).)
 
 ### Data Flow

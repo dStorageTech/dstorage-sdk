@@ -61,7 +61,6 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ardrive/turbo-sdk": "^1.42.0",
     "@dha-team/arbundles": "^1.0.4",
     "@midnight-ntwrk/compact-js": "2.5.1",
     "@midnight-ntwrk/compact-runtime": "0.16.0",

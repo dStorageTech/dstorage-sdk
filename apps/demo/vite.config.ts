@@ -20,8 +20,8 @@ export default defineConfig({
     // dependency, picking up packages/core's own exports.browser -> dist/browser.mjs
     // (which already bundles the other @dstorage/* packages inline, using each of
     // their own correct browser builds). Don't alias straight to source here — that
-    // bypasses each package's own build-time platform swaps (e.g. turbo-sdk's Node
-    // vs. browser entry) and breaks in ways the published package never would.
+    // bypasses each package's own build-time platform swaps (Node vs. browser entry)
+    // and breaks in ways the published package never would.
     alias: {
       // Node.js built-ins — polyfill with empty stubs.
       // More-specific entries MUST come before less-specific ones (first-match wins).

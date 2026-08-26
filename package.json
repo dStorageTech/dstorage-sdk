@@ -34,12 +34,6 @@
     "uuid": "14.0.2",
     "axios": "^1.18.1",
     "esbuild": "0.28.2",
-    "@ardrive/turbo-sdk": {
-      "elliptic": "6.6.1",
-      "ws": "8.21.3",
-      "uuid": "14.0.2",
-      "axios": "^1.18.1"
-    },
     "@dha-team/arbundles": {
       "elliptic": "6.6.1",
       "secp256k1": "5.0.2",
