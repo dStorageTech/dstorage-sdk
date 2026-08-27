@@ -65,6 +65,7 @@ import {
 import {
   DStorageError,
   assertValidLogger,
+  isDStorageError,
   readResponseTextWithLimit,
 } from "@dstorage/crypto";
 import { StorageErrorCode } from "../errors.js";
@@ -159,6 +160,14 @@ export interface ArweaveBundlerAdapterConfig {
    */
   maxMetadataResponseBytes?: number;
   /**
+   * Maximum number of attempts for the upload POST to the bundler service
+   * before giving up. On failure (network/timeout error or a non-ok HTTP
+   * response), attempts are retried with linear back-off (1s, 2s, 3s, …) —
+   * mirrors `ArweaveAdapterConfig.maxRetries`'s chunk-upload retry behavior.
+   * Defaults to 3.
+   */
+  maxRetries?: number;
+  /**
    * Optional logger for SDK operational output.
    */
   logger?: StorageAdapterLogger;
@@ -194,6 +203,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
   private readonly skipIntegrityCheck: boolean;
   private readonly requestTimeoutMs: number;
   private readonly maxMetadataResponseBytes: number;
+  private readonly maxRetries: number;
   protected readonly logger: StorageAdapterLogger | undefined;
 
   /** RSA-4096 public key modulus (512 bytes) parsed from the auth token at construction time. */
@@ -215,6 +225,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
       config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.maxMetadataResponseBytes =
       config.maxMetadataResponseBytes ?? DEFAULT_MAX_METADATA_RESPONSE_BYTES;
+    this.maxRetries = config.maxRetries ?? 3;
     assertValidLogger(config.logger, "ArweaveBundlerStorageAdapter");
     this.logger = config.logger;
 
@@ -552,6 +563,10 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
   /**
    * POST the complete signed ANS-104 data item bytes directly to the ArDrive bundler.
    * Server Turbo Credits are consumed based on the signing key — no client wallet needed.
+   *
+   * Retries the whole attempt up to `maxRetries` times with linear back-off
+   * (1s, 2s, 3s, …) on any failure — network/timeout error or a non-ok HTTP
+   * response — mirroring `ArweaveStorageAdapter`'s chunk-upload retry behavior.
    */
   private async _uploadToBundler(
     dataItemBuffer: Uint8Array,
@@ -561,17 +576,50 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
       `Uploading ${dataItemBuffer.byteLength}-byte signed data item to bundler…`,
     );
 
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await this._attemptUpload(dataItemBuffer);
+      } catch (err) {
+        lastErr = err;
+        if (attempt >= this.maxRetries) break;
+        this.logger?.warn(
+          "dStorage/arweave-bundler",
+          `Upload attempt ${attempt}/${this.maxRetries} failed — ${err} — retrying in ${attempt}s…`,
+        );
+        await sleep(1_000 * attempt);
+      }
+    }
+    // Preserve the last attempt's specific error code (e.g. NO_TX_ID_RETURNED,
+    // METADATA_TOO_LARGE) rather than collapsing every failure mode into one
+    // generic code — only fall back to UPLOAD_FAILED for a non-DStorageError.
+    const code = isDStorageError(lastErr)
+      ? lastErr.code
+      : StorageErrorCode.ARWEAVE_BUNDLER_UPLOAD_FAILED;
+    throw new DStorageError(
+      code,
+      `[dStorage/arweave-bundler] Upload to Arweave bundler failed after ${this.maxRetries} attempts: ${lastErr}`,
+      { cause: lastErr },
+    );
+  }
+
+  /** Single upload attempt — see _uploadToBundler for the retry wrapper. */
+  private async _attemptUpload(
+    dataItemBuffer: Uint8Array,
+  ): Promise<{ txId: string; dataCaches: string[] }> {
     let resp: Response;
     try {
-      resp = await fetch(`${this.uploadServiceUrl}/v1/tx/arweave`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/octet-stream",
-          "content-length": `${dataItemBuffer.byteLength}`,
-        },
-        body: Buffer.from(dataItemBuffer),
-        signal: AbortSignal.timeout(10_000),
-      });
+      resp = await fetch(
+        `${this.uploadServiceUrl}/v1/tx/arweave`,
+        this._withTimeout({
+          method: "POST",
+          headers: {
+            "content-type": "application/octet-stream",
+            "content-length": `${dataItemBuffer.byteLength}`,
+          },
+          body: Buffer.from(dataItemBuffer),
+        }),
+      );
     } catch (err) {
       throw new DStorageError(
         StorageErrorCode.ARWEAVE_BUNDLER_UPLOAD_FAILED,
@@ -609,6 +657,11 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
 
     return { txId: result.id, dataCaches: result.dataCaches ?? [] };
   }
+}
+
+/** Linear back-off delay between upload retry attempts. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ── Encoding helpers (browser-safe, no Buffer dependency) ─────────────────────

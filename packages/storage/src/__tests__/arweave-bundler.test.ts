@@ -473,10 +473,11 @@ describe("ArweaveBundlerStorageAdapter — store() full upload flow", () => {
   // length, not cryptographic validity (real validation happens server-side).
   const SIGNATURE_683 = "A".repeat(683);
 
-  function adapter() {
+  function adapter(overrides: { maxRetries?: number } = {}) {
     return new ArweaveBundlerStorageAdapter({
       signingServerUrl: SIGNING_URL,
       authToken: `ds_tok.${MODULUS_683}`,
+      ...overrides,
     });
   }
 
@@ -618,7 +619,7 @@ describe("ArweaveBundlerStorageAdapter — store() full upload flow", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     await expect(
-      adapter().store(new TextEncoder().encode("data")),
+      adapter({ maxRetries: 1 }).store(new TextEncoder().encode("data")),
     ).rejects.toMatchObject({
       code: StorageErrorCode.ARWEAVE_BUNDLER_UPLOAD_FAILED,
       message: expect.stringContaining("HTTP 502"),
@@ -643,9 +644,75 @@ describe("ArweaveBundlerStorageAdapter — store() full upload flow", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     await expect(
-      adapter().store(new TextEncoder().encode("data")),
+      adapter({ maxRetries: 1 }).store(new TextEncoder().encode("data")),
     ).rejects.toMatchObject({
       code: StorageErrorCode.ARWEAVE_BUNDLER_NO_TX_ID_RETURNED,
     });
+  });
+
+  // ── upload retry behavior ───────────────────────────────────────────────────
+  //
+  // _uploadToBundler retries the upload POST (only) on failure, with linear
+  // back-off — mirrors ArweaveStorageAdapter's chunk-upload retry. Cost
+  // estimate and sign-tx only ever happen once per store() call regardless.
+
+  it("retries a failed upload and succeeds once the bundler recovers", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(okJson({ winc: "999" })) // 1. cost estimate
+      .mockResolvedValueOnce(
+        // 2. sign-tx
+        okJson({
+          success: true,
+          txId: "server-tx-id",
+          signature: SIGNATURE_683,
+          publicKey: MODULUS_683,
+          txAmount: "999",
+          serviceFee: "0",
+        }),
+      )
+      .mockResolvedValueOnce(errJson(502, "bad gateway")) // 3. upload attempt 1: fails
+      .mockResolvedValueOnce(
+        // 4. upload attempt 2: succeeds
+        okJson({
+          id: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          dataCaches: [],
+        }),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await adapter({ maxRetries: 2 }).store(
+      new TextEncoder().encode("data"),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(result.id).toBe("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
+  });
+
+  it("throws with the attempt count once maxRetries is exhausted", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(okJson({ winc: "999" }))
+      .mockResolvedValueOnce(
+        okJson({
+          success: true,
+          txId: "server-tx-id",
+          signature: SIGNATURE_683,
+          publicKey: MODULUS_683,
+          txAmount: "999",
+          serviceFee: "0",
+        }),
+      )
+      .mockResolvedValueOnce(errJson(502, "bad gateway")) // upload attempt 1
+      .mockResolvedValueOnce(errJson(502, "bad gateway")); // upload attempt 2
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      adapter({ maxRetries: 2 }).store(new TextEncoder().encode("data")),
+    ).rejects.toMatchObject({
+      code: StorageErrorCode.ARWEAVE_BUNDLER_UPLOAD_FAILED,
+      message: expect.stringContaining("after 2 attempts"),
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(4);
   });
 });
