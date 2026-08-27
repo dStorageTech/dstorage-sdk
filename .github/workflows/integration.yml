@@ -81,5 +81,36 @@ jobs:
           echo "All fund attempts failed"
           exit 1
 
+      - name: Start bundler mock server
+        # Local mock signing server + mock ArDrive bundler (tools/mock-bundler-server.ts):
+        # relays uploads into real arlocal transactions. No external credentials
+        # or real funds involved. Placed after arlocal has been up for a couple
+        # of minutes already (proof-server wait + wallet funding above), so no
+        # startup-race retry is needed here.
+        run: |
+          nohup npx tsx tools/mock-bundler-server.ts > mock-bundler.log 2>&1 &
+          echo $! > mock-bundler.pid
+
+      - name: Wait for bundler mock server and record auth token
+        run: |
+          echo "Waiting for bundler mock server..."
+          for i in $(seq 1 30); do
+            if grep -q "INTEGRATION_BUNDLER_AUTH_TOKEN=" mock-bundler.log 2>/dev/null; then
+              echo "Bundler mock server ready after ~$((i * 2))s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "ERROR: bundler mock server did not become ready within 60s"
+              cat mock-bundler.log || true
+              exit 1
+            fi
+            sleep 2
+          done
+          TOKEN=$(grep "INTEGRATION_BUNDLER_AUTH_TOKEN=" mock-bundler.log | tail -1 | cut -d'=' -f2-)
+          {
+            echo "INTEGRATION_BUNDLER_MOCK_SERVER_URL=http://localhost:8901"
+            echo "INTEGRATION_BUNDLER_AUTH_TOKEN=${TOKEN}"
+          } >> .env.integration
+
       - name: Run integration tests
         run: npm run test:integration
