@@ -12,6 +12,13 @@ export default defineConfig({
     setupFiles: ["./tests/integration/setup.ts"],
     testTimeout: 120_000,
     hookTimeout: 120_000,
+    // These suites share one mutable local chain (arlocal) that every suite
+    // independently mines blocks on (each ArweaveLocalStorageAdapter.store()
+    // call, plus the bundler mock server's own relay). Running test files
+    // concurrently races block-mining against in-flight transactions built
+    // against a now-stale tx_anchor, causing sporadic arlocal rejections and
+    // content-hash mismatches. Run files sequentially instead.
+    fileParallelism: false,
   },
   resolve: {
     alias: {
