@@ -9,6 +9,10 @@ export type MidnightNetwork = "preprod" | "undeployed";
 export interface IntegrationEnv {
   arlocalUrl: string;
   proofServer: string;
+  bundler: {
+    mockServerUrl: string;
+    authToken: string | undefined;
+  };
   midnight: {
     network: MidnightNetwork;
     nodeEndpoint: string;
@@ -43,6 +47,12 @@ export function readEnv(): IntegrationEnv {
     arlocalUrl: process.env.INTEGRATION_ARLOCAL_URL ?? "http://localhost:1984",
     proofServer:
       process.env.INTEGRATION_PROOF_SERVER ?? "http://localhost:6300",
+    bundler: {
+      mockServerUrl:
+        process.env.INTEGRATION_BUNDLER_MOCK_SERVER_URL ??
+        "http://localhost:8901",
+      authToken: process.env.INTEGRATION_BUNDLER_AUTH_TOKEN || undefined,
+    },
     midnight: {
       network,
       nodeEndpoint:

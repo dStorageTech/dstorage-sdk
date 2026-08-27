@@ -112,6 +112,18 @@ export interface ArweaveBundlerAdapterConfig {
    */
   gateway?: string;
   /**
+   * Base URL of the bundler payment (cost estimate) service.
+   * Defaults to ArDrive's production payment service. Override to point at a
+   * self-hosted or local test double (e.g. for integration testing).
+   */
+  paymentServiceUrl?: string;
+  /**
+   * Base URL of the bundler upload service.
+   * Defaults to ArDrive's production upload service. Override to point at a
+   * self-hosted or local test double (e.g. for integration testing).
+   */
+  uploadServiceUrl?: string;
+  /**
    * Maximum number of bytes allowed in a single retrieve() call.
    * Rejects if the `Content-Length` response header exceeds this value, and
    * always rejects after loading if the actual byte count exceeds it.
@@ -176,6 +188,8 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
 
   private readonly signingServerUrl: string | null;
   private readonly gateway: string;
+  private readonly paymentServiceUrl: string;
+  private readonly uploadServiceUrl: string;
   private readonly maxRetrieveSizeBytes: number;
   private readonly skipIntegrityCheck: boolean;
   private readonly requestTimeoutMs: number;
@@ -190,6 +204,10 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
       ? config.signingServerUrl.replace(/\/$/, "")
       : null;
     this.gateway = config.gateway ?? ARWEAVE_GATEWAY_URL;
+    this.paymentServiceUrl =
+      config.paymentServiceUrl ?? BUNDLER_PAYMENT_SERVICE_URL;
+    this.uploadServiceUrl =
+      config.uploadServiceUrl ?? BUNDLER_UPLOAD_SERVICE_URL;
     this.maxRetrieveSizeBytes =
       config.maxRetrieveSizeBytes ?? DEFAULT_MAX_RETRIEVE_SIZE_BYTES;
     this.skipIntegrityCheck = config.skipIntegrityCheck ?? false;
@@ -398,7 +416,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
     let resp: Response;
     try {
       resp = await fetch(
-        `${BUNDLER_PAYMENT_SERVICE_URL}/v1/price/bytes/${dataSizeBytes}`,
+        `${this.paymentServiceUrl}/v1/price/bytes/${dataSizeBytes}`,
         this._withTimeout(),
       );
     } catch (err) {
@@ -545,7 +563,7 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
 
     let resp: Response;
     try {
-      resp = await fetch(`${BUNDLER_UPLOAD_SERVICE_URL}/v1/tx/arweave`, {
+      resp = await fetch(`${this.uploadServiceUrl}/v1/tx/arweave`, {
         method: "POST",
         headers: {
           "content-type": "application/octet-stream",

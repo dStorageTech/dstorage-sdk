@@ -21,6 +21,7 @@
     "format": "prettier --write .",
     "check": "npm run format && npm run build && npm run test",
     "version:bump": "node tools/bump-version.mjs",
+    "bundler-mock:run": "tsx tools/mock-bundler-server.ts",
     "clean": "find . -type d \\( -name node_modules -o -name dist \\) -prune -exec rm -rf {} +"
   },
   "overrides": {

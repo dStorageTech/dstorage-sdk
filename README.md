@@ -272,18 +272,24 @@ Integration tests exercise real network adapters end-to-end:
 - **arlocal-only suite** — `ArweaveLocalStorageAdapter` against a local arlocal node with `MidnightSimulatorChainAdapter`
 - **multi-key wrapping suite** — uploads encrypted with two encryption adapters verified against real arlocal storage; each adapter independently decrypts and an unrelated adapter is rejected
 - **full-stack suite** — `ArweaveLocalStorageAdapter` + `MidnightChainAdapter` with ZK proofs against Midnight Preprod (or a local node); includes wallet-isolation test verifying that a different encryption adapter cannot decrypt another user's private references
+- **bundler suite** — `ArweaveBundlerStorageAdapter` against a local mock signing/bundler server (relays uploads into real arlocal transactions; retrieval also goes through arlocal directly); fully local/offline, same scenario coverage as the arlocal-only, storage-only, content-hash, and tags suites
 
 #### Prerequisites
 
 Start the required services:
 
 ```sh
-# Arweave Local (required for both suites)
+# Arweave Local (required for all suites, including the bundler suite)
 docker run -d --rm -p 1984:1984 textury/arlocal
 
 # Midnight Proof Server (required for the full-stack suite)
 docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:8.1.0 -- midnight-proof-server -v
+
+# Bundler mock server (required only for the bundler suite) — separate terminal:
+npm run bundler-mock:run
 ```
+
+`npm run bundler-mock:run` prints an `INTEGRATION_BUNDLER_AUTH_TOKEN` on boot — copy it into `.env.integration`.
 
 #### Configuration
 
@@ -294,6 +300,8 @@ cp tests/integration/env.example .env.integration
 ```
 
 The only required variable for the full-stack suite is `INTEGRATION_SEED` — a BIP-39 mnemonic or 64-char hex seed for a Midnight Preprod wallet funded with NIGHT and DUST tokens (see [Prerequisites](#prerequisites) for faucet links). All other variables have defaults that match the Docker commands above.
+
+The bundler suite additionally requires `INTEGRATION_BUNDLER_AUTH_TOKEN` (printed by `npm run bundler-mock:run`) and depends on `INTEGRATION_BUNDLER_MOCK_SERVER_URL` (defaults to `http://localhost:8901`, matching the mock server's default port). Leave `INTEGRATION_BUNDLER_AUTH_TOKEN` unset to skip the bundler suite.
 
 #### Run
 
@@ -316,6 +324,9 @@ npm run test:integration -- -t "multi-key wrapping"
 
 # Run only the full-stack Midnight suite
 npm run test:integration -- -t "full stack"
+
+# Run only the bundler suite
+npm run test:integration -- -t "bundler"
 
 # Run a single test by name
 npm run test:integration -- -t "uploads and retrieves private data"
