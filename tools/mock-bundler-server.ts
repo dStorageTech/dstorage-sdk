@@ -144,6 +144,22 @@ function handlePriceEstimate(res: ServerResponse): void {
 }
 
 // ── Mock ArDrive upload service stand-in ────────────────────────────────────────
+//
+// The real upload.ardrive.io (ardriveapp/turbo-upload-service) deduplicates
+// resubmissions of the same ANS-104 data item via two mechanisms: in-flight
+// tracking for a duplicate arriving while the first is still processing
+// (dataItemIsInFlight(), Redis-backed — returns the in-progress result
+// rather than erroring), and idempotent lookup once already completed.
+// Mirror both here, keyed by the data item's own deterministic id (derived
+// from its signature, which is fixed once signed — identical across our
+// adapter's upload retries): a concurrent or later resubmission shares/reuses
+// the original relay's result instead of re-posting to arlocal, which would
+// otherwise reject the second post as a duplicate data_root.
+const completedRelays = new Map<string, { id: string; dataCaches: string[] }>();
+const inFlightRelays = new Map<
+  string,
+  Promise<{ id: string; dataCaches: string[] }>
+>();
 
 async function handleUpload(
   req: IncomingMessage,
@@ -152,10 +168,63 @@ async function handleUpload(
   const raw = await readRawBody(req);
   const dataItem = new DataItem(raw);
 
+  const completed = completedRelays.get(dataItem.id);
+  if (completed) {
+    console.log(
+      `[mock-bundler] duplicate submission of data item ${dataItem.id} -> returning cached tx ${completed.id}`,
+    );
+    sendJson(res, 200, completed);
+    return;
+  }
+
+  const inFlight = inFlightRelays.get(dataItem.id);
+  if (inFlight) {
+    console.log(
+      `[mock-bundler] duplicate submission of in-flight data item ${dataItem.id} -> awaiting original relay`,
+    );
+    try {
+      sendJson(res, 200, await inFlight);
+    } catch (err) {
+      const status = err instanceof RelayError ? err.status : 502;
+      sendJson(res, status, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  const relay = _relayToArlocal(dataItem);
+  inFlightRelays.set(dataItem.id, relay);
+  try {
+    const result = await relay;
+    completedRelays.set(dataItem.id, result);
+    sendJson(res, 200, result);
+  } catch (err) {
+    const status = err instanceof RelayError ? err.status : 502;
+    sendJson(res, status, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  } finally {
+    inFlightRelays.delete(dataItem.id);
+  }
+}
+
+class RelayError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** Validate, build, sign, and post one Arweave L1 transaction to arlocal. */
+async function _relayToArlocal(
+  dataItem: DataItem,
+): Promise<{ id: string; dataCaches: string[] }> {
   const valid = await dataItem.isValid().catch(() => false);
   if (!valid) {
-    sendJson(res, 400, { error: "invalid ANS-104 data item signature" });
-    return;
+    throw new RelayError(400, "invalid ANS-104 data item signature");
   }
 
   const tx = await arweave.createTransaction(
@@ -168,15 +237,15 @@ async function handleUpload(
   await arweave.transactions.sign(tx, wallet);
   const postResult = await arweave.transactions.post(tx);
   if (postResult.status !== 200 && postResult.status !== 202) {
-    sendJson(res, 502, {
-      error: `arlocal rejected relayed transaction: HTTP ${postResult.status}`,
-    });
-    return;
+    throw new RelayError(
+      502,
+      `arlocal rejected relayed transaction: HTTP ${postResult.status}`,
+    );
   }
   await mineOnArlocal();
 
   console.log(`[mock-bundler] relayed data item -> arlocal tx ${tx.id}`);
-  sendJson(res, 200, { id: tx.id, dataCaches: [] });
+  return { id: tx.id, dataCaches: [] };
 }
 
 // ── Minimal HTTP plumbing (no new deps) ─────────────────────────────────────────
