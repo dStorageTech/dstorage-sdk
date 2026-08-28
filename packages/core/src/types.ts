@@ -128,6 +128,22 @@ export interface StoreOptions {
   refId?: string;
 }
 
+/** Options for dStorage.update() */
+export interface UpdateOptions {
+  /**
+   * Unencrypted key/value tags forwarded to the storage layer (e.g. Arweave tx tags).
+   * Never written on-chain.
+   */
+  tags?: Record<string, string>;
+  /**
+   * Encrypted key/value metadata stored on-chain alongside the key envelope.
+   * Encrypted with the content DEK — only holders of a valid KEK can read it.
+   * Returned in `RetrieveResult.metadata` after decryption.
+   */
+  metadata?: Record<string, string>;
+  onProgress?: (progress: StoreProgress) => void;
+}
+
 /**
  * Aggregated cost estimate for a complete store operation.
  * Built from two quotes — one from the storage adapter and one from the chain adapter.

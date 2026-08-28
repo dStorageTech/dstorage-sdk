@@ -49,6 +49,7 @@ import type {
   RetrieveResult,
   StoreRecovery,
   UpdateResult,
+  UpdateOptions,
   StoreOptions,
   StoreProgress,
   StoreResult,
@@ -530,12 +531,12 @@ export class DStorage {
    *
    * @param refId    The chain reference to update (returned by a prior store/registerReference).
    * @param bytes    New content to encrypt and store.
-   * @param options  Optional StoreOptions. isPublic is ignored.
+   * @param options  Optional UpdateOptions (tags, metadata, onProgress).
    */
   async update(
     refId: string,
     bytes: Uint8Array,
-    options?: StoreOptions,
+    options?: UpdateOptions,
   ): Promise<UpdateResult> {
     try {
       this.assertConnected();
