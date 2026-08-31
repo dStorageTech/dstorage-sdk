@@ -256,8 +256,10 @@ async function main(): Promise<void> {
     }
     const managedPaymentService = useManagedPaymentService
       ? {
-          signingServerUrl: SIGNING_SERVER_URL!,
-          authToken: authToken!,
+          managedPayment: {
+            signingServerUrl: SIGNING_SERVER_URL!,
+            authToken: authToken!,
+          },
         }
       : {};
 
@@ -265,8 +267,10 @@ async function main(): Promise<void> {
 
     const storageAdapter = useManagedMock
       ? new MockStorageAdapter({
-          signingServerUrl: SIGNING_SERVER_URL!,
-          authToken: authToken!,
+          managedPayment: {
+            signingServerUrl: SIGNING_SERVER_URL!,
+            authToken: authToken!,
+          },
           logger,
         })
       : new ArweaveLocalStorageAdapter({
@@ -300,8 +304,10 @@ async function main(): Promise<void> {
     // ── 8. Build the chain adapter ──────────────────────────────────────────
     if (useManagedMock) {
       chainAdapter = new MidnightSimulatorChainAdapter({
-        signingServerUrl: SIGNING_SERVER_URL!,
-        authToken: authToken!,
+        managedPayment: {
+          signingServerUrl: SIGNING_SERVER_URL!,
+          authToken: authToken!,
+        },
         logger,
       });
     } else {

@@ -19,6 +19,7 @@ import {
   ManagedPaymentAdapter,
   PaymentAdapter,
 } from "@dstorage/payment";
+import type { ManagedPaymentOptions } from "@dstorage/payment";
 import {
   DStorageError,
   assertValidLogger,
@@ -28,10 +29,8 @@ import { StorageErrorCode } from "../errors.js";
 
 export type MockStorageAdapterConfig = {
   logger?: StorageAdapterLogger;
-} & (
-  | { signingServerUrl: string; authToken: string }
-  | { signingServerUrl?: never; authToken?: never }
-);
+  managedPayment?: ManagedPaymentOptions;
+};
 
 // In Node.js (no localStorage), fall back to an in-memory map.
 const memoryStore = new Map<string, string>();
@@ -106,8 +105,8 @@ export class MockStorageAdapter implements StorageAdapter {
   constructor(config: MockStorageAdapterConfig = {}) {
     assertValidLogger(config.logger, "MockStorageAdapter");
     this.logger = config.logger;
-    if (config.signingServerUrl) {
-      if (!config.authToken?.trim()) {
+    if (config.managedPayment) {
+      if (!config.managedPayment.authToken?.trim()) {
         throw new DStorageError(
           StorageErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
           "[dStorage/mock-storage] authToken is required when signingServerUrl is provided.",
@@ -116,8 +115,7 @@ export class MockStorageAdapter implements StorageAdapter {
       this.paymentAdapter = new ManagedPaymentAdapter({
         network: "managedmock",
         type: "storage",
-        signingServerUrl: config.signingServerUrl,
-        authToken: config.authToken,
+        managedPayment: config.managedPayment,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     } else {

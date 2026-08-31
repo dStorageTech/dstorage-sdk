@@ -11,14 +11,21 @@ import {
 import type { PaymentQuote } from "../types.js";
 import { PaymentErrorCode } from "../errors.js";
 
+const SIGNING_SERVER_URL = "https://signing.example.com";
+
 const BASE_CONFIG = {
-  signingServerUrl: "https://signing.example.com",
   network: "arweave" as const,
   type: "storage" as const,
 };
 
 function makeAdapter() {
-  return new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "tok_test" });
+  return new ManagedPaymentAdapter({
+    ...BASE_CONFIG,
+    managedPayment: {
+      signingServerUrl: SIGNING_SERVER_URL,
+      authToken: "tok_test",
+    },
+  });
 }
 
 function makeQuote(overrides: Partial<PaymentQuote> = {}): PaymentQuote {
@@ -43,15 +50,24 @@ describe("ManagedPaymentAdapter — authToken validation", () => {
   it("constructs successfully when authToken is a non-empty string", () => {
     expect(
       () =>
-        new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "tok_abc123" }),
+        new ManagedPaymentAdapter({
+          ...BASE_CONFIG,
+          managedPayment: {
+            signingServerUrl: SIGNING_SERVER_URL,
+            authToken: "tok_abc123",
+          },
+        }),
     ).not.toThrow();
   });
 
   it("throws at construction when authToken is missing", () => {
     let err: unknown;
-    // @ts-expect-error — intentionally omitting required authToken to test runtime guard
     try {
-      new ManagedPaymentAdapter({ ...BASE_CONFIG });
+      new ManagedPaymentAdapter({
+        ...BASE_CONFIG,
+        // @ts-expect-error — intentionally omitting required authToken to test runtime guard
+        managedPayment: { signingServerUrl: SIGNING_SERVER_URL },
+      });
     } catch (e) {
       err = e;
     }
@@ -64,7 +80,10 @@ describe("ManagedPaymentAdapter — authToken validation", () => {
   it("throws at construction when authToken is an empty string", () => {
     let err: unknown;
     try {
-      new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "" });
+      new ManagedPaymentAdapter({
+        ...BASE_CONFIG,
+        managedPayment: { signingServerUrl: SIGNING_SERVER_URL, authToken: "" },
+      });
     } catch (e) {
       err = e;
     }
@@ -77,7 +96,13 @@ describe("ManagedPaymentAdapter — authToken validation", () => {
   it("throws at construction when authToken is whitespace only", () => {
     let err: unknown;
     try {
-      new ManagedPaymentAdapter({ ...BASE_CONFIG, authToken: "   " });
+      new ManagedPaymentAdapter({
+        ...BASE_CONFIG,
+        managedPayment: {
+          signingServerUrl: SIGNING_SERVER_URL,
+          authToken: "   ",
+        },
+      });
     } catch (e) {
       err = e;
     }
@@ -98,7 +123,10 @@ describe("ManagedPaymentAdapter — authToken validation", () => {
       () =>
         new ManagedPaymentAdapter({
           ...BASE_CONFIG,
-          authToken: `${jwtCredential}.${modulus683}`,
+          managedPayment: {
+            signingServerUrl: SIGNING_SERVER_URL,
+            authToken: `${jwtCredential}.${modulus683}`,
+          },
         }),
     ).not.toThrow();
   });
@@ -345,7 +373,10 @@ describe("ManagedPaymentAdapter — server error body sanitisation", () => {
     mockErrorResponse(body);
     const adapter = new ManagedPaymentAdapter({
       ...MIDNIGHT_CONFIG,
-      requestTimeoutMs: 5_000,
+      managedPayment: {
+        ...MIDNIGHT_CONFIG.managedPayment,
+        requestTimeoutMs: 5_000,
+      },
     });
     try {
       await adapter.pay({
@@ -397,10 +428,12 @@ describe("ManagedPaymentAdapter — server error body sanitisation", () => {
 // a recognisable error so the caller can retry or surface a meaningful message.
 
 const MIDNIGHT_CONFIG = {
-  signingServerUrl: "https://signing.example.com",
   network: "midnight" as const,
   type: "chain" as const,
-  authToken: "tok_abc123",
+  managedPayment: {
+    signingServerUrl: SIGNING_SERVER_URL,
+    authToken: "tok_abc123",
+  },
 };
 
 describe("ManagedPaymentAdapter — request timeout", () => {
@@ -425,7 +458,10 @@ describe("ManagedPaymentAdapter — request timeout", () => {
 
     const adapter = new ManagedPaymentAdapter({
       ...MIDNIGHT_CONFIG,
-      requestTimeoutMs: 50,
+      managedPayment: {
+        ...MIDNIGHT_CONFIG.managedPayment,
+        requestTimeoutMs: 50,
+      },
     });
 
     await expect(
@@ -462,7 +498,10 @@ describe("ManagedPaymentAdapter — request timeout", () => {
 
     const adapter = new ManagedPaymentAdapter({
       ...MIDNIGHT_CONFIG,
-      requestTimeoutMs: 5_000,
+      managedPayment: {
+        ...MIDNIGHT_CONFIG.managedPayment,
+        requestTimeoutMs: 5_000,
+      },
     });
 
     await expect(
@@ -551,8 +590,10 @@ describe("ManagedPaymentAdapter — managedmock txData prefixing", () => {
     const adapter = new ManagedPaymentAdapter({
       network: "managedmock",
       type: "chain",
-      signingServerUrl: "https://signing.example.com",
-      authToken: "tok_test",
+      managedPayment: {
+        signingServerUrl: SIGNING_SERVER_URL,
+        authToken: "tok_test",
+      },
     });
     await adapter.pay({
       network: "mock",
@@ -569,8 +610,10 @@ describe("ManagedPaymentAdapter — managedmock txData prefixing", () => {
     const adapter = new ManagedPaymentAdapter({
       network: "managedmock",
       type: "storage",
-      signingServerUrl: "https://signing.example.com",
-      authToken: "tok_test",
+      managedPayment: {
+        signingServerUrl: SIGNING_SERVER_URL,
+        authToken: "tok_test",
+      },
     });
     await adapter.pay({
       network: "mock",
@@ -587,8 +630,10 @@ describe("ManagedPaymentAdapter — managedmock txData prefixing", () => {
     const adapter = new ManagedPaymentAdapter({
       network: "managedmock",
       type: "chain",
-      signingServerUrl: "https://signing.example.com",
-      authToken: "tok_test",
+      managedPayment: {
+        signingServerUrl: SIGNING_SERVER_URL,
+        authToken: "tok_test",
+      },
     });
     await adapter.pay({
       network: "midnight",
@@ -605,8 +650,10 @@ describe("ManagedPaymentAdapter — managedmock txData prefixing", () => {
     const adapter = new ManagedPaymentAdapter({
       network: "managedmock",
       type: "chain",
-      signingServerUrl: "https://signing.example.com",
-      authToken: "tok_test",
+      managedPayment: {
+        signingServerUrl: SIGNING_SERVER_URL,
+        authToken: "tok_test",
+      },
     });
     await adapter.pay({
       network: "mock",

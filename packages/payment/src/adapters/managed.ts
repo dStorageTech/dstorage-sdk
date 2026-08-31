@@ -65,6 +65,9 @@ import { PaymentErrorCode } from "../errors.js";
 // Shared API endpoint for all network payment flows on the dStorage signing server.
 const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
 
+/** Default request timeout — matches the convention used by arweave-bundler.ts and httpGateway.ts. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
 // ── Byte / encoding helpers ───────────────────────────────────────────────────
 
 function uint8ArrayToHex(bytes: Uint8Array): string {
@@ -85,14 +88,12 @@ function parseSignedTxBytes(signedTx: string): Uint8Array {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-export interface ManagedPaymentAdapterConfig extends Omit<
-  ArweavePaymentAdapterConfig,
-  "walletKey"
-> {
-  /** Which network this adapter is used for */
-  network: PaymentNetworkName;
-  /** Whether this covers a storage network fee or a chain transaction fee */
-  type: NetworkType;
+/**
+ * Options for routing payment through the dStorage managed signing server.
+ * Shared by `ManagedPaymentAdapter` itself and every higher-level adapter
+ * that can optionally delegate to it (storage and chain adapters).
+ */
+export interface ManagedPaymentOptions {
   /**
    * Base URL of the remote signing server (no trailing slash).
    * Example: "https://api.my-server.com"
@@ -111,6 +112,18 @@ export interface ManagedPaymentAdapterConfig extends Omit<
    * Pass `0` to disable the timeout entirely (not recommended for production).
    */
   requestTimeoutMs?: number;
+}
+
+export interface ManagedPaymentAdapterConfig extends Omit<
+  ArweavePaymentAdapterConfig,
+  "walletKey"
+> {
+  /** Which network this adapter is used for */
+  network: PaymentNetworkName;
+  /** Whether this covers a storage network fee or a chain transaction fee */
+  type: NetworkType;
+  /** Managed signing server connection options. */
+  managedPayment: ManagedPaymentOptions;
 }
 
 // ── Server response shapes ────────────────────────────────────────────────────
@@ -237,18 +250,25 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         : {}),
       ...(config.logger !== undefined ? { logger: config.logger } : {}),
     });
-    this.signingServerUrl = config.signingServerUrl.replace(/\/$/, "");
-    if (!config.authToken || config.authToken.trim() === "") {
+    this.signingServerUrl = config.managedPayment.signingServerUrl.replace(
+      /\/$/,
+      "",
+    );
+    if (
+      !config.managedPayment.authToken ||
+      config.managedPayment.authToken.trim() === ""
+    ) {
       throw new DStorageError(
         PaymentErrorCode.MANAGED_TOKEN_REQUIRED,
         "[dStorage/managed-payment] authToken is required and must not be empty or whitespace.",
       );
     }
     const { credential, ownerPublicKey } =
-      ManagedPaymentAdapter._parseAuthToken(config.authToken);
+      ManagedPaymentAdapter._parseAuthToken(config.managedPayment.authToken);
     this.authToken = credential;
     this.ownerPublicKey = ownerPublicKey;
-    this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
+    this.requestTimeoutMs =
+      config.managedPayment.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.network = config.network;
     this.type = config.type;
   }

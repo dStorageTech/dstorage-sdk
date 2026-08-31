@@ -385,8 +385,10 @@ describe("MockChainAdapter", () => {
 
     it("signingServerUrl + authToken switches to ManagedPaymentAdapter with network managedmock", () => {
       const adapter = new MockChainAdapter({
-        signingServerUrl: "https://signing.example.com",
-        authToken: "tok_abc123",
+        managedPayment: {
+          signingServerUrl: "https://signing.example.com",
+          authToken: "tok_abc123",
+        },
       });
       expect(adapter.paymentAdapter.network).toBe("managedmock");
       expect(adapter.paymentAdapter.type).toBe("chain");
@@ -396,9 +398,9 @@ describe("MockChainAdapter", () => {
       expect(
         () =>
           new MockChainAdapter({
-            signingServerUrl: "https://signing.example.com",
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } as any),
+            // @ts-expect-error — intentionally omitting required authToken to test runtime guard
+            managedPayment: { signingServerUrl: "https://signing.example.com" },
+          }),
       ).toThrow(
         expect.objectContaining({
           code: ChainErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
@@ -419,8 +421,10 @@ describe("MockChainAdapter", () => {
 
     it("writeReference calls paymentAdapter.pay() through the managed payment adapter", async () => {
       const adapter = new MockChainAdapter({
-        signingServerUrl: "https://signing.example.com",
-        authToken: "tok_abc123",
+        managedPayment: {
+          signingServerUrl: "https://signing.example.com",
+          authToken: "tok_abc123",
+        },
       });
       const fakeReceipt = {
         txHash: "tx123",

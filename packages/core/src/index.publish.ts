@@ -62,6 +62,7 @@ export { MockStorageAdapter } from "@dstorage/storage";
 export type { MockStorageAdapterConfig } from "@dstorage/storage";
 export { StorageErrorCode } from "@dstorage/storage";
 export { ArweaveStorageAdapter } from "@dstorage/storage";
+export type { ArweaveAdapterConfig } from "@dstorage/storage";
 export { ArweaveBundlerStorageAdapter } from "@dstorage/storage";
 export type { ArweaveBundlerAdapterConfig } from "@dstorage/storage";
 // ArweaveLocalStorageAdapter: no node:http dependency — uses fetch() throughout. Node-safe.
@@ -90,6 +91,7 @@ export type {
   Token,
   PaymentNetworkName,
   MidnightWalletProvider,
+  ManagedPaymentOptions,
 } from "@dstorage/payment";
 export { MockPaymentAdapter, TOKENS } from "@dstorage/payment";
 export { ArweavePaymentAdapter } from "@dstorage/payment";
@@ -120,6 +122,7 @@ export {
 export { ChainErrorCode } from "@dstorage/chain";
 export type {
   MidnightChainAdapterConfig,
+  MockChainAdapterConfig,
   WalletAddresses,
   AdapterWalletProvider,
   HttpGatewayChainAdapterConfig,

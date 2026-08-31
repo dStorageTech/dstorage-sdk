@@ -14,8 +14,10 @@ const SIGNING_URL = "https://signing.test";
 describe("ArweaveBundlerStorageAdapter — store() reserved tag key", () => {
   function adapter() {
     return new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
     });
   }
 
@@ -40,8 +42,10 @@ describe("ArweaveBundlerStorageAdapter — authToken parsing", () => {
     expect(
       () =>
         new ArweaveBundlerStorageAdapter({
-          signingServerUrl: SIGNING_URL,
-          authToken: `ds_tok.${MODULUS_683}`,
+          managedPayment: {
+            signingServerUrl: SIGNING_URL,
+            authToken: `ds_tok.${MODULUS_683}`,
+          },
         }),
     ).not.toThrow();
   });
@@ -54,8 +58,10 @@ describe("ArweaveBundlerStorageAdapter — authToken parsing", () => {
     expect(
       () =>
         new ArweaveBundlerStorageAdapter({
-          signingServerUrl: SIGNING_URL,
-          authToken: `${jwtCredential}.${MODULUS_683}`,
+          managedPayment: {
+            signingServerUrl: SIGNING_URL,
+            authToken: `${jwtCredential}.${MODULUS_683}`,
+          },
         }),
     ).not.toThrow();
   });
@@ -67,8 +73,7 @@ describe("ArweaveBundlerStorageAdapter — authToken parsing", () => {
     let err: unknown;
     try {
       new ArweaveBundlerStorageAdapter({
-        signingServerUrl: SIGNING_URL,
-        authToken: plainJwt,
+        managedPayment: { signingServerUrl: SIGNING_URL, authToken: plainJwt },
       });
     } catch (e) {
       err = e;
@@ -83,8 +88,10 @@ describe("ArweaveBundlerStorageAdapter — authToken parsing", () => {
     let err: unknown;
     try {
       new ArweaveBundlerStorageAdapter({
-        signingServerUrl: SIGNING_URL,
-        authToken: "nodottoken",
+        managedPayment: {
+          signingServerUrl: SIGNING_URL,
+          authToken: "nodottoken",
+        },
       });
     } catch (e) {
       err = e;
@@ -103,8 +110,10 @@ describe("ArweaveBundlerStorageAdapter — retrieve ID validation", () => {
 
   function adapter() {
     return new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
     });
   }
 
@@ -143,8 +152,10 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
 
   function adapter() {
     return new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
     });
   }
 
@@ -256,8 +267,10 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     vi.stubGlobal("fetch", mockFetch);
 
     const timeoutAdapter = new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
       requestTimeoutMs: 5_000,
     });
     await timeoutAdapter.retrieve(TX_ID);
@@ -277,8 +290,10 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     vi.stubGlobal("fetch", mockFetch);
 
     const noTimeoutAdapter = new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
       requestTimeoutMs: 0,
     });
     await noTimeoutAdapter.retrieve(TX_ID);
@@ -338,8 +353,10 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     vi.stubGlobal("fetch", mockFetch);
 
     const cappedAdapter = new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
       maxMetadataResponseBytes: 100,
     });
     await expect(cappedAdapter.retrieve(TX_ID)).rejects.toMatchObject({
@@ -356,8 +373,10 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     vi.stubGlobal("fetch", mockFetch);
 
     const cappedAdapter = new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
       maxMetadataResponseBytes: 50,
     });
     await expect(cappedAdapter.retrieve(TX_ID)).rejects.toMatchObject({
@@ -378,8 +397,10 @@ describe("ArweaveBundlerStorageAdapter — estimateCost()", () => {
 
   function adapter() {
     return new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
     });
   }
 
@@ -475,8 +496,10 @@ describe("ArweaveBundlerStorageAdapter — store() full upload flow", () => {
 
   function adapter(overrides: { maxRetries?: number } = {}) {
     return new ArweaveBundlerStorageAdapter({
-      signingServerUrl: SIGNING_URL,
-      authToken: `ds_tok.${MODULUS_683}`,
+      managedPayment: {
+        signingServerUrl: SIGNING_URL,
+        authToken: `ds_tok.${MODULUS_683}`,
+      },
       ...overrides,
     });
   }

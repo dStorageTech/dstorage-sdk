@@ -25,7 +25,7 @@ import type {
 } from "../types.js";
 import type { EncryptionScheme } from "../types.js";
 import { ManagedPaymentAdapter, MockPaymentAdapter } from "@dstorage/payment";
-import type { PaymentAdapter } from "@dstorage/payment";
+import type { PaymentAdapter, ManagedPaymentOptions } from "@dstorage/payment";
 import { DStorageError, assertValidLogger, hexToBytes } from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
 import type { DataRegistrySimulator } from "./midnight/contracts/src/test/dataregistry-simulator.js";
@@ -56,17 +56,15 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
        */
       senderPk?: string;
       logger?: ChainAdapterLogger;
-    } & (
-      | { signingServerUrl: string; authToken: string }
-      | { signingServerUrl?: never; authToken?: never }
-    ) = {},
+      managedPayment?: ManagedPaymentOptions;
+    } = {},
   ) {
     assertValidLogger(options.logger, "MidnightSimulatorChainAdapter");
     this.logger = options.logger;
     this.senderPk = options.senderPk ?? "00".repeat(32);
 
-    if (options.signingServerUrl) {
-      if (!options.authToken?.trim()) {
+    if (options.managedPayment) {
+      if (!options.managedPayment.authToken?.trim()) {
         throw new DStorageError(
           ChainErrorCode.MIDNIGHT_SIMULATOR_AUTH_TOKEN_REQUIRED,
           "[dStorage/midnight-simulator] authToken is required when signingServerUrl is provided.",
@@ -75,8 +73,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       this.paymentAdapter = new ManagedPaymentAdapter({
         network: "managedmock",
         type: "chain",
-        signingServerUrl: options.signingServerUrl,
-        authToken: options.authToken,
+        managedPayment: options.managedPayment,
         ...(options.logger !== undefined ? { logger: options.logger } : {}),
       });
     } else {

@@ -24,6 +24,7 @@ import {
   MockPaymentAdapter,
   ManagedPaymentAdapter,
 } from "@dstorage/payment";
+import type { ManagedPaymentOptions } from "@dstorage/payment";
 import { DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { ChainErrorCode } from "../errors.js";
 
@@ -74,10 +75,8 @@ export type MockChainAdapterConfig = {
    * Optional logger for SDK operational output.
    */
   logger?: ChainAdapterLogger;
-} & (
-  | { signingServerUrl: string; authToken: string }
-  | { signingServerUrl?: never; authToken?: never }
-);
+  managedPayment?: ManagedPaymentOptions;
+};
 
 // ── Mock Adapter ──
 export class MockChainAdapter implements ChainAdapter {
@@ -92,8 +91,8 @@ export class MockChainAdapter implements ChainAdapter {
     assertValidLogger(config.logger, "MockChainAdapter");
     this.logger = config.logger;
 
-    if (config.signingServerUrl) {
-      if (!config.authToken?.trim()) {
+    if (config.managedPayment) {
+      if (!config.managedPayment.authToken?.trim()) {
         throw new DStorageError(
           ChainErrorCode.MOCK_AUTH_TOKEN_REQUIRED,
           "[dStorage/mock-chain] authToken is required when signingServerUrl is provided.",
@@ -102,8 +101,7 @@ export class MockChainAdapter implements ChainAdapter {
       this.paymentAdapter = new ManagedPaymentAdapter({
         network: "managedmock",
         type: "chain",
-        signingServerUrl: config.signingServerUrl,
-        authToken: config.authToken,
+        managedPayment: config.managedPayment,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     } else {

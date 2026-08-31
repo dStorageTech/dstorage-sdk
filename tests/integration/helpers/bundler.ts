@@ -68,8 +68,10 @@ export function createBundlerAdapter(
   env: IntegrationEnv,
 ): ArweaveBundlerStorageAdapter {
   return new ArweaveBundlerStorageAdapter({
-    signingServerUrl: env.bundler.mockServerUrl,
-    authToken: env.bundler.authToken!,
+    managedPayment: {
+      signingServerUrl: env.bundler.mockServerUrl,
+      authToken: env.bundler.authToken!,
+    },
     gateway: env.arlocalUrl,
     paymentServiceUrl: env.bundler.mockServerUrl,
     uploadServiceUrl: env.bundler.mockServerUrl,

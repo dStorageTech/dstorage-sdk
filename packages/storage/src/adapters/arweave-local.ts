@@ -331,12 +331,13 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
       url: `${protocol}://${host}:${port}`,
     });
 
-    // When using ManagedPaymentAdapter (signingServerUrl + compound authToken),
-    // the Arweave transaction owner is set to the server's RSA public key, so
-    // arlocal checks the SERVER's wallet balance rather than the local wallet's.
-    // Extract that key here so we can also mint to the server's address on arlocal.
+    // When using ManagedPaymentAdapter (managedPayment.signingServerUrl + compound
+    // authToken), the Arweave transaction owner is set to the server's RSA public
+    // key, so arlocal checks the SERVER's wallet balance rather than the local
+    // wallet's. Extract that key here so we can also mint to the server's address
+    // on arlocal.
     const managedOwnerKey = ArweaveLocalStorageAdapter._extractOwnerKey(
-      config.authToken,
+      config.managedPayment?.authToken,
     );
 
     if (config.walletKey && Object.keys(config.walletKey).length > 0) {

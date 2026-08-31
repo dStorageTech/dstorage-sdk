@@ -54,7 +54,11 @@ import type {
   StorageQuote,
   RetrieveOptions,
 } from "../types.js";
-import type { PaymentAdapter, PaymentNetworkName } from "@dstorage/payment";
+import type {
+  PaymentAdapter,
+  PaymentNetworkName,
+  ManagedPaymentOptions,
+} from "@dstorage/payment";
 import { ManagedPaymentAdapter } from "@dstorage/payment";
 import type { Signer } from "@dha-team/arbundles";
 import {
@@ -92,15 +96,10 @@ const DEFAULT_MAX_RETRIEVE_SIZE_BYTES = 256 * 1024 * 1024; // 256 MiB
 
 export interface ArweaveBundlerAdapterConfig {
   /**
-   * Base URL of the dStorage API server that holds the funded Turbo Credits account.
-   * Example: "https://api.my-dstorage-server.com"
+   * Managed signing server connection options. The server must hold a
+   * funded Turbo Credits account. Required — local signing is not supported.
    */
-  signingServerUrl?: string;
-  /**
-   * Bearer token sent as the `Authorization` header to authenticate with the signing server.
-   * Required when `signingServerUrl` is provided.
-   */
-  authToken?: string; // validated at construction: required when signingServerUrl is set
+  managedPayment?: ManagedPaymentOptions;
   /**
    * Arweave gateway URL used for data retrieval.
    * Defaults to the public Arweave gateway.
@@ -185,8 +184,10 @@ export interface ArweaveBundlerAdapterConfig {
  *
  * @example
  * const adapter = new ArweaveBundlerStorageAdapter({
- *   signingServerUrl: "https://api.my-server.com",
- *   authToken: "ds_...",
+ *   managedPayment: {
+ *     signingServerUrl: "https://api.my-server.com",
+ *     authToken: "ds_...",
+ *   },
  * });
  * const { id } = await adapter.store(encryptedBytes, { "Content-Type": "application/octet-stream" });
  */
@@ -210,8 +211,8 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
   private readonly ownerPublicKey: Uint8Array;
 
   constructor(config: ArweaveBundlerAdapterConfig = {}) {
-    this.signingServerUrl = config.signingServerUrl
-      ? config.signingServerUrl.replace(/\/$/, "")
+    this.signingServerUrl = config.managedPayment
+      ? config.managedPayment.signingServerUrl.replace(/\/$/, "")
       : null;
     this.gateway = config.gateway ?? ARWEAVE_GATEWAY_URL;
     this.paymentServiceUrl =
@@ -232,19 +233,18 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
     // transactions are sent unsigned to the remote server, which holds a
     // funded Arweave wallet and returns the signature.
-    if (config.signingServerUrl) {
-      if (!config.authToken?.trim()) {
+    if (config.managedPayment) {
+      if (!config.managedPayment.authToken?.trim()) {
         throw new DStorageError(
           StorageErrorCode.ARWEAVE_BUNDLER_AUTH_TOKEN_REQUIRED,
           "[dStorage/arweave-bundler] authToken is required when signingServerUrl is provided.",
         );
       }
       this.ownerPublicKey = ArweaveBundlerStorageAdapter._parseToken(
-        config.authToken,
+        config.managedPayment.authToken,
       );
       this.paymentAdapter = new ManagedPaymentAdapter({
-        signingServerUrl: config.signingServerUrl,
-        authToken: config.authToken,
+        managedPayment: config.managedPayment,
         network: this.name as PaymentNetworkName,
         type: "storage",
         ...(config.logger !== undefined ? { logger: config.logger } : {}),

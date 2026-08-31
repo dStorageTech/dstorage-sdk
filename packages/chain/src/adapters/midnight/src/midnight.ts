@@ -22,7 +22,7 @@
  */
 
 import { ManagedPaymentAdapter } from "@dstorage/payment";
-import type { PaymentReceipt } from "@dstorage/payment";
+import type { PaymentReceipt, ManagedPaymentOptions } from "@dstorage/payment";
 import { hexToBytes, DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { ChainErrorCode } from "../../../errors.js";
 import {
@@ -153,16 +153,10 @@ interface BaseConfig {
    */
   network: NetworkId;
   /**
-   * Base URL of the dStorage managed payment signing server (no trailing slash).
-   * When provided, transaction balancing is delegated to the server instead of
-   * the local wallet.
+   * Managed signing server connection options. When provided, transaction
+   * balancing is delegated to the server instead of the local wallet.
    */
-  signingServerUrl?: string;
-  /**
-   * Bearer token sent as the `Authorization` header to authenticate with the signing server.
-   * Required when `signingServerUrl` is provided.
-   */
-  authToken?: string; // validated at construction: required when signingServerUrl is set
+  managedPayment?: ManagedPaymentOptions;
 }
 
 export type MidnightChainAdapterConfig = BaseConfig &
@@ -456,8 +450,8 @@ export class MidnightChainAdapter implements ChainAdapter {
       proofServerMaxRetries: config.proofServerMaxRetries ?? 3,
     };
 
-    if (config.signingServerUrl) {
-      if (!config.authToken?.trim()) {
+    if (config.managedPayment) {
+      if (!config.managedPayment.authToken?.trim()) {
         throw new DStorageError(
           ChainErrorCode.MIDNIGHT_AUTH_TOKEN_REQUIRED,
           "[dStorage/midnight] authToken is required when signingServerUrl is provided.",
@@ -466,8 +460,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       this.managedPaymentAdapter = new ManagedPaymentAdapter({
         network: "midnight",
         type: "chain",
-        signingServerUrl: config.signingServerUrl,
-        authToken: config.authToken,
+        managedPayment: config.managedPayment,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     }

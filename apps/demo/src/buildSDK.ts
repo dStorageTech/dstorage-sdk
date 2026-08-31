@@ -41,8 +41,10 @@ export async function buildSDK(
   const managedConfig =
     paymentKey === "managed"
       ? {
-          signingServerUrl: managedServiceUrl,
-          authToken: managedAuthToken.trim(),
+          managedPayment: {
+            signingServerUrl: managedServiceUrl,
+            authToken: managedAuthToken.trim(),
+          },
           logger: console,
         }
       : { logger: console };

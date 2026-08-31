@@ -61,6 +61,7 @@ import {
 import type {
   PaymentNetworkName,
   SignedArweaveUpload,
+  ManagedPaymentOptions,
 } from "@dstorage/payment";
 import { CONTENT_HASH_TAG, assertContentHash } from "./integrity.js";
 import { DStorageError, assertValidLogger } from "@dstorage/crypto";
@@ -103,18 +104,10 @@ export interface ArweaveAdapterConfig {
   walletKey?: Record<string, string>;
 
   /**
-   * Base URL of a local ManagedPaymentAdapter signing server.
    * When provided, the adapter uses ManagedPaymentAdapter (remote signing)
    * instead of the default ArweavePaymentAdapter (local signing).
-   * Example: "http://localhost:3000"
    */
-  signingServerUrl?: string;
-
-  /**
-   * Bearer token sent as the `Authorization` header to authenticate with the signing server.
-   * Required when `signingServerUrl` is provided.
-   */
-  authToken?: string; // validated at construction: required when signingServerUrl is set
+  managedPayment?: ManagedPaymentOptions;
 
   /**
    * How many times to retry a failed transaction post before throwing.
@@ -227,16 +220,15 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     // When a signing server URL is provided, use the ManagedPaymentAdapter:
     // transactions are sent unsigned to the remote server, which holds a
     // funded Arweave wallet and returns the signature.
-    if (config.signingServerUrl) {
-      if (!config.authToken?.trim()) {
+    if (config.managedPayment) {
+      if (!config.managedPayment.authToken?.trim()) {
         throw new DStorageError(
           StorageErrorCode.ARWEAVE_AUTH_TOKEN_REQUIRED,
           "[dStorage/arweave] authToken is required when signingServerUrl is provided.",
         );
       }
       this.paymentAdapter = new ManagedPaymentAdapter({
-        signingServerUrl: config.signingServerUrl,
-        authToken: config.authToken,
+        managedPayment: config.managedPayment,
         network: this.name as PaymentNetworkName,
         type: "storage",
         gateway: this.gateway,

@@ -61,6 +61,7 @@ export { MockStorageAdapter } from "@dstorage/storage";
 export type { MockStorageAdapterConfig } from "@dstorage/storage";
 export { StorageErrorCode } from "@dstorage/storage";
 export { ArweaveStorageAdapter } from "@dstorage/storage";
+export type { ArweaveAdapterConfig } from "@dstorage/storage";
 export { ArweaveBundlerStorageAdapter } from "@dstorage/storage";
 export type { ArweaveBundlerAdapterConfig } from "@dstorage/storage";
 // ArweaveLocalStorageAdapter: no node:http dependency — uses fetch() throughout.
@@ -90,6 +91,7 @@ export type {
   Token,
   PaymentNetworkName,
   MidnightWalletProvider,
+  ManagedPaymentOptions,
 } from "@dstorage/payment";
 export { MockPaymentAdapter, TOKENS } from "@dstorage/payment";
 export { ArweavePaymentAdapter } from "@dstorage/payment";
@@ -99,3 +101,7 @@ export { ManagedPaymentAdapter } from "@dstorage/payment";
 // MidnightChainAdapter provider/facade mode (uses node:fs) is excluded via the /browser subpath.
 export * from "@dstorage/chain/browser";
 export { ChainErrorCode } from "@dstorage/chain/browser";
+// Explicit re-export: not transitively referenced elsewhere in this file's
+// wildcard graph, so rollup-plugin-dts drops it from the built .d.ts otherwise
+// (see the "Explicit re-exports below" note above for the general pitfall).
+export type { MockChainAdapterConfig } from "@dstorage/chain/browser";
