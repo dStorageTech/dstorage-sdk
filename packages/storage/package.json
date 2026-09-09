@@ -41,10 +41,10 @@
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "arweave": "^1.15.7"
+    "arweave": "^2.1.0"
   },
   "peerDependencies": {
-    "arweave": "^1.15.7",
+    "arweave": "^2.1.0",
     "@dha-team/arbundles": "^1.0.4"
   },
   "peerDependenciesMeta": {

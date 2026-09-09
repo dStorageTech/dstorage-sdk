@@ -25,6 +25,7 @@
     "clean": "find . -type d \\( -name node_modules -o -name dist \\) -prune -exec rm -rf {} +"
   },
   "overrides": {
+    "arweave": "^2.1.0",
     "bn.js": "5.2.5",
     "@midnight-ntwrk/ledger-v8": "8.1.1",
     "@midnight-ntwrk/compact-js": "2.5.1",
@@ -54,16 +55,16 @@
     "@midnight-ntwrk/compact-runtime": "^0.16.0",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.1.1",
     "@midnight-ntwrk/wallet-sdk": "^1.2.0",
-    "@typescript-eslint/eslint-plugin": "^8.68.0",
-    "@typescript-eslint/parser": "^8.68.0",
-    "@vitest/coverage-v8": "^4.1.11",
-    "eslint": "^10.9.1",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
+    "@vitest/coverage-v8": "^5.0.0",
+    "eslint": "^10.10.0",
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "tsup": "^8.5.1",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   },
   "allowScripts": {
     "keccak@3.0.2": true,
