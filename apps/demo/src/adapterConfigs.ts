@@ -3,6 +3,7 @@ import type {
   ChainAdapterKey,
   PaymentAdapterKey,
 } from "./types";
+import type { StorageProviderName } from "@dstorage-tech/dstorage-sdk";
 
 export const PROOF_SERVER_ENDPOINT = "http://127.0.0.1:6300";
 
@@ -31,6 +32,29 @@ export const ADAPTER_CONFIGS: Record<
     description: "Pay-once permanent storage on the permaweb.",
     note: "Requires the ArConnect browser extension",
   },
+  "arweave-bundler": {
+    label: "Arweave (Bundler)",
+    description:
+      "ANS-104 bundled uploads with server-side signing — near-instant finality, no AR tokens needed.",
+    note: "Managed payment only — requires a running dStorage payment service",
+  },
+};
+
+/**
+ * Maps a demo-app storage-adapter selection to the on-chain `storageProvider`
+ * name(s) that adapter actually writes references under. Most keys map 1:1;
+ * "arweave-local" writes under the shared "arweave" provider name (same
+ * network, just pointed at a local arlocal node), and "arweave-bundler" maps
+ * to the adapter's own underscored provider name ("arweave_bundler").
+ */
+export const STORAGE_PROVIDER_NAMES: Record<
+  StorageAdapterKey,
+  StorageProviderName
+> = {
+  mock: "mock",
+  "arweave-local": "arweave",
+  arweave: "arweave",
+  "arweave-bundler": "arweave_bundler",
 };
 
 export const CHAIN_ADAPTER_CONFIGS: Record<

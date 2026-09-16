@@ -3,6 +3,7 @@ import {
   MockStorageAdapter,
   ArweaveStorageAdapter,
   ArweaveLocalStorageAdapter,
+  ArweaveBundlerStorageAdapter,
   MidnightSimulatorChainAdapter,
   MidnightChainAdapter,
 } from "@dstorage-tech/dstorage-sdk";
@@ -38,6 +39,12 @@ export async function buildSDK(
     );
   }
 
+  if (storageKey === "arweave-bundler" && paymentKey !== "managed") {
+    throw new Error(
+      "[dStorage] Arweave (Bundler) storage requires managed payment — local wallet signing is not supported for this adapter.",
+    );
+  }
+
   const managedConfig =
     paymentKey === "managed"
       ? {
@@ -58,11 +65,12 @@ export async function buildSDK(
         await ArweaveLocalStorageAdapter.createWithTestWallet();
       storageAdapter = adapter;
     }
+  } else if (storageKey === "arweave-bundler") {
+    storageAdapter = new ArweaveBundlerStorageAdapter(managedConfig);
+  } else if (storageKey === "arweave") {
+    storageAdapter = new ArweaveStorageAdapter(managedConfig);
   } else {
-    storageAdapter =
-      storageKey === "arweave"
-        ? new ArweaveStorageAdapter(managedConfig)
-        : new MockStorageAdapter();
+    storageAdapter = new MockStorageAdapter();
   }
 
   let chainAdapter;

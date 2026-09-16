@@ -23,7 +23,10 @@ import type {
   PaymentAdapterKey,
   UploadProgress,
 } from "./types";
-import { CHAIN_ADAPTER_CONFIGS } from "./adapterConfigs";
+import {
+  CHAIN_ADAPTER_CONFIGS,
+  STORAGE_PROVIDER_NAMES,
+} from "./adapterConfigs";
 import { buildSDK } from "./buildSDK";
 import {
   buildInitialUploadSteps,
@@ -82,6 +85,12 @@ export default function App() {
   );
   const managedServiceUrl =
     import.meta.env["VITE_MANAGED_SERVICE_URL"] ?? "http://localhost:3000";
+  // In dev, requests are routed through the Vite dev-server proxy (see
+  // vite.config.ts) instead of fetching the managed service directly — the
+  // managed service's CORS policy doesn't allow arbitrary localhost dev
+  // origins. The proxy forwards same-origin requests server-side, so an
+  // empty base URL here resolves relative to the page (same origin).
+  const managedServiceUrlForSdk = import.meta.env.DEV ? "" : managedServiceUrl;
   const [existingReferences, setExistingReferences] = useState<
     DataReferenceSummary[]
   >([]);
@@ -149,7 +158,7 @@ export default function App() {
         paymentAdapterKey,
         {
           managedAuthToken,
-          managedServiceUrl,
+          managedServiceUrl: managedServiceUrlForSdk,
           selectedContractAddress,
           encryptionAdapter,
         },
@@ -171,7 +180,7 @@ export default function App() {
       dstorage,
       keySource,
       mnemonic,
-      managedServiceUrl,
+      managedServiceUrlForSdk,
       managedAuthToken,
       paymentAdapterKey,
       selectedContractAddress,
@@ -193,10 +202,9 @@ export default function App() {
     async (sdk: DStorage): Promise<DataReferenceSummary[]> => {
       try {
         const refs = await sdk.listReferences();
-        const allowedProviders =
-          storageAdapterKey === "arweave-local"
-            ? new Set(["arweave"])
-            : new Set([storageAdapterKey]);
+        const allowedProviders = new Set([
+          STORAGE_PROVIDER_NAMES[storageAdapterKey],
+        ]);
         const filtered = refs.filter((ref) =>
           allowedProviders.has(ref.storageProvider),
         );
@@ -315,6 +323,9 @@ export default function App() {
     if (next === storageAdapterKey) return;
     dstorage?.destroy();
     setStorageAdapterKey(next);
+    if (next === "arweave-bundler" && paymentAdapterKey !== "managed") {
+      setPaymentAdapterKey("managed");
+    }
     setDStorage(null);
     setExistingReferences([]);
   };

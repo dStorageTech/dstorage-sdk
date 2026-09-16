@@ -1,97 +1,119 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import { resolve } from "path";
 
-export default defineConfig({
-  plugins: [
-    react(),
-    wasm(),
-    topLevelAwait({
-      promiseExportName: "__tla",
-      promiseImportName: (i) => `__tla_${i}`,
-    }),
-  ],
-  resolve: {
-    // Prefer browser-specific builds for packages that ship both Node.js and browser versions.
-    mainFields: ["browser", "module", "main"],
-    // @dstorage-tech/dstorage-sdk resolves through the npm workspace like any other
-    // dependency, picking up packages/core's own exports.browser -> dist/browser.mjs
-    // (which already bundles the other @dstorage/* packages inline, using each of
-    // their own correct browser builds). Don't alias straight to source here — that
-    // bypasses each package's own build-time platform swaps (Node vs. browser entry)
-    // and breaks in ways the published package never would.
-    alias: {
-      // Node.js built-ins — polyfill with empty stubs.
-      // More-specific entries MUST come before less-specific ones (first-match wins).
-      "node:fs/promises": resolve(__dirname, "src/polyfills/empty.js"),
-      "node:fs": resolve(__dirname, "src/polyfills/empty.js"),
-      "node:path": resolve(__dirname, "src/polyfills/empty.js"),
-      "fs/promises": resolve(__dirname, "src/polyfills/empty.js"),
-      fs: resolve(__dirname, "src/polyfills/empty.js"),
-      path: resolve(__dirname, "src/polyfills/empty.js"),
-    },
-  },
-  build: {
-    target: "esnext",
-    rolldownOptions: {
-      // Mark Node.js-only packages as external so Rolldown never tries to bundle them.
-      // These packages are only used in /* @vite-ignore */ dynamic imports that
-      // never execute in connector (browser) mode.
-      external: [
-        // Midnight wallet SDK (Node.js / facade mode only)
-        /^@midnight-ntwrk\/wallet-sdk/,
-        /^@midnight-ntwrk\/midnight-js-node-zk-config-provider/,
-        /^@midnight-ntwrk\/midnight-js-level-private-state-provider/,
-        /^ssh2/,
-        "leveldown",
-        "level",
-      ],
-      output: {
-        // Isolate the WASM runtime in its own chunk to avoid top-level await conflicts.
-        manualChunks(id: string) {
-          if (id.includes("@midnight-ntwrk/onchain-runtime-v3")) {
-            return "wasm";
-          }
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const managedServiceUrl =
+    env["VITE_MANAGED_SERVICE_URL"] || "http://localhost:3000";
+
+  return {
+    plugins: [
+      react(),
+      wasm(),
+      topLevelAwait({
+        promiseExportName: "__tla",
+        promiseImportName: (i) => `__tla_${i}`,
+      }),
+    ],
+    server: {
+      proxy: {
+        // Managed payment signing requests are proxied server-side so the browser
+        // sees a same-origin request — the managed service's CORS policy doesn't
+        // allow arbitrary localhost dev origins, and shouldn't need to.
+        "/api/service": {
+          target: managedServiceUrl,
+          changeOrigin: true,
         },
       },
     },
-  },
-  // Inject a minimal process shim so Node.js CJS polyfills bundled transitively
-  // from @subsquid/scale-codec → assert → util don't throw "process is not defined".
-  // The only access that fires at module init time is `process.env.NODE_DEBUG`.
-  define: {
-    global: "globalThis",
-    "process.env": "{}",
-    "process.browser": "true",
-    "process.version": '"v18.0.0"',
-    "process.platform": '"browser"',
-  },
-  optimizeDeps: {
-    // Pre-bundle compact-runtime so esbuild converts its CJS/TLA to ESM.
-    // Also pre-bundle other packages that need CJS→ESM conversion.
-    include: [
-      "@midnight-ntwrk/compact-runtime",
-      "@midnight-ntwrk/midnight-js-contracts",
-      "@midnight-ntwrk/midnight-js-indexer-public-data-provider",
-      "@midnight-ntwrk/midnight-js-fetch-zk-config-provider",
-      "@midnight-ntwrk/midnight-js-http-client-proof-provider",
-      // object-inspect is CJS-only; compact-runtime imports it via default import.
-      "object-inspect",
-      "buffer",
-    ],
-    // Exclude the raw WASM runtime (must be a separate chunk loaded at runtime).
-    // Also exclude Node.js-only Midnight packages so esbuild doesn't choke on them.
-    exclude: [
-      "@midnight-ntwrk/onchain-runtime-v3",
-      "@midnight-ntwrk/midnight-js-node-zk-config-provider",
-      "@midnight-ntwrk/midnight-js-level-private-state-provider",
-      "@midnight-ntwrk/wallet-sdk-facade",
-      "@midnight-ntwrk/wallet-sdk-shielded",
-      "@midnight-ntwrk/wallet-sdk-unshielded-wallet",
-      "@midnight-ntwrk/wallet-sdk-abstractions",
-      "@midnight-ntwrk/wallet-sdk-dust-wallet",
-    ],
-  },
+    resolve: {
+      // Prefer browser-specific builds for packages that ship both Node.js and browser versions.
+      mainFields: ["browser", "module", "main"],
+      // @dstorage-tech/dstorage-sdk resolves through the npm workspace like any other
+      // dependency, picking up packages/core's own exports.browser -> dist/browser.mjs
+      // (which already bundles the other @dstorage/* packages inline, using each of
+      // their own correct browser builds). Don't alias straight to source here — that
+      // bypasses each package's own build-time platform swaps (Node vs. browser entry)
+      // and breaks in ways the published package never would.
+      alias: {
+        // Node.js built-ins — polyfill with empty stubs.
+        // More-specific entries MUST come before less-specific ones (first-match wins).
+        "node:fs/promises": resolve(__dirname, "src/polyfills/empty.js"),
+        "node:fs": resolve(__dirname, "src/polyfills/empty.js"),
+        "node:path": resolve(__dirname, "src/polyfills/empty.js"),
+        "fs/promises": resolve(__dirname, "src/polyfills/empty.js"),
+        fs: resolve(__dirname, "src/polyfills/empty.js"),
+        path: resolve(__dirname, "src/polyfills/empty.js"),
+        // node:crypto — @dha-team/arbundles' browser build still imports this
+        // (createHash only) for ANS-104 signing digests. Not a no-op stub —
+        // see src/polyfills/crypto.js for why.
+        "node:crypto": resolve(__dirname, "src/polyfills/crypto.js"),
+        crypto: resolve(__dirname, "src/polyfills/crypto.js"),
+      },
+    },
+    build: {
+      target: "esnext",
+      rolldownOptions: {
+        // Mark Node.js-only packages as external so Rolldown never tries to bundle them.
+        // These packages are only used in /* @vite-ignore */ dynamic imports that
+        // never execute in connector (browser) mode.
+        external: [
+          // Midnight wallet SDK (Node.js / facade mode only)
+          /^@midnight-ntwrk\/wallet-sdk/,
+          /^@midnight-ntwrk\/midnight-js-node-zk-config-provider/,
+          /^@midnight-ntwrk\/midnight-js-level-private-state-provider/,
+          /^ssh2/,
+          "leveldown",
+          "level",
+        ],
+        output: {
+          // Isolate the WASM runtime in its own chunk to avoid top-level await conflicts.
+          manualChunks(id: string) {
+            if (id.includes("@midnight-ntwrk/onchain-runtime-v3")) {
+              return "wasm";
+            }
+          },
+        },
+      },
+    },
+    // Inject a minimal process shim so Node.js CJS polyfills bundled transitively
+    // from @subsquid/scale-codec → assert → util don't throw "process is not defined".
+    // The only access that fires at module init time is `process.env.NODE_DEBUG`.
+    define: {
+      global: "globalThis",
+      "process.env": "{}",
+      "process.browser": "true",
+      "process.version": '"v18.0.0"',
+      "process.platform": '"browser"',
+    },
+    optimizeDeps: {
+      // Pre-bundle compact-runtime so esbuild converts its CJS/TLA to ESM.
+      // Also pre-bundle other packages that need CJS→ESM conversion.
+      include: [
+        "@midnight-ntwrk/compact-runtime",
+        "@midnight-ntwrk/midnight-js-contracts",
+        "@midnight-ntwrk/midnight-js-indexer-public-data-provider",
+        "@midnight-ntwrk/midnight-js-fetch-zk-config-provider",
+        "@midnight-ntwrk/midnight-js-http-client-proof-provider",
+        // object-inspect is CJS-only; compact-runtime imports it via default import.
+        "object-inspect",
+        "buffer",
+      ],
+      // Exclude the raw WASM runtime (must be a separate chunk loaded at runtime).
+      // Also exclude Node.js-only Midnight packages so esbuild doesn't choke on them.
+      exclude: [
+        "@midnight-ntwrk/onchain-runtime-v3",
+        "@midnight-ntwrk/midnight-js-node-zk-config-provider",
+        "@midnight-ntwrk/midnight-js-level-private-state-provider",
+        "@midnight-ntwrk/wallet-sdk-facade",
+        "@midnight-ntwrk/wallet-sdk-shielded",
+        "@midnight-ntwrk/wallet-sdk-unshielded-wallet",
+        "@midnight-ntwrk/wallet-sdk-abstractions",
+        "@midnight-ntwrk/wallet-sdk-dust-wallet",
+      ],
+    },
+  };
 });

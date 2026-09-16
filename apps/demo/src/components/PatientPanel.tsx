@@ -251,19 +251,30 @@ export function PatientPanel({
                 PaymentAdapterKey,
                 (typeof PAYMENT_ADAPTER_CONFIGS)[PaymentAdapterKey],
               ][]
-            ).map(([key, cfg]) => (
-              <button
-                key={key}
-                className={`as-card ${paymentAdapterKey === key ? "selected" : ""}`}
-                onClick={() => onPaymentAdapterChange(key)}
-              >
-                <div className="as-card-top">
-                  <span className="as-card-name">{cfg.label}</span>
-                </div>
-                <div className="as-card-desc">{cfg.description}</div>
-                {cfg.note && <div className="as-card-note">{cfg.note}</div>}
-              </button>
-            ))}
+            ).map(([key, cfg]) => {
+              const disabled =
+                key === "local" && storageAdapterKey === "arweave-bundler";
+              return (
+                <button
+                  key={key}
+                  className={`as-card ${paymentAdapterKey === key ? "selected" : ""}`}
+                  onClick={() => onPaymentAdapterChange(key)}
+                  disabled={disabled}
+                >
+                  <div className="as-card-top">
+                    <span className="as-card-name">{cfg.label}</span>
+                  </div>
+                  <div className="as-card-desc">{cfg.description}</div>
+                  {cfg.note && <div className="as-card-note">{cfg.note}</div>}
+                  {disabled && (
+                    <div className="as-card-note">
+                      Not supported for Arweave (Bundler) — server-side signing
+                      only.
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
           {paymentAdapterKey === "local" &&
             (storageAdapterKey === "arweave" ||
