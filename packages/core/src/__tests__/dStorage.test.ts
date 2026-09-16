@@ -845,6 +845,40 @@ describe("store tags option", () => {
   });
 });
 
+describe("dStorage-Version tag", () => {
+  it("store() tags the upload with dStorage-Version", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const storeSpy = vi.spyOn(storage, "store");
+    await ds.store(enc("versioned content"));
+
+    expect(storeSpy).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.objectContaining({ "dStorage-Version": expect.any(String) }),
+    );
+  });
+
+  it("update() tags the upload with dStorage-Version", async () => {
+    const config = makeConfig();
+    const storage = config.storageAdapter as MockStorageAdapter;
+    const ds = new DStorage(config);
+    await ds.init();
+
+    const { chainRefId: refId } = await ds.store(enc("v1 content"));
+
+    const storeSpy = vi.spyOn(storage, "store");
+    await ds.update(refId!, enc("v2 content"));
+
+    expect(storeSpy).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.objectContaining({ "dStorage-Version": expect.any(String) }),
+    );
+  });
+});
+
 // ── removeReference ───────────────────────────────────────────────────────────
 
 describe("removeReference", () => {

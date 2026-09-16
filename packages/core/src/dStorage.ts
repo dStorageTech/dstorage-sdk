@@ -257,7 +257,7 @@ export class DStorage {
       }
 
       // 2. Upload first so we have the storageId for ownerSecret derivation (if needed).
-      const sdkVersion = corePackageJson.version ?? "unknown";
+      const sdkVersion = corePackageJson.version;
       const storageResult = await this.config.storageAdapter.store(uploadData, {
         ...tags,
         [TAG_SDK_VERSION]: sdkVersion,
@@ -568,10 +568,12 @@ export class DStorage {
       try {
         const scheme = XChaChaScheme.fromKey(dek);
         const uploadData = await scheme.encryptPayload(bytes, PAYLOAD_AAD);
+        const sdkVersion = corePackageJson.version;
         const storageResult = await this.config.storageAdapter.store(
           uploadData,
           {
             ...tags,
+            [TAG_SDK_VERSION]: sdkVersion,
             [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
           },
         );
@@ -1392,7 +1394,7 @@ export class DStorage {
     }
 
     const totalChunks = Math.ceil(bytes.length / CHUNK_SIZE);
-    const sdkVersion = corePackageJson.version ?? "unknown";
+    const sdkVersion = corePackageJson.version;
     const encryptionScheme = isPublic
       ? ("" as const)
       : ("xchacha20poly1305-v1" as const);

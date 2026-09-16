@@ -202,6 +202,23 @@ describe("store large file (> CHUNK_SIZE)", () => {
     expect(storeSpy).toHaveBeenCalledTimes(chunkCount + 1);
   });
 
+  it("every chunk and the manifest are tagged with dStorage-Version", async () => {
+    const config = makeConfig();
+    const storageAdapter = config.storageAdapter as MockStorageAdapter;
+    const storeSpy = vi.spyOn(storageAdapter, "store");
+
+    const ds = await makeInitedDStorage(config);
+    const bytes = makeBytes(CHUNK_SIZE * 2); // 2 chunks + 1 manifest
+    await ds.store(bytes);
+
+    expect(storeSpy.mock.calls.length).toBeGreaterThan(1);
+    for (const call of storeSpy.mock.calls) {
+      expect(call[1]).toEqual(
+        expect.objectContaining({ "dStorage-Version": expect.any(String) }),
+      );
+    }
+  });
+
   it("round-trip: retrieve reassembles original bytes (2 chunks)", async () => {
     const ds = await makeInitedDStorage();
     const bytes = makeBytes(CHUNK_SIZE + 100);
