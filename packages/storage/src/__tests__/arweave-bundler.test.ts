@@ -165,19 +165,25 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
       .join("");
   }
 
-  function toB64Url(str: string): string {
-    return Buffer.from(str, "utf-8").toString("base64url");
-  }
-
   function metaResponse(
     tags: Record<string, string>,
     opts: { contentLength?: string | null } = {},
   ) {
     const text = JSON.stringify({
-      tags: Object.entries(tags).map(([name, value]) => ({
-        name: toB64Url(name),
-        value: toB64Url(value),
-      })),
+      data: {
+        transactions: {
+          edges: [
+            {
+              node: {
+                tags: Object.entries(tags).map(([name, value]) => ({
+                  name,
+                  value,
+                })),
+              },
+            },
+          ],
+        },
+      },
     });
     return {
       ok: true,
@@ -311,10 +317,20 @@ describe("ArweaveBundlerStorageAdapter — content integrity (expectedContentHas
     opts: { chunkSize?: number; contentLength?: string | null } = {},
   ) {
     const text = JSON.stringify({
-      tags: Object.entries(tags).map(([name, value]) => ({
-        name: toB64Url(name),
-        value: toB64Url(value),
-      })),
+      data: {
+        transactions: {
+          edges: [
+            {
+              node: {
+                tags: Object.entries(tags).map(([name, value]) => ({
+                  name,
+                  value,
+                })),
+              },
+            },
+          ],
+        },
+      },
     });
     const bytes = new TextEncoder().encode(text);
     const chunkSize = opts.chunkSize ?? 16;

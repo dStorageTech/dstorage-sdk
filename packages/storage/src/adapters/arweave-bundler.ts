@@ -328,13 +328,18 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
         `[dStorage/arweave-bundler] Invalid transaction ID — expected 43 base64url characters: "${id.slice(0, 60)}${id.length > 60 ? "…" : ""}"`,
       );
     }
-    // ── Pre-fetch transaction metadata ────────────────────────────────────────
+    // ── Pre-fetch transaction metadata via GraphQL ────────────────────────────
     let storedHash: string | undefined;
     const tags: Record<string, string> = {};
     if (!this.skipIntegrityCheck) {
+      const gqlQuery = `{ transactions(ids: ["${id}"]) { edges { node { tags { name value } } } } }`;
       const metaResp = await fetch(
-        `${this.gateway}/tx/${id}`,
-        this._withTimeout(),
+        `${this.gateway}/graphql`,
+        this._withTimeout({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: gqlQuery }),
+        }),
       );
       if (!metaResp.ok) {
         throw new DStorageError(
@@ -349,14 +354,27 @@ export class ArweaveBundlerStorageAdapter implements StorageAdapter {
         code: StorageErrorCode.ARWEAVE_BUNDLER_METADATA_TOO_LARGE,
         component: `[dStorage/arweave-bundler] retrieve(${id}) metadata`,
       });
-      const tx = JSON.parse(metaText) as {
-        tags?: Array<{ name: string; value: string }>;
+      const gql = JSON.parse(metaText) as {
+        data?: {
+          transactions?: {
+            edges?: Array<{
+              node?: { tags?: Array<{ name: string; value: string }> };
+            }>;
+          };
+        };
       };
-      for (const tag of tx.tags ?? []) {
-        const name = new TextDecoder().decode(_base64urlToBytes(tag.name));
-        const value = new TextDecoder().decode(_base64urlToBytes(tag.value));
-        tags[name] = value;
-        if (name === CONTENT_HASH_TAG) storedHash = value;
+      const edges = gql.data?.transactions?.edges ?? [];
+      if (edges.length === 0) {
+        throw new DStorageError(
+          StorageErrorCode.ARWEAVE_BUNDLER_TX_METADATA_FAILED,
+          `[dStorage/arweave-bundler] Could not fetch transaction metadata for txId: ${id} — ` +
+            "content hash cannot be verified. " +
+            "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
+        );
+      }
+      for (const tag of edges[0]?.node?.tags ?? []) {
+        tags[tag.name] = tag.value;
+        if (tag.name === CONTENT_HASH_TAG) storedHash = tag.value;
       }
       if (!options?.expectedContentHash && !storedHash) {
         throw new DStorageError(
