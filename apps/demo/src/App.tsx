@@ -80,7 +80,8 @@ export default function App() {
   const [managedAuthToken, setManagedAuthToken] = useState(
     import.meta.env["VITE_DSTORAGE_AUTH_TOKEN"] ?? "",
   );
-  const managedServiceUrl = "http://localhost:3000";
+  const managedServiceUrl =
+    import.meta.env["VITE_MANAGED_SERVICE_URL"] ?? "http://localhost:3000";
   const [existingReferences, setExistingReferences] = useState<
     DataReferenceSummary[]
   >([]);
