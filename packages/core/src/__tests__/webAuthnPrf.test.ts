@@ -74,8 +74,8 @@ const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 
 function sharedAdapters() {
   return {
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MidnightSimulatorChainAdapter(),
+    storageAdapters: [new MockStorageAdapter()],
+    chainAdapters: [new MidnightSimulatorChainAdapter()],
   };
 }
 
@@ -146,7 +146,7 @@ describe("WebAuthnPrfEncryptionAdapter — DStorage store/retrieve round trip", 
     });
     await ownerSdk.init();
     const { chainRefId: selfRefId } = await ownerSdk.store(enc("self"));
-    const selfRef = await adapters.chainAdapter.readReference(selfRefId);
+    const selfRef = await adapters.chainAdapters[0]!.readReference(selfRefId);
     const selfEnvelope = JSON.parse(selfRef.keyEnvelope);
     expect(selfEnvelope.wrappers).toHaveLength(1);
     expect(selfEnvelope.wrappers[0].wrapKeyName).toBe("webauthn-prf");
@@ -162,7 +162,8 @@ describe("WebAuthnPrfEncryptionAdapter — DStorage store/retrieve round trip", 
     });
     await uploaderSdk.init();
     const { chainRefId: sharedRefId } = await uploaderSdk.store(enc("shared"));
-    const sharedRef = await adapters.chainAdapter.readReference(sharedRefId);
+    const sharedRef =
+      await adapters.chainAdapters[0]!.readReference(sharedRefId);
     const sharedEnvelope = JSON.parse(sharedRef.keyEnvelope);
     expect(sharedEnvelope.wrappers).toHaveLength(1);
     expect(sharedEnvelope.wrappers[0].wrapKeyName).toBe("webauthn-prf");

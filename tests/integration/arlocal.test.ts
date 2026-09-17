@@ -33,8 +33,8 @@ describe.skipIf(!arlocalOk)("arlocal only (mock chain)", () => {
     const { adapter } = await createStorageAdapter(env.arlocalUrl);
     mockChain = new MidnightSimulatorChainAdapter({ logger: console });
     sdk = new DStorage({
-      storageAdapter: adapter,
-      chainAdapter: mockChain,
+      storageAdapters: [adapter],
+      chainAdapters: [mockChain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-integration-test-v1!",

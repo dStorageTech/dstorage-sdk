@@ -42,8 +42,8 @@ const mnemonicProvider = () =>
 
 function sharedAdapters() {
   return {
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MidnightSimulatorChainAdapter(),
+    storageAdapters: [new MockStorageAdapter()],
+    chainAdapters: [new MidnightSimulatorChainAdapter()],
   };
 }
 
@@ -92,7 +92,7 @@ describe("multi-key wrapping — upload with two providers", () => {
 
     const { chainRefId } = await uploader.store(enc("envelope check"));
 
-    const ref = await adapters.chainAdapter.readReference(chainRefId);
+    const ref = await adapters.chainAdapters[0]!.readReference(chainRefId);
     expect(ref).not.toBeNull();
     const envelope = JSON.parse(ref!.keyEnvelope!);
     expect(envelope.v).toBe(1);
@@ -212,8 +212,8 @@ describe("multi-key wrapping — upload with two providers", () => {
     const { chainRefId: ref1 } = await uploader.store(enc("upload one"));
     const { chainRefId: ref2 } = await uploader.store(enc("upload two"));
 
-    const r1 = await adapters.chainAdapter.readReference(ref1);
-    const r2 = await adapters.chainAdapter.readReference(ref2);
+    const r1 = await adapters.chainAdapters[0]!.readReference(ref1);
+    const r2 = await adapters.chainAdapters[0]!.readReference(ref2);
 
     // Each upload has its own key envelope — the wrapped DEKs differ.
     expect(r1!.keyEnvelope).not.toBe(r2!.keyEnvelope);
@@ -234,7 +234,7 @@ describe("public upload — ownerSeed envelope", () => {
     const { chainRefId } = await sdk.store(enc("public content"), {
       isPublic: true,
     });
-    const ref = await adapters.chainAdapter.readReference(chainRefId);
+    const ref = await adapters.chainAdapters[0]!.readReference(chainRefId);
 
     expect(ref.keyEnvelope).toBeTruthy();
     const envelope = JSON.parse(ref.keyEnvelope);
@@ -255,7 +255,7 @@ describe("public upload — ownerSeed envelope", () => {
     const { chainRefId } = await sdk.store(enc("multi-kek public"), {
       isPublic: true,
     });
-    const ref = await adapters.chainAdapter.readReference(chainRefId);
+    const ref = await adapters.chainAdapters[0]!.readReference(chainRefId);
 
     const envelope = JSON.parse(ref.keyEnvelope);
     expect(envelope.wrappers).toHaveLength(2);
@@ -278,8 +278,8 @@ describe("public upload — ownerSeed envelope", () => {
       isPublic: true,
     });
 
-    const r1 = await adapters.chainAdapter.readReference(ref1);
-    const r2 = await adapters.chainAdapter.readReference(ref2);
+    const r1 = await adapters.chainAdapters[0]!.readReference(ref1);
+    const r2 = await adapters.chainAdapters[0]!.readReference(ref2);
     expect(r1.keyEnvelope).not.toBe(r2.keyEnvelope);
   });
 
@@ -343,7 +343,7 @@ describe("update — adding an encryption adapter", () => {
     await storeSdk.init();
     const { chainRefId } = await storeSdk.store(enc("v1 content"));
 
-    const v1Ref = await adapters.chainAdapter.readReference(chainRefId);
+    const v1Ref = await adapters.chainAdapters[0]!.readReference(chainRefId);
     const v1Envelope = JSON.parse(v1Ref!.keyEnvelope!);
     expect(v1Envelope.wrappers).toHaveLength(1);
     expect(v1Envelope.wrappers[0].wrapKeyName).toBe("password");
@@ -357,7 +357,7 @@ describe("update — adding an encryption adapter", () => {
 
     expect(result.chainRefId).toBe(chainRefId);
 
-    const v2Ref = await adapters.chainAdapter.readReference(chainRefId);
+    const v2Ref = await adapters.chainAdapters[0]!.readReference(chainRefId);
     const v2Envelope = JSON.parse(v2Ref!.keyEnvelope!);
     expect(v2Envelope.wrappers).toHaveLength(2);
     expect(v2Envelope.wrappers[0].wrapKeyName).toBe("password");
@@ -579,7 +579,7 @@ describe("rotateKeys — password rotation via mnemonic recovery", () => {
     await rotateKeysSdk.init();
     await rotateKeysSdk.rotateKeys(chainRefId);
 
-    const ref = await adapters.chainAdapter.readReference(chainRefId);
+    const ref = await adapters.chainAdapters[0]!.readReference(chainRefId);
     const envelope = JSON.parse(ref!.keyEnvelope!);
     expect(envelope.wrappers).toHaveLength(2);
     expect(envelope.wrappers[0].wrapKeyName).toBe("password");
@@ -604,7 +604,7 @@ describe("rotateKeys — password rotation via mnemonic recovery", () => {
 
   it("throws ROTATE_KEYS_REQUIRES_CHAIN when no chain adapter is configured", async () => {
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
       encryptionAdapters: [passwordProvider()],
     });
     await ds.init();
@@ -615,8 +615,8 @@ describe("rotateKeys — password rotation via mnemonic recovery", () => {
 
   it("throws ROTATE_KEYS_REQUIRES_ENCRYPTION when no encryption adapters are configured", async () => {
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
     });
     await ds.init();
     await expect(ds.rotateKeys("refId")).rejects.toMatchObject({

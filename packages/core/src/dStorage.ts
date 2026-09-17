@@ -33,16 +33,18 @@ import {
   base64urlToBytes,
 } from "@dstorage/crypto";
 import { CoreErrorCode, StorePartialError } from "./errors.js";
+import type { AdapterFailure } from "./errors.js";
 
 import type { CryptoScheme, KeyEnvelope } from "@dstorage/crypto";
 import type { StorageAdapter } from "@dstorage/storage";
-import type { ChainAdapter } from "@dstorage/chain";
+import type { ChainAdapter, ChainReference } from "@dstorage/chain";
 import corePackageJson from "../package.json";
 
 import type {
   CostEstimate,
   DStorageConfig,
   Logger,
+  ListedDataReference,
   ListReferencesOptions,
   RegisterReferenceOptions,
   RegisterReferenceResult,
@@ -62,7 +64,7 @@ import {
   METADATA_ONLY_OWNER_SECRET_SALT,
   chunkAad,
 } from "./types.js";
-import type { DataReferenceSummary, EncryptionScheme } from "@dstorage/chain";
+import type { EncryptionScheme } from "@dstorage/chain";
 import { CHUNK_SIZE, ChunkManifest, isManifest } from "./chunked.js";
 
 // Storage transaction tag keys and values attached to every upload.
@@ -101,6 +103,12 @@ export class DStorage {
   private readonly logger: Logger | undefined;
 
   constructor(config: DStorageConfig) {
+    if (!config.storageAdapters || config.storageAdapters.length === 0) {
+      throw new DStorageError(
+        CoreErrorCode.CONFIG_STORAGE_ADAPTERS_EMPTY,
+        "[dStorage] DStorageConfig.storageAdapters must contain at least one storage adapter.",
+      );
+    }
     this.config = config;
     assertValidLogger(config.logger, "DStorage");
     this.logger = config.logger;
@@ -108,12 +116,14 @@ export class DStorage {
 
   // ── Public accessors ─────────────────────────────────────────────────────
 
-  get storageAdapter(): StorageAdapter {
-    return this.config.storageAdapter;
+  /** Configured storage adapters, in fallback order. */
+  get storageAdapters(): readonly StorageAdapter[] {
+    return [...this.config.storageAdapters];
   }
 
-  get chainAdapter(): ChainAdapter | undefined {
-    return this.config.chainAdapter;
+  /** Configured chain adapters, in fallback order. Empty in storage-only mode. */
+  get chainAdapters(): readonly ChainAdapter[] {
+    return [...(this.config.chainAdapters ?? [])];
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -122,23 +132,43 @@ export class DStorage {
    * Initialize the SDK:
    *   1. Initialize the chain adapter wallet (if supported), and
    *      deploy a new DataRegistry contract, or connect to an existing one.
+   *      Tries each configured chain adapter in order, stopping at the first
+   *      one that initializes successfully — the rest are never attempted.
    *   2. Derive an encryption key from the chain adapter's credentials (if supported).
    *
-   * Returns the address of the DataRegistry contract in use.
+   * Returns the address of the DataRegistry contract in use (from whichever
+   * chain adapter succeeded), or undefined in storage-only mode.
    * Call this instead of connect() when using MidnightChainAdapter directly.
    */
   async init() {
     try {
-      // 1. Initialize chain adapter wallet (syncs wallet, etc.)
-      if (this.config.chainAdapter?.init) {
-        await this.config.chainAdapter.init();
+      const chainAdapters = this.config.chainAdapters ?? [];
+      let contractAddress: string | undefined;
+
+      if (chainAdapters.length > 0) {
+        const { result } = await this._tryEachAdapter(
+          chainAdapters,
+          async (adapter) => {
+            if (adapter.init) {
+              await adapter.init();
+            }
+            return adapter.getContractAddress();
+          },
+          (failures) =>
+            new DStorageError(
+              CoreErrorCode.INIT_CHAIN_ALL_FAILED,
+              `[dStorage] All ${chainAdapters.length} configured chain adapters failed to initialize.`,
+              { cause: failures },
+            ),
+        );
+        contractAddress = result;
       }
 
-      // 2. Store encryption adapters — they wrap/unwrap DEKs on demand.
+      // Store encryption adapters — they wrap/unwrap DEKs on demand.
       this._encryptionProviders = this.config.encryptionAdapters ?? [];
 
       this._initialized = true;
-      return this.config.chainAdapter?.getContractAddress();
+      return contractAddress;
     } catch (err) {
       wrapError(err);
     }
@@ -258,16 +288,28 @@ export class DStorage {
 
       // 2. Upload first so we have the storageId for ownerSecret derivation (if needed).
       const sdkVersion = corePackageJson.version;
-      const storageResult = await this.config.storageAdapter.store(uploadData, {
-        ...tags,
-        [TAG_SDK_VERSION]: sdkVersion,
-        [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
-      });
+      const { result: storageResult } = await this._tryEachAdapter(
+        this.config.storageAdapters,
+        (adapter) =>
+          adapter.store(uploadData, {
+            ...tags,
+            [TAG_SDK_VERSION]: sdkVersion,
+            [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
+          }),
+        (failures) =>
+          new DStorageError(
+            CoreErrorCode.STORAGE_WRITE_ALL_FAILED,
+            `[dStorage] All ${this.config.storageAdapters.length} configured storage adapters failed to store the content.`,
+            { cause: failures },
+          ),
+      );
+
+      const chainAdapters = this.config.chainAdapters ?? [];
 
       if (isPublic) {
         // 3a. Public: no content DEK needed. Key envelope and ownerSecret are only
         // needed for on-chain reference management — skip in storage-only mode.
-        if (this.config.chainAdapter) {
+        if (chainAdapters.length > 0) {
           if (this._encryptionProviders.length === 0) {
             throw new DStorageError(
               CoreErrorCode.PUBLIC_UPLOAD_REQUIRES_SEED_PROVIDER,
@@ -320,8 +362,8 @@ export class DStorage {
       };
 
       // 4. Write on-chain reference — only the storage pointer, never the data.
-      //    Skipped in storage-only mode (no chain adapter).
-      if (this.config.chainAdapter) {
+      //    Skipped in storage-only mode (no chain adapters configured).
+      if (chainAdapters.length > 0) {
         const contentHash = await computeBlake3Hex(uploadData);
 
         // Emit "stored" before the chain write so callers can persist recovery
@@ -350,17 +392,29 @@ export class DStorage {
             )
           : undefined;
         try {
-          const chainResult = await this.config.chainAdapter.writeReference({
-            storageId: onChainStorageId,
-            encryptionScheme,
-            storageProvider: storageResult.provider,
-            ...(refId !== undefined ? { refId } : {}),
-            ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-            writtenAt: Date.now(),
-            keyEnvelope,
-            contentHash,
-            ownerSecret,
-          });
+          const { result: chainResult } = await this._tryEachAdapter(
+            chainAdapters,
+            (adapter) =>
+              adapter.writeReference({
+                storageId: onChainStorageId,
+                encryptionScheme,
+                storageProvider: storageResult.provider,
+                ...(refId !== undefined ? { refId } : {}),
+                ...(encryptedMetadata !== undefined
+                  ? { encryptedMetadata }
+                  : {}),
+                writtenAt: Date.now(),
+                keyEnvelope,
+                contentHash,
+                ownerSecret,
+              }),
+            (failures) =>
+              new DStorageError(
+                CoreErrorCode.CHAIN_WRITE_ALL_FAILED,
+                `[dStorage] All ${chainAdapters.length} configured chain adapters failed to write the reference.`,
+                { cause: failures },
+              ),
+          );
 
           const resultRefId = chainResult.refId;
           this.logger?.log(
@@ -432,7 +486,8 @@ export class DStorage {
   ): Promise<RegisterReferenceResult> {
     try {
       this.assertConnected();
-      if (!this.config.chainAdapter) {
+      const chainAdapters = this.config.chainAdapters ?? [];
+      if (chainAdapters.length === 0) {
         throw new DStorageError(
           CoreErrorCode.REGISTER_REF_REQUIRES_CHAIN,
           "[dStorage] registerReference requires a chain adapter.",
@@ -493,22 +548,32 @@ export class DStorage {
             ? new TextEncoder().encode(options.storageId)
             : METADATA_ONLY_OWNER_SECRET_SALT,
         );
-        const chainResult = await this.config.chainAdapter.writeReference({
-          ...(onChainStorageId !== undefined
-            ? { storageId: onChainStorageId }
-            : {}),
-          encryptionScheme: "xchacha20poly1305-v1",
-          storageProvider:
-            options.storageProvider ?? this.config.storageAdapter.name,
-          ...(options.refId !== undefined ? { refId: options.refId } : {}),
-          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-          writtenAt: Date.now(),
-          keyEnvelope,
-          ...(options.contentHash !== undefined
-            ? { contentHash: options.contentHash }
-            : {}),
-          ownerSecret,
-        });
+        const { result: chainResult } = await this._tryEachAdapter(
+          chainAdapters,
+          (adapter) =>
+            adapter.writeReference({
+              ...(onChainStorageId !== undefined
+                ? { storageId: onChainStorageId }
+                : {}),
+              encryptionScheme: "xchacha20poly1305-v1",
+              storageProvider:
+                options.storageProvider ?? this.config.storageAdapters[0]!.name,
+              ...(options.refId !== undefined ? { refId: options.refId } : {}),
+              ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+              writtenAt: Date.now(),
+              keyEnvelope,
+              ...(options.contentHash !== undefined
+                ? { contentHash: options.contentHash }
+                : {}),
+              ownerSecret,
+            }),
+          (failures) =>
+            new DStorageError(
+              CoreErrorCode.CHAIN_WRITE_ALL_FAILED,
+              `[dStorage] All ${chainAdapters.length} configured chain adapters failed to write the reference.`,
+              { cause: failures },
+            ),
+        );
         return { chainRefId: chainResult.refId };
       } finally {
         dek.fill(0);
@@ -540,13 +605,14 @@ export class DStorage {
   ): Promise<UpdateResult> {
     try {
       this.assertConnected();
-      if (!this.config.chainAdapter) {
+      const chainAdapters = this.config.chainAdapters ?? [];
+      if (chainAdapters.length === 0) {
         throw new DStorageError(
           CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
           "[dStorage] update requires a chain adapter.",
         );
       }
-      if (typeof this.config.chainAdapter.updateReference !== "function") {
+      if (!chainAdapters.some((a) => typeof a.updateReference === "function")) {
         throw new DStorageError(
           CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
           "[dStorage] update is not supported by this chain adapter.",
@@ -561,21 +627,36 @@ export class DStorage {
 
       const { tags = {}, metadata: rawMeta } = options ?? {};
 
-      // Re-derive ownerSecret from the existing reference (proves ownership).
-      const ownerSecret = await this._computeOwnerSecret(refId);
+      // Re-derive ownerSecret from the existing reference (proves ownership),
+      // and identify which configured chain adapter actually holds it.
+      const { ownerSecret, adapter: targetChainAdapter } =
+        await this._computeOwnerSecret(refId);
+      if (typeof targetChainAdapter.updateReference !== "function") {
+        throw new DStorageError(
+          CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
+          `[dStorage] update is not supported by the "${targetChainAdapter.name}" chain adapter holding reference "${refId}".`,
+        );
+      }
 
       const dek = generateDek();
       try {
         const scheme = XChaChaScheme.fromKey(dek);
         const uploadData = await scheme.encryptPayload(bytes, PAYLOAD_AAD);
         const sdkVersion = corePackageJson.version;
-        const storageResult = await this.config.storageAdapter.store(
-          uploadData,
-          {
-            ...tags,
-            [TAG_SDK_VERSION]: sdkVersion,
-            [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
-          },
+        const { result: storageResult } = await this._tryEachAdapter(
+          this.config.storageAdapters,
+          (adapter) =>
+            adapter.store(uploadData, {
+              ...tags,
+              [TAG_SDK_VERSION]: sdkVersion,
+              [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
+            }),
+          (failures) =>
+            new DStorageError(
+              CoreErrorCode.STORAGE_WRITE_ALL_FAILED,
+              `[dStorage] All ${this.config.storageAdapters.length} configured storage adapters failed to store the content.`,
+              { cause: failures },
+            ),
         );
         const onChainStorageId = await scheme.encryptStorageId(
           storageResult.id,
@@ -617,7 +698,7 @@ export class DStorage {
         });
 
         try {
-          await this.config.chainAdapter.updateReference(
+          await targetChainAdapter.updateReference!(
             refId,
             {
               storageId: onChainStorageId,
@@ -660,13 +741,14 @@ export class DStorage {
   ): Promise<UpdateResult> {
     try {
       this.assertConnected();
-      if (!this.config.chainAdapter) {
+      const chainAdapters = this.config.chainAdapters ?? [];
+      if (chainAdapters.length === 0) {
         throw new DStorageError(
           CoreErrorCode.UPDATE_UPLOAD_REQUIRES_CHAIN,
           "[dStorage] retryUpdate requires a chain adapter.",
         );
       }
-      if (typeof this.config.chainAdapter.updateReference !== "function") {
+      if (!chainAdapters.some((a) => typeof a.updateReference === "function")) {
         throw new DStorageError(
           CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
           "[dStorage] retryUpdate is not supported by this chain adapter.",
@@ -689,8 +771,16 @@ export class DStorage {
       try {
         const scheme = XChaChaScheme.fromKey(dek);
         // The failed update() left the chain ref with OLD data, so _computeOwnerSecret
-        // reads the old key envelope and derives the old ownerSecret correctly.
-        const ownerSecret = await this._computeOwnerSecret(refId);
+        // reads the old key envelope and derives the old ownerSecret correctly,
+        // and identifies which configured chain adapter holds this reference.
+        const { ownerSecret, adapter: targetChainAdapter } =
+          await this._computeOwnerSecret(refId);
+        if (typeof targetChainAdapter.updateReference !== "function") {
+          throw new DStorageError(
+            CoreErrorCode.UPDATE_UPLOAD_NOT_SUPPORTED,
+            `[dStorage] retryUpdate is not supported by the "${targetChainAdapter.name}" chain adapter holding reference "${refId}".`,
+          );
+        }
         const onChainStorageId = await scheme.encryptStorageId(
           recovery.storageId,
         );
@@ -698,7 +788,7 @@ export class DStorage {
           dek,
           new TextEncoder().encode(recovery.storageId),
         );
-        await this.config.chainAdapter.updateReference(
+        await targetChainAdapter.updateReference(
           refId,
           {
             storageId: onChainStorageId,
@@ -740,13 +830,14 @@ export class DStorage {
   async rotateKeys(refId: string): Promise<void> {
     try {
       this.assertConnected();
-      if (!this.config.chainAdapter) {
+      const chainAdapters = this.config.chainAdapters ?? [];
+      if (chainAdapters.length === 0) {
         throw new DStorageError(
           CoreErrorCode.ROTATE_KEYS_REQUIRES_CHAIN,
           "[dStorage] rotateKeys requires a chain adapter.",
         );
       }
-      if (typeof this.config.chainAdapter.updateReference !== "function") {
+      if (!chainAdapters.some((a) => typeof a.updateReference === "function")) {
         throw new DStorageError(
           CoreErrorCode.ROTATE_KEYS_NOT_SUPPORTED,
           "[dStorage] rotateKeys is not supported by this chain adapter.",
@@ -759,9 +850,19 @@ export class DStorage {
         );
       }
 
-      const ref = await this.config.chainAdapter.readReference(refId);
-      // Proves ownership — any adapter matching an old wrapper suffices.
-      const ownerSecret = await this._computeOwnerSecret(refId);
+      // Single read locates both the reference and which chain adapter holds
+      // it — also proves ownership (any adapter matching an old wrapper suffices).
+      const {
+        ownerSecret,
+        ref,
+        adapter: targetChainAdapter,
+      } = await this._computeOwnerSecret(refId);
+      if (typeof targetChainAdapter.updateReference !== "function") {
+        throw new DStorageError(
+          CoreErrorCode.ROTATE_KEYS_NOT_SUPPORTED,
+          `[dStorage] rotateKeys is not supported by the "${targetChainAdapter.name}" chain adapter holding reference "${refId}".`,
+        );
+      }
       // Unwrap the existing DEK/ownerSeed to re-wrap under the new adapter set.
       const seed = await this._unwrapDek(ref.keyEnvelope);
       try {
@@ -777,7 +878,7 @@ export class DStorage {
         // ownerSecret = HKDF(seed, rawStorageId). Since seed and storageId
         // are unchanged, old and new ownerSecret are identical.
         // Pass the existing contentHash through unchanged (content not re-uploaded).
-        await this.config.chainAdapter.updateReference(
+        await targetChainAdapter.updateReference(
           refId,
           {
             storageId: ref.storageId ?? "",
@@ -819,13 +920,25 @@ export class DStorage {
     try {
       this.assertConnected();
 
-      const { bytes: rawBytes, tags } =
-        await this.config.storageAdapter.retrieve(
-          storageId,
-          contentHash !== undefined
-            ? { expectedContentHash: contentHash }
-            : undefined,
-        );
+      const {
+        adapter: sourceAdapter,
+        result: { bytes: rawBytes, tags },
+      } = await this._tryEachAdapter(
+        this.config.storageAdapters,
+        (adapter) =>
+          adapter.retrieve(
+            storageId,
+            contentHash !== undefined
+              ? { expectedContentHash: contentHash }
+              : undefined,
+          ),
+        (failures) =>
+          new DStorageError(
+            CoreErrorCode.STORAGE_READ_ALL_FAILED,
+            `[dStorage] No configured storage adapter could retrieve storageId "${storageId}".`,
+            { cause: failures },
+          ),
+      );
 
       if (contentHash) {
         const computed = await computeBlake3Hex(rawBytes);
@@ -840,10 +953,77 @@ export class DStorage {
         }
       }
 
-      return this._decryptAndReassemble(rawBytes, storageId, tags, dekScheme);
+      return this._decryptAndReassemble(
+        rawBytes,
+        storageId,
+        tags,
+        sourceAdapter,
+        dekScheme,
+      );
     } catch (err) {
       wrapError(err);
     }
+  }
+
+  /**
+   * Try each candidate adapter in order, returning the first successful
+   * result. Mirrors the encryption-adapter fallback pattern in
+   * `_tryUnwrapDek` below, generalized to storage/chain adapters.
+   *
+   * On total failure: if exactly one candidate was tried, its original error
+   * is rethrown verbatim (unwrapped) — this keeps single-adapter configs
+   * behaviorally and code-for-code identical to a bare (non-fallback) call.
+   * Only when two or more candidates are configured and all of them fail
+   * does `buildExhaustedError` get invoked to synthesize an aggregate error.
+   *
+   * Capability filtering (e.g. only candidates that implement an optional
+   * method) is the caller's responsibility — this helper just iterates
+   * whatever list it's given.
+   */
+  private async _tryEachAdapter<T extends { name: string }, R>(
+    candidates: readonly T[],
+    attempt: (adapter: T) => Promise<R>,
+    buildExhaustedError: (failures: AdapterFailure[]) => DStorageError,
+  ): Promise<{ adapter: T; result: R }> {
+    const failures: AdapterFailure[] = [];
+    for (const adapter of candidates) {
+      try {
+        const result = await attempt(adapter);
+        return { adapter, result };
+      } catch (err) {
+        failures.push({ adapterName: adapter.name, error: err });
+      }
+    }
+    if (failures.length === 1) {
+      throw failures[0]!.error;
+    }
+    throw buildExhaustedError(failures);
+  }
+
+  /**
+   * Read an on-chain reference by refId, trying each configured chain
+   * adapter in order and falling back on failure. A given refId only
+   * actually lives on exactly one configured chain, so this naturally
+   * locates the right adapter — used both for plain reads and as the first
+   * step of every reference-mutating operation (update/remove/rotate), which
+   * then perform the mutation directly on the located adapter rather than
+   * attempting a separate write-fallback loop.
+   */
+  private async _readReferenceFallback(
+    refId: string,
+  ): Promise<{ ref: ChainReference; adapter: ChainAdapter }> {
+    const chainAdapters = this.config.chainAdapters ?? [];
+    const { adapter, result: ref } = await this._tryEachAdapter(
+      chainAdapters,
+      (a) => a.readReference(refId),
+      (failures) =>
+        new DStorageError(
+          CoreErrorCode.CHAIN_READ_ALL_FAILED,
+          `[dStorage] No configured chain adapter could read reference "${refId}".`,
+          { cause: failures },
+        ),
+    );
+    return { ref, adapter };
   }
 
   /**
@@ -954,27 +1134,37 @@ export class DStorage {
   }
 
   /**
-   * Compute the ownerSecret for an existing on-chain reference.
-   * Used by removeReference/updateReference to derive the ZK witness secret.
+   * Compute the ownerSecret for an existing on-chain reference, identifying
+   * which configured chain adapter actually holds it along the way.
+   * Used by removeReference/update/retryUpdate/rotateKeys to derive the ZK
+   * witness secret and to target the mutation at the correct adapter without
+   * a separate (and semantically wrong) write-fallback loop — a reference
+   * only ever lives on one configured chain.
    *
    * Flow:
-   *   1. Read the reference from chain to get keyEnvelope + storageId
-   *   2. Unwrap the DEK from keyEnvelope using available KEKs
-   *   3. Recover raw storageId (decrypt with DEK if private, plaintext if public)
-   *   4. Return HKDF-SHA256(dek, rawStorageId) for private, or HKDF-SHA256(ownerSeed, rawStorageId) for public
+   *   1. Read the reference from chain (trying each configured adapter in
+   *      order) to get keyEnvelope + storageId + which adapter holds it.
+   *   2. Unwrap the DEK from keyEnvelope using available KEKs.
+   *   3. Recover raw storageId (decrypt with DEK if private, plaintext if public).
+   *   4. Return HKDF-SHA256(dek, rawStorageId) for private, or HKDF-SHA256(ownerSeed, rawStorageId) for public.
    */
-  private async _computeOwnerSecret(refId: string): Promise<Uint8Array> {
-    const ref = await this.config.chainAdapter!.readReference(refId);
+  private async _computeOwnerSecret(refId: string): Promise<{
+    ownerSecret: Uint8Array;
+    ref: ChainReference;
+    adapter: ChainAdapter;
+  }> {
+    const { ref, adapter } = await this._readReferenceFallback(refId);
     const isPublic = !ref.encryptionScheme;
 
     if (isPublic) {
       // Public uploads store a wrapped ownerSeed envelope (any KEK can unwrap it).
       const ownerSeed = await this._unwrapDek(ref.keyEnvelope);
-      return deriveOwnerSecret(
+      const ownerSecret = await deriveOwnerSecret(
         ownerSeed,
         new TextEncoder().encode(ref.storageId),
         "dstorage:owner-secret:public:v1",
       );
+      return { ownerSecret, ref, adapter };
     }
 
     // Private: unwrap DEK, decrypt storageId, derive ownerSecret from DEK.
@@ -988,15 +1178,21 @@ export class DStorage {
           await dekScheme.decryptStorageId(ref.storageId),
         )
       : METADATA_ONLY_OWNER_SECRET_SALT;
-    return deriveOwnerSecret(dek, rawStorageIdBytes);
+    const ownerSecret = await deriveOwnerSecret(dek, rawStorageIdBytes);
+    return { ownerSecret, ref, adapter };
   }
 
   // Accepts an optional pre-built CryptoScheme (unwrapped from a key envelope).
   // If no dekScheme is provided, content is treated as public (no decryption).
+  // sourceAdapter is the storage adapter that served rawBytes — reused as-is
+  // for every chunk fetch if this turns out to be a manifest (see
+  // _retrieveChunked: a manifest and its chunks always live on the same
+  // adapter, since store() writes them as one whole-operation attempt).
   private async _decryptAndReassemble(
     rawBytes: Uint8Array,
     storageId: string,
     tags: Record<string, string>,
+    sourceAdapter: StorageAdapter,
     dekScheme?: CryptoScheme,
   ): Promise<RetrieveResult> {
     const scheme: CryptoScheme | null = dekScheme ?? null;
@@ -1035,7 +1231,7 @@ export class DStorage {
           "dStorage",
           `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
         );
-        return this._retrieveChunked(parsed, scheme, tags);
+        return this._retrieveChunked(parsed, sourceAdapter, scheme, tags);
       }
 
       // Not a manifest — decrypt as regular payload.
@@ -1065,7 +1261,7 @@ export class DStorage {
           "dStorage",
           `Manifest detected: reassembling ${parsed.chunkCount} chunks`,
         );
-        return this._retrieveChunked(parsed, null, tags);
+        return this._retrieveChunked(parsed, sourceAdapter, null, tags);
       }
     } catch {
       // Not JSON — treat as raw content, fall through.
@@ -1100,7 +1296,7 @@ export class DStorage {
     try {
       this.assertConnected();
 
-      if (!this.config.chainAdapter) {
+      if ((this.config.chainAdapters ?? []).length === 0) {
         throw new DStorageError(
           CoreErrorCode.RETRIEVE_BY_REF_ID_REQUIRES_CHAIN,
           "[dStorage] retrieveByRefId() requires a chain adapter. " +
@@ -1108,24 +1304,17 @@ export class DStorage {
         );
       }
 
-      const ref = await this.config.chainAdapter.readReference(refId);
+      const { ref } = await this._readReferenceFallback(refId);
       if (!ref)
         throw new DStorageError(
           CoreErrorCode.REF_NOT_FOUND,
           `[dStorage] No on-chain reference found for refId: ${refId}`,
         );
 
-      if (
-        ref.storageProvider &&
-        ref.storageProvider !== this.config.storageAdapter.name
-      ) {
-        throw new DStorageError(
-          CoreErrorCode.STORAGE_ADAPTER_MISMATCH,
-          `[dStorage] Storage adapter mismatch: reference "${refId}" was stored on ` +
-            `"${ref.storageProvider}" but the configured adapter is "${this.config.storageAdapter.name}". ` +
-            `Configure a "${ref.storageProvider}" storage adapter to retrieve this reference.`,
-        );
-      }
+      // No storage-adapter mismatch check: retrieveByStorageId() below tries
+      // every configured storage adapter in order regardless of which one
+      // ref.storageProvider names — a non-matching adapter simply fails to
+      // find the data and fallback proceeds to the next.
 
       const isPublic = !ref.encryptionScheme;
 
@@ -1198,13 +1387,22 @@ export class DStorage {
   }
 
   /**
-   * List references currently available from the configured chain adapter.
+   * List references currently available from the configured chain adapters.
+   *
+   * The no-filter (aggregate) path calls listReferences() on every configured
+   * chain adapter that supports it and merges the results — a single failing
+   * adapter doesn't abort the call as long as at least one other succeeds,
+   * since references may legitimately live on more than one configured chain.
+   * The refIds-filter path instead looks up each requested reference
+   * individually, trying configured chain adapters in order per refId
+   * (a given refId only lives on exactly one chain).
    */
   async listReferences(
     options?: ListReferencesOptions,
-  ): Promise<DataReferenceSummary[]> {
+  ): Promise<ListedDataReference[]> {
     try {
-      if (!this.config.chainAdapter) {
+      const chainAdapters = this.config.chainAdapters ?? [];
+      if (chainAdapters.length === 0) {
         throw new DStorageError(
           CoreErrorCode.LIST_REFS_REQUIRES_CHAIN,
           "[dStorage] listReferences() requires a chain adapter.",
@@ -1219,7 +1417,14 @@ export class DStorage {
         storageProvider: string;
         ownerCommitment: string;
         encryptedMetadata?: string;
+        sourceAdapterIndex?: number;
       };
+
+      // Only tag results with which chain adapter they came from when more
+      // than one is actually configured — keeps output shape unchanged for
+      // the common single-adapter case (no existing test/consumer needs to
+      // account for a new field it never asked for).
+      const tagSource = chainAdapters.length > 1;
 
       let rawItems: RawItem[];
 
@@ -1229,7 +1434,7 @@ export class DStorage {
         // should use the no-filter path.
         rawItems = await Promise.all(
           options.refIds.map(async (refId) => {
-            const ref = await this.config.chainAdapter!.readReference(refId);
+            const { ref, adapter } = await this._readReferenceFallback(refId);
             return {
               refId,
               storageId: ref.storageId ?? null,
@@ -1237,6 +1442,9 @@ export class DStorage {
               keyEnvelope: ref.keyEnvelope,
               storageProvider: ref.storageProvider,
               ownerCommitment: "",
+              ...(tagSource
+                ? { sourceAdapterIndex: chainAdapters.indexOf(adapter) }
+                : {}),
               ...(ref.encryptedMetadata !== undefined
                 ? { encryptedMetadata: ref.encryptedMetadata }
                 : {}),
@@ -1244,13 +1452,43 @@ export class DStorage {
           }),
         );
       } else {
-        if (typeof this.config.chainAdapter.listReferences !== "function") {
+        const capable = chainAdapters
+          .map((adapter, index) => ({ adapter, index }))
+          .filter(
+            ({ adapter }) => typeof adapter.listReferences === "function",
+          );
+        if (capable.length === 0) {
           throw new DStorageError(
             CoreErrorCode.LIST_REFS_NOT_SUPPORTED,
             "[dStorage] listReferences() is not supported by this chain adapter.",
           );
         }
-        rawItems = await this.config.chainAdapter.listReferences();
+
+        const failures: AdapterFailure[] = [];
+        const perAdapter = await Promise.all(
+          capable.map(async ({ adapter, index }) => {
+            try {
+              const items = await adapter.listReferences!();
+              const mapped: RawItem[] = items.map((item) => ({
+                ...item,
+                ...(tagSource ? { sourceAdapterIndex: index } : {}),
+              }));
+              return mapped;
+            } catch (err) {
+              failures.push({ adapterName: adapter.name, error: err });
+              return null;
+            }
+          }),
+        );
+        const succeeded = perAdapter.filter((r): r is RawItem[] => r !== null);
+        if (succeeded.length === 0) {
+          throw new DStorageError(
+            CoreErrorCode.LIST_REFS_ALL_FAILED,
+            `[dStorage] All ${capable.length} configured chain adapters that support listReferences() failed.`,
+            { cause: failures },
+          );
+        }
+        rawItems = succeeded.flat();
       }
 
       return Promise.all(
@@ -1311,6 +1549,9 @@ export class DStorage {
             encryptionScheme: item.encryptionScheme ?? null,
             keyEnvelope: item.keyEnvelope,
             ownerCommitment: item.ownerCommitment,
+            ...(item.sourceAdapterIndex !== undefined
+              ? { sourceAdapterIndex: item.sourceAdapterIndex }
+              : {}),
             ...(decryptionError !== undefined ? { decryptionError } : {}),
             ...(metadata !== undefined ? { metadata } : {}),
           };
@@ -1328,20 +1569,28 @@ export class DStorage {
    */
   async removeReference(refId: string): Promise<void> {
     try {
-      if (!this.config.chainAdapter) {
+      const chainAdapters = this.config.chainAdapters ?? [];
+      if (chainAdapters.length === 0) {
         throw new DStorageError(
           CoreErrorCode.REMOVE_REF_REQUIRES_CHAIN,
           "[dStorage] removeReference() requires a chain adapter.",
         );
       }
-      if (typeof this.config.chainAdapter.removeReference !== "function") {
+      if (!chainAdapters.some((a) => typeof a.removeReference === "function")) {
         throw new DStorageError(
           CoreErrorCode.REMOVE_REF_NOT_SUPPORTED,
           "[dStorage] removeReference() is not supported by this chain adapter.",
         );
       }
-      const ownerSecret = await this._computeOwnerSecret(refId);
-      await this.config.chainAdapter.removeReference(refId, ownerSecret);
+      const { ownerSecret, adapter: targetChainAdapter } =
+        await this._computeOwnerSecret(refId);
+      if (typeof targetChainAdapter.removeReference !== "function") {
+        throw new DStorageError(
+          CoreErrorCode.REMOVE_REF_NOT_SUPPORTED,
+          `[dStorage] removeReference() is not supported by the "${targetChainAdapter.name}" chain adapter holding reference "${refId}".`,
+        );
+      }
+      await targetChainAdapter.removeReference(refId, ownerSecret);
     } catch (err) {
       wrapError(err);
     }
@@ -1349,12 +1598,15 @@ export class DStorage {
 
   /**
    * Estimate the full cost (storage + chain) for a given payload size before committing.
+   * Quotes the first configured storage/chain adapter only — the cost that
+   * would actually be incurred in the common (non-fallback) case, rather than
+   * pre-quoting every configured candidate.
    */
   async estimateCost(sizeBytes: number): Promise<CostEstimate> {
     try {
       const [storageQuote, chainQuote] = await Promise.all([
-        this.config.storageAdapter.estimateCost(sizeBytes),
-        this.config.chainAdapter?.estimateCost(),
+        this.config.storageAdapters[0]!.estimateCost(sizeBytes),
+        this.config.chainAdapters?.[0]?.estimateCost(),
       ]);
 
       return {
@@ -1433,102 +1685,126 @@ export class DStorage {
       keyEnvelope = serializeKeyEnvelope(buildKeyEnvelope(ownerSeedWrappers));
     }
 
-    const chunkEntries: ChunkManifest["chunks"] = [];
-    let bytesUploaded = 0;
+    // Whole-operation fallback: each attempt below re-runs the ENTIRE
+    // per-chunk loop + manifest upload against one storage adapter candidate.
+    // If a candidate fails partway (e.g. chunk 3 of 5), that partial attempt
+    // is abandoned outright and the next candidate restarts from chunk 0 —
+    // never a per-chunk fallback, since the manifest and on-chain reference
+    // each record only a single `provider` and a manifest fetched from
+    // adapter A implies its chunks all live on adapter A too. Chunks are
+    // re-encrypted from the original plaintext on every retry (not buffered
+    // as ciphertext) to preserve chunking's bounded-memory design — trading
+    // a small amount of CPU on the rare fallback path for that guarantee.
+    let attemptIndex = -1;
+    const {
+      result: { manifestResult, manifestData },
+    } = await this._tryEachAdapter(
+      this.config.storageAdapters,
+      async (storageAdapter) => {
+        attemptIndex++;
+        const chunkEntries: ChunkManifest["chunks"] = [];
+        let bytesUploaded = 0;
 
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const chunk = bytes.subarray(start, start + CHUNK_SIZE);
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const chunk = bytes.subarray(start, start + CHUNK_SIZE);
 
-      onProgress?.({
-        phase: "encrypting",
-        chunksUploaded: i,
-        totalChunks,
-        bytesUploaded,
-        totalBytes: bytes.length,
-      });
+          onProgress?.({
+            phase: "encrypting",
+            chunksUploaded: i,
+            totalChunks,
+            bytesUploaded,
+            totalBytes: bytes.length,
+            attemptIndex,
+          });
 
-      let chunkData: Uint8Array;
-      if (isPublic) {
-        chunkData = chunk;
-      } else {
-        chunkData = await uploadScheme!.encryptPayload(
-          chunk,
-          chunkAad(i, totalChunks),
+          let chunkData: Uint8Array;
+          if (isPublic) {
+            chunkData = chunk;
+          } else {
+            chunkData = await uploadScheme!.encryptPayload(
+              chunk,
+              chunkAad(i, totalChunks),
+            );
+          }
+
+          onProgress?.({
+            phase: "uploading",
+            chunksUploaded: i,
+            totalChunks,
+            bytesUploaded,
+            totalBytes: bytes.length,
+            attemptIndex,
+          });
+
+          const chunkResult = await storageAdapter.store(chunkData, {
+            ...tags,
+            [TAG_SDK_VERSION]: sdkVersion,
+            [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
+            [TAG_CHUNK_INDEX]: String(i),
+            [TAG_CHUNK_TOTAL]: String(totalChunks),
+          });
+
+          chunkEntries.push({
+            index: i,
+            storageId: chunkResult.id,
+            size: chunk.length,
+          });
+          bytesUploaded += chunk.length;
+
+          onProgress?.({
+            phase: "uploading",
+            chunksUploaded: i + 1,
+            totalChunks,
+            bytesUploaded,
+            totalBytes: bytes.length,
+            attemptIndex,
+          });
+        }
+
+        // Build and upload the manifest.
+        onProgress?.({
+          phase: "finalizing",
+          chunksUploaded: totalChunks,
+          totalChunks,
+          bytesUploaded,
+          totalBytes: bytes.length,
+          attemptIndex,
+        });
+
+        const manifest: ChunkManifest = {
+          v: 1,
+          type: "dstorage-chunked-manifest",
+          totalSize: bytes.length,
+          chunkSize: CHUNK_SIZE,
+          chunkCount: totalChunks,
+          provider: storageAdapter.name,
+          chunks: chunkEntries,
+        };
+
+        const manifestBytes = new TextEncoder().encode(
+          JSON.stringify(manifest),
         );
-      }
+        const manifestData: Uint8Array = isPublic
+          ? manifestBytes
+          : await uploadScheme!.encryptPayload(manifestBytes, MANIFEST_AAD);
 
-      onProgress?.({
-        phase: "uploading",
-        chunksUploaded: i,
-        totalChunks,
-        bytesUploaded,
-        totalBytes: bytes.length,
-      });
+        const manifestResult = await storageAdapter.store(manifestData, {
+          [TAG_SDK_VERSION]: sdkVersion,
+          [TAG_CONTENT_TYPE]: isPublic
+            ? TAG_CONTENT_TYPE_JSON
+            : TAG_CONTENT_TYPE_OCTET_STREAM,
+          [TAG_MANIFEST_UPLOAD]: "true",
+        });
 
-      const chunkResult = await this.config.storageAdapter.store(chunkData, {
-        ...tags,
-        [TAG_SDK_VERSION]: sdkVersion,
-        [TAG_CONTENT_TYPE]: TAG_CONTENT_TYPE_OCTET_STREAM,
-        [TAG_CHUNK_INDEX]: String(i),
-        [TAG_CHUNK_TOTAL]: String(totalChunks),
-      });
-
-      chunkEntries.push({
-        index: i,
-        storageId: chunkResult.id,
-        size: chunk.length,
-      });
-      bytesUploaded += chunk.length;
-
-      onProgress?.({
-        phase: "uploading",
-        chunksUploaded: i + 1,
-        totalChunks,
-        bytesUploaded,
-        totalBytes: bytes.length,
-      });
-    }
-
-    // Build and upload the manifest.
-    onProgress?.({
-      phase: "finalizing",
-      chunksUploaded: totalChunks,
-      totalChunks,
-      bytesUploaded,
-      totalBytes: bytes.length,
-    });
-
-    const manifest: ChunkManifest = {
-      v: 1,
-      type: "dstorage-chunked-manifest",
-      totalSize: bytes.length,
-      chunkSize: CHUNK_SIZE,
-      chunkCount: totalChunks,
-      provider: this.config.storageAdapter.name,
-      chunks: chunkEntries,
-    };
-
-    const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
-    let manifestData: Uint8Array;
-    if (isPublic) {
-      manifestData = manifestBytes;
-    } else {
-      manifestData = await uploadScheme!.encryptPayload(
-        manifestBytes,
-        MANIFEST_AAD,
-      );
-    }
-
-    const manifestResult = await this.config.storageAdapter.store(
-      manifestData,
-      {
-        [TAG_SDK_VERSION]: sdkVersion,
-        [TAG_CONTENT_TYPE]: isPublic
-          ? TAG_CONTENT_TYPE_JSON
-          : TAG_CONTENT_TYPE_OCTET_STREAM,
-        [TAG_MANIFEST_UPLOAD]: "true",
+        return { manifestResult, manifestData };
       },
+      (failures) =>
+        new DStorageError(
+          CoreErrorCode.STORAGE_WRITE_ALL_FAILED,
+          `[dStorage] All ${this.config.storageAdapters.length} configured storage adapters failed to store the chunked upload.`,
+          { cause: failures },
+        ),
     );
 
     // For private data: encrypt the manifest storageId with the same per-upload DEK.
@@ -1554,7 +1830,8 @@ export class DStorage {
           "dstorage:owner-secret:public:v1",
         );
 
-    if (this.config.chainAdapter) {
+    const chainAdapters = this.config.chainAdapters ?? [];
+    if (chainAdapters.length > 0) {
       const contentHash = await computeBlake3Hex(manifestData);
 
       // Emit "stored" before the chain write so callers can persist recovery
@@ -1584,17 +1861,27 @@ export class DStorage {
             )
           : undefined;
       try {
-        const chainResult = await this.config.chainAdapter.writeReference({
-          storageId: onChainManifestId,
-          encryptionScheme,
-          storageProvider: manifestResult.provider,
-          ...(refId !== undefined ? { refId } : {}),
-          ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
-          writtenAt: Date.now(),
-          keyEnvelope,
-          contentHash,
-          ownerSecret,
-        });
+        const { result: chainResult } = await this._tryEachAdapter(
+          chainAdapters,
+          (adapter) =>
+            adapter.writeReference({
+              storageId: onChainManifestId,
+              encryptionScheme,
+              storageProvider: manifestResult.provider,
+              ...(refId !== undefined ? { refId } : {}),
+              ...(encryptedMetadata !== undefined ? { encryptedMetadata } : {}),
+              writtenAt: Date.now(),
+              keyEnvelope,
+              contentHash,
+              ownerSecret,
+            }),
+          (failures) =>
+            new DStorageError(
+              CoreErrorCode.CHAIN_WRITE_ALL_FAILED,
+              `[dStorage] All ${chainAdapters.length} configured chain adapters failed to write the reference.`,
+              { cause: failures },
+            ),
+        );
 
         const resultRefId = chainResult.refId;
         this.logger?.log(
@@ -1659,9 +1946,17 @@ export class DStorage {
   /**
    * Reassemble a chunked file from its manifest.
    * Fetches and decrypts each chunk sequentially to bound memory usage.
+   *
+   * All chunks are fetched from the same `sourceAdapter` that served the
+   * manifest (no per-chunk fallback to a different configured storage
+   * adapter) — a manifest and its chunks are always written together in one
+   * whole-operation attempt (see `_uploadChunked`), so falling back
+   * mid-reassembly to an unrelated adapter would silently return wrong or
+   * missing data rather than actually help.
    */
   private async _retrieveChunked(
     manifest: ChunkManifest,
+    sourceAdapter: StorageAdapter,
     scheme: CryptoScheme | null = null,
     tags: Record<string, string> = {},
   ): Promise<RetrieveResult> {
@@ -1686,8 +1981,9 @@ export class DStorage {
     let offset = 0;
 
     for (const entry of sorted) {
-      const { bytes: rawChunkBytes } =
-        await this.config.storageAdapter.retrieve(entry.storageId);
+      const { bytes: rawChunkBytes } = await sourceAdapter.retrieve(
+        entry.storageId,
+      );
 
       let chunkBytes = rawChunkBytes;
       if (scheme) {

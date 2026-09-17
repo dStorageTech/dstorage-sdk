@@ -63,8 +63,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     // Isolation under test is purely cryptographic — different encryptionSeedProvider
     // means different keys and therefore different ability to decrypt each other's data.
     sdk = new DStorage({
-      storageAdapter: adapter,
-      chainAdapter,
+      storageAdapters: [adapter],
+      chainAdapters: [chainAdapter],
       encryptionAdapters: [
         new MnemonicEncryptionAdapter({
           mnemonic: ALICE_SEED,
@@ -90,8 +90,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     }
 
     sdkBob = new DStorage({
-      storageAdapter: adapter,
-      chainAdapter,
+      storageAdapters: [adapter],
+      chainAdapters: [chainAdapter],
       encryptionAdapters: [
         new MnemonicEncryptionAdapter({ mnemonic: BOB_SEED }),
       ],
@@ -281,8 +281,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
     it("content stored before destroy is retrievable after reinit with same seed", async () => {
       const content = new TextEncoder().encode("persisted-after-reinit");
       const first = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
         ],
@@ -292,8 +292,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
       first.destroy();
 
       const second = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
         ],
@@ -306,8 +306,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
 
     it("listReferences on a fresh instance still includes the pre-destroy ref", async () => {
       const first = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
         ],
@@ -317,8 +317,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
       first.destroy();
 
       const second = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           new MnemonicEncryptionAdapter({ mnemonic: ALICE_SEED }),
         ],
@@ -349,22 +349,22 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
 
     beforeAll(async () => {
       multiKeySdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [PASSWORD_ADAPTER, MNEMONIC_ADAPTER],
       });
       await multiKeySdk.init();
 
       passwordOnlySdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [PASSWORD_ADAPTER],
       });
       await passwordOnlySdk.init();
 
       mnemonicOnlySdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [MNEMONIC_ADAPTER],
       });
       await mnemonicOnlySdk.init();
@@ -412,8 +412,8 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
       kpSecretKey = secretKey;
 
       mlkemSdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [kpAdapter],
       });
       await mlkemSdk.init();
@@ -443,13 +443,13 @@ describe.skipIf(!midnightOk)("full stack: Midnight + arlocal", () => {
       );
 
       const pkSdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [pkOnly],
       });
       const skSdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter,
+        storageAdapters: [adapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [skFull],
       });
       await pkSdk.init();

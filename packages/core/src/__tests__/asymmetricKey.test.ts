@@ -22,8 +22,8 @@ const CTX = "test-context";
 
 function sharedAdapters() {
   return {
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MidnightSimulatorChainAdapter(),
+    storageAdapters: [new MockStorageAdapter()],
+    chainAdapters: [new MidnightSimulatorChainAdapter()],
   };
 }
 
@@ -213,7 +213,7 @@ describe("mixed symmetric + asymmetric envelope", () => {
     await sdk.init();
 
     const { chainRefId } = await sdk.store(enc("envelope check"));
-    const ref = await adapters.chainAdapter.readReference(chainRefId);
+    const ref = await adapters.chainAdapters[0]!.readReference(chainRefId);
     const envelope = JSON.parse(ref.keyEnvelope);
 
     expect(envelope.v).toBe(1);

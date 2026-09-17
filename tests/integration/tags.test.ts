@@ -36,8 +36,8 @@ describe.skipIf(!arlocalOk)("storage transaction tags on arlocal", () => {
   beforeAll(async () => {
     ({ adapter: storageAdapter } = await createStorageAdapter(env.arlocalUrl));
     sdk = new DStorage({
-      storageAdapter,
-      chainAdapter: new MidnightSimulatorChainAdapter({ logger: console }),
+      storageAdapters: [storageAdapter],
+      chainAdapters: [new MidnightSimulatorChainAdapter({ logger: console })],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-integration-tags-test-v1!",

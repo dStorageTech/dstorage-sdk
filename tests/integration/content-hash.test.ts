@@ -40,8 +40,8 @@ describe.skipIf(!arlocalOk)("content hash — arlocal + mock chain", () => {
     storageAdapter = adapter;
     mockChain = new MidnightSimulatorChainAdapter({ logger: console });
     sdk = new DStorage({
-      storageAdapter,
-      chainAdapter: mockChain,
+      storageAdapters: [storageAdapter],
+      chainAdapters: [mockChain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-content-hash-test-v1!",

@@ -31,7 +31,7 @@ describe.skipIf(!arlocalOk)("storage-only mode with real Arweave", () => {
   beforeAll(async () => {
     const { adapter } = await createStorageAdapter(env.arlocalUrl);
     storageOnlySdk = new DStorage({
-      storageAdapter: adapter,
+      storageAdapters: [adapter],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-storageonly-integration-v1!",

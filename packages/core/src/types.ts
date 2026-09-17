@@ -4,7 +4,11 @@
  */
 
 import type { StorageAdapter, StorageProviderName } from "@dstorage/storage";
-import type { ChainAdapter, ChainProviderName } from "@dstorage/chain";
+import type {
+  ChainAdapter,
+  ChainProviderName,
+  DataReferenceSummary,
+} from "@dstorage/chain";
 import type { TokenSymbol } from "@dstorage/payment";
 import type { CryptoScheme } from "@dstorage/crypto";
 import type { EncryptionAdapter } from "@dstorage/encryption";
@@ -27,14 +31,32 @@ export interface WalletInfo {
 
 /** Configuration passed to dStorage constructor */
 export interface DStorageConfig {
-  /** Storage adapter to use (MockStorageAdapter | ArweaveStorageAdapter | ...) */
-  storageAdapter: StorageAdapter;
   /**
-   * Chain adapter to use (MockChainAdapter | MidnightChainAdapter | ...).
-   * When omitted the SDK operates in storage-only mode — uploads store to the
-   * storage backend but no on-chain reference is written.
+   * Storage adapters to use, in priority order (MockStorageAdapter | ArweaveStorageAdapter | ...).
+   * Must contain at least one. Reads try each configured adapter in order,
+   * falling back to the next on failure, succeeding on the first that
+   * retrieves the content. Writes try each in order, falling back on
+   * failure, succeeding as soon as one adapter's write succeeds.
+   *
+   * @example
+   * // Single adapter (most common)
+   * storageAdapters: [new ArweaveStorageAdapter({ ... })]
+   *
+   * @example
+   * // Fall back to a mirror if the primary gateway is unreachable
+   * storageAdapters: [primaryArweaveAdapter, mirrorArweaveAdapter]
    */
-  chainAdapter?: ChainAdapter;
+  storageAdapters: StorageAdapter[];
+  /**
+   * Chain adapters to use, in priority order (MockChainAdapter | MidnightChainAdapter | ...).
+   * When omitted or empty the SDK operates in storage-only mode — uploads
+   * store to the storage backend but no on-chain reference is written.
+   * Same try-in-order fallback semantics as `storageAdapters` for reads and
+   * writes. `listReferences()` is the exception — it aggregates results from
+   * every configured chain adapter rather than stopping at the first success,
+   * since references may legitimately live on more than one configured chain.
+   */
+  chainAdapters?: ChainAdapter[];
   /**
    * Encryption adapters that wrap and unwrap per-upload Data Encryption Keys (DEKs).
    * Each adapter produces an independent wrapped DEK; any of them can independently decrypt.
@@ -100,6 +122,16 @@ export interface StoreProgress {
    * failure without re-uploading.
    */
   recovery?: StoreRecovery;
+  /**
+   * Zero-based index of which configured `storageAdapters` candidate this
+   * progress event belongs to. Only meaningful for chunked uploads (>10 MB):
+   * if the first storage adapter fails partway through, the whole chunked
+   * upload restarts from scratch against the next candidate, so
+   * `chunksUploaded`/`bytesUploaded` will visibly rewind to 0 — a bump in
+   * `attemptIndex` distinguishes that rewind from data corruption. Always 0
+   * for the single-shot (≤10 MB) path, which never retries.
+   */
+  attemptIndex?: number;
 }
 
 export interface StoreOptions {
@@ -200,13 +232,33 @@ export interface ListReferencesOptions {
   refIds?: string[];
 }
 
+/**
+ * A `DataReferenceSummary` returned by `dStorage.listReferences()`, tagged
+ * with which configured chain adapter it came from.
+ */
+export type ListedDataReference = DataReferenceSummary & {
+  /**
+   * Zero-based index into the configured `chainAdapters` array identifying
+   * which chain adapter this reference was retrieved from. Only populated by
+   * the no-filter (aggregate) path of `listReferences()` when multiple chain
+   * adapters are configured — `ChainAdapter.name`/`.providerName` are not
+   * guaranteed unique per instance (e.g. two Midnight configs pointed at
+   * different networks both report `"midnight"`), so the index is the only
+   * reliable way to disambiguate which chain a result came from.
+   */
+  sourceAdapterIndex?: number;
+};
+
 /** Options for dStorage.registerReference() */
 export interface RegisterReferenceOptions {
   /** The pre-existing storage network ID to register. Omit for metadata-only references. */
   storageId?: string;
   /**
    * Storage provider name recorded in the chain reference.
-   * Defaults to the configured `storageAdapter.name`.
+   * Defaults to the first configured `storageAdapters[0].name`. This is
+   * informational metadata only — retrieval tries every configured storage
+   * adapter in order regardless of this value, so pass it explicitly only
+   * when you want the on-chain record to reflect a specific adapter.
    */
   storageProvider?: StorageProviderName;
   /**

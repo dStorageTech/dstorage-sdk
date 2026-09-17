@@ -359,8 +359,8 @@ async function main(): Promise<void> {
     // real-world "backup recovery key" pattern without any re-encryption of the
     // stored content.
     const sdk = new DStorage({
-      storageAdapter,
-      chainAdapter,
+      storageAdapters: [storageAdapter],
+      chainAdapters: [chainAdapter],
       encryptionAdapters: [
         new MnemonicEncryptionAdapter(credentials),
         new PasswordEncryptionAdapter({

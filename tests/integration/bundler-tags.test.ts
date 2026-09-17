@@ -48,8 +48,8 @@ describe.skipIf(!bundlerOk)("arweave bundler storage transaction tags", () => {
   beforeAll(async () => {
     storageAdapter = createBundlerAdapter(env);
     sdk = new DStorage({
-      storageAdapter,
-      chainAdapter: new MidnightSimulatorChainAdapter({ logger: console }),
+      storageAdapters: [storageAdapter],
+      chainAdapters: [new MidnightSimulatorChainAdapter({ logger: console })],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-integration-bundler-tags-test-v1!",

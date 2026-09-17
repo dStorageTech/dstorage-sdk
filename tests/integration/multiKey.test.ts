@@ -72,8 +72,8 @@ describe.skipIf(!arlocalOk)(
 
     it("content stored with two providers is retrievable by the password provider", async () => {
       const uploader = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
@@ -82,8 +82,8 @@ describe.skipIf(!arlocalOk)(
       const { chainRefId } = await uploader.store(enc(content));
 
       const sdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider()],
       });
       await sdk.init();
@@ -94,8 +94,8 @@ describe.skipIf(!arlocalOk)(
 
     it("content stored with two providers is retrievable by the mnemonic provider", async () => {
       const uploader = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
@@ -104,8 +104,8 @@ describe.skipIf(!arlocalOk)(
       const { chainRefId } = await uploader.store(enc(content));
 
       const sdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [mnemonicProvider()],
       });
       await sdk.init();
@@ -116,8 +116,8 @@ describe.skipIf(!arlocalOk)(
 
     it("both providers recover identical bytes from the same store", async () => {
       const uploader = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
@@ -126,13 +126,13 @@ describe.skipIf(!arlocalOk)(
       const { chainRefId } = await uploader.store(enc(content));
 
       const passwordSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider()],
       });
       const mnemonicSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [mnemonicProvider()],
       });
       await Promise.all([passwordSdk.init(), mnemonicSdk.init()]);
@@ -148,8 +148,8 @@ describe.skipIf(!arlocalOk)(
 
     it("an unrelated provider cannot decrypt multi-key content", async () => {
       const uploader = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
@@ -157,8 +157,8 @@ describe.skipIf(!arlocalOk)(
       const { chainRefId } = await uploader.store(enc("private"));
 
       const unrelated = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           new PasswordEncryptionAdapter({
             password: "completely-different-passphrase!",
@@ -178,8 +178,8 @@ describe.skipIf(!arlocalOk)(
 
     it("password-only SDK can removeReference a public store made with two providers", async () => {
       const uploader = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
@@ -188,8 +188,8 @@ describe.skipIf(!arlocalOk)(
       });
 
       const passwordSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider()],
       });
       await passwordSdk.init();
@@ -203,8 +203,8 @@ describe.skipIf(!arlocalOk)(
 
     it("mnemonic-only SDK can removeReference a public store made with two providers", async () => {
       const uploader = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [passwordProvider(), mnemonicProvider()],
       });
       await uploader.init();
@@ -213,8 +213,8 @@ describe.skipIf(!arlocalOk)(
       });
 
       const mnemonicSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [mnemonicProvider()],
       });
       await mnemonicSdk.init();
@@ -229,8 +229,8 @@ describe.skipIf(!arlocalOk)(
     describe("rotateKeys", () => {
       it("mnemonic authorises rotation to a new password; both new adapters can then retrieve", async () => {
         const uploader = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [passwordProvider(), mnemonicProvider()],
         });
         await uploader.init();
@@ -240,16 +240,16 @@ describe.skipIf(!arlocalOk)(
 
         // Rotate: old password is absent — mnemonic unwraps the old DEK.
         const rotateSdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [newPasswordProvider(), mnemonicProvider()],
         });
         await rotateSdk.init();
         await rotateSdk.rotateKeys(chainRefId);
 
         const newPasswordSdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [newPasswordProvider()],
         });
         await newPasswordSdk.init();
@@ -257,8 +257,8 @@ describe.skipIf(!arlocalOk)(
         expect(dec(byNewPassword.bytes)).toBe(content);
 
         const mnemonicSdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [mnemonicProvider()],
         });
         await mnemonicSdk.init();
@@ -268,8 +268,8 @@ describe.skipIf(!arlocalOk)(
 
       it("old password can no longer decrypt after rotation", async () => {
         const uploader = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [passwordProvider(), mnemonicProvider()],
         });
         await uploader.init();
@@ -279,16 +279,16 @@ describe.skipIf(!arlocalOk)(
         );
 
         const rotateSdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [newPasswordProvider(), mnemonicProvider()],
         });
         await rotateSdk.init();
         await rotateSdk.rotateKeys(chainRefId);
 
         const oldPasswordSdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [passwordProvider()],
         });
         await oldPasswordSdk.init();
@@ -301,8 +301,8 @@ describe.skipIf(!arlocalOk)(
 
       it("rotateKeys with the same adapter set is idempotent — content still decrypts", async () => {
         const sdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [passwordProvider(), mnemonicProvider()],
         });
         await sdk.init();
@@ -320,8 +320,8 @@ describe.skipIf(!arlocalOk)(
 
       it("unrelated adapter cannot authorise rotateKeys", async () => {
         const storeSdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [passwordProvider()],
         });
         await storeSdk.init();
@@ -330,8 +330,8 @@ describe.skipIf(!arlocalOk)(
         );
 
         const unrelatedSdk = new DStorage({
-          storageAdapter,
-          chainAdapter,
+          storageAdapters: [storageAdapter],
+          chainAdapters: [chainAdapter],
           encryptionAdapters: [
             new PasswordEncryptionAdapter({
               password: "completely-different-passphrase!",

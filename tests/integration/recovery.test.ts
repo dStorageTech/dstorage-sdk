@@ -37,8 +37,8 @@ describe.skipIf(!arlocalOk)(
       const { adapter } = await createStorageAdapter(env.arlocalUrl);
       mockChain = new MidnightSimulatorChainAdapter({ logger: console });
       sdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter: mockChain,
+        storageAdapters: [adapter],
+        chainAdapters: [mockChain],
         encryptionAdapters: [
           new PasswordEncryptionAdapter({
             password: "dstorage-recovery-integration-test!",
@@ -116,8 +116,8 @@ describe.skipIf(!arlocalOk)(
       const { adapter } = await createStorageAdapter(env.arlocalUrl);
       mockChain = new MidnightSimulatorChainAdapter({ logger: console });
       sdk = new DStorage({
-        storageAdapter: adapter,
-        chainAdapter: mockChain,
+        storageAdapters: [adapter],
+        chainAdapters: [mockChain],
         encryptionAdapters: [
           new PasswordEncryptionAdapter({
             password: "dstorage-retryupdate-integration-test!",

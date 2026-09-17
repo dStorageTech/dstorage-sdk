@@ -9,7 +9,7 @@ const enc = (s: string) => new TextEncoder().encode(s);
 
 function makeConfig(): DStorageConfig {
   return {
-    storageAdapter: new MockStorageAdapter(),
+    storageAdapters: [new MockStorageAdapter()],
     encryptionAdapters: [
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
@@ -21,7 +21,7 @@ function makeConfig(): DStorageConfig {
 }
 
 function makePublicConfig(): DStorageConfig {
-  return { storageAdapter: new MockStorageAdapter() };
+  return { storageAdapters: [new MockStorageAdapter()] };
 }
 
 async function makeInited() {

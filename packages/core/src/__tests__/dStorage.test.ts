@@ -34,8 +34,8 @@ const enc = (s: string) => new TextEncoder().encode(s);
 
 function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MidnightSimulatorChainAdapter(),
+    storageAdapters: [new MockStorageAdapter()],
+    chainAdapters: [new MidnightSimulatorChainAdapter()],
     encryptionAdapters: [
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
@@ -116,8 +116,8 @@ describe("init / destroy", () => {
       destroy: destroySpy,
     };
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
       encryptionAdapters: [mockAdapter],
     });
     await ds.init();
@@ -257,43 +257,84 @@ describe("retrieveByRefId", () => {
     });
   });
 
-  it("throws a descriptive error when the configured storage adapter does not match the reference's storageProvider", async () => {
-    // Upload with mock storage (name: "mock"), then try to retrieve with an
-    // adapter that reports name: "arweave". Without a mismatch guard the SDK
-    // silently hands the storageId to the wrong adapter and returns a cryptic
-    // "not found" error. The guard must surface the real cause immediately.
-    class ArweaveMockStorageAdapter extends MockStorageAdapter {
-      override readonly name: StorageProviderName = "arweave";
-    }
+  // A storage adapter that reports a different provider name (e.g. "arweave")
+  // but is otherwise a fully independent MockStorageAdapter instance (its own
+  // in-memory store) — used below to simulate a configured adapter that
+  // doesn't hold the content being retrieved.
+  class ArweaveMockStorageAdapter extends MockStorageAdapter {
+    override readonly name: StorageProviderName = "arweave";
+  }
 
+  it("falls back to the next configured storage adapter when an earlier one fails", async () => {
+    // MockStorageAdapter's backing store is module-level (shared across every
+    // instance), so a genuine "doesn't hold the content" failure has to be
+    // forced via a spy rather than relying on separate instances/providers.
+    const failingStorage = new ArweaveMockStorageAdapter();
+    vi.spyOn(failingStorage, "retrieve").mockRejectedValue(
+      new Error("simulated network failure"),
+    );
+    const workingStorage = new MockStorageAdapter();
     const chainAdapter = new MidnightSimulatorChainAdapter();
     const encryption = new PasswordEncryptionAdapter({
       password: "dstorage-test-passphrase-v1!",
-      salt: "mismatch-test",
+      salt: "fallback-test",
       params: { N: 32768, r: 8, p: 1 },
     });
 
-    // Upload via "mock" storage adapter.
-    const ds1 = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter,
+    const uploader = new DStorage({
+      storageAdapters: [workingStorage],
+      chainAdapters: [chainAdapter],
       encryptionAdapters: [encryption],
     });
-    await ds1.init();
-    const { chainRefId } = await ds1.store(enc("hello"));
+    await uploader.init();
+    const { chainRefId } = await uploader.store(enc("hello"));
 
-    // Try to retrieve via "arweave" adapter against the same chain.
-    const ds2 = new DStorage({
-      storageAdapter: new ArweaveMockStorageAdapter(),
-      chainAdapter,
+    const retriever = new DStorage({
+      storageAdapters: [failingStorage, workingStorage],
+      chainAdapters: [chainAdapter],
       encryptionAdapters: [encryption],
     });
-    await ds2.init();
+    await retriever.init();
 
-    await expect(ds2.retrieveByRefId(chainRefId)).rejects.toMatchObject({
-      code: CoreErrorCode.STORAGE_ADAPTER_MISMATCH,
-      message: expect.stringContaining("storage adapter"),
+    const { bytes } = await retriever.retrieveByRefId(chainRefId);
+    expect(new TextDecoder().decode(bytes)).toBe("hello");
+    expect(failingStorage.retrieve).toHaveBeenCalled();
+  });
+
+  it("throws STORAGE_READ_ALL_FAILED with a per-adapter cause when every configured storage adapter fails", async () => {
+    const chainAdapter = new MidnightSimulatorChainAdapter();
+    const encryption = new PasswordEncryptionAdapter({
+      password: "dstorage-test-passphrase-v1!",
+      salt: "all-failed-test",
+      params: { N: 32768, r: 8, p: 1 },
     });
+
+    const uploader = new DStorage({
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [chainAdapter],
+      encryptionAdapters: [encryption],
+    });
+    await uploader.init();
+    const { chainRefId } = await uploader.store(enc("hello"));
+
+    // Both configured adapters fail — neither actually resolves the retrieve.
+    const failingA = new ArweaveMockStorageAdapter();
+    const failingB = new ArweaveMockStorageAdapter();
+    vi.spyOn(failingA, "retrieve").mockRejectedValue(new Error("fail A"));
+    vi.spyOn(failingB, "retrieve").mockRejectedValue(new Error("fail B"));
+
+    const retriever = new DStorage({
+      storageAdapters: [failingA, failingB],
+      chainAdapters: [chainAdapter],
+      encryptionAdapters: [encryption],
+    });
+    await retriever.init();
+
+    const err = await retriever
+      .retrieveByRefId(chainRefId)
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: CoreErrorCode.STORAGE_READ_ALL_FAILED });
+    expect((err as { cause?: unknown[] }).cause).toHaveLength(2);
   });
 });
 
@@ -325,8 +366,8 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
     const chain = new TamperedChainAdapter(badEnvelope);
     // Upload with a normal adapter so a valid ref exists in the mock store.
     const uploader = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: chain,
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [chain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
@@ -381,8 +422,8 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
   it("throws with cause.code 'no_wrapper_matched' when the envelope is valid but the key is wrong", async () => {
     const chain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: chain,
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [chain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "alice-passphrase-ec",
@@ -392,8 +433,8 @@ describe("keyEnvelope error codes on retrieveByRefId", () => {
       ],
     });
     const bob = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: chain,
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [chain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "bob-passphrase-ec",
@@ -431,8 +472,8 @@ describe("public store and retrieve", () => {
     // Public uploads require at least one seed provider to derive a deterministic
     // ownerSecret. Without it the reference could never be removed or updated.
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
       encryptionAdapters: [],
     });
     await ds.init();
@@ -467,7 +508,7 @@ describe("public store and retrieve", () => {
     const { chainRefId, storageId } = await ds.store(enc("public"), {
       isPublic: true,
     });
-    const ref = await ds.chainAdapter.readReference(chainRefId);
+    const ref = await ds.chainAdapters[0]!.readReference(chainRefId);
     // For public data the storageId on-chain must equal the raw storage id
     expect(ref.storageId).toBe(storageId);
     expect(ref.encryptionScheme).toBe("");
@@ -476,14 +517,14 @@ describe("public store and retrieve", () => {
   it("private store stores an encrypted (different) storageId on-chain", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId, storageId } = await ds.store(enc("private"));
-    const ref = await ds.chainAdapter.readReference(chainRefId);
+    const ref = await ds.chainAdapters[0]!.readReference(chainRefId);
     expect(ref.storageId).not.toBe(storageId);
     expect(ref.encryptionScheme).toBe("xchacha20poly1305-v1");
   });
 
   it("private store: bytes stored in storage are not the original plaintext", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -501,7 +542,7 @@ describe("public store and retrieve", () => {
 
   it("private store: metadata stored on-chain is not the plaintext JSON", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -519,7 +560,7 @@ describe("public store and retrieve", () => {
 
   it("tampered ciphertext in storage is caught by on-chain hash check before decryption", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -542,8 +583,8 @@ describe("public store and retrieve", () => {
     const sharedChain = new MidnightSimulatorChainAdapter();
     const makePublicUser = (address: string) =>
       new DStorage({
-        storageAdapter: sharedStorage,
-        chainAdapter: sharedChain,
+        storageAdapters: [sharedStorage],
+        chainAdapters: [sharedChain],
         encryptionAdapters: [
           new PasswordEncryptionAdapter({
             password: "dstorage-test-passphrase-v1!",
@@ -588,8 +629,8 @@ describe("listReferences", () => {
     const sharedStorage = new MockStorageAdapter();
     const sharedChain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "alice-passphrase-lr",
@@ -599,8 +640,8 @@ describe("listReferences", () => {
       ],
     });
     const bob = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "bob-passphrase-lr",
@@ -638,8 +679,8 @@ describe("listReferences", () => {
 
   it("public store by another user: storageId is visible but decryptionError is set", async () => {
     const adapters = {
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
     };
     const alice = new DStorage({
       ...adapters,
@@ -731,8 +772,8 @@ describe("store metadata option", () => {
     const sharedStorage = new MockStorageAdapter();
     const sharedChain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "alice-passphrase-meta",
@@ -742,8 +783,8 @@ describe("store metadata option", () => {
       ],
     });
     const bob = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "bob-passphrase-meta",
@@ -803,7 +844,7 @@ describe("store metadata option", () => {
 describe("store tags option", () => {
   it("tags are forwarded to the storage adapter", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -848,7 +889,7 @@ describe("store tags option", () => {
 describe("dStorage-Version tag", () => {
   it("store() tags the upload with dStorage-Version", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -863,7 +904,7 @@ describe("dStorage-Version tag", () => {
 
   it("update() tags the upload with dStorage-Version", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -973,7 +1014,7 @@ describe("registerReference", () => {
 
   it("throws when no chain adapter is configured", async () => {
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
@@ -993,8 +1034,8 @@ describe("registerReference", () => {
 
   it("throws when no encryption adapters are configured", async () => {
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
     });
     await ds.init();
     await expect(
@@ -1009,7 +1050,7 @@ describe("registerReference", () => {
 
   it("forwards storageProvider option to the chain reference", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1066,7 +1107,7 @@ describe("update", () => {
 
   it("throws when no chain adapter is configured", async () => {
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
@@ -1088,8 +1129,8 @@ describe("update", () => {
         undefined as unknown as MidnightSimulatorChainAdapter["updateReference"];
     }
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new NoUpdateChain(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new NoUpdateChain()],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
@@ -1108,8 +1149,8 @@ describe("update", () => {
 
   it("throws when no encryption adapters are configured", async () => {
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
     });
     await ds.init();
     await expect(ds.update("refId", enc("data"))).rejects.toMatchObject({
@@ -1162,8 +1203,8 @@ describe("update", () => {
     }
 
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new ReadFailsChain(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new ReadFailsChain()],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
@@ -1188,8 +1229,8 @@ describe("update", () => {
 describe("store() refId option", () => {
   it("honors a caller-supplied refId when the chain adapter supports it", async () => {
     const ds = new DStorage({
-      storageAdapter: new MockStorageAdapter(),
-      chainAdapter: new MockChainAdapter(),
+      storageAdapters: [new MockStorageAdapter()],
+      chainAdapters: [new MockChainAdapter()],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
@@ -1227,7 +1268,7 @@ describe("update() StorePartialError recovery", () => {
   it("update() throws StorePartialError when chain write fails", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1"));
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("chain down"),
     );
     await expect(ds.update(refId!, enc("v2"))).rejects.toBeInstanceOf(
@@ -1238,7 +1279,7 @@ describe("update() StorePartialError recovery", () => {
   it("isStorePartialError() returns true for the error thrown by update()", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1"));
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("chain down"),
     );
     const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
@@ -1248,7 +1289,7 @@ describe("update() StorePartialError recovery", () => {
   it("StorePartialError from update() has code CHAIN_WRITE_FAILED", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1"));
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("timeout"),
     );
     const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
@@ -1263,7 +1304,7 @@ describe("update() StorePartialError recovery", () => {
     const underlying = new Error(
       "[dStorage/managed-payment] POST /api/service/sign-tx failed: HTTP 500 — insufficient funds",
     );
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       underlying,
     );
     const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
@@ -1274,7 +1315,7 @@ describe("update() StorePartialError recovery", () => {
   it("StorePartialError.recovery.storageId is a non-empty string", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1"));
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("net"),
     );
     const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
@@ -1286,7 +1327,7 @@ describe("update() StorePartialError recovery", () => {
   it("StorePartialError.recovery.keyEnvelope is a non-empty string", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1"));
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("net"),
     );
     const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
@@ -1298,7 +1339,7 @@ describe("update() StorePartialError recovery", () => {
   it("retryUpdate() returns { chainRefId, storageId }", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1"));
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("chain down"),
     );
     const err = await ds.update(refId!, enc("v2")).catch((e: unknown) => e);
@@ -1316,7 +1357,7 @@ describe("update() StorePartialError recovery", () => {
   it("full round-trip: update() chain write fails → retryUpdate() → retrieveByRefId() returns new bytes", async () => {
     const ds = await makeInitedDStorage();
     const { chainRefId: refId } = await ds.store(enc("v1 content"));
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("chain temporarily down"),
     );
 
@@ -1335,7 +1376,7 @@ describe("update() StorePartialError recovery", () => {
     const { chainRefId: refId } = await ds.store(enc("v1 content"));
 
     let capturedRecovery: StorePartialError["recovery"] | undefined;
-    vi.spyOn(ds.chainAdapter!, "updateReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "updateReference").mockRejectedValueOnce(
       new Error("chain down"),
     );
 
@@ -1363,7 +1404,7 @@ describe("StorePartialError recovery", () => {
 
   it("store() throws StorePartialError (not generic DStorageError) when chain write fails", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("chain down"),
     );
     await expect(ds.store(enc("hello"))).rejects.toBeInstanceOf(
@@ -1373,7 +1414,7 @@ describe("StorePartialError recovery", () => {
 
   it("StorePartialError has code CHAIN_WRITE_FAILED", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("timeout"),
     );
     const err = await ds.store(enc("hello")).catch((e: unknown) => e);
@@ -1387,7 +1428,7 @@ describe("StorePartialError recovery", () => {
     const underlying = new Error(
       "[dStorage/managed-payment] POST /api/service/sign-tx failed: HTTP 500 — insufficient funds",
     );
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       underlying,
     );
     const err = await ds.store(enc("hello")).catch((e: unknown) => e);
@@ -1397,7 +1438,7 @@ describe("StorePartialError recovery", () => {
 
   it("StorePartialError.recovery.storageId is a non-empty string", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
     const err = await ds.store(enc("content")).catch((e: unknown) => e);
@@ -1409,7 +1450,7 @@ describe("StorePartialError recovery", () => {
 
   it("StorePartialError.recovery.storageProvider matches the configured adapter", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
     const err = await ds.store(enc("content")).catch((e: unknown) => e);
@@ -1418,7 +1459,7 @@ describe("StorePartialError recovery", () => {
 
   it("StorePartialError.recovery.keyEnvelope is a non-empty string for private uploads", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
     const err = await ds.store(enc("private")).catch((e: unknown) => e);
@@ -1429,7 +1470,7 @@ describe("StorePartialError recovery", () => {
 
   it("StorePartialError.recovery.keyEnvelope is undefined for public uploads", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
     const err = await ds
@@ -1440,7 +1481,7 @@ describe("StorePartialError recovery", () => {
 
   it("isStorePartialError() returns true for StorePartialError", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
     const err = await ds.store(enc("x")).catch((e: unknown) => e);
@@ -1453,7 +1494,7 @@ describe("StorePartialError recovery", () => {
 
   it("full round-trip: chain write fails → StorePartialError → registerReference → retrieveByRefId", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("chain temporarily down"),
     );
 
@@ -1481,10 +1522,10 @@ describe("StorePartialError recovery", () => {
     const phases: string[] = [];
     let storedFiredBeforeChain = false;
 
-    const originalWrite = ds.chainAdapter!.writeReference.bind(
-      ds.chainAdapter!,
+    const originalWrite = ds.chainAdapters[0]!.writeReference.bind(
+      ds.chainAdapters[0]!,
     );
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockImplementation(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockImplementation(
       async (...args) => {
         storedFiredBeforeChain = phases.includes("stored");
         return originalWrite(...args);
@@ -1535,7 +1576,7 @@ describe("StorePartialError recovery", () => {
     const ds = await makeInitedDStorage();
     let capturedRecovery: import("../types.js").StoreRecovery | undefined;
 
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("chain down"),
     );
 
@@ -1562,7 +1603,7 @@ describe("StorePartialError recovery", () => {
 
   it("registerReference() with keyEnvelope returns a chainRefId", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
 
@@ -1583,7 +1624,7 @@ describe("StorePartialError recovery", () => {
 
   it("registerReference() with keyEnvelope produces a reference that decrypts correctly", async () => {
     const ds = await makeInitedDStorage();
-    vi.spyOn(ds.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(ds.chainAdapters[0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
 
@@ -1608,7 +1649,7 @@ describe("StorePartialError recovery", () => {
 describe("contentHash", () => {
   it("store() writes a 64-char hex contentHash to the chain adapter", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1622,8 +1663,8 @@ describe("contentHash", () => {
   it("contentHash is the BLAKE3 hex of the raw ciphertext bytes in storage", async () => {
     const { computeBlake3Hex } = await import("@dstorage/crypto");
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1643,8 +1684,8 @@ describe("contentHash", () => {
 
   it("retrieveByRefId() passes the on-chain contentHash as an expectedContentHash anchor to storageAdapter.retrieve()", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1661,7 +1702,7 @@ describe("contentHash", () => {
 
   it("retrieveByRefId() throws CONTENT_HASH_MISMATCH when storage bytes are tampered", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1679,7 +1720,7 @@ describe("contentHash", () => {
 
   it("contentHash is preserved unchanged through rotateKeys()", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1695,7 +1736,7 @@ describe("contentHash", () => {
 
   it("contentHash changes after update() with new content", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1722,7 +1763,7 @@ describe("contentHash", () => {
     const config = makeConfig();
     const ds = new DStorage(config);
     await ds.init();
-    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(config.chainAdapters![0]!, "writeReference").mockRejectedValueOnce(
       new Error("chain down"),
     );
 
@@ -1736,10 +1777,10 @@ describe("contentHash", () => {
 
   it("registerReference() with contentHash stores it on chain", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
-    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(config.chainAdapters![0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
 
@@ -1762,7 +1803,7 @@ describe("contentHash", () => {
     const config = makeConfig();
     const ds = new DStorage(config);
     await ds.init();
-    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(config.chainAdapters![0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
 
@@ -1787,10 +1828,10 @@ describe("contentHash", () => {
 
   it("tampered storage after recovery triggers CONTENT_HASH_MISMATCH via retrieveByRefId", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
-    vi.spyOn(config.chainAdapter!, "writeReference").mockRejectedValueOnce(
+    vi.spyOn(config.chainAdapters![0]!, "writeReference").mockRejectedValueOnce(
       new Error("net"),
     );
 
@@ -1825,7 +1866,7 @@ describe("contentHash", () => {
 
   it("public store() writes a 64-char hex contentHash to chain", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1841,8 +1882,8 @@ describe("contentHash", () => {
   it("public contentHash equals BLAKE3 of the raw plaintext bytes (no encryption layer)", async () => {
     const { computeBlake3Hex } = await import("@dstorage/crypto");
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1869,7 +1910,7 @@ describe("contentHash", () => {
 
   it("tampered public upload triggers CONTENT_HASH_MISMATCH (no AEAD fallback for public data)", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1900,7 +1941,7 @@ describe("contentHash", () => {
 describe("JSON.parse error handling on authenticated data", () => {
   it("retrieveByStorageId() throws MANIFEST_PARSE_FAILED for authenticated-but-invalid-JSON manifest bytes", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = new DStorage(config);
     await ds.init();
 
@@ -1920,7 +1961,7 @@ describe("JSON.parse error handling on authenticated data", () => {
 
   it("retrieveByRefId() throws METADATA_PARSE_FAILED for authenticated-but-invalid-JSON metadata", async () => {
     const config = makeConfig();
-    const chain = config.chainAdapter as MidnightSimulatorChainAdapter;
+    const chain = config.chainAdapters![0] as MidnightSimulatorChainAdapter;
     const passwordAdapter = config
       .encryptionAdapters![0] as PasswordEncryptionAdapter;
     const ds = new DStorage(config);

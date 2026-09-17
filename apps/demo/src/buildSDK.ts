@@ -102,8 +102,8 @@ export async function buildSDK(
   const encryptionAdapters = [encryptionAdapter];
 
   return new DStorage({
-    storageAdapter,
-    chainAdapter,
+    storageAdapters: [storageAdapter],
+    chainAdapters: [chainAdapter],
     encryptionAdapters,
     logger: console,
   });

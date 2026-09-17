@@ -45,8 +45,8 @@ describe.skipIf(!bundlerOk)("arweave bundler (mock chain)", () => {
     const adapter = createBundlerAdapter(env);
     mockChain = new MidnightSimulatorChainAdapter({ logger: console });
     sdk = new DStorage({
-      storageAdapter: adapter,
-      chainAdapter: mockChain,
+      storageAdapters: [adapter],
+      chainAdapters: [mockChain],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-bundler-integration-test-v1!",

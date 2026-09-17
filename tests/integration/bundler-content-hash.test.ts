@@ -49,8 +49,8 @@ describe.skipIf(!bundlerOk)(
       storageAdapter = createBundlerAdapter(env);
       mockChain = new MidnightSimulatorChainAdapter({ logger: console });
       sdk = new DStorage({
-        storageAdapter,
-        chainAdapter: mockChain,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [mockChain],
         encryptionAdapters: [
           new PasswordEncryptionAdapter({
             password: "dstorage-bundler-content-hash-test-v1!",

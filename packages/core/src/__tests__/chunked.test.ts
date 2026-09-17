@@ -37,8 +37,8 @@ const CHUNK_SIZE = 512;
 
 function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MidnightSimulatorChainAdapter(),
+    storageAdapters: [new MockStorageAdapter()],
+    chainAdapters: [new MidnightSimulatorChainAdapter()],
     encryptionAdapters: [
       new PasswordEncryptionAdapter({
         password: "dstorage-test-passphrase-v1!",
@@ -161,7 +161,7 @@ describe("store small file (≤ CHUNK_SIZE)", () => {
 
   it("file exactly CHUNK_SIZE bytes uses single-shot path (1 storage entry)", async () => {
     const config = makeConfig();
-    const storageAdapter = config.storageAdapter as MockStorageAdapter;
+    const storageAdapter = config.storageAdapters[0] as MockStorageAdapter;
     const storeSpy = vi.spyOn(storageAdapter, "store");
 
     const ds = await makeInitedDStorage(config);
@@ -177,7 +177,7 @@ describe("store small file (≤ CHUNK_SIZE)", () => {
 describe("store large file (> CHUNK_SIZE)", () => {
   it("splits into ceil(size/CHUNK_SIZE) chunks + 1 manifest store", async () => {
     const config = makeConfig();
-    const storageAdapter = config.storageAdapter as MockStorageAdapter;
+    const storageAdapter = config.storageAdapters[0] as MockStorageAdapter;
     const storeSpy = vi.spyOn(storageAdapter, "store");
 
     const ds = await makeInitedDStorage(config);
@@ -190,7 +190,7 @@ describe("store large file (> CHUNK_SIZE)", () => {
 
   it("chunk count is ceil(size / CHUNK_SIZE)", async () => {
     const config = makeConfig();
-    const storageAdapter = config.storageAdapter as MockStorageAdapter;
+    const storageAdapter = config.storageAdapters[0] as MockStorageAdapter;
     const storeSpy = vi.spyOn(storageAdapter, "store");
 
     const ds = await makeInitedDStorage(config);
@@ -204,7 +204,7 @@ describe("store large file (> CHUNK_SIZE)", () => {
 
   it("every chunk and the manifest are tagged with dStorage-Version", async () => {
     const config = makeConfig();
-    const storageAdapter = config.storageAdapter as MockStorageAdapter;
+    const storageAdapter = config.storageAdapters[0] as MockStorageAdapter;
     const storeSpy = vi.spyOn(storageAdapter, "store");
 
     const ds = await makeInitedDStorage(config);
@@ -237,7 +237,7 @@ describe("store large file (> CHUNK_SIZE)", () => {
 
   it("StoreResult.storageId is the manifest's storageId", async () => {
     const config = makeConfig();
-    const storageAdapter = config.storageAdapter as MockStorageAdapter;
+    const storageAdapter = config.storageAdapters[0] as MockStorageAdapter;
 
     const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE + 1);
@@ -278,7 +278,7 @@ describe("store large file (> CHUNK_SIZE)", () => {
 
   it("honors a caller-supplied refId for the manifest reference", async () => {
     const config = makeConfig();
-    config.chainAdapter = new MockChainAdapter();
+    config.chainAdapters = [new MockChainAdapter()];
     const ds = await makeInitedDStorage(config);
     const bytes = makeBytes(CHUNK_SIZE + 1);
 
@@ -313,7 +313,7 @@ describe("chunked manifest fields are correct in storage", () => {
     // wrapping). isPublic: true ensures the manifest JSON is stored in plaintext
     // so we can parse it without decryption.
     const ds = new DStorage({
-      storageAdapter,
+      storageAdapters: [storageAdapter],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-test-passphrase-v1!",
@@ -405,7 +405,7 @@ describe("chunked store via init() with encryptionSeedProvider", () => {
 describe("security: chunk AAD binding catches gateway swap", () => {
   it("swapping two chunks in storage causes decryption to throw", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
 
     // Spy on upload to record IDs in upload order (chunks first, manifest last).
     const uploadedIds: string[] = [];
@@ -456,7 +456,7 @@ describe("security: manifest structural validation", () => {
     tamper: (m: ChunkManifest) => ChunkManifest,
   ) {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = await makeInitedDStorage(config);
 
     // Public upload — manifest stored as plaintext, easy to tamper.
@@ -556,7 +556,7 @@ describe("security: manifest shape in user content is not misinterpreted", () =>
 
   it("manifest-shaped content does not trigger a fetch to the embedded storageId", async () => {
     const config = makeConfig();
-    const storage = config.storageAdapter as MockStorageAdapter;
+    const storage = config.storageAdapters[0] as MockStorageAdapter;
     const ds = await makeInitedDStorage(config);
 
     const sentinelId = "attacker-controlled-id-sentinel";

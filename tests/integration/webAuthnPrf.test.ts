@@ -103,8 +103,8 @@ describe.skipIf(!arlocalOk)(
       const owner = await WebAuthnPrfEncryptionAdapter.register();
 
       const uploaderSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [owner],
       });
       await uploaderSdk.init();
@@ -113,8 +113,8 @@ describe.skipIf(!arlocalOk)(
       const { chainRefId } = await uploaderSdk.store(enc(content));
 
       const readerSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           await WebAuthnPrfEncryptionAdapter.authenticate([owner.credentialId]),
         ],
@@ -130,8 +130,8 @@ describe.skipIf(!arlocalOk)(
       const owner = await WebAuthnPrfEncryptionAdapter.register();
 
       const uploaderSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           WebAuthnPrfEncryptionAdapter.fromPublicKey(owner.publicKey),
         ],
@@ -142,8 +142,8 @@ describe.skipIf(!arlocalOk)(
       const { chainRefId } = await uploaderSdk.store(enc(content));
 
       const readerSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [
           await WebAuthnPrfEncryptionAdapter.authenticate([owner.credentialId]),
         ],
@@ -159,8 +159,8 @@ describe.skipIf(!arlocalOk)(
       const owner = await WebAuthnPrfEncryptionAdapter.register();
 
       const uploaderSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [owner],
       });
       await uploaderSdk.init();
@@ -174,8 +174,8 @@ describe.skipIf(!arlocalOk)(
       ]);
 
       const unrelatedSdk = new DStorage({
-        storageAdapter,
-        chainAdapter,
+        storageAdapters: [storageAdapter],
+        chainAdapters: [chainAdapter],
         encryptionAdapters: [unrelated],
       });
       await unrelatedSdk.init();

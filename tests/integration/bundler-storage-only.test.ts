@@ -42,7 +42,7 @@ describe.skipIf(!bundlerOk)("storage-only mode with arweave bundler", () => {
   beforeAll(async () => {
     const adapter = createBundlerAdapter(env);
     storageOnlySdk = new DStorage({
-      storageAdapter: adapter,
+      storageAdapters: [adapter],
       encryptionAdapters: [
         new PasswordEncryptionAdapter({
           password: "dstorage-bundler-storageonly-integration-v1!",

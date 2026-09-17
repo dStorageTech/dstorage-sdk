@@ -29,8 +29,8 @@ const testSeedProvider = (salt: string) =>
 
 function makeConfig(address = "0xTestUser"): DStorageConfig {
   return {
-    storageAdapter: new MockStorageAdapter(),
-    chainAdapter: new MidnightSimulatorChainAdapter(),
+    storageAdapters: [new MockStorageAdapter()],
+    chainAdapters: [new MidnightSimulatorChainAdapter()],
     encryptionAdapters: [testSeedProvider(address)],
   };
 }
@@ -98,13 +98,13 @@ describe("wallet isolation", () => {
     // Use separate chain adapter instances so Alice's chain has no knowledge of Bob's refs.
     const sharedStorage = new MockStorageAdapter();
     const alice = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [sharedStorage],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
       encryptionAdapters: [testSeedProvider("0xAlice_iso1")],
     });
     const bob = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: new MidnightSimulatorChainAdapter(),
+      storageAdapters: [sharedStorage],
+      chainAdapters: [new MidnightSimulatorChainAdapter()],
       encryptionAdapters: [testSeedProvider("0xBob_iso1")],
     });
     await alice.init();
@@ -124,13 +124,13 @@ describe("wallet isolation", () => {
     const sharedStorage = new MockStorageAdapter();
     const sharedChain = new MidnightSimulatorChainAdapter();
     const ds1 = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [testSeedProvider("0xAlice_iso2")],
     });
     const ds2 = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [testSeedProvider("0xAlice_iso2")], // same salt → same key
     });
     await ds1.init();
@@ -189,13 +189,13 @@ describe("upload → list → remove lifecycle", () => {
     const sharedStorage = new MockStorageAdapter();
     const sharedChain = new MidnightSimulatorChainAdapter();
     const alice = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [testSeedProvider("0xAlice_iso2")],
     });
     const bob = new DStorage({
-      storageAdapter: sharedStorage,
-      chainAdapter: sharedChain,
+      storageAdapters: [sharedStorage],
+      chainAdapters: [sharedChain],
       encryptionAdapters: [testSeedProvider("0xBob_iso2")],
     });
     await alice.init();
@@ -224,8 +224,8 @@ describe("destroy and reconnect", () => {
     const sharedStorage = new MockStorageAdapter();
     const makeDs = () =>
       new DStorage({
-        storageAdapter: sharedStorage,
-        chainAdapter: new MidnightSimulatorChainAdapter(),
+        storageAdapters: [sharedStorage],
+        chainAdapters: [new MidnightSimulatorChainAdapter()],
         encryptionAdapters: [testSeedProvider("0xAlice_drr1")],
       });
 
