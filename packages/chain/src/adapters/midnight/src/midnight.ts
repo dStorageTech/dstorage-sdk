@@ -772,32 +772,9 @@ export class MidnightChainAdapter implements ChainAdapter {
           "dStorage/midnight",
           `submitTx: submitting tx length=${serializedTx.length}`,
         );
-        // TEMP DIAGNOSTIC — remove once the Lace SubmissionError root cause is
-        // confirmed. Dumps the exact bytes Lace rejected so they can be
-        // resubmitted directly against the node RPC, bypassing Lace's own
-        // error-summarising layer which drops the underlying rejection reason.
-        logger?.log(
-          "dStorage/midnight",
-          `submitTx DIAGNOSTIC: full serialized tx hex (network=${this.config.networkId}):\n${serializedTx}`,
-        );
         try {
           await connectorAPI.submitTransaction(serializedTx);
         } catch (err) {
-          // TEMP DIAGNOSTIC — dump the raw error shape Lace threw, in case it
-          // carries more than describeConnectorError() can extract.
-          logger?.log(
-            "dStorage/midnight",
-            `submitTx DIAGNOSTIC: raw error = ${(() => {
-              try {
-                return JSON.stringify(
-                  err,
-                  Object.getOwnPropertyNames(err ?? {}),
-                );
-              } catch {
-                return String(err);
-              }
-            })()}`,
-          );
           throw new DStorageError(
             ChainErrorCode.MIDNIGHT_SUBMIT_TX_FAILED,
             `[dStorage/midnight] Wallet failed to submit the transaction: ${describeConnectorError(err)}`,
