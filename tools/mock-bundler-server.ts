@@ -104,6 +104,7 @@ interface SignTxRequestBody {
   txData?: string; // base64url(48-byte deep_hash)
   network?: string;
   ownerKey?: string;
+  dataSizeBytes?: number;
 }
 
 function signHash(hashBytes: Buffer, key: KeyObject): Buffer {
@@ -123,6 +124,10 @@ async function handleSignTx(
   const body = await readJsonBody<SignTxRequestBody>(req);
   if (!body.txData) {
     sendJson(res, 400, { error: "missing txData" });
+    return;
+  }
+  if (!body.dataSizeBytes || body.dataSizeBytes <= 0) {
+    sendJson(res, 400, { error: "missing dataSizeBytes" });
     return;
   }
   const hashBytes = Buffer.from(body.txData, "base64url");

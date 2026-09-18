@@ -538,6 +538,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const body = JSON.stringify({
       txData: instruction.txData ?? null,
       network: instruction.network,
+      dataSizeBytes: instruction.dataSizeBytes,
       ...(instruction.ownerKey !== undefined
         ? { ownerKey: instruction.ownerKey }
         : {}),
