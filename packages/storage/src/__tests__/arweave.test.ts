@@ -163,6 +163,25 @@ describe("ArweaveStorageAdapter", () => {
       expect(() => new ArweaveStorageAdapter()).not.toThrow();
     });
 
+    it("rejects managedPayment.testMode (only supported by ArweaveLocalStorageAdapter)", () => {
+      try {
+        new ArweaveStorageAdapter({
+          walletKey: MOCK_JWK,
+          managedPayment: {
+            signingServerUrl: "https://signing.example.com",
+            authToken: "tok_test",
+            testMode: true,
+          },
+        });
+        expect.unreachable("constructor should have thrown");
+      } catch (err) {
+        expect((err as { code?: number }).code).toBe(
+          StorageErrorCode.ARWEAVE_TEST_MODE_UNSUPPORTED,
+        );
+        expect((err as Error).message).toMatch(/^\[dStorage\/arweave\]/);
+      }
+    });
+
     it("accepts a full config object", () => {
       expect(
         () =>

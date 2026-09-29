@@ -311,6 +311,17 @@ export type ArweaveLocalAdapterConfig = ArweaveAdapterConfig;
  *
  *   // Production — real Arweave mainnet
  *   storageAdapter: new ArweaveStorageAdapter({ walletKey: realJwk })
+ *
+ * ── Managed payment in test mode ──────────────────────────────────────────────
+ *
+ *   With `managedPayment.testMode: true`, the payment goes to the signing
+ *   server as a "TEST" (sandbox) request, and the transaction is signed
+ *   locally with `walletKey` so arlocal accepts it:
+ *
+ *   new ArweaveLocalStorageAdapter({
+ *     walletKey: testJwk,
+ *     managedPayment: { signingServerUrl, authToken, testMode: true },
+ *   })
  */
 export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
   override readonly name: StorageProviderName = "arweave";
@@ -335,10 +346,12 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     // authToken), the Arweave transaction owner is set to the server's RSA public
     // key, so arlocal checks the SERVER's wallet balance rather than the local
     // wallet's. Extract that key here so we can also mint to the server's address
-    // on arlocal.
-    const managedOwnerKey = ArweaveLocalStorageAdapter._extractOwnerKey(
-      config.managedPayment?.authToken,
-    );
+    // on arlocal. Not needed in test mode, where the tx is signed with walletKey.
+    const managedOwnerKey = config.managedPayment?.testMode
+      ? undefined
+      : ArweaveLocalStorageAdapter._extractOwnerKey(
+          config.managedPayment?.authToken,
+        );
 
     if (config.walletKey && Object.keys(config.walletKey).length > 0) {
       this._initMintPromise = this._mintWallet(
@@ -351,6 +364,10 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     } else {
       this._initMintPromise = null;
     }
+  }
+
+  protected override supportsManagedTestMode(): boolean {
+    return true;
   }
 
   /**
@@ -444,6 +461,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
    *
    * @param options.fundAr    AR to mint into the test wallet (default: 10)
    * @param options.gateway   Override the arlocal gateway (default: localhost:1984)
+   * @param options.managedPayment  Optional managed payment config (e.g. with testMode)
    *
    * @example
    * const { adapter, walletKey, address } =
@@ -456,6 +474,7 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
     options: {
       fundAr?: number;
       gateway?: ArweaveGatewayConfig;
+      managedPayment?: ArweaveAdapterConfig["managedPayment"];
     } = {},
   ): Promise<{
     adapter: ArweaveLocalStorageAdapter;
@@ -485,7 +504,13 @@ export class ArweaveLocalStorageAdapter extends ArweaveStorageAdapter {
       walletKey as unknown as JWKInterface,
     );
 
-    const adapter = new ArweaveLocalStorageAdapter({ walletKey, gateway });
+    const adapter = new ArweaveLocalStorageAdapter({
+      walletKey,
+      gateway,
+      ...(options.managedPayment !== undefined
+        ? { managedPayment: options.managedPayment }
+        : {}),
+    });
     const winstons = BigInt(fundAr) * 1_000_000_000_000n;
     await adapter.testnet.mintTokens(address, winstons);
 

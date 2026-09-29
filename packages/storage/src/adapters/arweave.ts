@@ -227,11 +227,20 @@ export class ArweaveStorageAdapter implements StorageAdapter {
           "[dStorage/arweave] authToken is required when signingServerUrl is provided.",
         );
       }
+      if (config.managedPayment.testMode && !this.supportsManagedTestMode()) {
+        throw new DStorageError(
+          StorageErrorCode.ARWEAVE_TEST_MODE_UNSUPPORTED,
+          "[dStorage/arweave] managedPayment.testMode is only supported by ArweaveLocalStorageAdapter.",
+        );
+      }
       this.paymentAdapter = new ManagedPaymentAdapter({
         managedPayment: config.managedPayment,
         network: this.name as PaymentNetworkName,
         type: "storage",
         gateway: this.gateway,
+        ...(config.walletKey !== undefined
+          ? { walletKey: config.walletKey }
+          : {}),
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     } else {
@@ -244,6 +253,15 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         ...(config.logger !== undefined ? { logger: config.logger } : {}),
       });
     }
+  }
+
+  /**
+   * Whether this adapter accepts `managedPayment.testMode`. False here: test
+   * mode signs with the local walletKey, which is only meant for arlocal.
+   * Called from the constructor, so overrides must not depend on subclass fields.
+   */
+  protected supportsManagedTestMode(): boolean {
+    return false;
   }
 
   // ── Private: lazy Arweave client ──────────────────────────────────────────────

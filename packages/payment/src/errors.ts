@@ -17,6 +17,7 @@ export const PaymentErrorCode = {
   MANAGED_KEY_CHANGED: 14108,
   MANAGED_SIGN_HTTP_ERROR: 14109,
   MANAGED_NON_JSON_RESPONSE: 14110,
+  MANAGED_TEST_MODE_WALLET_REQUIRED: 14111,
 } as const;
 
 export type PaymentErrorCode =

@@ -112,12 +112,21 @@ export interface ManagedPaymentOptions {
    * Pass `0` to disable the timeout entirely (not recommended for production).
    */
   requestTimeoutMs?: number;
+  /**
+   * Opt-in sandbox mode for adapters that support it. When true, sign-tx
+   * requests carry the literal network identifier "TEST": the signing server
+   * records a sandbox payment (no real funds) and returns fake signing data,
+   * which the adapter replaces with whatever the target network needs to
+   * accept the transaction. Adapters that don't support it reject the flag.
+   * Defaults to false.
+   *
+   * Currently supported by: ArweaveLocalStorageAdapter (the transaction is
+   * signed locally with its `walletKey` for arlocal).
+   */
+  testMode?: boolean;
 }
 
-export interface ManagedPaymentAdapterConfig extends Omit<
-  ArweavePaymentAdapterConfig,
-  "walletKey"
-> {
+export interface ManagedPaymentAdapterConfig extends ArweavePaymentAdapterConfig {
   /** Which network this adapter is used for */
   network: PaymentNetworkName;
   /** Whether this covers a storage network fee or a chain transaction fee */
@@ -216,6 +225,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   private readonly authToken: string;
   private readonly requestTimeoutMs: number;
   private readonly ownerPublicKey: string | undefined;
+  private readonly testMode: boolean;
 
   /**
    * Strip a RSA-4096 modulus suffix from a compound auth token
@@ -249,7 +259,22 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
         ? { quoteValidityMs: config.quoteValidityMs }
         : {}),
       ...(config.logger !== undefined ? { logger: config.logger } : {}),
+      ...(config.walletKey !== undefined
+        ? { walletKey: config.walletKey }
+        : {}),
     });
+    this.testMode = config.managedPayment.testMode ?? false;
+    if (
+      this.testMode &&
+      config.network === "arweave" &&
+      (!config.walletKey || Object.keys(config.walletKey).length === 0)
+    ) {
+      throw new DStorageError(
+        PaymentErrorCode.MANAGED_TEST_MODE_WALLET_REQUIRED,
+        "[dStorage/managed-payment] managedPayment.testMode on Arweave requires a walletKey to sign the transaction locally — " +
+          "pass one, or use ArweaveLocalStorageAdapter.createWithTestWallet({ managedPayment }).",
+      );
+    }
     this.signingServerUrl = config.managedPayment.signingServerUrl.replace(
       /\/$/,
       "",
@@ -408,6 +433,9 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    *   6. Restores the raw data so the chunked uploader can post it directly to
    *      the Arweave gateway — the server never sees the file content.
    *
+   * In test mode, step 4 uses the "TEST" network and steps 5–6 are replaced by
+   * signing locally with walletKey (the server's signing data is fake).
+   *
    * Falls back to the base-class pass-through if provideUploadData() was not called.
    */
   private async _payArweave(
@@ -426,7 +454,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     onStatus?.("Creating Arweave transaction…");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tx: any = await arweave.createTransaction({ data });
-    if (this.ownerPublicKey) {
+    // In test mode the tx is signed locally, which sets the owner from walletKey.
+    if (this.ownerPublicKey && !this.testMode) {
       tx.owner = this.ownerPublicKey;
     }
     for (const [key, value] of Object.entries(metadata)) {
@@ -443,9 +472,10 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const rawData: any = tx.data;
     tx.data = new Uint8Array(0);
 
+    const network = this.testMode ? "TEST" : instruction.network;
     const body = JSON.stringify({
       txData: tx.toJSON(),
-      network: instruction.network,
+      network,
     });
 
     const {
@@ -454,7 +484,30 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       publicKey,
       txAmount: arCost,
       serviceFee,
-    } = await this._sendSignTxRequest(body, instruction.network, onStatus);
+    } = await this._sendSignTxRequest(body, network, onStatus);
+
+    if (this.testMode) {
+      // The TEST response records the payment but its signing data is fake
+      // (it wouldn't pass the gateway's signature check), so sign locally.
+      tx.data = rawData;
+      onStatus?.("Signing transaction locally (test mode)…");
+      await arweave.transactions.sign(tx, this.resolveWallet());
+      this.signedUpload = { tx, arCost };
+
+      this.logger?.log(
+        "dStorage/managed-payment",
+        `TEST payment recorded (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee}); Arweave tx signed locally → id: ${tx.id}`,
+      );
+
+      return {
+        txHash: txId,
+        token: this.token,
+        amount: arCost,
+        type: this.type,
+        paidAt: Date.now(),
+        serviceFee,
+      };
+    }
 
     // Pin check: when an expected server modulus was supplied out-of-band (in the
     // auth token), the response's owner key must match it before we apply the

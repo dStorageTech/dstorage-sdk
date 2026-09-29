@@ -2,7 +2,8 @@
  * @dstorage/payment — ManagedPaymentAdapter tests
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
+import Arweave from "arweave";
 import {
   ManagedPaymentAdapter,
   parseSignTxResponse,
@@ -662,5 +663,161 @@ describe("ManagedPaymentAdapter — managedmock txData prefixing", () => {
     });
     const sent = JSON.parse(capture.body()) as { txData: string };
     expect(sent.txData).toBe("mock");
+  });
+});
+
+// ── testMode (Arweave) ────────────────────────────────────────────────────────
+//
+// With managedPayment.testMode the sign-tx request carries network "TEST"; the
+// signing server returns fake signing data (as the portal's processTest does),
+// so the adapter must sign the tx locally with walletKey for arlocal to accept it.
+
+describe("ManagedPaymentAdapter — testMode (Arweave)", () => {
+  let walletKey: Record<string, string>;
+  let arweave: Arweave;
+
+  beforeAll(async () => {
+    arweave = Arweave.init({});
+    walletKey = (await arweave.wallets.generate()) as unknown as Record<
+      string,
+      string
+    >;
+  }, 30_000);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Portal-shaped TEST response: random bytes, not a valid Arweave signature.
+  const FAKE_TX_ID = "t".repeat(43);
+
+  function stubGatewayAndSigningServer(): { body: () => string } {
+    let capturedBody = "";
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if (url.includes("/api/service/sign-tx")) {
+        capturedBody = String(init?.body ?? "");
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: true,
+              txId: FAKE_TX_ID,
+              signature: "f".repeat(86),
+              publicKey: "p".repeat(43),
+              txAmount: "0.001",
+              serviceFee: "0.0001",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes("/tx_anchor")) {
+        return Promise.resolve(new Response("a".repeat(64), { status: 200 }));
+      }
+      if (url.includes("/price/")) {
+        return Promise.resolve(new Response("12345", { status: 200 }));
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    return { body: () => capturedBody };
+  }
+
+  function makeTestModeAdapter(authToken = "tok_test") {
+    return new ManagedPaymentAdapter({
+      ...BASE_CONFIG,
+      walletKey,
+      managedPayment: {
+        signingServerUrl: SIGNING_SERVER_URL,
+        authToken,
+        testMode: true,
+      },
+    });
+  }
+
+  async function payWithUpload(adapter: ManagedPaymentAdapter) {
+    const data = new TextEncoder().encode("test-mode payload");
+    adapter.provideUploadData(data, {
+      "Content-Type": "application/octet-stream",
+    });
+    const receipt = await adapter.pay(
+      makeQuote({ dataSizeBytes: data.byteLength }),
+    );
+    return { data, receipt };
+  }
+
+  it("throws when testMode is set on Arweave without a walletKey", () => {
+    try {
+      new ManagedPaymentAdapter({
+        ...BASE_CONFIG,
+        managedPayment: {
+          signingServerUrl: SIGNING_SERVER_URL,
+          authToken: "tok_test",
+          testMode: true,
+        },
+      });
+      expect.unreachable("constructor should have thrown");
+    } catch (err) {
+      expect((err as { code?: number }).code).toBe(
+        PaymentErrorCode.MANAGED_TEST_MODE_WALLET_REQUIRED,
+      );
+      expect((err as Error).message).toMatch(/^\[dStorage\/managed-payment\]/);
+      expect((err as Error).message).toContain("createWithTestWallet");
+    }
+  });
+
+  it("does not require a walletKey for testMode on non-Arweave networks", () => {
+    expect(
+      () =>
+        new ManagedPaymentAdapter({
+          network: "managedmock",
+          type: "chain",
+          managedPayment: {
+            signingServerUrl: SIGNING_SERVER_URL,
+            authToken: "tok_test",
+            testMode: true,
+          },
+        }),
+    ).not.toThrow();
+  });
+
+  it("sends the stripped Arweave tx with network TEST", async () => {
+    const capture = stubGatewayAndSigningServer();
+    await payWithUpload(makeTestModeAdapter());
+
+    const sent = JSON.parse(capture.body()) as {
+      network: string;
+      txData: { data: string; data_root: string; data_size: string };
+    };
+    expect(sent.network).toBe("TEST");
+    expect(sent.txData.data).toBe("");
+    expect(sent.txData.data_root).not.toBe("");
+    expect(sent.txData.data_size).toBe(
+      String(new TextEncoder().encode("test-mode payload").byteLength),
+    );
+  });
+
+  it("signs the tx locally with walletKey instead of applying the fake signature", async () => {
+    stubGatewayAndSigningServer();
+    const adapter = makeTestModeAdapter();
+    const { data, receipt } = await payWithUpload(adapter);
+
+    expect(receipt.txHash).toBe(FAKE_TX_ID);
+
+    const signed = adapter.consumeSignedUpload();
+    expect(signed).not.toBeNull();
+    const tx = signed!.tx;
+    expect(tx.owner).toBe(walletKey.n);
+    expect(tx.id).not.toBe(FAKE_TX_ID);
+    expect(tx.data).toEqual(data);
+    expect(await arweave.transactions.verify(tx)).toBe(true);
+  });
+
+  it("ignores a pinned server key from a compound authToken", async () => {
+    stubGatewayAndSigningServer();
+    const adapter = makeTestModeAdapter(`tok_test.${"A".repeat(683)}`);
+    await payWithUpload(adapter);
+
+    const tx = adapter.consumeSignedUpload()!.tx;
+    expect(tx.owner).toBe(walletKey.n);
+    expect(await arweave.transactions.verify(tx)).toBe(true);
   });
 });

@@ -495,6 +495,47 @@ describe("ArweaveLocalStorageAdapter", () => {
     });
   });
 
+  // ── managedPayment.testMode ────────────────────────────────────────────────
+
+  describe("managedPayment.testMode", () => {
+    const managedPayment = {
+      signingServerUrl: "https://signing.example.com",
+      authToken: `tok_test.${"A".repeat(683)}`,
+      testMode: true,
+    };
+
+    beforeEach(() => {
+      mockFetch.mockResolvedValue(okResponse());
+    });
+
+    it("throws without a walletKey, pointing to createWithTestWallet", () => {
+      expect(() => new ArweaveLocalStorageAdapter({ managedPayment })).toThrow(
+        /createWithTestWallet/,
+      );
+    });
+
+    it("funds only the local wallet, not the server key from the authToken", async () => {
+      const adapter = makeAdapter({ managedPayment });
+      await (adapter as unknown as { _initMintPromise: Promise<void> })
+        ._initMintPromise;
+
+      const mintCalls = mockFetch.mock.calls.filter(([url]) =>
+        String(url).includes("/mint/"),
+      );
+      expect(mintCalls).toHaveLength(1);
+      expect(String(mintCalls[0]![0])).toContain(`/mint/${MOCK_ADDRESS}/`);
+    });
+
+    it("createWithTestWallet forwards managedPayment to the adapter", async () => {
+      const { adapter } = await ArweaveLocalStorageAdapter.createWithTestWallet(
+        { managedPayment },
+      );
+      expect(adapter.paymentAdapter.constructor.name).toBe(
+        "ManagedPaymentAdapter",
+      );
+    });
+  });
+
   // ── testnet helper integration ─────────────────────────────────────────────
 
   describe("testnet helper via adapter", () => {
