@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   Requires two local services and Preprod wallet tokens:
 
   1) Proof Server (port 6300)
-       docker run -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v
+       docker run -p 6300:6300 midnightntwrk/proof-server:8.1.0 -- midnight-proof-server -v
      Docs: https://docs.midnight.network/getting-started/installation#run-the-proof-server
 
   2) Arweave Local (port 1984)

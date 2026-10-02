@@ -45,7 +45,7 @@ services:
         condition: service_started
 
   node:
-    image: "midnightntwrk/midnight-node:1.0.1"
+    image: "midnightntwrk/midnight-node:1.0.300"
     container_name: midnight-node
     ports:
       - "9944:9944"
