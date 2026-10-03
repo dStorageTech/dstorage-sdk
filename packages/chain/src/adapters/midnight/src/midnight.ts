@@ -459,6 +459,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       }
       this.managedPaymentAdapter = new ManagedPaymentAdapter({
         network: "midnight",
+        networkId: config.network,
         type: "chain",
         managedPayment: config.managedPayment,
         ...(config.logger !== undefined ? { logger: config.logger } : {}),

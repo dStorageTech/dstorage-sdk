@@ -133,6 +133,13 @@ export interface ManagedPaymentAdapterConfig extends ArweavePaymentAdapterConfig
   type: NetworkType;
   /** Managed signing server connection options. */
   managedPayment: ManagedPaymentOptions;
+  /**
+   * Target network identifier within the chain (e.g. Midnight "preprod",
+   * "preview", "undeployed"). Sent as `networkId` in Midnight sign-tx requests
+   * so the signing server can balance against — or reject a mismatch with —
+   * the network the transaction was built for.
+   */
+  networkId?: string;
 }
 
 // ── Server response shapes ────────────────────────────────────────────────────
@@ -226,6 +233,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   private readonly requestTimeoutMs: number;
   private readonly ownerPublicKey: string | undefined;
   private readonly testMode: boolean;
+  private readonly networkId: string | undefined;
 
   /**
    * Strip a RSA-4096 modulus suffix from a compound auth token
@@ -296,6 +304,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       config.managedPayment.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.network = config.network;
     this.type = config.type;
+    this.networkId = config.networkId;
   }
 
   // ── PaymentAdapter: estimateCost ─────────────────────────────────────────────
@@ -543,7 +552,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    *   Midnight account and submits the chain transaction on behalf of the user.
    *
    *   POST {baseUrl}{POST_SIGN_TX_API_PATH}
-   *        → { txData: string (hex-serialized UnboundTransaction), network: string, userId: string }
+   *        → { txData: string (hex-serialized UnboundTransaction), network: string,
+   *            networkId?: string (e.g. "preprod", "preview"), userId: string }
    *        ← { txId: string, signature: string (hex-serialized FinalizedTransaction), ... }
    *
    * The hex-serialized FinalizedTransaction is returned in PaymentReceipt.signedTx
@@ -556,6 +566,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
     const body = JSON.stringify({
       txData: instruction.txData ?? null,
       network: instruction.network,
+      ...(this.networkId !== undefined ? { networkId: this.networkId } : {}),
     });
 
     const {

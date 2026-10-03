@@ -519,6 +519,57 @@ describe("ManagedPaymentAdapter — request timeout", () => {
   });
 });
 
+// ── Midnight sign-tx request body ─────────────────────────────────────────────
+
+describe("ManagedPaymentAdapter — Midnight networkId", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function captureBody(
+    networkId?: string,
+  ): Promise<Record<string, unknown>> {
+    let sent: string | undefined;
+    vi.stubGlobal("fetch", (_url: string, init?: RequestInit) => {
+      sent = init?.body as string;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: true,
+            txId: "a".repeat(43),
+            signature: "c2lnbmF0dXJl",
+            publicKey: "cHVibGljS2V5",
+            txAmount: "0.001",
+            serviceFee: "0.0001",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+    const adapter = new ManagedPaymentAdapter({
+      ...MIDNIGHT_CONFIG,
+      ...(networkId !== undefined ? { networkId } : {}),
+    });
+    await adapter.pay({
+      network: "midnight",
+      txData: "deadbeef",
+      dataSizeBytes: 0,
+      expiresAt: Date.now() + 60_000,
+    });
+    return JSON.parse(sent ?? "{}") as Record<string, unknown>;
+  }
+
+  it("sends the configured networkId in the sign-tx request", async () => {
+    const body = await captureBody("preview");
+    expect(body).toMatchObject({ network: "midnight", networkId: "preview" });
+  });
+
+  it("omits networkId when none is configured", async () => {
+    const body = await captureBody();
+    expect(body).not.toHaveProperty("networkId");
+  });
+});
+
 // ── Quote TTL enforcement ─────────────────────────────────────────────────────
 
 describe("ManagedPaymentAdapter — quote TTL", () => {
