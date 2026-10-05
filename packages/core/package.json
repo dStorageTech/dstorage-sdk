@@ -56,9 +56,10 @@
   },
   "sideEffects": false,
   "scripts": {
-    "build": "tsup && npm run copy:zk-artifacts",
+    "build": "tsup && npm run check:dts && npm run copy:zk-artifacts",
     "copy:zk-artifacts": "mkdir -p dist/contracts/dataregistry/managed && cp -a ../chain/src/adapters/midnight/contracts/dataregistry/managed/keys dist/contracts/dataregistry/managed/ && cp -a ../chain/src/adapters/midnight/contracts/dataregistry/managed/zkir dist/contracts/dataregistry/managed/",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "check:dts": "node scripts/check-dts.mjs"
   },
   "dependencies": {
     "@dha-team/arbundles": "^1.0.4",

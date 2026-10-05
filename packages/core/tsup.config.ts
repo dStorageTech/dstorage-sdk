@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "tsup";
 
 const sharedNoExternal = [
@@ -35,6 +36,24 @@ const sharedExternal: (string | RegExp)[] = [
   "bip39",
 ];
 
+// The workspace @dstorage/* packages are bundled into this package and are not
+// published dependencies, so their declarations must be inlined into our .d.ts
+// files too. tsup's `dts.resolve` can't do this: it resolves them through the
+// node_modules symlinks, so rollup-plugin-dts treats each sibling's dist/*.d.ts
+// as an external library and leaves its relative re-exports (`./types.js`,
+// `./adapters/mock.js`) as dangling imports in our dist — every type behind
+// them then resolves to `any` for consumers. Instead, point TypeScript `paths`
+// at the siblings' real dist directories so their declarations are bundled.
+const siblingDist = (pkg: string) =>
+  fileURLToPath(new URL(`../${pkg}/dist/`, import.meta.url));
+const dtsPaths: Record<string, string[]> = Object.fromEntries(
+  ["crypto", "payment", "encryption", "storage", "chain"].flatMap((pkg) => [
+    [`@dstorage/${pkg}`, [`${siblingDist(pkg)}index.d.ts`]],
+    [`@dstorage/${pkg}/*`, [`${siblingDist(pkg)}*.d.ts`]],
+  ]),
+);
+const dts = { compilerOptions: { paths: dtsPaths } };
+
 // "node:fs" and "fs" are added to the browser build external list because
 // MidnightChainAdapter uses a dynamic import("node:fs") inside its provider-mode
 // code path. That path is never reached in connector (browser) mode, so leaving
@@ -49,9 +68,7 @@ export default defineConfig([
   {
     entry: { errors: "src/errors.public.ts" },
     format: ["esm", "cjs"],
-    dts: {
-      resolve: [/^@dstorage\/(crypto|storage|chain)/],
-    },
+    dts,
     tsconfig: "tsconfig.build.json",
     noExternal: sharedNoExternal,
     external: sharedExternal,
@@ -66,9 +83,7 @@ export default defineConfig([
   {
     entry: { index: "src/index.publish.ts" },
     format: ["esm", "cjs"],
-    dts: {
-      resolve: [/^@dstorage\/(crypto|payment|encryption|storage|chain)/],
-    },
+    dts,
     tsconfig: "tsconfig.build.json",
     // Bundle lightweight siblings inline.
     noExternal: sharedNoExternal,
@@ -97,9 +112,7 @@ export default defineConfig([
     entry: { browser: "src/browser.ts" },
     format: ["esm"],
     platform: "browser",
-    dts: {
-      resolve: [/^@dstorage\/(crypto|payment|encryption|storage|chain)/],
-    },
+    dts,
     tsconfig: "tsconfig.build.json",
     noExternal: sharedNoExternal,
     external: [...sharedExternal, ...browserOnlyExternal],
