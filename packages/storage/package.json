@@ -1,6 +1,6 @@
 {
   "name": "@dstorage/storage",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Pluggable storage adapters for dStorage SDK",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
