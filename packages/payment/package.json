@@ -1,6 +1,6 @@
 {
   "name": "@dstorage/payment",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Pluggable payment adapters for dStorage SDK",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
