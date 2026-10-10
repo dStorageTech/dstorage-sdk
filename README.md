@@ -204,20 +204,20 @@ Reference `dist/browser.mjs` directly, or serve it from a CDN that supports impo
 
 ### What is and is not included
 
-| Adapter                                       | Browser bundle | Reason for exclusion                                                                       |
-| --------------------------------------------- | :------------: | ------------------------------------------------------------------------------------------ |
-| `MockStorageAdapter`                          |       ✅       |                                                                                            |
-| `ArweaveStorageAdapter`                       |       ✅       |                                                                                            |
-| `ArweaveBundlerStorageAdapter`                |       ✅       |                                                                                            |
-| `ArweaveLocalStorageAdapter`                  |       ✅       | Requires arlocal running at a browser-reachable URL — see note below                       |
-| `MockPaymentAdapter`                          |       ✅       |                                                                                            |
-| `ArweavePaymentAdapter`                       |       ✅       |                                                                                            |
-| `ManagedPaymentAdapter`                       |       ✅       |                                                                                            |
-| `MockChainAdapter`                            |       ✅       |                                                                                            |
-| `MidnightSimulatorChainAdapter`               |       ✅       |                                                                                            |
-| `HttpGatewayChainAdapter`                     |       ✅       |                                                                                            |
-| `MidnightChainAdapter` (connector mode)       |       ✅       | Requires Lace wallet extension; use `NETWORKS` preset for endpoint config — see note below |
-| `MidnightChainAdapter` (provider/facade mode) |       ❌       | Requires LevelDB (private state) and filesystem (ZK artifacts) — Node.js only              |
+| Adapter                                       | Browser bundle | Reason for exclusion                                                                              |
+| --------------------------------------------- | :------------: | ------------------------------------------------------------------------------------------------- |
+| `MockStorageAdapter`                          |       ✅       |                                                                                                   |
+| `ArweaveStorageAdapter`                       |       ✅       |                                                                                                   |
+| `ArweaveBundlerStorageAdapter`                |       ✅       |                                                                                                   |
+| `ArweaveLocalStorageAdapter`                  |       ✅       | Requires arlocal running at a browser-reachable URL — see note below                              |
+| `MockPaymentAdapter`                          |       ✅       |                                                                                                   |
+| `ArweavePaymentAdapter`                       |       ✅       |                                                                                                   |
+| `ManagedPaymentAdapter`                       |       ✅       |                                                                                                   |
+| `MockChainAdapter`                            |       ✅       |                                                                                                   |
+| `MidnightSimulatorChainAdapter`               |       ✅       |                                                                                                   |
+| `HttpGatewayChainAdapter`                     |       ✅       |                                                                                                   |
+| `MidnightChainAdapter` (connector mode)       |       ✅       | Requires Lace wallet extension; endpoints come from the wallet unless configured — see note below |
+| `MidnightChainAdapter` (provider/facade mode) |       ❌       | Requires LevelDB (private state) and filesystem (ZK artifacts) — Node.js only                     |
 
 **`ArweaveLocalStorageAdapter` in browsers**: arlocal sets `Access-Control-Allow-Origin: *` by default, so no extra CORS configuration is required. Start arlocal as usual (`docker run -p 1984:1984 textury/arlocal` or `npx arlocal`) and point the adapter at the arlocal URL:
 
@@ -236,7 +236,9 @@ const adapter2 = new ArweaveLocalStorageAdapter({
 
 If arlocal runs on a non-localhost host, verify that your reverse proxy or network path preserves the CORS headers arlocal sets. Browsers treat `localhost` as a secure context, so HTTP connections to `localhost:1984` are not blocked even when the app is served over HTTPS.
 
-**`MidnightChainAdapter` in browsers**: only **connector mode** (`walletMode: "connector"`) is supported in the browser bundle. It connects to the Lace wallet extension, fetches ZK artifacts over HTTP (`FetchZkConfigProvider`), and stores private state in memory. Use the `NETWORKS` constant for pre-configured endpoints:
+**`MidnightChainAdapter` in browsers**: only **connector mode** (`walletMode: "connector"`) is supported in the browser bundle. It connects to the Lace wallet extension, fetches ZK artifacts over HTTP (`FetchZkConfigProvider`), and stores private state in memory.
+
+The adapter has no built-in endpoint defaults. In connector mode the indexer endpoints come from the connected wallet's configuration, unless you set them yourself. Endpoints you set always take priority over the wallet's:
 
 ```typescript
 import {
@@ -246,10 +248,14 @@ import {
 
 const chain = new MidnightChainAdapter({
   walletMode: "connector",
-  ...NETWORKS.preprod,
+  network: NETWORKS.preprod.networkId, // must match the wallet's network, or init() throws
+  proofServerEndpoint: "http://127.0.0.1:6300", // used instead of the wallet's proverServerUri
+  // indexerEndpoint / indexerWsEndpoint: optional, override the wallet's indexer
   zkConfigBaseUrl: window.location.origin, // serve keys/ and zkir/ from public/
 });
 ```
+
+If `proofServerEndpoint` is omitted, the wallet's proof server is only used with `allowWalletProofServer: true`. In provider mode, `indexerEndpoint`, `indexerWsEndpoint` and `proofServerEndpoint` are required. `NETWORKS` only lists the known network ids (`preprod`, `preview`, `undeployed`); it contains no endpoints.
 
 Provider/facade mode (`walletMode: "provider"`) is Node.js-only and cannot run in a browser — it requires LevelDB for persistent private state and local filesystem access for ZK artifact files.
 

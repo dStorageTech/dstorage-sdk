@@ -45,6 +45,7 @@ import type {
 } from "../../../types.js";
 
 import type {
+  Configuration as WalletConfiguration,
   ConnectedAPI,
   InitialAPI,
 } from "@midnight-ntwrk/dapp-connector-api";
@@ -69,55 +70,39 @@ export interface WalletAddresses {
   dust: string;
 }
 
-// ── Network default endpoints ──────────────────────────────────────────────────
-type SUPPORTED_NETWORKS = {
-  [K in "preprod" | "preview" | "undeployed"]: EnvironmentConfiguration;
-};
-export const NETWORKS: SUPPORTED_NETWORKS = {
-  preprod: {
-    networkId: "preprod",
-    nodeHttp: "https://rpc.preprod.midnight.network",
-    nodeWs: "wss://rpc.preprod.midnight.network",
-    indexerHttp: "https://indexer.preprod.midnight.network/api/v4/graphql",
-    indexerWs: "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
-    proofServer: "http://127.0.0.1:6300",
-  },
-  preview: {
-    networkId: "preview",
-    nodeHttp: "https://rpc.preview.midnight.network",
-    nodeWs: "wss://rpc.preview.midnight.network",
-    indexerHttp: "https://indexer.preview.midnight.network/api/v4/graphql",
-    indexerWs: "wss://indexer.preview.midnight.network/api/v4/graphql/ws",
-    proofServer: "http://127.0.0.1:6300",
-  },
-  undeployed: {
-    networkId: "undeployed",
-    nodeHttp: "http://127.0.0.1:9944",
-    nodeWs: "ws://127.0.0.1:9944",
-    indexerHttp: "http://127.0.0.1:8088/api/v4/graphql",
-    indexerWs: "ws://127.0.0.1:8088/api/v4/graphql/ws",
-    proofServer: "http://127.0.0.1:6300",
-  },
+// ── Known networks ─────────────────────────────────────────────────────────────
+// Network ids only — endpoints are never preset; configure them explicitly or
+// (in connector mode) let the wallet supply them.
+export const NETWORKS = {
+  preprod: { networkId: "preprod" },
+  preview: { networkId: "preview" },
+  undeployed: { networkId: "undeployed" },
 } as const;
 
-/** Internal environment configuration passed to wallet SDK providers. */
-interface EnvironmentConfiguration {
+/**
+ * Internal resolved adapter configuration. Endpoints are only those the caller
+ * explicitly configured — there are no built-in defaults.
+ */
+interface AdapterEnvironment {
   networkId: string;
-  nodeHttp: string;
-  nodeWs: string;
-  indexerHttp: string;
-  indexerWs: string;
-  proofServer: string;
-  proofServerMaxRetries?: number;
+  nodeHttp?: string;
+  nodeWs?: string;
+  indexerHttp?: string;
+  indexerWs?: string;
+  proofServer?: string;
+  proofServerMaxRetries: number;
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
 interface BaseConfig {
   /**
-   * Midnight node RPC endpoint.
+   * Midnight node RPC (HTTP) endpoint. No default.
    */
   nodeEndpoint?: string;
+  /**
+   * Midnight node RPC WebSocket endpoint. No default.
+   */
   nodeWsEndpoint?: string;
   /**
    * Optional logger for SDK operational output.
@@ -126,17 +111,24 @@ interface BaseConfig {
    */
   logger?: ChainAdapterLogger;
   /**
-   * Midnight indexer HTTP (GraphQL) endpoint for state queries.
+   * Midnight indexer HTTP (GraphQL) endpoint for state queries. No default.
+   * Required in provider mode. In connector mode, when set, it takes priority
+   * over the wallet's `indexerUri`; when omitted, the wallet's value is used.
    */
   indexerEndpoint?: string;
   /**
-   * Midnight indexer WebSocket endpoint for real-time subscriptions.
+   * Midnight indexer WebSocket endpoint for real-time subscriptions. No default.
+   * Required in provider mode. In connector mode, when set, it takes priority
+   * over the wallet's `indexerWsUri`; when omitted, the wallet's value is used.
    */
   indexerWsEndpoint?: string;
   /**
-   * Proof server URL.
+   * Proof server URL. No default. Required in provider mode. In connector mode,
+   * when set, it always takes priority over the wallet's `proverServerUri`;
+   * when omitted, the wallet's value is used only if `allowWalletProofServer`
+   * is `true`.
    */
-  proofServerEndpoint: string;
+  proofServerEndpoint?: string;
   /**
    * Number of times to retry a proof-server circuit call on failure before
    * giving up. Uses exponential backoff (1 s, 2 s, 4 s, …).
@@ -150,6 +142,9 @@ interface BaseConfig {
   contractAddress?: string;
   /**
    * Target network. Controls wallet networkId, address format, and fee overhead.
+   * Always takes priority over the connected wallet's: in connector mode it is
+   * passed to `connect()`, and `init()` throws if the wallet's configuration
+   * reports a different networkId.
    */
   network: NetworkId;
   /**
@@ -222,12 +217,13 @@ export type MidnightChainAdapterConfig = BaseConfig &
          */
         zkConfigBaseUrl?: string;
         /**
-         * Allow a proof server URL supplied by the wallet extension to override
-         * `proofServerEndpoint`. Default: `false`.
+         * Allow the proof server URL supplied by the wallet extension to be used
+         * when `proofServerEndpoint` is not set. Default: `false`.
          *
-         * When `false` (default): if the wallet returns a `proverServerUri` that differs
-         * from the configured endpoint, it is logged as a warning and ignored — the
-         * developer-configured endpoint is always used.
+         * A configured `proofServerEndpoint` always takes priority over the wallet's
+         * `proverServerUri`, regardless of this flag. When no endpoint is configured
+         * and this is `false`, the wallet's URL is ignored and write operations fail
+         * with a "proof server endpoint is not set" error.
          *
          * Set to `true` only when you trust the connected wallet extension to supply a safe
          * proof server (e.g. Midnight Lace in a controlled deployment). A compromised wallet
@@ -333,7 +329,7 @@ export class MidnightChainAdapter implements ChainAdapter {
   private _injectedWalletProvider: AdapterWalletProvider | null = null;
   private _injectedPrivateStatePassword: string | null = null;
 
-  private readonly config: EnvironmentConfiguration;
+  private readonly config: AdapterEnvironment;
 
   constructor(config: MidnightChainAdapterConfig) {
     if (config.contractAddress !== undefined) {
@@ -363,6 +359,25 @@ export class MidnightChainAdapter implements ChainAdapter {
         throw new DStorageError(
           ChainErrorCode.MIDNIGHT_PRIVATE_STATE_PASSWORD_REQUIRED,
           '[dStorage/midnight] privateStatePassword is required (walletMode: "provider").',
+        );
+      }
+      // Provider mode has no wallet configuration to take endpoints from.
+      if (!config.indexerEndpoint) {
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_INDEXER_HTTP_NOT_SET,
+          '[dStorage/midnight] indexerEndpoint is required (walletMode: "provider").',
+        );
+      }
+      if (!config.indexerWsEndpoint) {
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_INDEXER_WS_NOT_SET,
+          '[dStorage/midnight] indexerWsEndpoint is required (walletMode: "provider").',
+        );
+      }
+      if (!config.proofServerEndpoint) {
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+          '[dStorage/midnight] proofServerEndpoint is required (walletMode: "provider").',
         );
       }
       this._injectedWalletProvider = providerConfig.walletProvider;
@@ -425,28 +440,22 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
     }
 
-    const networkDefaults = NETWORKS[config.network as keyof typeof NETWORKS];
-    if (
-      !networkDefaults &&
-      (config.indexerEndpoint === undefined ||
-        config.indexerWsEndpoint === undefined ||
-        config.nodeEndpoint === undefined ||
-        config.nodeWsEndpoint === undefined ||
-        config.proofServerEndpoint === undefined)
-    ) {
-      throw new DStorageError(
-        ChainErrorCode.MIDNIGHT_UNSUPPORTED_NETWORK,
-        `[dStorage/midnight] Unsupported network: "${config.network}". Supported networks: ${Object.keys(NETWORKS).join(", ")}. ` +
-          `For custom networks, provide all endpoint options explicitly.`,
-      );
-    }
+    // No built-in endpoint defaults: only what the caller configured is kept.
+    // In connector mode, anything left unset is taken from the wallet's
+    // getConfiguration() during init().
     this.config = {
       networkId: config.network,
-      indexerHttp: config.indexerEndpoint ?? networkDefaults.indexerHttp,
-      indexerWs: config.indexerWsEndpoint ?? networkDefaults.indexerWs,
-      nodeHttp: config.nodeEndpoint ?? networkDefaults.nodeHttp,
-      nodeWs: config.nodeWsEndpoint ?? networkDefaults.nodeWs,
-      proofServer: config.proofServerEndpoint ?? networkDefaults.proofServer,
+      ...(config.indexerEndpoint
+        ? { indexerHttp: config.indexerEndpoint }
+        : {}),
+      ...(config.indexerWsEndpoint
+        ? { indexerWs: config.indexerWsEndpoint }
+        : {}),
+      ...(config.nodeEndpoint ? { nodeHttp: config.nodeEndpoint } : {}),
+      ...(config.nodeWsEndpoint ? { nodeWs: config.nodeWsEndpoint } : {}),
+      ...(config.proofServerEndpoint
+        ? { proofServer: config.proofServerEndpoint }
+        : {}),
       proofServerMaxRetries: config.proofServerMaxRetries ?? 3,
     };
 
@@ -649,6 +658,51 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
+   * Resolve connector-mode endpoints. Configured endpoints take priority; the
+   * wallet's (recorded by _applyWalletConfiguration) are only used for the ones
+   * left unset. There are no built-in defaults, so a missing value means it was
+   * neither configured nor supplied by the wallet — fail loudly rather than use
+   * "" as the URL.
+   */
+  private _resolveConnectorEndpoints(): {
+    indexerHttp: string;
+    indexerWs: string;
+    proofServer: string;
+  } {
+    const indexerHttp = this.config.indexerHttp ?? this.connectorIndexerHttp;
+    const indexerWs = this.config.indexerWs ?? this.connectorIndexerWs;
+    const proofServer = this.config.proofServer ?? this.connectorProofServer;
+
+    if (!indexerHttp) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INDEXER_HTTP_NOT_SET,
+        "[dStorage/midnight] Indexer HTTP endpoint is not set. " +
+          "No indexerEndpoint was configured and the wallet's getConfiguration() " +
+          "did not return indexerUri. " +
+          "Set indexerEndpoint or check that your wallet is configured against the target network.",
+      );
+    }
+    if (!indexerWs) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INDEXER_WS_NOT_SET,
+        "[dStorage/midnight] Indexer WebSocket endpoint is not set. " +
+          "No indexerWsEndpoint was configured and the wallet's getConfiguration() " +
+          "did not return indexerWsUri. " +
+          "Set indexerWsEndpoint or check that your wallet is configured against the target network.",
+      );
+    }
+    if (!proofServer) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+        "[dStorage/midnight] Proof server endpoint is not set. " +
+          "No proofServerEndpoint was configured, and the wallet's proverServerUri " +
+          "is unavailable or not allowed (set allowWalletProofServer: true to use it).",
+      );
+    }
+    return { indexerHttp, indexerWs, proofServer };
+  }
+
+  /**
    * Build providers for connector (browser) mode.
    * Uses in-memory private state, FetchZkConfigProvider, and the Lace wallet connector API.
    */
@@ -695,40 +749,8 @@ export class MidnightChainAdapter implements ChainAdapter {
           "Check that your Lace wallet is unlocked and connected to the target network.",
       );
     }
-    const indexerHttp = this.connectorIndexerHttp ?? this.config.indexerHttp;
-    const indexerWs = this.connectorIndexerWs ?? this.config.indexerWs ?? "";
-    const proofServer = this.connectorProofServer ?? this.config.proofServer;
-
-    // All three endpoints are required. An empty string here means either
-    // getConfiguration() failed/returned partial data AND no fallback was
-    // supplied in the adapter config — every provider call would silently use
-    // "" as the URL, producing fetch errors with no useful diagnosis.
-    if (!indexerHttp) {
-      throw new DStorageError(
-        ChainErrorCode.MIDNIGHT_INDEXER_HTTP_NOT_SET,
-        "[dStorage/midnight] Indexer HTTP endpoint is not set. " +
-          "getConfiguration() did not return indexerUri and no indexerEndpoint " +
-          "was supplied in the adapter config. " +
-          "Check that your Lace wallet is configured against the target network.",
-      );
-    }
-    if (!indexerWs) {
-      throw new DStorageError(
-        ChainErrorCode.MIDNIGHT_INDEXER_WS_NOT_SET,
-        "[dStorage/midnight] Indexer WebSocket endpoint is not set. " +
-          "getConfiguration() did not return indexerWsUri and no indexerWsEndpoint " +
-          "was supplied in the adapter config. " +
-          "Check that your Lace wallet is configured against the target network.",
-      );
-    }
-    if (!proofServer) {
-      throw new DStorageError(
-        ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
-        "[dStorage/midnight] Proof server endpoint is not set. " +
-          "getConfiguration() did not return proverServerUri and no proofServerEndpoint " +
-          "was supplied in the adapter config.",
-      );
-    }
+    const { indexerHttp, indexerWs, proofServer } =
+      this._resolveConnectorEndpoints();
 
     const walletProvider = {
       getCoinPublicKey: () => coinPublicKey,
@@ -841,9 +863,10 @@ export class MidnightChainAdapter implements ChainAdapter {
     const providers = await this._assembleDataRegistryProviders({
       privateStateProvider: basePrivateStateProvider,
       zkConfigProvider,
-      indexerHttp: this.config.indexerHttp,
-      indexerWs: this.config.indexerWs,
-      proofServer: this.config.proofServer,
+      // Guaranteed by the provider-mode constructor checks.
+      indexerHttp: this.config.indexerHttp!,
+      indexerWs: this.config.indexerWs!,
+      proofServer: this.config.proofServer!,
       walletProvider: this._wrapPaymentProvider(walletProvider),
       midnightProvider: walletProvider,
     });
@@ -1228,6 +1251,78 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
+   * Record the endpoints supplied by the connected wallet. They are only used
+   * for endpoints not set in the adapter config (see _buildConnectorProviders).
+   * Throws if the wallet is on a different network than the configured one.
+   */
+  private _applyWalletConfiguration(walletConfig: WalletConfiguration): void {
+    if (
+      walletConfig.networkId &&
+      walletConfig.networkId !== this.config.networkId
+    ) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_NETWORK_MISMATCH,
+        `[dStorage/midnight] Wallet is connected to network "${walletConfig.networkId}" ` +
+          `but the adapter is configured for "${this.config.networkId}".`,
+      );
+    }
+
+    const preferConfigured = (
+      label: string,
+      configured: string | undefined,
+      fromWallet: string | undefined,
+    ) => {
+      if (configured && fromWallet && configured !== fromWallet) {
+        this.logger?.log(
+          "dStorage/midnight",
+          `Using configured ${label} "${configured}" instead of the wallet's "${fromWallet}".`,
+        );
+      }
+    };
+
+    preferConfigured(
+      "indexerEndpoint",
+      this.config.indexerHttp,
+      walletConfig.indexerUri,
+    );
+    preferConfigured(
+      "indexerWsEndpoint",
+      this.config.indexerWs,
+      walletConfig.indexerWsUri,
+    );
+    this.connectorIndexerHttp = walletConfig.indexerUri || null;
+    this.connectorIndexerWs = walletConfig.indexerWsUri || null;
+
+    const walletProofServer = walletConfig.proverServerUri;
+    if (!walletProofServer) return;
+    if (this.config.proofServer) {
+      preferConfigured(
+        "proofServerEndpoint",
+        this.config.proofServer,
+        walletProofServer,
+      );
+    } else if (!isHttpOrHttps(walletProofServer)) {
+      this.logger?.warn(
+        "dStorage/midnight",
+        `Wallet-supplied proverServerUri has an invalid URL scheme — must be http or https. Ignoring it.`,
+      );
+    } else if (this.allowWalletProofServer) {
+      this.logger?.warn(
+        "dStorage/midnight",
+        `Using wallet-supplied proof server "${walletProofServer}" (allowWalletProofServer: true). ` +
+          `Ensure this endpoint is trusted — a compromised wallet can redirect ZK witness inputs to an attacker-controlled server.`,
+      );
+      this.connectorProofServer = walletProofServer;
+    } else {
+      this.logger?.warn(
+        "dStorage/midnight",
+        `Ignoring wallet-supplied proverServerUri "${walletProofServer}" — set proofServerEndpoint, ` +
+          `or allowWalletProofServer: true to use the wallet's.`,
+      );
+    }
+  }
+
+  /**
    * Initialize in connector mode: connect to browser wallet extension.
    *
    * Discovers available wallets by enumerating window.midnight, as per the
@@ -1324,52 +1419,24 @@ export class MidnightChainAdapter implements ChainAdapter {
       `✓ Connected to wallet "${selected.id}"`,
     );
 
-    // Step 2: Retrieve wallet configuration (respects user preferences for proof server, indexer, etc.)
+    // Step 2: Retrieve wallet configuration. Endpoints explicitly set in the
+    // adapter config take priority; the wallet's fill in only what is unset.
+    let walletConfig: WalletConfiguration | undefined;
     try {
-      const walletConfig = await connectedAPI.getConfiguration();
+      walletConfig = await connectedAPI.getConfiguration();
       this.logger?.debug?.(
         "dStorage/midnight",
         `Wallet configuration: ${JSON.stringify(walletConfig)}`,
       );
-      this.connectorIndexerHttp =
-        walletConfig.indexerUri ?? this.config.indexerHttp;
-      this.connectorIndexerWs =
-        walletConfig.indexerWsUri ?? this.config.indexerWs ?? null;
-      const walletProofServer = walletConfig.proverServerUri;
-      if (walletProofServer && walletProofServer !== this.config.proofServer) {
-        if (!isHttpOrHttps(walletProofServer)) {
-          this.logger?.warn(
-            "dStorage/midnight",
-            `Wallet-supplied proverServerUri has an invalid URL scheme — must be http or https. ` +
-              `Ignoring wallet URL, using configured endpoint "${this.config.proofServer}".`,
-          );
-          this.connectorProofServer = this.config.proofServer;
-        } else if (this.allowWalletProofServer) {
-          this.logger?.warn(
-            "dStorage/midnight",
-            `Using wallet-supplied proof server "${walletProofServer}" (allowWalletProofServer: true). ` +
-              `Ensure this endpoint is trusted — a compromised wallet can redirect ZK witness inputs to an attacker-controlled server.`,
-          );
-          this.connectorProofServer = walletProofServer;
-        } else {
-          this.logger?.warn(
-            "dStorage/midnight",
-            `Wallet-supplied proverServerUri "${walletProofServer}" differs from configured endpoint ` +
-              `"${this.config.proofServer}" — ignoring wallet URL (set allowWalletProofServer: true to override).`,
-          );
-          this.connectorProofServer = this.config.proofServer;
-        }
-      } else {
-        this.connectorProofServer =
-          walletProofServer ?? this.config.proofServer;
-      }
     } catch (err) {
       this.logger?.warn(
         "dStorage/midnight",
-        `getConfiguration() failed — falling back to adapter config endpoints ` +
-          `(indexer: "${this.config.indexerHttp}", proofServer: "${this.config.proofServer}"): ` +
+        `getConfiguration() failed — only endpoints set in the adapter config will be used: ` +
           `${err instanceof Error ? err.message : String(err)}`,
       );
+    }
+    if (walletConfig) {
+      this._applyWalletConfiguration(walletConfig);
     }
 
     // Step 3: Extract addresses from connector

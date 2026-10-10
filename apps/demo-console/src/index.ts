@@ -87,6 +87,40 @@ const DATA_REGISTRY_ZK_PATH = path.resolve(
 // ── Network default endpoints ──────────────────────────────────────────────────
 type NetworkName = keyof typeof NETWORKS;
 
+// The SDK has no built-in endpoints, so the demo supplies its own per network.
+const DEMO_ENDPOINTS: Record<
+  NetworkName,
+  {
+    nodeHttp: string;
+    nodeWs: string;
+    indexerHttp: string;
+    indexerWs: string;
+    proofServer: string;
+  }
+> = {
+  preprod: {
+    nodeHttp: "https://rpc.preprod.midnight.network",
+    nodeWs: "wss://rpc.preprod.midnight.network",
+    indexerHttp: "https://indexer.preprod.midnight.network/api/v4/graphql",
+    indexerWs: "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
+  },
+  preview: {
+    nodeHttp: "https://rpc.preview.midnight.network",
+    nodeWs: "wss://rpc.preview.midnight.network",
+    indexerHttp: "https://indexer.preview.midnight.network/api/v4/graphql",
+    indexerWs: "wss://indexer.preview.midnight.network/api/v4/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
+  },
+  undeployed: {
+    nodeHttp: "http://127.0.0.1:9944",
+    nodeWs: "ws://127.0.0.1:9944",
+    indexerHttp: "http://127.0.0.1:8088/api/v4/graphql",
+    indexerWs: "ws://127.0.0.1:8088/api/v4/graphql/ws",
+    proofServer: "http://127.0.0.1:6300",
+  },
+};
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -133,7 +167,7 @@ async function main(): Promise<void> {
                 `Unknown network "${networkInput}". Choose 1 (preprod) or 2 (undeployed).`,
               );
             })();
-    const defaultEndpoints = NETWORKS[networkName];
+    const defaultEndpoints = DEMO_ENDPOINTS[networkName];
 
     console.log(`Network: ${networkName}\n`);
 
@@ -320,6 +354,8 @@ async function main(): Promise<void> {
         ...(contractAddressInput
           ? { contractAddress: contractAddressInput }
           : {}),
+        indexerEndpoint: defaultEndpoints.indexerHttp,
+        indexerWsEndpoint: defaultEndpoints.indexerWs,
         proofServerEndpoint,
         // ZK artifacts for the DataRegistry storeReference circuit
         zkArtifactsPath: DATA_REGISTRY_ZK_PATH,

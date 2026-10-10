@@ -6,6 +6,12 @@ import { ChainErrorCode } from "../errors.js";
 const MOCK_WALLET_PROVIDER = {} as AdapterWalletProvider;
 const MOCK_PRIVATE_STATE_PASSWORD = "Aa1!mockseedfortest";
 const MOCK_NETWORK = "undeployed" as const;
+// Provider mode has no wallet configuration to fall back on, so these are required.
+const MOCK_PROVIDER_ENDPOINTS = {
+  indexerEndpoint: "http://indexer.test/api/v4/graphql",
+  indexerWsEndpoint: "ws://indexer.test/api/v4/graphql/ws",
+  proofServerEndpoint: "http://proof-server.test:6300",
+};
 
 // Valid Midnight contract addresses: 64 lowercase hex chars (32 bytes).
 const VALID_ADDR = "a".repeat(64);
@@ -26,6 +32,7 @@ describe("MidnightChainAdapter", () => {
         walletMode: "provider",
         walletProvider: MOCK_WALLET_PROVIDER,
         privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        ...MOCK_PROVIDER_ENDPOINTS,
       });
       expect(adapter.name).toBe("midnight");
     });
@@ -39,6 +46,7 @@ describe("MidnightChainAdapter", () => {
           walletMode: "provider",
           walletProvider: MOCK_WALLET_PROVIDER,
           privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+          ...MOCK_PROVIDER_ENDPOINTS,
         });
       } catch (e) {
         err = e;
@@ -60,6 +68,7 @@ describe("MidnightChainAdapter", () => {
           walletMode: "provider",
           walletProvider: MOCK_WALLET_PROVIDER,
           privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+          ...MOCK_PROVIDER_ENDPOINTS,
         });
       } catch (e) {
         err = e;
@@ -81,6 +90,7 @@ describe("MidnightChainAdapter", () => {
           walletMode: "provider",
           walletProvider: MOCK_WALLET_PROVIDER,
           privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+          ...MOCK_PROVIDER_ENDPOINTS,
         });
       } catch (e) {
         err = e;
@@ -113,6 +123,7 @@ describe("MidnightChainAdapter", () => {
             walletMode: "provider",
             walletProvider: MOCK_WALLET_PROVIDER,
             privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...MOCK_PROVIDER_ENDPOINTS,
           }),
       ).not.toThrow();
     });
@@ -136,6 +147,7 @@ describe("MidnightChainAdapter", () => {
             walletMode: "provider",
             walletProvider: MOCK_WALLET_PROVIDER,
             privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...MOCK_PROVIDER_ENDPOINTS,
           }),
       ).not.toThrow();
     });
@@ -153,6 +165,7 @@ describe("MidnightChainAdapter", () => {
           network: MOCK_NETWORK,
           walletMode: "provider",
           privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+          ...MOCK_PROVIDER_ENDPOINTS,
         });
       } catch (e) {
         err = e;
@@ -189,7 +202,73 @@ describe("MidnightChainAdapter", () => {
 
   // ── Default config values ─────────────────────────────────────────────────
 
-  describe("default endpoints", () => {
+  describe("endpoint config", () => {
+    it.each([
+      [
+        "indexerEndpoint",
+        ChainErrorCode.MIDNIGHT_INDEXER_HTTP_NOT_SET,
+      ] as const,
+      [
+        "indexerWsEndpoint",
+        ChainErrorCode.MIDNIGHT_INDEXER_WS_NOT_SET,
+      ] as const,
+      [
+        "proofServerEndpoint",
+        ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+      ] as const,
+    ])(
+      "provider mode throws when %s is not set (no default)",
+      (field, code) => {
+        const endpoints: Partial<typeof MOCK_PROVIDER_ENDPOINTS> = {
+          ...MOCK_PROVIDER_ENDPOINTS,
+        };
+        delete endpoints[field];
+        let err: unknown;
+        try {
+          new MidnightChainAdapter({
+            contractAddress: VALID_ADDR,
+            network: MOCK_NETWORK,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...endpoints,
+          });
+        } catch (e) {
+          err = e;
+        }
+        expect(err).toMatchObject({
+          code,
+          message: expect.stringContaining(
+            `[dStorage/midnight] ${field} is required (walletMode: "provider")`,
+          ),
+        });
+      },
+    );
+
+    it("accepts a network without a preset when endpoints are given", () => {
+      expect(
+        () =>
+          new MidnightChainAdapter({
+            contractAddress: VALID_ADDR,
+            network: "my-custom-net",
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...MOCK_PROVIDER_ENDPOINTS,
+          }),
+      ).not.toThrow();
+    });
+
+    it("connector mode does not require any endpoint", () => {
+      expect(
+        () =>
+          new MidnightChainAdapter({
+            network: "my-custom-net",
+            walletMode: "connector",
+          }),
+      ).not.toThrow();
+    });
+
     it("accepts custom nodeEndpoint", () => {
       expect(
         () =>
@@ -199,6 +278,7 @@ describe("MidnightChainAdapter", () => {
             walletMode: "provider",
             walletProvider: MOCK_WALLET_PROVIDER,
             privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...MOCK_PROVIDER_ENDPOINTS,
             nodeEndpoint: "https://custom.node.example.com",
           }),
       ).not.toThrow();
@@ -213,6 +293,7 @@ describe("MidnightChainAdapter", () => {
             walletMode: "provider",
             walletProvider: MOCK_WALLET_PROVIDER,
             privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...MOCK_PROVIDER_ENDPOINTS,
             indexerEndpoint: "https://custom.indexer.example.com/graphql",
           }),
       ).not.toThrow();
@@ -227,6 +308,7 @@ describe("MidnightChainAdapter", () => {
             walletMode: "provider",
             walletProvider: MOCK_WALLET_PROVIDER,
             privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...MOCK_PROVIDER_ENDPOINTS,
             proofServerEndpoint: "http://proof-server.internal:6300",
           }),
       ).not.toThrow();
@@ -268,6 +350,7 @@ describe("MidnightChainAdapter", () => {
         walletMode: "provider",
         walletProvider: MOCK_WALLET_PROVIDER,
         privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        ...MOCK_PROVIDER_ENDPOINTS,
       });
       await expect(
         adapter.writeReference({
@@ -313,6 +396,7 @@ describe("MidnightChainAdapter", () => {
         walletMode: "provider",
         walletProvider: MOCK_WALLET_PROVIDER,
         privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        ...MOCK_PROVIDER_ENDPOINTS,
       });
       expect(() => adapter.setContractAddress(VALID_ADDR_2)).not.toThrow();
     });
@@ -324,6 +408,7 @@ describe("MidnightChainAdapter", () => {
         walletMode: "provider",
         walletProvider: MOCK_WALLET_PROVIDER,
         privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        ...MOCK_PROVIDER_ENDPOINTS,
       });
       let err: unknown;
       try {
@@ -346,6 +431,7 @@ describe("MidnightChainAdapter", () => {
         walletMode: "provider",
         walletProvider: MOCK_WALLET_PROVIDER,
         privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+        ...MOCK_PROVIDER_ENDPOINTS,
       });
       let err: unknown;
       try {
@@ -590,6 +676,175 @@ describe("MidnightChainAdapter", () => {
       }
       expect(err).toMatchObject({
         code: ChainErrorCode.MIDNIGHT_NO_WALLETS_FOUND,
+      });
+    });
+  });
+
+  // ── Connector mode: configured settings vs wallet configuration ───────────
+
+  describe("connector mode endpoint/network precedence", () => {
+    const WALLET_CONFIG = {
+      indexerUri: "https://wallet-indexer.example/api/v4/graphql",
+      indexerWsUri: "wss://wallet-indexer.example/api/v4/graphql/ws",
+      proverServerUri: "https://wallet-prover.example",
+      substrateNodeUri: "wss://wallet-node.example",
+      networkId: MOCK_NETWORK,
+    };
+
+    function makeMockLogger() {
+      return { log: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    }
+
+    async function initWithWalletConfig(
+      config: Partial<
+        Extract<
+          ConstructorParameters<typeof MidnightChainAdapter>[0],
+          { walletMode: "connector" }
+        >
+      >,
+      walletConfig: Promise<unknown>,
+    ) {
+      const connectedAPI = {
+        getConfiguration: vi.fn().mockReturnValue(walletConfig),
+        getShieldedAddresses: vi.fn().mockResolvedValue({
+          shieldedAddress: "fake-shielded-address",
+          shieldedCoinPublicKey: "fake-coin-pk",
+          shieldedEncryptionPublicKey: "fake-enc-pk",
+        }),
+        getUnshieldedAddress: vi.fn().mockRejectedValue(new Error("n/a")),
+        getDustAddress: vi.fn().mockRejectedValue(new Error("n/a")),
+      };
+      const wallet = {
+        name: "lace",
+        rdns: "io.lace.wallet",
+        apiVersion: "4.0.0",
+        connect: vi.fn().mockResolvedValue(connectedAPI),
+      };
+      vi.stubGlobal("window", { midnight: { lace: wallet } });
+      const logger = makeMockLogger();
+      const adapter = new MidnightChainAdapter({
+        contractAddress: VALID_ADDR,
+        network: MOCK_NETWORK,
+        walletMode: "connector",
+        logger,
+        ...config,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = adapter as any;
+      await a._initConnector();
+      return {
+        wallet,
+        logger,
+        resolve: () =>
+          a._resolveConnectorEndpoints() as {
+            indexerHttp: string;
+            indexerWs: string;
+            proofServer: string;
+          },
+      };
+    }
+
+    it("configured endpoints take priority over the wallet's", async () => {
+      const { resolve, logger } = await initWithWalletConfig(
+        {
+          indexerEndpoint: "http://my-indexer/graphql",
+          indexerWsEndpoint: "ws://my-indexer/graphql/ws",
+          proofServerEndpoint: "http://my-prover:6300",
+          allowWalletProofServer: true,
+        },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(resolve()).toEqual({
+        indexerHttp: "http://my-indexer/graphql",
+        indexerWs: "ws://my-indexer/graphql/ws",
+        proofServer: "http://my-prover:6300",
+      });
+      expect(logger.log).toHaveBeenCalledWith(
+        "dStorage/midnight",
+        expect.stringContaining(
+          'Using configured indexerEndpoint "http://my-indexer/graphql"',
+        ),
+      );
+    });
+
+    it("uses the wallet's indexer endpoints when none are configured", async () => {
+      const { resolve } = await initWithWalletConfig(
+        { proofServerEndpoint: "http://my-prover:6300" },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(resolve()).toEqual({
+        indexerHttp: WALLET_CONFIG.indexerUri,
+        indexerWs: WALLET_CONFIG.indexerWsUri,
+        proofServer: "http://my-prover:6300",
+      });
+    });
+
+    it("uses the wallet's proof server when unset and allowWalletProofServer is true", async () => {
+      const { resolve } = await initWithWalletConfig(
+        { allowWalletProofServer: true },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(resolve().proofServer).toBe(WALLET_CONFIG.proverServerUri);
+    });
+
+    it("ignores the wallet's proof server when unset and allowWalletProofServer is false", async () => {
+      const { resolve } = await initWithWalletConfig(
+        {},
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(() => resolve()).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+        }),
+      );
+    });
+
+    it("ignores a non-http wallet proof server even with allowWalletProofServer", async () => {
+      const { resolve } = await initWithWalletConfig(
+        { allowWalletProofServer: true },
+        Promise.resolve({
+          ...WALLET_CONFIG,
+          proverServerUri: "javascript:alert(1)",
+        }),
+      );
+      expect(() => resolve()).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+        }),
+      );
+    });
+
+    it("has no built-in fallback when getConfiguration() fails", async () => {
+      const { resolve } = await initWithWalletConfig(
+        { proofServerEndpoint: "http://my-prover:6300" },
+        Promise.reject(new Error("no config")),
+      );
+      expect(() => resolve()).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MIDNIGHT_INDEXER_HTTP_NOT_SET,
+        }),
+      );
+    });
+
+    it("connects with the configured network", async () => {
+      const { wallet } = await initWithWalletConfig(
+        {},
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(wallet.connect).toHaveBeenCalledWith(MOCK_NETWORK);
+    });
+
+    it("throws MIDNIGHT_NETWORK_MISMATCH when the wallet is on another network", async () => {
+      await expect(
+        initWithWalletConfig(
+          {},
+          Promise.resolve({ ...WALLET_CONFIG, networkId: "preprod" }),
+        ),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_NETWORK_MISMATCH,
+        message: expect.stringContaining(
+          `[dStorage/midnight] Wallet is connected to network "preprod" but the adapter is configured for "${MOCK_NETWORK}"`,
+        ),
       });
     });
   });
