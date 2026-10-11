@@ -1,7 +1,22 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MidnightChainAdapter } from "../adapters/midnight/src/midnight.js";
+import {
+  MidnightChainAdapter,
+  PROVER_MODE,
+} from "../adapters/midnight/src/midnight.js";
 import type { AdapterWalletProvider } from "../adapters/midnight/src/common-types.js";
 import { ChainErrorCode } from "../errors.js";
+
+// Capture the ProvingProvider the adapter hands to midnight-js, so tests can
+// exercise its prove/check wrappers without building a real transaction.
+vi.mock("@midnight-ntwrk/midnight-js-types", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@midnight-ntwrk/midnight-js-types")
+  >()),
+  createProofProvider: vi.fn((provingProvider: unknown) => ({
+    proveTx: vi.fn(),
+    provingProvider,
+  })),
+}));
 
 const MOCK_WALLET_PROVIDER = {} as AdapterWalletProvider;
 const MOCK_PRIVATE_STATE_PASSWORD = "Aa1!mockseedfortest";
@@ -12,6 +27,7 @@ const MOCK_PROVIDER_ENDPOINTS = {
   indexerWsEndpoint: "ws://indexer.test/api/v4/graphql/ws",
   proofServerEndpoint: "http://proof-server.test:6300",
 };
+const MOCK_PROOF_SERVER_ENDPOINT = MOCK_PROVIDER_ENDPOINTS.proofServerEndpoint;
 
 // Valid Midnight contract addresses: 64 lowercase hex chars (32 bytes).
 const VALID_ADDR = "a".repeat(64);
@@ -110,6 +126,7 @@ describe("MidnightChainAdapter", () => {
             contractAddress: VALID_ADDR,
             network: MOCK_NETWORK,
             walletMode: "connector",
+            proofServerEndpoint: MOCK_PROOF_SERVER_ENDPOINT,
           }),
       ).not.toThrow();
     });
@@ -135,6 +152,7 @@ describe("MidnightChainAdapter", () => {
             contractAddress: VALID_ADDR,
             network: MOCK_NETWORK,
             walletMode: "connector",
+            proofServerEndpoint: MOCK_PROOF_SERVER_ENDPOINT,
           }),
       ).not.toThrow();
     });
@@ -259,12 +277,13 @@ describe("MidnightChainAdapter", () => {
       ).not.toThrow();
     });
 
-    it("connector mode does not require any endpoint", () => {
+    it("connector mode does not require indexer endpoints", () => {
       expect(
         () =>
           new MidnightChainAdapter({
             network: "my-custom-net",
             walletMode: "connector",
+            proofServerEndpoint: MOCK_PROOF_SERVER_ENDPOINT,
           }),
       ).not.toThrow();
     });
@@ -314,7 +333,7 @@ describe("MidnightChainAdapter", () => {
       ).not.toThrow();
     });
 
-    it("connector mode accepts allowWalletProofServer: true without throwing", () => {
+    it("connector mode requires proofServerEndpoint with the default prover", () => {
       expect(
         () =>
           new MidnightChainAdapter({
@@ -322,21 +341,118 @@ describe("MidnightChainAdapter", () => {
             network: MOCK_NETWORK,
             walletMode: "connector",
             zkConfigBaseUrl: "http://localhost:3000",
-            allowWalletProofServer: true,
           }),
-      ).not.toThrow();
+      ).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+          message: expect.stringContaining(
+            `prover: "${PROVER_MODE.PROOF_SERVER_URL}"`,
+          ),
+        }),
+      );
     });
 
-    it("connector mode defaults allowWalletProofServer to false (no throw)", () => {
+    it.each([
+      PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER,
+      PROVER_MODE.WALLET_DELEGATED,
+    ])(
+      "connector mode accepts prover %s without proofServerEndpoint",
+      (prover) => {
+        expect(
+          () =>
+            new MidnightChainAdapter({
+              contractAddress: VALID_ADDR,
+              network: MOCK_NETWORK,
+              walletMode: "connector",
+              zkConfigBaseUrl: "http://localhost:3000",
+              prover,
+            }),
+        ).not.toThrow();
+      },
+    );
+
+    it.each([
+      PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER,
+      PROVER_MODE.WALLET_DELEGATED,
+    ])(
+      "connector mode rejects proofServerEndpoint with prover %s",
+      (prover) => {
+        expect(
+          () =>
+            new MidnightChainAdapter({
+              contractAddress: VALID_ADDR,
+              network: MOCK_NETWORK,
+              walletMode: "connector",
+              proofServerEndpoint: MOCK_PROOF_SERVER_ENDPOINT,
+              prover,
+            }),
+        ).toThrow(
+          expect.objectContaining({
+            code: ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+            message: expect.stringContaining(
+              "proofServerEndpoint must not be set",
+            ),
+          }),
+        );
+      },
+    );
+
+    it("connector mode rejects an unknown prover", () => {
       expect(
         () =>
           new MidnightChainAdapter({
             contractAddress: VALID_ADDR,
             network: MOCK_NETWORK,
             walletMode: "connector",
-            zkConfigBaseUrl: "http://localhost:3000",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            prover: "wallet" as any,
           }),
-      ).not.toThrow();
+      ).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+          message: expect.stringContaining('Unknown prover "wallet"'),
+        }),
+      );
+    });
+
+    it("rejects the removed allowWalletProofServer option with a migration hint", () => {
+      expect(
+        () =>
+          new MidnightChainAdapter({
+            contractAddress: VALID_ADDR,
+            network: MOCK_NETWORK,
+            walletMode: "connector",
+            allowWalletProofServer: true,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any),
+      ).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+          message: expect.stringContaining(
+            "PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER",
+          ),
+        }),
+      );
+    });
+
+    it("provider mode rejects the prover option", () => {
+      expect(
+        () =>
+          new MidnightChainAdapter({
+            contractAddress: VALID_ADDR,
+            network: MOCK_NETWORK,
+            walletMode: "provider",
+            walletProvider: MOCK_WALLET_PROVIDER,
+            privateStatePassword: MOCK_PRIVATE_STATE_PASSWORD,
+            ...MOCK_PROVIDER_ENDPOINTS,
+            prover: PROVER_MODE.WALLET_DELEGATED,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any),
+      ).toThrow(
+        expect.objectContaining({
+          code: ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+        }),
+      );
     });
   });
 
@@ -371,6 +487,7 @@ describe("MidnightChainAdapter", () => {
         network: MOCK_NETWORK,
         walletMode: "connector",
         zkConfigBaseUrl: "http://localhost:3000",
+        proofServerEndpoint: MOCK_PROOF_SERVER_ENDPOINT,
       });
       await expect(
         adapter.writeReference({
@@ -713,6 +830,7 @@ describe("MidnightChainAdapter", () => {
         }),
         getUnshieldedAddress: vi.fn().mockRejectedValue(new Error("n/a")),
         getDustAddress: vi.fn().mockRejectedValue(new Error("n/a")),
+        getProvingProvider: vi.fn(),
       };
       const wallet = {
         name: "lace",
@@ -735,6 +853,8 @@ describe("MidnightChainAdapter", () => {
       return {
         wallet,
         logger,
+        connectedAPI,
+        buildProviders: () => a._buildConnectorProviders() as Promise<unknown>,
         resolve: () =>
           a._resolveConnectorEndpoints() as {
             indexerHttp: string;
@@ -750,7 +870,6 @@ describe("MidnightChainAdapter", () => {
           indexerEndpoint: "http://my-indexer/graphql",
           indexerWsEndpoint: "ws://my-indexer/graphql/ws",
           proofServerEndpoint: "http://my-prover:6300",
-          allowWalletProofServer: true,
         },
         Promise.resolve(WALLET_CONFIG),
       );
@@ -779,18 +898,32 @@ describe("MidnightChainAdapter", () => {
       });
     });
 
-    it("uses the wallet's proof server when unset and allowWalletProofServer is true", async () => {
-      const { resolve } = await initWithWalletConfig(
-        { allowWalletProofServer: true },
+    it("uses the wallet's proof server with prover WALLET_CONFIGURED_PROOF_SERVER", async () => {
+      const { resolve, logger } = await initWithWalletConfig(
+        { prover: PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER },
         Promise.resolve(WALLET_CONFIG),
       );
       expect(resolve().proofServer).toBe(WALLET_CONFIG.proverServerUri);
+      expect(logger.warn).toHaveBeenCalledWith(
+        "dStorage/midnight",
+        expect.stringContaining("Using wallet-supplied proof server"),
+      );
     });
 
-    it("ignores the wallet's proof server when unset and allowWalletProofServer is false", async () => {
+    it("ignores the wallet's proof server with the default prover", async () => {
       const { resolve } = await initWithWalletConfig(
-        {},
+        { proofServerEndpoint: "http://my-prover:6300" },
         Promise.resolve(WALLET_CONFIG),
+      );
+      expect(resolve().proofServer).toBe("http://my-prover:6300");
+    });
+
+    it("throws MIDNIGHT_PROOF_SERVER_NOT_SET when the wallet reports no proof server", async () => {
+      const { proverServerUri: _omit, ...walletConfigWithoutProver } =
+        WALLET_CONFIG;
+      const { resolve } = await initWithWalletConfig(
+        { prover: PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER },
+        Promise.resolve(walletConfigWithoutProver),
       );
       expect(() => resolve()).toThrow(
         expect.objectContaining({
@@ -799,9 +932,25 @@ describe("MidnightChainAdapter", () => {
       );
     });
 
-    it("ignores a non-http wallet proof server even with allowWalletProofServer", async () => {
+    it("never falls back to wallet-delegated proving when the wallet's proof server is unusable", async () => {
+      const { proverServerUri: _omit, ...walletConfigWithoutProver } =
+        WALLET_CONFIG;
+      const { buildProviders, connectedAPI } = await initWithWalletConfig(
+        {
+          prover: PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER,
+          zkConfigBaseUrl: "http://localhost:3000",
+        },
+        Promise.resolve(walletConfigWithoutProver),
+      );
+      await expect(buildProviders()).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+      });
+      expect(connectedAPI.getProvingProvider).not.toHaveBeenCalled();
+    });
+
+    it("ignores a non-http wallet proof server", async () => {
       const { resolve } = await initWithWalletConfig(
-        { allowWalletProofServer: true },
+        { prover: PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER },
         Promise.resolve({
           ...WALLET_CONFIG,
           proverServerUri: "javascript:alert(1)",
@@ -812,6 +961,18 @@ describe("MidnightChainAdapter", () => {
           code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
         }),
       );
+    });
+
+    it("resolves no proof server with prover WALLET_DELEGATED", async () => {
+      const { resolve } = await initWithWalletConfig(
+        { prover: PROVER_MODE.WALLET_DELEGATED },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(resolve()).toEqual({
+        indexerHttp: WALLET_CONFIG.indexerUri,
+        indexerWs: WALLET_CONFIG.indexerWsUri,
+        proofServer: null,
+      });
     });
 
     it("has no built-in fallback when getConfiguration() fails", async () => {
@@ -828,7 +989,7 @@ describe("MidnightChainAdapter", () => {
 
     it("connects with the configured network", async () => {
       const { wallet } = await initWithWalletConfig(
-        {},
+        { proofServerEndpoint: "http://my-prover:6300" },
         Promise.resolve(WALLET_CONFIG),
       );
       expect(wallet.connect).toHaveBeenCalledWith(MOCK_NETWORK);
@@ -837,7 +998,7 @@ describe("MidnightChainAdapter", () => {
     it("throws MIDNIGHT_NETWORK_MISMATCH when the wallet is on another network", async () => {
       await expect(
         initWithWalletConfig(
-          {},
+          { proofServerEndpoint: "http://my-prover:6300" },
           Promise.resolve({ ...WALLET_CONFIG, networkId: "preprod" }),
         ),
       ).rejects.toMatchObject({
@@ -846,6 +1007,148 @@ describe("MidnightChainAdapter", () => {
           `[dStorage/midnight] Wallet is connected to network "preprod" but the adapter is configured for "${MOCK_NETWORK}"`,
         ),
       });
+    });
+  });
+
+  // ── Connector mode: wallet-delegated proving ──────────────────────────────
+
+  describe("wallet-delegated proving", () => {
+    const KEY_MATERIAL = { getZKIR: vi.fn() };
+    const zkConfigProvider = {
+      asKeyMaterialProvider: vi.fn(() => KEY_MATERIAL),
+    };
+
+    function makeAdapter() {
+      return new MidnightChainAdapter({
+        contractAddress: VALID_ADDR,
+        network: MOCK_NETWORK,
+        walletMode: "connector",
+        zkConfigBaseUrl: "http://localhost:3000",
+        prover: PROVER_MODE.WALLET_DELEGATED,
+      });
+    }
+
+    async function buildWalletProofProvider(connectorAPI: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = makeAdapter() as any;
+      return a._buildWalletProofProvider(
+        connectorAPI,
+        zkConfigProvider,
+      ) as Promise<{
+        provingProvider: {
+          check: (p: Uint8Array, k: string) => Promise<unknown>;
+          prove: (p: Uint8Array, k: string, b?: bigint) => Promise<Uint8Array>;
+        };
+      }>;
+    }
+
+    it("gets the wallet's proving provider with the ZK key material", async () => {
+      const proof = new Uint8Array([1, 2, 3]);
+      const walletProving = {
+        check: vi.fn().mockResolvedValue([1n]),
+        prove: vi.fn().mockResolvedValue(proof),
+      };
+      const connectorAPI = {
+        getProvingProvider: vi.fn().mockResolvedValue(walletProving),
+      };
+      const { provingProvider } = await buildWalletProofProvider(connectorAPI);
+
+      expect(connectorAPI.getProvingProvider).toHaveBeenCalledWith(
+        KEY_MATERIAL,
+      );
+      const preimage = new Uint8Array([9]);
+      await expect(
+        provingProvider.prove(preimage, "storeReference", 5n),
+      ).resolves.toBe(proof);
+      expect(walletProving.prove).toHaveBeenCalledWith(
+        preimage,
+        "storeReference",
+        5n,
+      );
+      await expect(
+        provingProvider.check(preimage, "storeReference"),
+      ).resolves.toEqual([1n]);
+    });
+
+    it("throws MIDNIGHT_WALLET_PROVING_FAILED when the wallet has no proving provider", async () => {
+      const connectorAPI = {
+        getProvingProvider: vi.fn().mockRejectedValue({
+          type: "DAppConnectorAPIError",
+          code: "InvalidRequest",
+          reason: "proving not supported",
+        }),
+      };
+      await expect(
+        buildWalletProofProvider(connectorAPI),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
+        message: expect.stringContaining("proving not supported"),
+      });
+    });
+
+    it("wraps wallet prove failures as MIDNIGHT_WALLET_PROVING_FAILED", async () => {
+      const connectorAPI = {
+        getProvingProvider: vi.fn().mockResolvedValue({
+          check: vi.fn(),
+          prove: vi.fn().mockRejectedValue(new Error("prover crashed")),
+        }),
+      };
+      const { provingProvider } = await buildWalletProofProvider(connectorAPI);
+      await expect(
+        provingProvider.prove(new Uint8Array(), "storeReference"),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
+        message: expect.stringContaining("prover crashed"),
+      });
+    });
+  });
+
+  // ── Proof retries ──────────────────────────────────────────────────────────
+
+  describe("proof retries", () => {
+    function makeAdapter() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new MidnightChainAdapter({
+        contractAddress: VALID_ADDR,
+        network: MOCK_NETWORK,
+        walletMode: "connector",
+        proofServerEndpoint: MOCK_PROOF_SERVER_ENDPOINT,
+        proofServerMaxRetries: 3,
+      }) as any;
+    }
+
+    it.each(["Rejected", "PermissionRejected"])(
+      "does not retry when the user declines the wallet prompt (%s)",
+      async (code) => {
+        const rejection = {
+          type: "DAppConnectorAPIError",
+          code,
+          reason: "User rejected",
+        };
+        const fn = vi
+          .fn()
+          .mockRejectedValue(new Error("wrapped", { cause: rejection }));
+        await expect(
+          makeAdapter()._withProofRetry(fn, "storeReference"),
+        ).rejects.toThrow("wrapped");
+        expect(fn).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("retries other failures", async () => {
+      vi.useFakeTimers();
+      try {
+        const fn = vi
+          .fn()
+          .mockRejectedValueOnce(new Error("proof server busy"))
+          .mockResolvedValue("ok");
+        const result = makeAdapter()._withProofRetry(fn, "storeReference");
+        await vi.advanceTimersByTimeAsync(1_000);
+        await expect(result).resolves.toBe("ok");
+        expect(fn).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

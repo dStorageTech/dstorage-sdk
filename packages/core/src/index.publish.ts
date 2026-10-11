@@ -117,12 +117,14 @@ export {
   MidnightChainAdapter,
   HttpGatewayChainAdapter,
   NETWORKS,
+  PROVER_MODE,
   waitForFacadeSync,
 } from "@dstorage/chain";
 export { ChainErrorCode } from "@dstorage/chain";
 export type {
   MidnightChainAdapterConfig,
   MockChainAdapterConfig,
+  ProverMode,
   WalletAddresses,
   AdapterWalletProvider,
   HttpGatewayChainAdapterConfig,

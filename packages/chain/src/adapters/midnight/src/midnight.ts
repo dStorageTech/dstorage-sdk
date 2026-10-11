@@ -13,7 +13,7 @@
  *
  * Transaction flow (handled by DataRegistryAPI internally):
  *   1. Build  — construct the unproven circuit call
- *   2. Prove  — send to proof server for ZK proof generation
+ *   2. Prove  — generate the ZK proof (proof server, or the wallet — see PROVER_MODE)
  *   3. Balance — attach DUST fees via the connected wallet
  *   4. Submit — broadcast to the Midnight node
  *   5. Confirm — wait for block inclusion
@@ -26,6 +26,7 @@ import type { PaymentReceipt, ManagedPaymentOptions } from "@dstorage/payment";
 import { hexToBytes, DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { ChainErrorCode } from "../../../errors.js";
 import {
+  type ProofProvider,
   type WalletProvider,
   type ZKConfigProvider,
 } from "@midnight-ntwrk/midnight-js-types";
@@ -48,6 +49,7 @@ import type {
   Configuration as WalletConfiguration,
   ConnectedAPI,
   InitialAPI,
+  ProvingProvider,
 } from "@midnight-ntwrk/dapp-connector-api";
 import type { DataRegistryAPI } from "./contract-api.js";
 import type {
@@ -78,6 +80,26 @@ export const NETWORKS = {
   preview: { networkId: "preview" },
   undeployed: { networkId: "undeployed" },
 } as const;
+
+// ── Prover modes ───────────────────────────────────────────────────────────────
+
+/**
+ * Where ZK proofs are generated in connector mode (`prover` config option).
+ *
+ *   - PROOF_SERVER_URL: the adapter calls the proof server set in
+ *     `proofServerEndpoint` (required).
+ *   - WALLET_CONFIGURED_PROOF_SERVER: the adapter calls the proof server the
+ *     wallet reports as `proverServerUri` in its configuration.
+ *   - WALLET_DELEGATED: proving is delegated to the wallet itself via the
+ *     DApp Connector `getProvingProvider()`.
+ */
+export const PROVER_MODE = {
+  PROOF_SERVER_URL: "proof-server-url",
+  WALLET_CONFIGURED_PROOF_SERVER: "wallet-configured-proof-server",
+  WALLET_DELEGATED: "wallet-delegated",
+} as const;
+
+export type ProverMode = (typeof PROVER_MODE)[keyof typeof PROVER_MODE];
 
 /**
  * Internal resolved adapter configuration. Endpoints are only those the caller
@@ -123,10 +145,9 @@ interface BaseConfig {
    */
   indexerWsEndpoint?: string;
   /**
-   * Proof server URL. No default. Required in provider mode. In connector mode,
-   * when set, it always takes priority over the wallet's `proverServerUri`;
-   * when omitted, the wallet's value is used only if `allowWalletProofServer`
-   * is `true`.
+   * Proof server URL. No default. Required in provider mode, and in connector
+   * mode with `prover: PROVER_MODE.PROOF_SERVER_URL` (the default). Must not be
+   * set with any other connector-mode `prover`.
    */
   proofServerEndpoint?: string;
   /**
@@ -217,20 +238,22 @@ export type MidnightChainAdapterConfig = BaseConfig &
          */
         zkConfigBaseUrl?: string;
         /**
-         * Allow the proof server URL supplied by the wallet extension to be used
-         * when `proofServerEndpoint` is not set. Default: `false`.
+         * Where ZK proofs are generated. Default: `PROVER_MODE.PROOF_SERVER_URL`.
          *
-         * A configured `proofServerEndpoint` always takes priority over the wallet's
-         * `proverServerUri`, regardless of this flag. When no endpoint is configured
-         * and this is `false`, the wallet's URL is ignored and write operations fail
-         * with a "proof server endpoint is not set" error.
+         *   - `PROVER_MODE.PROOF_SERVER_URL`: call the proof server set in
+         *     `proofServerEndpoint` (required). The wallet's `proverServerUri` is ignored.
+         *   - `PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER`: call the proof server the
+         *     wallet reports as `proverServerUri`. `proofServerEndpoint` must not be set.
+         *   - `PROVER_MODE.WALLET_DELEGATED`: delegate proving to the wallet via the
+         *     DApp Connector `getProvingProvider()`; the wallet fetches the circuit keys
+         *     from `zkConfigBaseUrl`. `proofServerEndpoint` must not be set.
          *
-         * Set to `true` only when you trust the connected wallet extension to supply a safe
-         * proof server (e.g. Midnight Lace in a controlled deployment). A compromised wallet
-         * extension can redirect ZK witness inputs — including the ownerSecret — to an
-         * attacker-controlled server, allowing reference takeover or deletion.
+         * Use either wallet option only when you trust the connected wallet extension.
+         * Both hand the ZK witness inputs — including the ownerSecret — to something the
+         * wallet controls; a compromised wallet extension could use them to take over or
+         * delete references.
          */
-        allowWalletProofServer?: boolean;
+        prover?: ProverMode;
       }
   );
 
@@ -279,6 +302,25 @@ function findErrorDetail(
   return undefined;
 }
 
+/**
+ * True when the error chain contains a DApp Connector rejection — the user
+ * declined the wallet prompt. Such calls must not be retried, or the user is
+ * prompted again for each attempt.
+ */
+function isWalletRejection(err: unknown, depth = 0): boolean {
+  if (depth > 5 || typeof err !== "object" || err === null) return false;
+  const obj = err as Record<string, unknown>;
+  if (
+    obj["type"] === "DAppConnectorAPIError" &&
+    (obj["code"] === "Rejected" || obj["code"] === "PermissionRejected")
+  ) {
+    return true;
+  }
+  return ["failure", "cause", "error"].some((key) =>
+    isWalletRejection(obj[key], depth + 1),
+  );
+}
+
 function describeConnectorError(err: unknown): string {
   const detail = findErrorDetail(err);
   if (detail)
@@ -314,7 +356,7 @@ export class MidnightChainAdapter implements ChainAdapter {
 
   private readonly walletMode: "connector" | "provider";
   private readonly connectorName: string | null;
-  private readonly allowWalletProofServer: boolean;
+  private readonly prover: ProverMode;
   private readonly logger: ChainAdapterLogger | undefined;
 
   private _contractAddress: string | undefined;
@@ -380,9 +422,21 @@ export class MidnightChainAdapter implements ChainAdapter {
           '[dStorage/midnight] proofServerEndpoint is required (walletMode: "provider").',
         );
       }
+      if ("prover" in config) {
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+          '[dStorage/midnight] prover is only supported in walletMode: "connector". ' +
+            "Provider mode always uses proofServerEndpoint.",
+        );
+      }
       this._injectedWalletProvider = providerConfig.walletProvider;
       this._injectedPrivateStatePassword = providerConfig.privateStatePassword;
     }
+
+    this.prover =
+      walletMode === "connector"
+        ? MidnightChainAdapter._resolveProver(config)
+        : PROVER_MODE.PROOF_SERVER_URL;
 
     assertValidLogger(config.logger, "MidnightChainAdapter");
     this.logger = config.logger;
@@ -396,15 +450,6 @@ export class MidnightChainAdapter implements ChainAdapter {
             >
           ).connectorName ?? null)
         : null;
-    this.allowWalletProofServer =
-      walletMode === "connector"
-        ? ((
-            config as Extract<
-              MidnightChainAdapterConfig,
-              { walletMode: "connector" }
-            >
-          ).allowWalletProofServer ?? false)
-        : false;
 
     this._contractAddress = config.contractAddress;
     this._zkArtifactsPath =
@@ -497,6 +542,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         return await fn();
       } catch (err) {
         lastErr = err;
+        if (isWalletRejection(err)) break;
         if (attempt < maxRetries - 1) {
           const delayMs = 1_000 * 2 ** attempt; // 1 s, 2 s, 4 s, …
           this.logger?.log(
@@ -626,15 +672,12 @@ export class MidnightChainAdapter implements ChainAdapter {
     zkConfigProvider: ZKConfigProvider<DataRegistryCircuitKeys>;
     indexerHttp: string;
     indexerWs: string;
-    proofServer: string;
+    proofProvider: ProofProvider;
     walletProvider: unknown;
     midnightProvider: unknown;
   }): Promise<DataRegistryProviders> {
     const { indexerPublicDataProvider } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/midnight-js-indexer-public-data-provider"
-    );
-    const { httpClientProofProvider } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-http-client-proof-provider"
     );
 
     return {
@@ -646,15 +689,23 @@ export class MidnightChainAdapter implements ChainAdapter {
         params.indexerWs,
       ),
       zkConfigProvider: params.zkConfigProvider,
-      proofProvider: httpClientProofProvider(
-        params.proofServer,
-        params.zkConfigProvider,
-      ),
+      proofProvider: params.proofProvider,
       walletProvider:
         params.walletProvider as unknown as DataRegistryProviders["walletProvider"],
       midnightProvider:
         params.midnightProvider as unknown as DataRegistryProviders["midnightProvider"],
     };
+  }
+
+  /** Build a proof provider that sends proving requests to a proof server over HTTP. */
+  private async _buildHttpProofProvider(
+    proofServer: string,
+    zkConfigProvider: ZKConfigProvider<DataRegistryCircuitKeys>,
+  ): Promise<ProofProvider> {
+    const { httpClientProofProvider } = await import(
+      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-http-client-proof-provider"
+    );
+    return httpClientProofProvider(proofServer, zkConfigProvider);
   }
 
   /**
@@ -667,11 +718,11 @@ export class MidnightChainAdapter implements ChainAdapter {
   private _resolveConnectorEndpoints(): {
     indexerHttp: string;
     indexerWs: string;
-    proofServer: string;
+    /** null when the wallet proves itself (PROVER_MODE.WALLET_DELEGATED). */
+    proofServer: string | null;
   } {
     const indexerHttp = this.config.indexerHttp ?? this.connectorIndexerHttp;
     const indexerWs = this.config.indexerWs ?? this.connectorIndexerWs;
-    const proofServer = this.config.proofServer ?? this.connectorProofServer;
 
     if (!indexerHttp) {
       throw new DStorageError(
@@ -691,12 +742,18 @@ export class MidnightChainAdapter implements ChainAdapter {
           "Set indexerWsEndpoint or check that your wallet is configured against the target network.",
       );
     }
+    if (this.prover === PROVER_MODE.WALLET_DELEGATED) {
+      return { indexerHttp, indexerWs, proofServer: null };
+    }
+    // PROOF_SERVER_URL: proofServerEndpoint is guaranteed by the constructor.
+    // WALLET_CONFIGURED_PROOF_SERVER: taken from the wallet's configuration.
+    const proofServer = this.config.proofServer ?? this.connectorProofServer;
     if (!proofServer) {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
         "[dStorage/midnight] Proof server endpoint is not set. " +
-          "No proofServerEndpoint was configured, and the wallet's proverServerUri " +
-          "is unavailable or not allowed (set allowWalletProofServer: true to use it).",
+          `The wallet's getConfiguration() did not return a usable proverServerUri (prover: "${this.prover}"). ` +
+          "Check the wallet's proof server setting, or set proofServerEndpoint with PROVER_MODE.PROOF_SERVER_URL.",
       );
     }
     return { indexerHttp, indexerWs, proofServer };
@@ -808,15 +865,79 @@ export class MidnightChainAdapter implements ChainAdapter {
       },
     };
 
+    const proofProvider =
+      proofServer === null
+        ? await this._buildWalletProofProvider(connectorAPI, zkConfigProvider)
+        : await this._buildHttpProofProvider(proofServer, zkConfigProvider);
+
     return this._assembleDataRegistryProviders({
       privateStateProvider,
       zkConfigProvider,
       indexerHttp,
       indexerWs,
-      proofServer,
+      proofProvider,
       walletProvider: this._wrapPaymentProvider(walletProvider),
       midnightProvider,
     });
+  }
+
+  /**
+   * Build a proof provider that delegates proving to the connected wallet
+   * (PROVER_MODE.WALLET_DELEGATED). The wallet fetches circuit keys and ZKIR
+   * through the ZK config provider, so zkConfigBaseUrl is still required.
+   */
+  private async _buildWalletProofProvider(
+    connectorAPI: ConnectedAPI,
+    zkConfigProvider: ZKConfigProvider<DataRegistryCircuitKeys>,
+  ): Promise<ProofProvider> {
+    let walletProving: ProvingProvider;
+    try {
+      walletProving = await connectorAPI.getProvingProvider(
+        zkConfigProvider.asKeyMaterialProvider(),
+      );
+    } catch (err) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
+        `[dStorage/midnight] Wallet did not provide a proving provider (prover: "${this.prover}"): ` +
+          describeConnectorError(err),
+        { cause: err },
+      );
+    }
+    this.logger?.log(
+      "dStorage/midnight",
+      "Using the wallet's proving provider (proving delegated to the wallet).",
+    );
+
+    const wrap =
+      <A extends unknown[], R>(op: string, fn: (...args: A) => Promise<R>) =>
+      async (...args: A): Promise<R> => {
+        try {
+          return await fn(...args);
+        } catch (err) {
+          throw new DStorageError(
+            ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
+            `[dStorage/midnight] Wallet failed to ${op}: ${describeConnectorError(err)}`,
+            { cause: err },
+          );
+        }
+      };
+    const provingProvider: ProvingProvider = {
+      check: wrap("check the proof preimage", (preimage, keyLocation) =>
+        walletProving.check(preimage, keyLocation),
+      ),
+      prove: wrap(
+        "generate the proof",
+        (
+          preimage: Uint8Array,
+          keyLocation: string,
+          overwriteBindingInput?: bigint,
+        ) => walletProving.prove(preimage, keyLocation, overwriteBindingInput),
+      ),
+    };
+
+    const { createProofProvider } =
+      await import("@midnight-ntwrk/midnight-js-types");
+    return createProofProvider(provingProvider);
   }
 
   /**
@@ -866,7 +987,10 @@ export class MidnightChainAdapter implements ChainAdapter {
       // Guaranteed by the provider-mode constructor checks.
       indexerHttp: this.config.indexerHttp!,
       indexerWs: this.config.indexerWs!,
-      proofServer: this.config.proofServer!,
+      proofProvider: await this._buildHttpProofProvider(
+        this.config.proofServer!,
+        zkConfigProvider,
+      ),
       walletProvider: this._wrapPaymentProvider(walletProvider),
       midnightProvider: walletProvider,
     });
@@ -958,6 +1082,50 @@ export class MidnightChainAdapter implements ChainAdapter {
           "Expected a 64-character lowercase hex string (32 bytes).",
       );
     }
+  }
+
+  /**
+   * Validate the connector-mode prover settings and return the prover mode.
+   * PROOF_SERVER_URL requires proofServerEndpoint; the wallet modes forbid it,
+   * so the proof source is never ambiguous.
+   */
+  private static _resolveProver(
+    config: MidnightChainAdapterConfig,
+  ): ProverMode {
+    if ("allowWalletProofServer" in config) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+        "[dStorage/midnight] allowWalletProofServer has been removed. " +
+          "Use prover: PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER to use the wallet's proof server.",
+      );
+    }
+    const prover =
+      ("prover" in config ? config.prover : undefined) ??
+      PROVER_MODE.PROOF_SERVER_URL;
+    if (!(Object.values(PROVER_MODE) as string[]).includes(prover)) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+        `[dStorage/midnight] Unknown prover "${String(prover)}". ` +
+          `Expected one of: ${Object.values(PROVER_MODE).join(", ")}.`,
+      );
+    }
+    if (prover === PROVER_MODE.PROOF_SERVER_URL) {
+      if (!config.proofServerEndpoint) {
+        throw new DStorageError(
+          ChainErrorCode.MIDNIGHT_PROOF_SERVER_NOT_SET,
+          `[dStorage/midnight] proofServerEndpoint is required (prover: "${prover}"). ` +
+            "Set it, or choose PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER or " +
+            "PROVER_MODE.WALLET_DELEGATED to let the wallet supply proving.",
+        );
+      }
+    } else if (config.proofServerEndpoint) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INVALID_PROVER_CONFIG,
+        `[dStorage/midnight] proofServerEndpoint must not be set with prover: "${prover}". ` +
+          "Remove it, or use PROVER_MODE.PROOF_SERVER_URL to prove with that endpoint.",
+      );
+    }
+    return prover;
   }
 
   /**
@@ -1295,31 +1463,28 @@ export class MidnightChainAdapter implements ChainAdapter {
 
     const walletProofServer = walletConfig.proverServerUri;
     if (!walletProofServer) return;
-    if (this.config.proofServer) {
+    if (this.prover === PROVER_MODE.PROOF_SERVER_URL) {
       preferConfigured(
         "proofServerEndpoint",
         this.config.proofServer,
         walletProofServer,
       );
-    } else if (!isHttpOrHttps(walletProofServer)) {
+    } else if (this.prover === PROVER_MODE.WALLET_CONFIGURED_PROOF_SERVER) {
+      if (!isHttpOrHttps(walletProofServer)) {
+        this.logger?.warn(
+          "dStorage/midnight",
+          `Wallet-supplied proverServerUri has an invalid URL scheme — must be http or https. Ignoring it.`,
+        );
+        return;
+      }
       this.logger?.warn(
         "dStorage/midnight",
-        `Wallet-supplied proverServerUri has an invalid URL scheme — must be http or https. Ignoring it.`,
-      );
-    } else if (this.allowWalletProofServer) {
-      this.logger?.warn(
-        "dStorage/midnight",
-        `Using wallet-supplied proof server "${walletProofServer}" (allowWalletProofServer: true). ` +
+        `Using wallet-supplied proof server "${walletProofServer}" (prover: "${this.prover}"). ` +
           `Ensure this endpoint is trusted — a compromised wallet can redirect ZK witness inputs to an attacker-controlled server.`,
       );
       this.connectorProofServer = walletProofServer;
-    } else {
-      this.logger?.warn(
-        "dStorage/midnight",
-        `Ignoring wallet-supplied proverServerUri "${walletProofServer}" — set proofServerEndpoint, ` +
-          `or allowWalletProofServer: true to use the wallet's.`,
-      );
     }
+    // WALLET_DELEGATED: the wallet proves itself; its proverServerUri is not used here.
   }
 
   /**
