@@ -333,6 +333,37 @@ function describeConnectorError(err: unknown): string {
   }
 }
 
+/**
+ * Proof server HTTP failures surface as bare fetch errors ("fetch failed",
+ * "Failed to fetch", TimeoutError) that don't mention the proof server at all.
+ * Translate the common shapes into something actionable.
+ */
+function describeProofServerError(err: unknown): string {
+  if (typeof err !== "object" || err === null) {
+    return String(err) || "unknown error";
+  }
+  const obj = err as { name?: unknown; message?: unknown; cause?: unknown };
+  if (obj.name === "TimeoutError" || obj.name === "AbortError") {
+    return "request timed out";
+  }
+  const message = typeof obj.message === "string" ? obj.message : "";
+  if (
+    obj.name === "TypeError" &&
+    /fetch failed|failed to fetch|networkerror/i.test(message)
+  ) {
+    const cause = obj.cause as
+      { code?: unknown; message?: unknown } | undefined;
+    const code =
+      typeof cause?.code === "string"
+        ? cause.code
+        : typeof cause?.message === "string"
+          ? cause.message
+          : undefined;
+    return code ? `could not connect (${code})` : "could not connect";
+  }
+  return findErrorDetail(err)?.message ?? (message || String(err));
+}
+
 // ── Adapter ────────────────────────────────────────────────────────────────────
 
 export class MidnightChainAdapter implements ChainAdapter {
@@ -702,10 +733,84 @@ export class MidnightChainAdapter implements ChainAdapter {
     proofServer: string,
     zkConfigProvider: ZKConfigProvider<DataRegistryCircuitKeys>,
   ): Promise<ProofProvider> {
-    const { httpClientProofProvider } = await import(
+    const { httpClientProvingProvider } = await import(
       /* @vite-ignore */ "@midnight-ntwrk/midnight-js-http-client-proof-provider"
     );
-    return httpClientProofProvider(proofServer, zkConfigProvider);
+    const provingProvider = httpClientProvingProvider(
+      proofServer,
+      zkConfigProvider,
+    );
+    return this._makeProofProvider(
+      provingProvider,
+      (op, err) =>
+        new DStorageError(
+          ChainErrorCode.MIDNIGHT_PROOF_SERVER_FAILED,
+          `[dStorage/midnight] Proof server at ${proofServer} failed to ${op}: ` +
+            `${describeProofServerError(err)}. ` +
+            "Check that the proof server is running and reachable.",
+          { cause: err },
+        ),
+    );
+  }
+
+  /**
+   * Wrap a circuit-level ProvingProvider so failures in check()/prove() reach
+   * the caller as a descriptive DStorageError. Those callbacks are invoked from
+   * inside the ledger WASM's `unprovenTx.prove()`, which can strip or reword a
+   * JS error on its way back out — so the wrapped error is remembered and
+   * rethrown from proveTx() in place of whatever the WASM surfaces.
+   */
+  private async _makeProofProvider(
+    provingProvider: ProvingProvider,
+    toError: (op: string, err: unknown) => DStorageError,
+  ): Promise<ProofProvider> {
+    let lastError: DStorageError | undefined;
+    const wrap =
+      <A extends unknown[], R>(op: string, fn: (...args: A) => Promise<R>) =>
+      async (...args: A): Promise<R> => {
+        try {
+          return await fn(...args);
+        } catch (err) {
+          lastError = toError(op, err);
+          throw lastError;
+        }
+      };
+    const wrapped: ProvingProvider = {
+      check: wrap("check the proof preimage", (preimage, keyLocation) =>
+        provingProvider.check(preimage, keyLocation),
+      ),
+      prove: wrap(
+        "generate the proof",
+        (
+          preimage: Uint8Array,
+          keyLocation: string,
+          overwriteBindingInput?: bigint,
+        ) =>
+          provingProvider.prove(preimage, keyLocation, overwriteBindingInput),
+      ),
+    };
+
+    const { createProofProvider } =
+      await import("@midnight-ntwrk/midnight-js-types");
+    const inner = createProofProvider(wrapped);
+    const logger = this.logger;
+    return {
+      proveTx: async (...args: Parameters<ProofProvider["proveTx"]>) => {
+        lastError = undefined;
+        try {
+          return await inner.proveTx(...args);
+        } catch (err) {
+          if (lastError && err !== lastError) {
+            logger?.log(
+              "dStorage/midnight",
+              `proveTx failed (raw error: ${err instanceof Error ? err.message : String(err)})`,
+            );
+            throw lastError;
+          }
+          throw err;
+        }
+      },
+    };
   }
 
   /**
@@ -908,36 +1013,15 @@ export class MidnightChainAdapter implements ChainAdapter {
       "Using the wallet's proving provider (proving delegated to the wallet).",
     );
 
-    const wrap =
-      <A extends unknown[], R>(op: string, fn: (...args: A) => Promise<R>) =>
-      async (...args: A): Promise<R> => {
-        try {
-          return await fn(...args);
-        } catch (err) {
-          throw new DStorageError(
-            ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
-            `[dStorage/midnight] Wallet failed to ${op}: ${describeConnectorError(err)}`,
-            { cause: err },
-          );
-        }
-      };
-    const provingProvider: ProvingProvider = {
-      check: wrap("check the proof preimage", (preimage, keyLocation) =>
-        walletProving.check(preimage, keyLocation),
-      ),
-      prove: wrap(
-        "generate the proof",
-        (
-          preimage: Uint8Array,
-          keyLocation: string,
-          overwriteBindingInput?: bigint,
-        ) => walletProving.prove(preimage, keyLocation, overwriteBindingInput),
-      ),
-    };
-
-    const { createProofProvider } =
-      await import("@midnight-ntwrk/midnight-js-types");
-    return createProofProvider(provingProvider);
+    return this._makeProofProvider(
+      walletProving,
+      (op, err) =>
+        new DStorageError(
+          ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
+          `[dStorage/midnight] Wallet failed to ${op}: ${describeConnectorError(err)}`,
+          { cause: err },
+        ),
+    );
   }
 
   /**

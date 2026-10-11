@@ -5,18 +5,30 @@ import {
 } from "../adapters/midnight/src/midnight.js";
 import type { AdapterWalletProvider } from "../adapters/midnight/src/common-types.js";
 import { ChainErrorCode } from "../errors.js";
+import { createProofProvider } from "@midnight-ntwrk/midnight-js-types";
 
-// Capture the ProvingProvider the adapter hands to midnight-js, so tests can
-// exercise its prove/check wrappers without building a real transaction.
+// Stand-in for the ledger's unprovenTx.prove(): proveTx hands the ProvingProvider
+// to the "transaction", so tests can drive check/prove without real circuits.
 vi.mock("@midnight-ntwrk/midnight-js-types", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@midnight-ntwrk/midnight-js-types")
   >()),
   createProofProvider: vi.fn((provingProvider: unknown) => ({
-    proveTx: vi.fn(),
-    provingProvider,
+    proveTx: (tx: { prove: (p: unknown) => Promise<unknown> }) =>
+      tx.prove(provingProvider),
   })),
 }));
+
+type TestProvingProvider = {
+  check: (p: Uint8Array, k: string) => Promise<unknown>;
+  prove: (p: Uint8Array, k: string, b?: bigint) => Promise<Uint8Array>;
+};
+
+/** The (wrapped) ProvingProvider most recently passed to createProofProvider. */
+function lastProvingProvider(): TestProvingProvider {
+  return vi.mocked(createProofProvider).mock
+    .lastCall![0] as TestProvingProvider;
+}
 
 const MOCK_WALLET_PROVIDER = {} as AdapterWalletProvider;
 const MOCK_PRIVATE_STATE_PASSWORD = "Aa1!mockseedfortest";
@@ -1031,15 +1043,11 @@ describe("MidnightChainAdapter", () => {
     async function buildWalletProofProvider(connectorAPI: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const a = makeAdapter() as any;
-      return a._buildWalletProofProvider(
+      const proofProvider = await a._buildWalletProofProvider(
         connectorAPI,
         zkConfigProvider,
-      ) as Promise<{
-        provingProvider: {
-          check: (p: Uint8Array, k: string) => Promise<unknown>;
-          prove: (p: Uint8Array, k: string, b?: bigint) => Promise<Uint8Array>;
-        };
-      }>;
+      );
+      return { proofProvider, provingProvider: lastProvingProvider() };
     }
 
     it("gets the wallet's proving provider with the ZK key material", async () => {
@@ -1100,6 +1108,140 @@ describe("MidnightChainAdapter", () => {
         code: ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
         message: expect.stringContaining("prover crashed"),
       });
+    });
+
+    it("proveTx surfaces the wallet error even when the WASM rewords it", async () => {
+      const connectorAPI = {
+        getProvingProvider: vi.fn().mockResolvedValue({
+          check: vi.fn().mockRejectedValue(new Error("prover crashed")),
+          prove: vi.fn(),
+        }),
+      };
+      const { proofProvider } = await buildWalletProofProvider(connectorAPI);
+      const tx = {
+        prove: async (p: TestProvingProvider) => {
+          await p.check(new Uint8Array(), "storeReference").catch(() => {
+            throw new Error("JsValue(Object({}))");
+          });
+        },
+      };
+      await expect(proofProvider.proveTx(tx)).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
+        message: expect.stringContaining("prover crashed"),
+      });
+    });
+  });
+
+  // ── Proof server proving ───────────────────────────────────────────────────
+
+  describe("proof server proving", () => {
+    afterEach(() => {
+      vi.doUnmock("@midnight-ntwrk/midnight-js-http-client-proof-provider");
+    });
+
+    async function buildHttpProofProvider(base: {
+      check?: unknown;
+      prove?: unknown;
+    }) {
+      const httpClientProvingProvider = vi.fn(() => ({
+        check: base.check ?? vi.fn(),
+        prove: base.prove ?? vi.fn(),
+      }));
+      vi.doMock(
+        "@midnight-ntwrk/midnight-js-http-client-proof-provider",
+        () => ({
+          httpClientProvingProvider,
+        }),
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = new MidnightChainAdapter({
+        contractAddress: VALID_ADDR,
+        network: MOCK_NETWORK,
+        walletMode: "connector",
+        proofServerEndpoint: MOCK_PROOF_SERVER_ENDPOINT,
+      }) as any;
+      const zkConfigProvider = {};
+      const proofProvider = await a._buildHttpProofProvider(
+        MOCK_PROOF_SERVER_ENDPOINT,
+        zkConfigProvider,
+      );
+      expect(httpClientProvingProvider).toHaveBeenCalledWith(
+        MOCK_PROOF_SERVER_ENDPOINT,
+        zkConfigProvider,
+      );
+      return { proofProvider, provingProvider: lastProvingProvider() };
+    }
+
+    // Mimics the ledger WASM: the check() rejection comes back out reworded.
+    const opaqueTx = {
+      prove: async (p: TestProvingProvider) => {
+        await p.check(new Uint8Array(), "storeReference").catch(() => {
+          throw new Error("JsValue(TypeError)");
+        });
+      },
+    };
+
+    it("names the proof server when it cannot be reached", async () => {
+      const { proofProvider } = await buildHttpProofProvider({
+        check: vi.fn().mockRejectedValue(
+          new TypeError("fetch failed", {
+            cause: Object.assign(new Error("connect ECONNREFUSED"), {
+              code: "ECONNREFUSED",
+            }),
+          }),
+        ),
+      });
+      const err = await proofProvider.proveTx(opaqueTx).catch((e: Error) => e);
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_FAILED,
+      });
+      expect(err.message).toContain(
+        `Proof server at ${MOCK_PROOF_SERVER_ENDPOINT} failed to check the proof preimage`,
+      );
+      expect(err.message).toContain("could not connect (ECONNREFUSED)");
+      expect(err.message).toMatch(/^\[dStorage\/midnight\]/);
+    });
+
+    it("reports a timed-out request", async () => {
+      const timeout = new Error("The operation was aborted due to timeout");
+      timeout.name = "TimeoutError";
+      const { proofProvider } = await buildHttpProofProvider({
+        check: vi.fn().mockRejectedValue(timeout),
+      });
+      await expect(proofProvider.proveTx(opaqueTx)).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_FAILED,
+        message: expect.stringContaining("request timed out"),
+      });
+    });
+
+    it("reports a non-2xx proof server response from prove()", async () => {
+      const httpErr = new Error(
+        'Failed Proof Server response: url="x", code="500", status="Internal Server Error"',
+      );
+      const { provingProvider } = await buildHttpProofProvider({
+        prove: vi.fn().mockRejectedValue(httpErr),
+      });
+      await expect(
+        provingProvider.prove(new Uint8Array(), "storeReference"),
+      ).rejects.toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_PROOF_SERVER_FAILED,
+        message: expect.stringContaining(
+          'failed to generate the proof: Failed Proof Server response: url="x", code="500"',
+        ),
+        cause: httpErr,
+      });
+    });
+
+    it("rethrows non-proving errors from proveTx unchanged", async () => {
+      const { proofProvider } = await buildHttpProofProvider({});
+      const boom = new Error("unrelated ledger failure");
+      await expect(
+        proofProvider.proveTx({
+          prove: async () => {
+            throw boom;
+          },
+        }),
+      ).rejects.toBe(boom);
     });
   });
 
