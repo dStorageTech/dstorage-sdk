@@ -40,3 +40,8 @@ Thumbs.db
 .vscode/
 .idea/
 tools/midnight-local-dev/
+
+# Local assistant / private working files (never committed)
+.claude/
+CLAUDE.md
+

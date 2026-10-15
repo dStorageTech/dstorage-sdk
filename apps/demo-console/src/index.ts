@@ -141,7 +141,8 @@ async function main(): Promise<void> {
 
   2) Arweave Local (port 1984)
        docker run -d --rm -p 1984:1984 textury/arlocal
-     A pre-funded test wallet key is provided at apps/demo-console/test-arweave-wallet-key.json.
+     Requires a test wallet key at apps/demo-console/test-arweave-wallet-key.json (gitignored —
+     see CONTRIBUTING.md#console-demo to generate one; arlocal funds it automatically).
 
   3) Preprod tokens
      - NIGHT: https://faucet.preprod.midnight.network/

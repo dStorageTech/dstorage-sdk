@@ -4,6 +4,15 @@
   "version": "0.3.0",
   "type": "module",
   "description": "dStorage SDK — Privacy-first data layer for dApps",
+  "license": "MIT",
+  "homepage": "https://github.com/dStorageTech/dstorage-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dStorageTech/dstorage-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dStorageTech/dstorage-sdk/issues"
+  },
   "workspaces": [
     "packages/*",
     "apps/*"

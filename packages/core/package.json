@@ -19,6 +19,9 @@
     "type": "git",
     "url": "git+https://github.com/dstoragetech/dstorage-sdk.git"
   },
+  "bugs": {
+    "url": "https://github.com/dStorageTech/dstorage-sdk/issues"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

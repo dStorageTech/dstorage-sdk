@@ -12,8 +12,8 @@ echo ""
 
 # Check Node version
 NODE_VERSION=$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1)
-if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" -lt 18 ]; then
-  echo "❌ Node.js 18+ required. Install from https://nodejs.org"
+if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" -lt 22 ]; then
+  echo "❌ Node.js 22+ required. Install from https://nodejs.org"
   exit 1
 fi
 echo "✓ Node.js $(node -v)"
@@ -33,4 +33,4 @@ echo "╚═══════════════════════�
 echo ""
 
 # Start the Vite dev server
-npm run dev -w apps/demo 
+npm run demo:run
