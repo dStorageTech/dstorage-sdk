@@ -12,8 +12,11 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 
 > ⚠️ **Pre-1.0, active development**: APIs may still change between minor versions. It's safe to follow the guides, but hold off on production use for now.
 
+🌐 Website: [dstorage.pro](https://dstorage.pro)
+
 ## Table of Contents
 
+- [Guides & AI prompts](#guides--ai-prompts)
 - [What it does](#what-it-does)
 - [Quick Start](#quick-start)
 - [Managing References](#managing-references)
@@ -29,6 +32,14 @@ For teams building privacy-sensitive dApps (health, identity, finance, and enter
 - [Contributing](#contributing)
 - [Security](#security)
 - [License](#license)
+
+---
+
+## Guides & AI prompts
+
+Step-by-step guides live at **[dstorage.pro/docs](https://dstorage.pro/docs/guide/)**: mock adapters, local & simulator setup, the Midnight network adapter, passkey encryption, managed payments, and an [FAQ](https://dstorage.pro/docs/faq/).
+
+Building with an AI coding agent (Claude Code, Cursor, Codex, ...)? Visit the [Build with AI](https://dstorage.pro/docs/guide/build-with-ai.html) page on the website. It has a ready-made prompt for every guide and explains how to point your agent at the current docs. The SDK is new and its API changes between versions, so an agent's memory of it is often wrong.
 
 ---
 

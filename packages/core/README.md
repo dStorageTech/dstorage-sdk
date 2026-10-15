@@ -11,6 +11,14 @@
 
 ## 📖 [Full documentation on GitHub →](https://github.com/dStorageTech/dstorage-sdk#readme)
 
+🌐 Website: [dstorage.pro](https://dstorage.pro)
+
+## Guides & AI prompts
+
+Step-by-step guides live at **[dstorage.pro/docs](https://dstorage.pro/docs/guide/)**: mock adapters, local & simulator setup, the Midnight network adapter, passkey encryption, managed payments, and an FAQ.
+
+Building with an AI coding agent (Claude Code, Cursor, Codex, ...)? Visit the [Build with AI](https://dstorage.pro/docs/guide/build-with-ai.html) page on the website. It has a ready-made prompt for every guide and explains how to point your agent at the current docs. The SDK is new and its API changes between versions, so an agent's memory of it is often wrong.
+
 ## Install
 
 ```sh
@@ -56,6 +64,7 @@ console.log(new TextDecoder().decode(bytes)); // "Hello dStorage!"
 - [Midnight ZK artifacts](https://github.com/dStorageTech/dstorage-sdk#midnight-zk-artifacts)
 - [Error handling](https://github.com/dStorageTech/dstorage-sdk#error-handling)
 - [Encryption design](https://github.com/dStorageTech/dstorage-sdk#encryption-design)
+- [dStorage website](https://dstorage.pro) · [Guides](https://dstorage.pro/docs/guide/) · [FAQ](https://dstorage.pro/docs/faq/)
 - [Issues](https://github.com/dStorageTech/dstorage-sdk/issues) · [Security policy](https://github.com/dStorageTech/dstorage-sdk/blob/main/SECURITY.md)
 
 ## License
