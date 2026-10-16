@@ -94,16 +94,18 @@ export async function resolveSeedHex(credentials: {
 // ── Wallet construction ────────────────────────────────────────────────────────
 
 /**
- * Build and start a MidnightWalletProvider from a master seed hex string.
+ * Build a MidnightWalletProvider from a master seed hex string.
  * HD-derives per-role seeds (Zswap, NightExternal, Dust) and initialises
- * the WalletFacade. The returned provider is already started.
+ * the WalletFacade. The provider is started (i.e. begins syncing with the
+ * indexer) only when `start` is true.
  */
 async function buildWalletProvider(
   env: EnvironmentConfiguration,
   seedHex: string | undefined,
+  start: boolean,
 ): Promise<MidnightWalletProvider> {
   const walletProvider = await MidnightWalletProvider.build(env, seedHex);
-  await walletProvider.start();
+  if (start) await walletProvider.start();
   return walletProvider;
 }
 
@@ -121,11 +123,15 @@ export async function initWallet(
 
   const walletProvider = await ticker(
     () => "Building wallet...",
-    () => buildWalletProvider(envConfig, seedHex),
+    // Managed payment: the signing server balances and pays for transactions,
+    // so the local wallet only supplies keys/addresses and submits the
+    // balanced tx. Starting it would kick off a background sync of all three
+    // wallets against the indexer that nothing uses.
+    () => buildWalletProvider(envConfig, seedHex, !skipFundCheck),
   );
   if (skipFundCheck) {
     console.log(
-      "Managed payment mode — skipping wallet sync and NIGHT balance check.",
+      "Managed payment mode — wallet not started (no sync, no NIGHT balance check).",
     );
   } else {
     const SAVE_INTERVAL_MS = 30_000;

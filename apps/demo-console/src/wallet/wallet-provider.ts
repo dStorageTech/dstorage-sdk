@@ -31,6 +31,7 @@ import {
   UnshieldedWallet,
 } from "@midnight-ntwrk/wallet-sdk/unshielded";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk/dust";
+import { isNodeSocketClosedError } from "../errors.js";
 import { HDWallet, Roles, Role } from "@midnight-ntwrk/wallet-sdk/hd";
 import { hexToBytes } from "@dstorage-tech/dstorage-sdk";
 
@@ -170,8 +171,28 @@ export class MidnightWalletProvider
     return await this.wallet.finalizeRecipe(recipe);
   }
 
-  submitTx(tx: FinalizedTransaction): Promise<string> {
-    return this.wallet.submitTransaction(tx);
+  async submitTx(tx: FinalizedTransaction): Promise<string> {
+    // wallet-sdk-node-client race: after each submission it calls
+    // api.disconnect(), which resolves before the WebSocket has actually
+    // closed. The next submission sees `isConnected === true`, skips the
+    // reconnect, and sends on the closing socket — failing with
+    // "disconnected from <node>: 1000:: Normal Closure". Invisible against a
+    // local node (the close is instant), but routine against a remote RPC
+    // such as Blockfrost. The request never reaches the node and the facade
+    // reverts the tx on failure, so retrying is safe; by then the old socket
+    // is closed and the client reconnects properly.
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.wallet.submitTransaction(tx);
+      } catch (err) {
+        if (attempt >= MAX_ATTEMPTS || !isNodeSocketClosedError(err)) throw err;
+        console.warn(
+          `Node connection was closing during submission (attempt ${attempt}/${MAX_ATTEMPTS}), retrying...`,
+        );
+        await new Promise((r) => setTimeout(r, 1_000 * attempt));
+      }
+    }
   }
 
   // We do not wait for funds, it's done outside
