@@ -333,7 +333,9 @@ export class ArweaveStorageAdapter implements StorageAdapter {
       }
     }
 
-    const { tx, arCost } = signed;
+    const { tx } = signed;
+    // The signed reward is the exact fee (data txs carry no quantity).
+    const arCost = arweave.ar.winstonToAr(tx.reward) as string;
 
     // Broadcast via chunked uploader — sends 256 KB slices to /chunk endpoint.
     // Supports transactions up to ~2 GB and retries failed slices independently.
@@ -344,7 +346,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     this.logger?.log(
       "dStorage/arweave",
-      `Uploaded → txId: ${txId}  cost: ~${arCost} AR`,
+      `Uploaded → txId: ${txId}  cost: ${arCost} AR`,
     );
 
     // Optional: block until the transaction is included in a block.

@@ -292,17 +292,14 @@ export class ArweavePaymentAdapter implements PaymentAdapter {
     onStatus?.("Requesting AR wallet approval…");
     await arweave.transactions.sign(tx, wallet);
 
-    // Fetch the real cost for the upload result receipt
-    const winstons = (await arweave.transactions.getPrice(
-      data.byteLength,
-    )) as string;
-    const arCost = arweave.ar.winstonToAr(winstons) as string;
+    // The signed reward is the exact fee (data txs carry no quantity).
+    const arCost = arweave.ar.winstonToAr(tx.reward) as string;
 
     this.signedUpload = { tx, arCost };
 
     this.logger?.log(
       "dStorage/arweave-payment",
-      `Transaction signed → txId: ${tx.id}  cost: ~${arCost} AR`,
+      `Transaction signed → txId: ${tx.id}  cost: ${arCost} AR`,
     );
 
     return {

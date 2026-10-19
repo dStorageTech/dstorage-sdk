@@ -505,7 +505,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
       this.logger?.log(
         "dStorage/managed-payment",
-        `TEST payment recorded (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee}); Arweave tx signed locally → id: ${tx.id}`,
+        `TEST payment recorded (${this.signingServerUrl} API service) → txId: ${txId}  cost: ${arCost} ${this.token} (service fee: ${serviceFee}); Arweave tx signed locally → id: ${tx.id}`,
       );
 
       return {
@@ -528,7 +528,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee})`,
+      `Transaction signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ${arCost} ${this.token} (service fee: ${serviceFee})`,
     );
 
     return {
@@ -573,7 +573,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Midnight Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${dustCost} ${this.token} (service fee: ${serviceFee})`,
+      `Midnight Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ${dustCost} ${this.token} (service fee: ${serviceFee})`,
     );
 
     return {
@@ -612,7 +612,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `Arweave bundler Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ~${arCost} ${this.token} (service fee: ${serviceFee})`,
+      `Arweave bundler Tx signed remotely (${this.signingServerUrl} API service) → txId: ${txId}  cost: ${arCost} ${this.token} (service fee: ${serviceFee})`,
     );
 
     return {
@@ -662,7 +662,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
 
     this.logger?.log(
       "dStorage/managed-payment",
-      `ManagedMock Tx signed remotely (${this.signingServerUrl}) → txId: ${txId}  cost: ~${txAmount} MOCK (service fee: ${serviceFee})`,
+      `ManagedMock Tx signed remotely (${this.signingServerUrl}) → txId: ${txId}  cost: ${txAmount} MOCK (service fee: ${serviceFee})`,
     );
 
     return {
