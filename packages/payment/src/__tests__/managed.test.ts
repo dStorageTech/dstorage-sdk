@@ -956,3 +956,30 @@ describe("ManagedPaymentAdapter — remote signing (Arweave)", () => {
     expect(tx.id).toBe(SERVER_TX_ID);
   });
 });
+
+// ── Token per network ─────────────────────────────────────────────────────────
+//
+// ManagedPaymentAdapter extends ArweavePaymentAdapter, whose token is "AR"; costs
+// on other networks must be labelled with that network's own token.
+
+describe("ManagedPaymentAdapter — token per network", () => {
+  it.each([
+    ["arweave", "AR"],
+    ["arweave_bundler", "AR"],
+    ["midnight", "DUST"],
+    ["managedmock", "MOCK"],
+  ] as const)("%s costs are denominated in %s", async (network, token) => {
+    const adapter = new ManagedPaymentAdapter({
+      network,
+      type: "chain",
+      managedPayment: {
+        signingServerUrl: SIGNING_SERVER_URL,
+        authToken: "tok_test",
+      },
+    });
+    expect(adapter.token).toBe(token);
+    if (network !== "arweave") {
+      expect((await adapter.estimateCost(1024)).token).toBe(token);
+    }
+  });
+});

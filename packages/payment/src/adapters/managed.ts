@@ -57,6 +57,7 @@ import type {
   PaymentQuote,
   PaymentReceipt,
   NetworkType,
+  TokenSymbol,
 } from "../types.js";
 import { ArweavePaymentAdapter } from "./arweave.js";
 import type { ArweavePaymentAdapterConfig } from "./arweave.js";
@@ -69,6 +70,15 @@ const POST_SIGN_TX_API_PATH = "/api/service/sign-tx";
 
 /** Default request timeout — matches the convention used by arweave-bundler.ts and httpGateway.ts. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Token each network's costs are denominated in. */
+const TOKEN_BY_NETWORK: Record<PaymentNetworkName, TokenSymbol> = {
+  arweave: "AR",
+  arweave_bundler: "AR",
+  midnight: "DUST",
+  managedmock: "MOCK",
+  mock: "MOCK",
+};
 
 // ── Byte / encoding helpers ───────────────────────────────────────────────────
 
@@ -229,6 +239,7 @@ export function assertOwnerKeyMatch(
 export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
   override readonly network: PaymentNetworkName;
   override readonly type: NetworkType;
+  override readonly token: TokenSymbol;
 
   private readonly signingServerUrl: string;
   private readonly authToken: string;
@@ -305,6 +316,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
       config.managedPayment.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.network = config.network;
     this.type = config.type;
+    this.token = TOKEN_BY_NETWORK[config.network];
     this.networkId = config.networkId;
   }
 
