@@ -1,6 +1,6 @@
 {
   "name": "@dstorage/crypto",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Client-side encryption utilities for dStorage SDK",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
