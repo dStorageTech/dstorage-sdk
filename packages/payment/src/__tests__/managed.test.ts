@@ -872,3 +872,87 @@ describe("ManagedPaymentAdapter — testMode (Arweave)", () => {
     expect(await arweave.transactions.verify(tx)).toBe(true);
   });
 });
+
+// ── Remote signing (Arweave) ──────────────────────────────────────────────────
+//
+// The server's signing wallet is the tx owner (and fee payer), so the stripped
+// tx is sent with an empty owner and the owner returned by the server is applied.
+// A compound token's suffix is the server's bundler wallet key, not this signer,
+// so it must neither be sent as the owner nor pin the response.
+
+describe("ManagedPaymentAdapter — remote signing (Arweave)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const SERVER_TX_ID = "s".repeat(43);
+  const SERVER_OWNER = "B".repeat(683);
+
+  function stubGatewayAndSigningServer(): { body: () => string } {
+    let capturedBody = "";
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if (url.includes("/api/service/sign-tx")) {
+        capturedBody = String(init?.body ?? "");
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: true,
+              txId: SERVER_TX_ID,
+              signature: "f".repeat(683),
+              publicKey: SERVER_OWNER,
+              txAmount: "0.001",
+              serviceFee: "0.0001",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes("/tx_anchor")) {
+        return Promise.resolve(new Response("a".repeat(64), { status: 200 }));
+      }
+      if (url.includes("/price/")) {
+        return Promise.resolve(new Response("12345", { status: 200 }));
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    return { body: () => capturedBody };
+  }
+
+  async function payWithUpload(authToken: string) {
+    const adapter = new ManagedPaymentAdapter({
+      ...BASE_CONFIG,
+      managedPayment: { signingServerUrl: SIGNING_SERVER_URL, authToken },
+    });
+    const data = new TextEncoder().encode("remote-signing payload");
+    adapter.provideUploadData(data, {
+      "Content-Type": "application/octet-stream",
+    });
+    await adapter.pay(makeQuote({ dataSizeBytes: data.byteLength }));
+    return adapter;
+  }
+
+  it("sends the stripped tx with an empty owner (plain token)", async () => {
+    const capture = stubGatewayAndSigningServer();
+    await payWithUpload("tok_test");
+
+    const sent = JSON.parse(capture.body()) as { txData: { owner: string } };
+    expect(sent.txData.owner).toBe("");
+  });
+
+  it("does not send a compound token's bundler key as the owner", async () => {
+    const capture = stubGatewayAndSigningServer();
+    await payWithUpload(`tok_test.${"A".repeat(683)}`);
+
+    const sent = JSON.parse(capture.body()) as { txData: { owner: string } };
+    expect(sent.txData.owner).toBe("");
+  });
+
+  it("applies the server's owner even when it differs from a compound token's bundler key", async () => {
+    stubGatewayAndSigningServer();
+    const adapter = await payWithUpload(`tok_test.${"A".repeat(683)}`);
+
+    const tx = adapter.consumeSignedUpload()!.tx;
+    expect(tx.owner).toBe(SERVER_OWNER);
+    expect(tx.id).toBe(SERVER_TX_ID);
+  });
+});
