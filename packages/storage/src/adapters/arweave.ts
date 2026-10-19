@@ -383,16 +383,27 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     // ── Pre-fetch transaction metadata ────────────────────────────────────────
     // Done before downloading data so we can (a) reject oversized blobs before
-    // they materialise in memory, and (b) grab the X-Content-Hash tag for
-    // integrity verification — both in a single round trip.
+    // they materialise in memory, (b) grab the X-Content-Hash tag for integrity
+    // verification and (c) know the exact data size to expect. Only the header
+    // is fetched: transactions.get() would also download the data.
     let storedHash: string | undefined;
+    let expectedSize: number | undefined;
     const tags: Record<string, string> = {};
     if (!this.skipIntegrityCheck) {
       try {
-        const tx = await arweave.transactions.get(id);
+        const header = await arweave.api.get(`tx/${id}`);
+        if (header.status !== 200) {
+          throw new Error(
+            header.status === 202
+              ? "transaction is still pending"
+              : `HTTP ${header.status}`,
+          );
+        }
+        const tx = arweave.transactions.fromRaw(header.data as object);
 
         // Size guard — reject before materialising a potentially huge blob.
         const dataSize = parseInt(tx.data_size ?? "0", 10);
+        if (!isNaN(dataSize)) expectedSize = dataSize;
         if (!isNaN(dataSize) && dataSize > this.maxRetrieveSizeBytes) {
           throw new DStorageError(
             StorageErrorCode.ARWEAVE_TX_TOO_LARGE,
@@ -411,7 +422,7 @@ export class ArweaveStorageAdapter implements StorageAdapter {
         if ((err as Error).message.startsWith("[dStorage/arweave]")) throw err;
         throw new DStorageError(
           StorageErrorCode.ARWEAVE_TX_METADATA_FAILED,
-          `[dStorage/arweave] Could not fetch transaction metadata for txId: ${id} — ` +
+          `[dStorage/arweave] Could not fetch transaction metadata for txId: ${id} (${(err as Error).message}) — ` +
             "content hash cannot be verified. " +
             "Set skipIntegrityCheck: true to bypass integrity checking for fully trusted gateways.",
           { cause: err },
@@ -420,30 +431,17 @@ export class ArweaveStorageAdapter implements StorageAdapter {
     }
 
     // ── Download data ─────────────────────────────────────────────────────────
-    let raw: unknown;
-    try {
-      raw = await arweave.transactions.getData(id, {
-        decode: true,
-        string: false,
-      });
-    } catch (err) {
-      throw new DStorageError(
-        StorageErrorCode.ARWEAVE_GET_DATA_FAILED,
-        `[dStorage/arweave] Failed to download data for txId: ${id} — ${String(err)}`,
-        { cause: err },
-      );
-    }
+    const bytes = await this.downloadData(arweave, id, expectedSize);
 
-    if (!raw) {
+    if (!bytes || (bytes.byteLength === 0 && expectedSize !== 0)) {
       throw new DStorageError(
         StorageErrorCode.ARWEAVE_NO_DATA_RETURNED,
         `[dStorage/arweave] No data returned for txId: ${id}\n` +
-          "The transaction may still be pending — Arweave can take a few minutes to confirm.\n" +
+          "The transaction may still be pending, or its data may not have propagated to " +
+          "the gateway yet — this can take a few minutes after it is mined.\n" +
           `Check status at: https://viewblock.io/arweave/tx/${id}`,
       );
     }
-
-    const bytes = raw as Uint8Array;
 
     // Post-load size guard — defense-in-depth and covers the skipIntegrityCheck path.
     if (bytes.byteLength > this.maxRetrieveSizeBytes) {
@@ -473,6 +471,59 @@ export class ArweaveStorageAdapter implements StorageAdapter {
 
     this.logger?.log("dStorage/arweave", `Retrieved txId: ${id}`);
     return { bytes, tags };
+  }
+
+  /**
+   * Download a transaction's data.
+   *
+   * Tries the gateway's /raw/{id} first: it serves the exact data bytes as soon
+   * as the tx is mined, whereas the chunks getData() reads can take minutes to
+   * hours to propagate after mining — and getData()'s own fallback (/{id}) can
+   * answer with an empty body in the meantime. A /raw response is only used when
+   * its length matches the tx header's data_size (when known).
+   *
+   * Falls back to getData() for gateways without /raw (e.g. arlocal).
+   */
+  private async downloadData(
+    arweave: Arweave,
+    id: string,
+    expectedSize: number | undefined,
+  ): Promise<Uint8Array | undefined> {
+    try {
+      const resp = await arweave.api.get(`raw/${id}`, {
+        responseType: "arraybuffer",
+      });
+      if (resp.status === 200 && resp.data instanceof ArrayBuffer) {
+        const bytes = new Uint8Array(resp.data);
+        if (
+          expectedSize === undefined
+            ? bytes.byteLength > 0
+            : bytes.byteLength === expectedSize
+        ) {
+          return bytes;
+        }
+      }
+    } catch {
+      // Fall through to getData().
+    }
+
+    this.logger?.log(
+      "dStorage/arweave",
+      `Gateway /raw/${id} unavailable — falling back to chunked download`,
+    );
+    try {
+      const raw = await arweave.transactions.getData(id, {
+        decode: true,
+        string: false,
+      });
+      return raw ? (raw as Uint8Array) : undefined;
+    } catch (err) {
+      throw new DStorageError(
+        StorageErrorCode.ARWEAVE_GET_DATA_FAILED,
+        `[dStorage/arweave] Failed to download data for txId: ${id} — ${String(err)}`,
+        { cause: err },
+      );
+    }
   }
 
   // ── estimateCost ───────────────────────────────────────────────────────────────

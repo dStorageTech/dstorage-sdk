@@ -75,6 +75,11 @@ const DEFAULT_CONTENT_HASH = Array.from(blake3(DEFAULT_RETRIEVED_DATA))
   .map((b) => b.toString(16).padStart(2, "0"))
   .join("");
 
+// The /tx/{id} header (metadata only). Defaults to tags that pass verification.
+const mockTxHeader = vi.fn();
+// The gateway's /raw/{id} response. Defaults to 404 so getData() serves the data.
+const mockRawResponse = vi.fn();
+
 const mockArweave = {
   // createTransaction is a top-level method on the Arweave instance
   createTransaction: vi.fn().mockResolvedValue(mockTx),
@@ -86,11 +91,15 @@ const mockArweave = {
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 1234567 } }),
-    get: vi
-      .fn()
-      .mockResolvedValue(
-        makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }),
-      ),
+    fromRaw: vi.fn((attributes: unknown) => attributes),
+  },
+  api: {
+    // tx/{id} → the header from mockTxHeader; raw/{id} → mockRawResponse.
+    get: vi.fn(async (endpoint: string) =>
+      endpoint.startsWith("tx/")
+        ? { status: 200, data: await mockTxHeader(endpoint.slice(3)) }
+        : mockRawResponse(endpoint.slice(4)),
+    ),
   },
   ar: {
     winstonToAr: vi.fn().mockReturnValue("0.000001"),
@@ -135,9 +144,13 @@ describe("ArweaveStorageAdapter", () => {
       status: 200,
       confirmed: { block_height: 1234567 },
     });
-    mockArweave.transactions.get.mockResolvedValue(
+    mockTxHeader.mockResolvedValue(
       makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }),
     );
+    mockRawResponse.mockResolvedValue({
+      status: 404,
+      data: new ArrayBuffer(0),
+    });
     mockArweave.ar.winstonToAr.mockReturnValue("0.000001");
   });
 
@@ -334,7 +347,7 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it("throws before any network call when the id contains path-traversal characters", async () => {
-      const retrieveSpy = vi.spyOn(mockArweave.transactions, "get");
+      const retrieveSpy = vi.spyOn(mockArweave.api, "get");
       await expect(
         nodeAdapter().retrieve("../../etc/passwd"),
       ).rejects.toMatchObject({
@@ -342,6 +355,57 @@ describe("ArweaveStorageAdapter", () => {
         message: expect.stringContaining("Invalid transaction ID"),
       });
       expect(retrieveSpy).not.toHaveBeenCalled();
+    });
+
+    it("downloads from the gateway's /raw endpoint when its size matches data_size", async () => {
+      const size = String(DEFAULT_RETRIEVED_DATA.byteLength);
+      mockTxHeader.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }, size),
+      );
+      mockRawResponse.mockResolvedValueOnce({
+        status: 200,
+        data: DEFAULT_RETRIEVED_DATA.slice().buffer,
+      });
+      const { bytes } = await nodeAdapter().retrieve(TX_MOCK);
+      expect(bytes).toEqual(DEFAULT_RETRIEVED_DATA);
+      expect(mockArweave.transactions.getData).not.toHaveBeenCalled();
+    });
+
+    it("falls back to getData when /raw returns a body that doesn't match data_size", async () => {
+      const size = String(DEFAULT_RETRIEVED_DATA.byteLength);
+      mockTxHeader.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }, size),
+      );
+      // Empty 200, as a gateway can answer before the data has propagated.
+      mockRawResponse.mockResolvedValueOnce({
+        status: 200,
+        data: new ArrayBuffer(0),
+      });
+      const { bytes } = await nodeAdapter().retrieve(TX_MOCK);
+      expect(bytes).toEqual(DEFAULT_RETRIEVED_DATA);
+      expect(mockArweave.transactions.getData).toHaveBeenCalledOnce();
+    });
+
+    it("throws ARWEAVE_NO_DATA_RETURNED when only an empty body is available for non-empty data", async () => {
+      mockTxHeader.mockResolvedValueOnce(
+        makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }, "85336"),
+      );
+      mockArweave.transactions.getData.mockResolvedValueOnce(new Uint8Array(0));
+      await expect(nodeAdapter().retrieve(TX_MOCK)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_NO_DATA_RETURNED,
+        message: expect.stringMatching(/not have propagated/),
+      });
+    });
+
+    it("reports a pending transaction when the header is not yet available", async () => {
+      mockArweave.api.get.mockResolvedValueOnce({
+        status: 202,
+        data: "Pending",
+      });
+      await expect(nodeAdapter().retrieve(TX_MOCK)).rejects.toMatchObject({
+        code: StorageErrorCode.ARWEAVE_TX_METADATA_FAILED,
+        message: expect.stringContaining("still pending"),
+      });
     });
 
     it("throws for an id that is shorter than 43 characters", async () => {
@@ -438,7 +502,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("retrieve passes when hash tag matches retrieved bytes", async () => {
       const data = enc("retrieved-data");
-      mockArweave.transactions.get.mockResolvedValueOnce(
+      mockTxHeader.mockResolvedValueOnce(
         makeMockTxWithTags({ "X-Content-Hash": hexOf(data) }),
       );
       await expect(nodeAdapter().retrieve(TX_BASIC)).resolves.toBeDefined();
@@ -450,7 +514,7 @@ describe("ArweaveStorageAdapter", () => {
       mockArweave.transactions.getData.mockResolvedValueOnce(
         enc("tampered bytes"),
       );
-      mockArweave.transactions.get.mockResolvedValueOnce(
+      mockTxHeader.mockResolvedValueOnce(
         makeMockTxWithTags({ "X-Content-Hash": hexOf(originalData) }),
       );
       const err = await nodeAdapter()
@@ -463,9 +527,7 @@ describe("ArweaveStorageAdapter", () => {
     });
 
     it("retrieve throws when X-Content-Hash tag is absent", async () => {
-      mockArweave.transactions.get.mockResolvedValueOnce(
-        makeMockTxWithTags({}),
-      );
+      mockTxHeader.mockResolvedValueOnce(makeMockTxWithTags({}));
       await expect(nodeAdapter().retrieve(TX_NO_HASH)).rejects.toMatchObject({
         code: StorageErrorCode.ARWEAVE_HASH_TAG_MISSING,
         message: expect.stringContaining("[dStorage/arweave]"),
@@ -478,7 +540,7 @@ describe("ArweaveStorageAdapter", () => {
       // Gateway serves tampered bytes AND a tag that matches those tampered
       // bytes — internally consistent, so the gateway-tag-only check would pass.
       mockArweave.transactions.getData.mockResolvedValueOnce(tamperedData);
-      mockArweave.transactions.get.mockResolvedValueOnce(
+      mockTxHeader.mockResolvedValueOnce(
         makeMockTxWithTags({ "X-Content-Hash": hexOf(tamperedData) }),
       );
       const err = await nodeAdapter()
@@ -494,9 +556,7 @@ describe("ArweaveStorageAdapter", () => {
 
     it("expectedContentHash anchor allows retrieve to succeed when the X-Content-Hash tag is absent", async () => {
       const data = enc("retrieved-data");
-      mockArweave.transactions.get.mockResolvedValueOnce(
-        makeMockTxWithTags({}),
-      );
+      mockTxHeader.mockResolvedValueOnce(makeMockTxWithTags({}));
       await expect(
         nodeAdapter().retrieve(TX_ANCHOR_NO_TAG, {
           expectedContentHash: hexOf(data),
@@ -511,13 +571,11 @@ describe("ArweaveStorageAdapter", () => {
       );
       const adapter = nodeAdapter({ skipIntegrityCheck: true });
       await expect(adapter.retrieve(TX_SKIP)).resolves.toBeDefined();
-      expect(mockArweave.transactions.get).not.toHaveBeenCalled();
+      expect(mockTxHeader).not.toHaveBeenCalled();
     });
 
     it("retrieve throws when transactions.get() fails (metadata required for integrity)", async () => {
-      mockArweave.transactions.get.mockRejectedValueOnce(
-        new Error("tx not indexed yet"),
-      );
+      mockTxHeader.mockRejectedValueOnce(new Error("tx not indexed yet"));
       await expect(nodeAdapter().retrieve(TX_UNINDEXED)).rejects.toMatchObject({
         code: StorageErrorCode.ARWEAVE_TX_METADATA_FAILED,
         message: expect.stringMatching(
@@ -532,7 +590,7 @@ describe("ArweaveStorageAdapter", () => {
   describe("retrieve size limit", () => {
     it("throws when tx data_size exceeds maxRetrieveSizeBytes (pre-download guard)", async () => {
       const limit = 100;
-      mockArweave.transactions.get.mockResolvedValueOnce(
+      mockTxHeader.mockResolvedValueOnce(
         makeMockTxWithTags({ "X-Content-Hash": DEFAULT_CONTENT_HASH }, "9999"),
       );
       const adapter = nodeAdapter({ maxRetrieveSizeBytes: limit });
@@ -548,7 +606,7 @@ describe("ArweaveStorageAdapter", () => {
       // data_size in tx metadata is below the limit so the pre-load guard passes,
       // but getData returns more bytes than the limit — triggering the post-load guard.
       const bigData = new Uint8Array(200);
-      mockArweave.transactions.get.mockResolvedValueOnce(
+      mockTxHeader.mockResolvedValueOnce(
         makeMockTxWithTags({ "X-Content-Hash": hexOf(bigData) }, "50"),
       );
       mockArweave.transactions.getData.mockResolvedValueOnce(bigData);

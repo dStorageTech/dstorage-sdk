@@ -55,6 +55,9 @@ const mockLocalUploader = {
   }),
 };
 
+// The /tx/{id} header (metadata only).
+const mockTxHeader = vi.fn();
+
 const mockArweaveInstance = {
   createTransaction: vi.fn().mockResolvedValue(mockTx),
   wallets: {
@@ -66,14 +69,19 @@ const mockArweaveInstance = {
     sign: vi.fn().mockResolvedValue(undefined),
     getUploader: vi.fn().mockResolvedValue(mockLocalUploader),
     getData: vi.fn().mockResolvedValue(MOCK_RETRIEVED_DATA),
-    get: vi
-      .fn()
-      .mockResolvedValue(
-        makeMockTxWithTags({ "X-Content-Hash": MOCK_CONTENT_HASH }),
-      ),
+    fromRaw: vi.fn((attributes: unknown) => attributes),
     getStatus: vi
       .fn()
       .mockResolvedValue({ status: 200, confirmed: { block_height: 42 } }),
+  },
+  api: {
+    // tx/{id} → the header from mockTxHeader; raw/{id} → 404, as on arlocal,
+    // so getData() serves the data.
+    get: vi.fn(async (endpoint: string) =>
+      endpoint.startsWith("tx/")
+        ? { status: 200, data: await mockTxHeader(endpoint.slice(3)) }
+        : { status: 404, data: new ArrayBuffer(0) },
+    ),
   },
   ar: {
     winstonToAr: vi.fn().mockReturnValue("0.0000005"),
@@ -131,7 +139,7 @@ beforeEach(() => {
   mockArweaveInstance.transactions.getData.mockResolvedValue(
     MOCK_RETRIEVED_DATA,
   );
-  mockArweaveInstance.transactions.get.mockResolvedValue(
+  mockTxHeader.mockResolvedValue(
     makeMockTxWithTags({ "X-Content-Hash": MOCK_CONTENT_HASH }),
   );
   mockArweaveInstance.ar.winstonToAr.mockReturnValue("0.0000005");
