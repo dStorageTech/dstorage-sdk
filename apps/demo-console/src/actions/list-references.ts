@@ -1,12 +1,9 @@
-import {
-  type DStorage,
-  type MidnightChainAdapter,
-} from "@dstorage-tech/dstorage-sdk";
+import { type DStorage, type ChainAdapter } from "@dstorage-tech/dstorage-sdk";
 import { logError } from "../common.js";
 
 export async function listReferences(
   sdk: DStorage,
-  chainAdapter: MidnightChainAdapter,
+  chainAdapter: ChainAdapter,
 ): Promise<void> {
   try {
     const refs = await sdk.listReferences();

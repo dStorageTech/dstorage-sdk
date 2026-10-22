@@ -3,15 +3,15 @@ import { type Interface } from "node:readline/promises";
 import path from "node:path";
 import {
   type DStorage,
-  type ArweaveLocalStorageAdapter,
-  type MidnightChainAdapter,
+  type StorageAdapter,
+  type ChainAdapter,
 } from "@dstorage-tech/dstorage-sdk";
 import { withTicker, logError, promptMetadata } from "../common.js";
 
 export async function uploadFile(
   sdk: DStorage,
-  storageAdapter: ArweaveLocalStorageAdapter,
-  chainAdapter: MidnightChainAdapter,
+  storageAdapter: StorageAdapter,
+  chainAdapter: ChainAdapter,
   rl: Interface,
 ): Promise<void> {
   const filePath = (
@@ -28,15 +28,6 @@ export async function uploadFile(
     return;
   }
 
-  const visibilityInput = (
-    await rl.question("  Upload as [1=private (default), 2=public]: ")
-  ).trim();
-  const isPublic =
-    visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
-
-  // Metadata prompt (only for private uploads — metadata is encrypted with the DEK)
-  const metadata = isPublic ? undefined : await promptMetadata(rl);
-
   const replaceInput = (
     await rl.question("  Replace an existing reference? [y/N]: ")
   )
@@ -49,6 +40,21 @@ export async function uploadFile(
     replaceRefId =
       (await rl.question("  Enter refId to replace: ")).trim() || undefined;
   }
+
+  // Updates are always encrypted, so only new uploads can be public.
+  let isPublic = false;
+  if (replaceRefId) {
+    console.log("  (updates are always private — content will be encrypted)");
+  } else {
+    const visibilityInput = (
+      await rl.question("  Upload as [1=private (default), 2=public]: ")
+    ).trim();
+    isPublic =
+      visibilityInput === "2" || visibilityInput.toLowerCase() === "public";
+  }
+
+  // Metadata prompt (only for private uploads — metadata is encrypted with the DEK)
+  const metadata = isPublic ? undefined : await promptMetadata(rl);
 
   console.log(
     `\n  File: ${path.basename(filePath)} (${fileContent.byteLength} bytes) [${isPublic ? "public" : "private"}]`,
@@ -63,7 +69,6 @@ export async function uploadFile(
         () => `Updating reference ${replaceRefId}...`,
         () =>
           sdk.update(replaceRefId!, fileContent, {
-            isPublic,
             ...(metadata !== undefined && { metadata }),
           }),
       );

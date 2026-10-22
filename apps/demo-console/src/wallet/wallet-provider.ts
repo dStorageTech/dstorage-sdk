@@ -252,6 +252,7 @@ export class MidnightWalletProvider
         additionalFeeOverhead,
         feeBlocksMargin: 5,
       },
+      txHistoryStorage: new NoOpTransactionHistoryStorage(),
     };
 
     // Dust protocol parameters from the initial ledger state.
@@ -294,40 +295,29 @@ export class MidnightWalletProvider
         return shieldedWallet;
       },
       dust: (cfg: DefaultConfiguration) => {
-        const dustCfg = {
-          ...cfg,
-          txHistoryStorage: new NoOpTransactionHistoryStorage(),
-        };
         if (cache) {
           try {
-            dustWallet = DustWallet(dustCfg).restore(cache.dust);
+            dustWallet = DustWallet(cfg).restore(cache.dust);
             return dustWallet;
           } catch (e) {
             console.warn("Failed to restore dust wallet from cache:", e);
           }
         }
-        dustWallet = DustWallet(dustCfg).startWithSeed(
-          dustSeed,
-          dustParameters,
-        );
+        dustWallet = DustWallet(cfg).startWithSeed(dustSeed, dustParameters);
         return dustWallet;
       },
       unshielded: (cfg: DefaultConfiguration) => {
         if (cache) {
           try {
-            unshieldedWallet = UnshieldedWallet({
-              ...cfg,
-              txHistoryStorage: new NoOpTransactionHistoryStorage(),
-            }).restore(cache.unshielded);
+            unshieldedWallet = UnshieldedWallet(cfg).restore(cache.unshielded);
             return unshieldedWallet;
           } catch (e) {
             console.warn("Failed to restore unshielded wallet from cache:", e);
           }
         }
-        unshieldedWallet = UnshieldedWallet({
-          ...cfg,
-          txHistoryStorage: new NoOpTransactionHistoryStorage(),
-        }).startWithPublicKey(PublicKey.fromKeyStore(keystore));
+        unshieldedWallet = UnshieldedWallet(cfg).startWithPublicKey(
+          PublicKey.fromKeyStore(keystore),
+        );
         return unshieldedWallet;
       },
     });

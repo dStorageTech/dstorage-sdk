@@ -1,13 +1,10 @@
 import { type Interface } from "node:readline/promises";
-import {
-  type DStorage,
-  type MidnightChainAdapter,
-} from "@dstorage-tech/dstorage-sdk";
+import { type DStorage, type ChainAdapter } from "@dstorage-tech/dstorage-sdk";
 import { withTicker, logError } from "../common.js";
 
 export async function removeReference(
   sdk: DStorage,
-  chainAdapter: MidnightChainAdapter,
+  chainAdapter: ChainAdapter,
   rl: Interface,
 ): Promise<void> {
   const refId = (
