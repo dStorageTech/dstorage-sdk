@@ -170,7 +170,33 @@ async function main(): Promise<void> {
             })();
     const defaultEndpoints = DEMO_ENDPOINTS[networkName];
 
+    // Optional per-endpoint overrides (e.g. a keyed provider URL). Keyed URLs
+    // belong in .env only — never log them, they may carry an API key.
+    const endpointOverrides = {
+      nodeHttp: "DSTORAGE_NODE_HTTP",
+      nodeWs: "DSTORAGE_NODE_WS",
+      indexerHttp: "DSTORAGE_INDEXER_HTTP",
+      indexerWs: "DSTORAGE_INDEXER_WS",
+    } as const;
+    const endpoints = { ...defaultEndpoints };
+    const overriddenVars: string[] = [];
+    for (const [field, envVar] of Object.entries(endpointOverrides) as [
+      keyof typeof endpointOverrides,
+      string,
+    ][]) {
+      const value = process.env[envVar]?.trim();
+      if (value) {
+        endpoints[field] = value;
+        overriddenVars.push(envVar);
+      }
+    }
+
     console.log(`Network: ${networkName}\n`);
+    if (overriddenVars.length > 0) {
+      console.log(
+        `Using endpoint overrides from env: ${overriddenVars.join(", ")}\n`,
+      );
+    }
 
     // ── 2. Proof server endpoint ─────────────────────────────────────────────
     const proofServerEndpoint =
@@ -320,10 +346,10 @@ async function main(): Promise<void> {
     const seedHex = await resolveSeedHex(credentials);
     const envConfig: EnvironmentConfiguration = {
       networkId: networkName,
-      indexerHttp: defaultEndpoints.indexerHttp,
-      indexerWs: defaultEndpoints.indexerWs,
-      nodeHttp: defaultEndpoints.nodeHttp,
-      nodeWs: defaultEndpoints.nodeWs,
+      indexerHttp: endpoints.indexerHttp,
+      indexerWs: endpoints.indexerWs,
+      nodeHttp: endpoints.nodeHttp,
+      nodeWs: endpoints.nodeWs,
       proofServer: proofServerEndpoint,
     };
 
@@ -355,8 +381,8 @@ async function main(): Promise<void> {
         ...(contractAddressInput
           ? { contractAddress: contractAddressInput }
           : {}),
-        indexerEndpoint: defaultEndpoints.indexerHttp,
-        indexerWsEndpoint: defaultEndpoints.indexerWs,
+        indexerEndpoint: endpoints.indexerHttp,
+        indexerWsEndpoint: endpoints.indexerWs,
         proofServerEndpoint,
         // ZK artifacts for the DataRegistry storeReference circuit
         zkArtifactsPath: DATA_REGISTRY_ZK_PATH,
