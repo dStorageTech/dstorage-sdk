@@ -22,13 +22,18 @@ import {
 } from "@midnight-ntwrk/midnight-js-contracts";
 import {
   combineLatest,
+  defer,
   map,
   tap,
   from,
   firstValueFrom,
-  shareReplay,
+  retry,
+  share,
+  throwIfEmpty,
+  ReplaySubject,
   type Observable,
 } from "rxjs";
+import type { ContractState } from "@midnight-ntwrk/compact-runtime";
 import { toHex } from "@midnight-ntwrk/midnight-js-utils";
 import { DStorageError } from "@dstorage/crypto";
 import { ChainErrorCode } from "../../../errors.js";
@@ -59,6 +64,43 @@ export function validateContractVersion(
         `Deploy a compatible DataRegistry contract or upgrade the SDK.`,
     );
   }
+}
+
+/** @internal */
+export const LEDGER_STATE_RETRY_COUNT = 5;
+/** @internal */
+export const LEDGER_STATE_RETRY_DELAY_MS = 2_000;
+
+/**
+ * Latest on-chain contract state, resilient to the indexer stream completing
+ * without emitting. The indexer provider filters out polls where
+ * `contractAction` is still null; if the underlying query then completes, the
+ * raw observable ends empty and `firstValueFrom` throws rxjs `EmptyError`.
+ * Here an empty completion becomes an error and the stream is re-subscribed
+ * (a fresh indexer query) a bounded number of times before giving up.
+ *
+ * @internal
+ */
+export function ledgerState$(
+  providers: Pick<DataRegistryProviders, "publicDataProvider">,
+  contractAddress: ContractAddress,
+  retryDelayMs: number = LEDGER_STATE_RETRY_DELAY_MS,
+): Observable<ContractState> {
+  return defer(() =>
+    providers.publicDataProvider.contractStateObservable(contractAddress, {
+      type: "latest",
+    }),
+  ).pipe(
+    throwIfEmpty(
+      () =>
+        new DStorageError(
+          ChainErrorCode.CONTRACT_STATE_UNAVAILABLE,
+          `[dStorage/midnight] The indexer returned no contract state for ${contractAddress}. ` +
+            `The contract may not be indexed yet, or the address may be wrong.`,
+        ),
+    ),
+    retry({ count: LEDGER_STATE_RETRY_COUNT, delay: retryDelayMs }),
+  );
 }
 
 /**
@@ -113,19 +155,15 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     this.state$ = combineLatest(
       [
         // Combine public (ledger) state with...
-        providers.publicDataProvider
-          .contractStateObservable(this.deployedContractAddress, {
-            type: "latest",
-          })
-          .pipe(
-            map((contractState) => DataRegistry.ledger(contractState.data)),
-            tap((ledgerState) =>
-              logger?.debug?.(
-                "dStorage/midnight",
-                `ledger state changed: refCounter=${ledgerState.refCounter}`,
-              ),
+        ledgerState$(providers, this.deployedContractAddress).pipe(
+          map((contractState) => DataRegistry.ledger(contractState.data)),
+          tap((ledgerState) =>
+            logger?.debug?.(
+              "dStorage/midnight",
+              `ledger state changed: refCounter=${ledgerState.refCounter}`,
             ),
           ),
+        ),
         // ...private state...
         //    since the private state of the DataRegistry application never changes, we can query the
         //    private state once and always use the same value with `combineLatest`. In applications
@@ -163,7 +201,15 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       //   2. Every new subscriber (e.g. listReferences, readReference) immediately
       //      receives the most recently emitted state.
       //   3. Future indexer pushes (after upload/remove txs) still update the cache.
-      shareReplay({ bufferSize: 1, refCount: false }),
+      // resetOnComplete/resetOnError: if the indexer stream ends (or fails after
+      // ledgerState$ exhausts its retries), the next subscriber starts a fresh
+      // query instead of replaying a dead, possibly empty, buffer forever.
+      share({
+        connector: () => new ReplaySubject<DataRegistryDerivedState>(1),
+        resetOnError: true,
+        resetOnComplete: true,
+        resetOnRefCountZero: false,
+      }),
     );
   }
 
@@ -396,9 +442,9 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
 
     // Validate the on-chain contract version before accepting the contract.
     const contractVersion = await firstValueFrom(
-      providers.publicDataProvider
-        .contractStateObservable(contractAddress, { type: "latest" })
-        .pipe(map((s) => DataRegistry.ledger(s.data).contractVersion)),
+      ledgerState$(providers, contractAddress).pipe(
+        map((s) => DataRegistry.ledger(s.data).contractVersion),
+      ),
     );
     validateContractVersion(contractVersion, contractAddress);
 
