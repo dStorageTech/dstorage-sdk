@@ -144,6 +144,72 @@ describe.skipIf(!arlocalOk)(
   },
 );
 
+// ── Block A2: real storage replication through a policy ───────────────────────
+
+describe.skipIf(!arlocalOk)(
+  "multi-adapter: real storage replication (arlocal)",
+  () => {
+    let adapterA: ArweaveLocalStorageAdapter;
+    let adapterB: ArweaveLocalStorageAdapter;
+
+    beforeAll(async () => {
+      ({ adapter: adapterA } = await createStorageAdapter(env.arlocalUrl));
+      ({ adapter: adapterB } = await createStorageAdapter(env.arlocalUrl));
+    });
+
+    function replicatingSdk(salt: string) {
+      return new DStorage({
+        storageAdapters: [adapterA, adapterB],
+        chainAdapters: [new MidnightSimulatorChainAdapter({ logger: console })],
+        encryptionAdapters: [testEncryption(salt)],
+        storagePolicy: { onSuccess: () => "continue" },
+      });
+    }
+
+    it("reads a real copy when the primary's ID can't be fetched", async () => {
+      const ds = replicatingSdk("replication-read");
+      await ds.init();
+
+      const content = "real replicated content";
+      const { chainRefId, storageId, replicas } = await ds.store(enc(content));
+      expect(replicas).toHaveLength(1);
+      expect(replicas![0]!.id).not.toBe(storageId);
+
+      // arlocal is shared, so the primary stays reachable through either
+      // adapter unless every fetch of its ID is made to fail.
+      const original = adapterA.retrieve.bind(adapterA);
+      const retrieve = async (
+        id: string,
+        options?: Parameters<typeof original>[1],
+      ) => {
+        if (id === storageId) throw new Error("simulated missing primary");
+        return original(id, options);
+      };
+      const spyA = vi.spyOn(adapterA, "retrieve").mockImplementation(retrieve);
+      const spyB = vi.spyOn(adapterB, "retrieve").mockImplementation(retrieve);
+      try {
+        const { bytes } = await ds.retrieveByRefId(chainRefId!);
+        expect(new TextDecoder().decode(bytes)).toBe(content);
+      } finally {
+        spyA.mockRestore();
+        spyB.mockRestore();
+      }
+    });
+
+    it("keeps ownership working on a reference with real copies", async () => {
+      const ds = replicatingSdk("replication-owner");
+      await ds.init();
+
+      const { chainRefId } = await ds.store(enc("v1"));
+      const { replicas } = await ds.update(chainRefId!, enc("v2"));
+      expect(replicas).toHaveLength(1);
+      const { bytes } = await ds.retrieveByRefId(chainRefId!);
+      expect(new TextDecoder().decode(bytes)).toBe("v2");
+      await ds.removeReference(chainRefId!);
+    });
+  },
+);
+
 // ── Block B: chain adapter fallback (real storage, simulator chains) ───────────
 
 describe.skipIf(!arlocalOk)(

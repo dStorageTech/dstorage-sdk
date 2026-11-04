@@ -125,7 +125,7 @@ const { chainRefId } = await sdk.store(bytes, {
 
 ### Multiple storage and chain adapters (fallback)
 
-`storageAdapters` and `chainAdapters` are both **arrays in priority order**. With a single entry (the common case) the SDK behaves exactly like a single adapter. With more than one, every read and write tries each adapter in order and falls back to the next on failure, succeeding as soon as one works:
+`storageAdapters` and `chainAdapters` are both **arrays in priority order**. With a single entry (the common case) the SDK behaves exactly like a single adapter. With more than one, reads and writes try each adapter in order and fall back to the next on failure, succeeding as soon as one works. A write lands on one adapter only, unless a [policy](#overriding-how-adapters-are-used-policies) says otherwise:
 
 ```typescript
 const sdk = new DStorage({
@@ -139,7 +139,92 @@ const sdk = new DStorage({
 - `storageAdapters` is required and must contain at least one adapter.
 - `chainAdapters` is optional. Omitting it (or passing `[]`) puts the SDK in **storage-only mode**: content is encrypted and stored, but no on-chain reference is written.
 - `listReferences()` is the exception to "first success wins": it aggregates references from **every** configured chain adapter. Single-reference operations (`update()`, `removeReference()`, `rotateKeys()`, `retryUpdate()`) target whichever chain adapter holds that reference.
-- Chunked uploads are retried as a whole against the next storage adapter, never chunk by chunk. `StoreProgress.attemptIndex` tells you which candidate is being tried.
+- Chunked uploads are retried as a whole against the next storage adapter, never chunk by chunk. A bump in `StoreProgress.attemptIndex` marks each restart.
+- `init()` stops at the first chain adapter that works. A fallback adapter that requires `init()`, such as Midnight, can't serve requests unless you call its `init()` yourself or use a policy.
+
+### Overriding how adapters are used (policies)
+
+`storagePolicy` and `chainPolicy` let you decide what happens for each adapter and operation. Every hook is optional, can be async, and omitting one keeps the default behaviour above.
+
+```typescript
+const sdk = new DStorage({
+  storageAdapters: [arweaveAdapter, bundlerAdapter],
+  chainAdapters: [midnightA, midnightB],
+  encryptionAdapters: [passwordAdapter],
+  storagePolicy: {
+    // Store on every adapter, and fail unless at least two copies landed
+    onSuccess: () => "continue",
+    onComplete: ({ successes }) => (successes.length >= 2 ? "accept" : "fail"),
+  },
+  chainPolicy: {
+    // Initialize every chain adapter, not just the first that works
+    onSuccess: () => "continue",
+    onFailure: ({ operation, attempt, error }) => {
+      if (operation === "read" && attempt === 1) {
+        return { action: "retry", delayMs: 500 };
+      }
+      return isNotFound(error) ? "abort" : "next";
+    },
+  },
+});
+```
+
+| Hook         | Decides                                 | Returns                                               | Default                                             |
+| ------------ | --------------------------------------- | ----------------------------------------------------- | --------------------------------------------------- |
+| `order`      | Which candidates to try, in which order | A non-empty subset of `ctx.candidates`                | Configured order                                    |
+| `onSuccess`  | Whether to write further copies         | `"stop"` or `"continue"`                              | `"stop"`                                            |
+| `onFailure`  | What to do after a failed attempt       | `"next"`, `"abort"` or `{ action: "retry", delayMs }` | `"next"`; `estimateCost` stops at the first failure |
+| `onComplete` | Whether to accept the final outcome     | `"accept"` or `"fail"`                                | `"accept"`                                          |
+
+Hooks receive `kind`, `operation`, `attempt` (from 1), `successes` and `failures`, plus `adapter` (`{ index, name, providerName }`, never the instance) and `error` where relevant. Use `index` to tell adapters apart, because names aren't unique.
+
+| `operation`                                                                    | `order`               | `onSuccess` | `"next"` moves to another adapter | `"retry"` | `"abort"` |
+| ------------------------------------------------------------------------------ | --------------------- | ----------- | --------------------------------- | --------- | --------- |
+| Storage `store`, `storeChunked`, `update`                                      | Yes                   | Yes         | Yes                               | Yes       | Yes       |
+| Storage `retrieve`                                                             | Yes, including copies | Not called  | Yes                               | Yes       | Yes       |
+| Storage `retrieveChunk`; chain `update`, `retryUpdate`, `rotateKeys`, `remove` | Not called (pinned)   | Not called  | No, surfaces the error            | Yes       | Yes       |
+| Chain `init`                                                                   | Yes                   | Yes         | Yes                               | Yes       | Yes       |
+| Chain `store`, `registerReference`, `read`                                     | Yes                   | Not called  | Yes                               | Yes       | Yes       |
+| Chain `list` (parallel)                                                        | Yes                   | Not called  | Tolerates the failure             | Yes       | Invalid   |
+| `estimateCost`                                                                 | Yes                   | Not called  | Yes, if `onFailure` is set        | Yes       | Yes       |
+
+**Errors.** A policy can end an operation with an `AdapterPolicyError` (`isAdapterPolicyError(err)`), which carries `successes`, `failures` and `committed`:
+
+| Code                              | Meaning                                                                      |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `ADAPTER_POLICY_ABORTED`          | `onFailure` returned `"abort"`; adapter errors are in `.cause`               |
+| `ADAPTER_POLICY_REJECTED`         | `onComplete` returned `"fail"` after at least one success                    |
+| `ADAPTER_POLICY_HOOK_FAILED`      | A hook threw; its error is in `.cause`. This never triggers fallback         |
+| `ADAPTER_POLICY_INVALID_DECISION` | A hook returned something invalid, or retried beyond 32 attempts per adapter |
+
+If nothing succeeded, `onComplete` still runs, but the usual adapter error is thrown whatever it returns. When `committed` is `true`, a chain write has landed: **don't** call `registerReference()`, because that creates a duplicate reference. Use the `refId` in `err.successes`. Aborting a chain write that hasn't landed gives the usual `StorePartialError`, so recovery still works.
+
+**Before you use these:**
+
+- Retries cost money and can duplicate work. A retried upload pays again, a chunked retry restarts from chunk 0, and a chain write that timed out may still have landed.
+- `onSuccess: () => "continue"` on `chainPolicy` calls `init()` on every chain adapter. A Midnight adapter with no `contractAddress` deploys a new contract, which costs DUST, including when `init()` runs again after a rejection.
+- Filtering `"read"` in `order` also hides references from `update()`, `removeReference()` and `rotateKeys()`, which use it to find the holding chain.
+- Hooks can run concurrently, for example across the `refIds` in `listReferences()`.
+- `ctx.error` is the adapter's unfiltered error and can contain details such as endpoint URLs.
+
+### Storing copies on several storage adapters
+
+Returning `"continue"` from `storagePolicy.onSuccess` writes the content to further adapters. The first success is the primary, and the rest are recorded with the on-chain reference, so `retrieveByRefId()` falls back to them automatically, including when the primary's bytes fail the hash check.
+
+```typescript
+const res = await sdk.store(bytes);
+res.storageId; // the primary copy
+res.replicas; // [{ provider: "arweave_bundler", id: "...", cost: { ... } }]
+```
+
+`listReferences()` returns `replicas` too, and `update()` writes a new set of copies. References stay on one chain: chain replication isn't supported.
+
+- **Upgrade readers first.** References with copies use a new `storageId` format that SDK versions without this feature can't read, update or remove. References without copies are unchanged.
+- **Reads need a matching adapter.** A copy is only tried on adapters whose `name` equals its `provider`, so the reading SDK needs that adapter type configured.
+- **Copies can't be deleted.** `StorageAdapter` has no delete method, so rejected writes, `update()` and `removeReference()` leave paid copies in place. `AdapterPolicyError.successes` lists what was stored.
+- **Cost.** `costEstimate` and `estimateCost()` cover one copy; `replicas[].cost` reports the rest. Each copy of a chunked upload is a full upload. Each copy also lengthens the on-chain `storageId`, by very roughly 300-450 characters for a private reference, which affects chain transaction size.
+- **Privacy.** Private copy lists are encrypted, though the string length roughly reveals how many there are. Public lists are readable on-chain.
+- **Limits.** A reference records at most 16 copies. Private chunked uploads can't be replicated in storage-only mode, and public uploads' copies can't be recovered through `registerReference()`, because neither can be read back today.
 
 ### Arweave Local (development)
 
@@ -487,11 +572,14 @@ try {
   await sdk.store(bytes);
 } catch (err) {
   if (isStorePartialError(err)) {
-    const { storageId, storageProvider, keyEnvelope } = err.recovery;
+    const { storageId, storageProvider, keyEnvelope, contentHash, replicas } =
+      err.recovery;
     const { chainRefId } = await sdk.registerReference({
       storageId,
       storageProvider,
       keyEnvelope,
+      contentHash,
+      ...(replicas ? { replicas } : {}), // otherwise extra copies aren't recorded
     });
   }
 }

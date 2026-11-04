@@ -47,7 +47,10 @@ export {
   CoreErrorCode,
   StorePartialError,
   isStorePartialError,
+  AdapterPolicyError,
+  isAdapterPolicyError,
 } from "./errors.js";
+export type { AdapterFailure } from "./errors.js";
 
 // Storage: types + all adapters.
 // Full package imports (not subpaths) so dts.resolve can inline type declarations.
