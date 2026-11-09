@@ -20,6 +20,13 @@ import { ChainErrorCode } from "../errors.js";
 
 const ADDRESS = "a".repeat(64);
 const STATE = { data: "fake-state" };
+// What the indexer provider emits: a positioned record holding the state
+// serialized with its ledger era, which ledgerState$ decodes.
+const RECORD = {
+  value: { contractState: { deserialize: () => STATE } },
+  blockHeight: 1,
+  blockHash: "00",
+};
 
 function makeProviders(sources: (() => unknown)[]) {
   const contractStateObservable = vi.fn(() => {
@@ -37,7 +44,7 @@ describe("ledgerState$", () => {
   it("re-queries the indexer when the first stream completes empty", async () => {
     const { providers, contractStateObservable } = makeProviders([
       () => EMPTY,
-      () => of(STATE),
+      () => of(RECORD),
     ]);
 
     const state = await firstValueFrom(ledgerState$(providers, ADDRESS, 0));
@@ -49,7 +56,7 @@ describe("ledgerState$", () => {
   it("retries transient indexer errors", async () => {
     const { providers } = makeProviders([
       () => throwError(() => new Error("socket closed")),
-      () => of(STATE),
+      () => of(RECORD),
     ]);
 
     await expect(
@@ -80,7 +87,7 @@ describe("ledgerState$", () => {
         { length: LEDGER_STATE_RETRY_COUNT + 1 },
         () => () => EMPTY,
       ),
-      () => of(STATE),
+      () => of(RECORD),
     ]);
     const shared$ = ledgerState$(providers, ADDRESS, 0).pipe(
       share({

@@ -35,14 +35,10 @@
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "arweave": "^2.1.0",
-    "@midnight-ntwrk/midnight-js-protocol": "^4.1.1"
+    "arweave": "^2.1.0"
   },
   "peerDependenciesMeta": {
     "arweave": {
-      "optional": true
-    },
-    "@midnight-ntwrk/midnight-js-protocol": {
       "optional": true
     }
   }

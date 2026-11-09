@@ -14,12 +14,11 @@ import {
   bytesToBase64url,
   waitForFacadeSync,
 } from "@dstorage-tech/dstorage-sdk";
-import { type UnshieldedTokenType } from "@midnight-ntwrk/midnight-js-protocol/ledger";
-import { type WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
-import { type UnshieldedWalletState } from "@midnight-ntwrk/wallet-sdk/unshielded";
+import { type UnshieldedTokenType } from "@midnight-ntwrk/midnight-js-protocol/v9";
+import { type WalletFacade } from "@midnightntwrk/wallet-sdk/facade";
+import { type UnshieldedWalletState } from "@midnightntwrk/wallet-sdk/unshielded";
 import * as Rx from "rxjs";
-import { UnshieldedAddress } from "@midnight-ntwrk/wallet-sdk/address-format";
-import { getNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
+import { UnshieldedAddress } from "@midnightntwrk/wallet-sdk/address-format";
 
 export type { MidnightWalletProvider, EnvironmentConfiguration };
 
@@ -117,10 +116,6 @@ export async function initWallet(
   skipFundCheck: boolean,
   ticker: <T>(statusLine: () => string, fn: () => Promise<T>) => Promise<T>,
 ): Promise<MidnightWalletProvider> {
-  const { setNetworkId } =
-    await import("@midnight-ntwrk/midnight-js-network-id");
-  setNetworkId(envConfig.networkId);
-
   const walletProvider = await ticker(
     () => "Building wallet...",
     // Managed payment: the signing server balances and pays for transactions,
@@ -151,10 +146,15 @@ export async function initWallet(
       () => walletProvider.saveState(),
     );
     const { unshieldedToken } =
-      await import("@midnight-ntwrk/midnight-js-protocol/ledger");
+      await import("@midnight-ntwrk/midnight-js-protocol/v9");
     const unshieldedState = await ticker(
       () => "Waiting for NIGHT funds...",
-      () => waitForUnshieldedFunds(walletProvider.wallet, unshieldedToken()),
+      () =>
+        waitForUnshieldedFunds(
+          walletProvider.wallet,
+          unshieldedToken(),
+          envConfig.networkId,
+        ),
     );
     const nightBalance = unshieldedState.balances[unshieldedToken().raw];
     if (nightBalance === undefined) {
@@ -198,10 +198,11 @@ export const syncWallet = async (wallet: WalletFacade, timeout = 360_000) => {
 export const waitForUnshieldedFunds = async (
   wallet: WalletFacade,
   tokenType: UnshieldedTokenType,
+  networkId: string,
 ): Promise<UnshieldedWalletState> => {
   const initialState = await Rx.firstValueFrom(wallet.unshielded.state);
   const unshieldedAddress = UnshieldedAddress.codec.encode(
-    getNetworkId(),
+    networkId,
     initialState.address,
   );
   console.log(

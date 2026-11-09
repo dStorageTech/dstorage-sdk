@@ -2,13 +2,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as Rx from "rxjs";
 import { MidnightChainAdapter, waitForFacadeSync } from "@dstorage/chain";
-import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
-import { NetworkId } from "@midnight-ntwrk/wallet-sdk";
+import type { WalletFacade } from "@midnightntwrk/wallet-sdk/facade";
+import { NetworkId } from "@midnightntwrk/wallet-sdk";
 import type { IntegrationEnv } from "./env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Path to the compiled DataRegistry ZK artifacts (keys/ and zkir/).
+// Path to the compiled DataRegistry ZK artifacts (compiler/, keys/ and zkir/).
 const ZK_ARTIFACTS_PATH = path.resolve(
   __dirname,
   "../../../packages/chain/src/adapters/midnight/contracts/dataregistry/managed",
@@ -41,10 +41,6 @@ export async function createChainAdapter(
     midnight.network === "undeployed"
       ? NetworkId.NetworkId.Undeployed
       : NetworkId.NetworkId.PreProd;
-
-  const { setNetworkId } =
-    await import("@midnight-ntwrk/midnight-js-network-id");
-  setNetworkId(walletNetworkId);
 
   // Resolve seed to hex (mnemonic → 128-char hex via HD derivation).
   let seedHex: string | undefined;
@@ -89,7 +85,7 @@ export async function createChainAdapter(
 
   // Wait for NIGHT funds — same logic as demo console waitForUnshieldedFunds.
   const { unshieldedToken } =
-    await import("@midnight-ntwrk/midnight-js-protocol/ledger");
+    await import("@midnight-ntwrk/midnight-js-protocol/v9");
   const token = unshieldedToken();
   const initialState = await Rx.firstValueFrom(
     walletProvider.wallet.unshielded.state,

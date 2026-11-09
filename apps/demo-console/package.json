@@ -9,9 +9,8 @@
   },
   "dependencies": {
     "@dstorage-tech/dstorage-sdk": "*",
-    "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
-    "@midnight-ntwrk/midnight-js-protocol": "^4.1.1",
-    "@midnight-ntwrk/wallet-sdk": "^1.2.0",
+    "@midnight-ntwrk/midnight-js-protocol": "^5.0.0",
+    "@midnightntwrk/wallet-sdk": "^2.0.0",
     "axios": "^1.19.0",
     "dotenv": "^17.4.2",
     "rxjs": "^7.8.2",

@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  setNetworkId,
-  NetworkId,
-} from "@midnight-ntwrk/midnight-js-network-id";
-import {
   encodeContractAddress,
-  convertFieldToBytes,
+  convertBigintToBytes,
 } from "@midnight-ntwrk/compact-runtime";
 import { pureCircuits } from "../../dataregistry/managed/contract/index.js";
 import { DataRegistrySimulator } from "./dataregistry-simulator.js";
@@ -19,8 +15,6 @@ import {
   SUPPORTED_CONTRACT_VERSION,
   validateContractVersion,
 } from "../../../src/contract-api.js";
-
-setNetworkId("undeployed" as NetworkId);
 
 type TestUser = {
   secretKey: Uint8Array;
@@ -45,24 +39,24 @@ describe("DataRegistry contract", () => {
   let other: TestUser;
   let simulator: DataRegistrySimulator;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     owner = randomUser();
     other = randomUser();
-    simulator = new DataRegistrySimulator(owner.pk);
+    simulator = await DataRegistrySimulator.create(owner.pk);
   });
 
   describe("initial state", () => {
-    it("starts with an empty references map", () => {
+    it("starts with an empty references map", async () => {
       expect(simulator.getLedger().references.isEmpty()).toBe(true);
       expect(simulator.getLedger().references.size()).toBe(0n);
     });
 
-    it("starts with refCounter at 1", () => {
+    it("starts with refCounter at 1", async () => {
       // Counter is initialised to 1 in the constructor
       expect(simulator.getLedger().refCounter).toBe(1n);
     });
 
-    it("has contractVersion equal to SUPPORTED_CONTRACT_VERSION", () => {
+    it("has contractVersion equal to SUPPORTED_CONTRACT_VERSION", async () => {
       expect(simulator.getLedger().contractVersion).toBe(
         SUPPORTED_CONTRACT_VERSION,
       );
@@ -70,14 +64,14 @@ describe("DataRegistry contract", () => {
   });
 
   describe("contract version validation", () => {
-    it("validateContractVersion accepts the current contract version", () => {
+    it("validateContractVersion accepts the current contract version", async () => {
       const version = simulator.getLedger().contractVersion;
       expect(() =>
         validateContractVersion(version, "0xTestContract"),
       ).not.toThrow();
     });
 
-    it("validateContractVersion throws for an unsupported version", () => {
+    it("validateContractVersion throws for an unsupported version", async () => {
       expect(() =>
         validateContractVersion(
           SUPPORTED_CONTRACT_VERSION + 1n,
@@ -86,15 +80,15 @@ describe("DataRegistry contract", () => {
       ).toThrow("Unsupported contract version");
     });
 
-    it("validateContractVersion error includes the version number and address", () => {
+    it("validateContractVersion error includes the version number and address", async () => {
       const addr = "0xDeadBeef";
       expect(() => validateContractVersion(99n, addr)).toThrow(addr);
       expect(() => validateContractVersion(99n, addr)).toThrow("99");
     });
 
-    it("contractVersion is immutable — stays at SUPPORTED_CONTRACT_VERSION after all circuit calls", () => {
+    it("contractVersion is immutable — stays at SUPPORTED_CONTRACT_VERSION after all circuit calls", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -105,7 +99,7 @@ describe("DataRegistry contract", () => {
         SUPPORTED_CONTRACT_VERSION,
       );
 
-      simulator.updateReference(
+      await simulator.updateReference(
         refId,
         randomString(),
         "",
@@ -117,7 +111,7 @@ describe("DataRegistry contract", () => {
         SUPPORTED_CONTRACT_VERSION,
       );
 
-      simulator.removeReference(refId);
+      await simulator.removeReference(refId);
       expect(simulator.getLedger().contractVersion).toBe(
         SUPPORTED_CONTRACT_VERSION,
       );
@@ -125,9 +119,9 @@ describe("DataRegistry contract", () => {
   });
 
   describe("storeReference", () => {
-    it("stores a reference and returns a non-zero refId", () => {
+    it("stores a reference and returns a non-zero refId", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -140,9 +134,9 @@ describe("DataRegistry contract", () => {
       expect(refId.every((b) => b === 0)).toBe(false);
     });
 
-    it("adds the entry to the references map", () => {
+    it("adds the entry to the references map", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -162,11 +156,11 @@ describe("DataRegistry contract", () => {
       expect(stored.writtenAt).toBe(entry.writtenAt);
     });
 
-    it("increments refCounter after each store", () => {
+    it("increments refCounter after each store", async () => {
       expect(simulator.getLedger().refCounter).toBe(1n);
 
       const entry = randomEntry();
-      simulator.storeReference(
+      await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -176,7 +170,7 @@ describe("DataRegistry contract", () => {
 
       expect(simulator.getLedger().refCounter).toBe(2n);
 
-      simulator.storeReference(
+      await simulator.storeReference(
         randomString(),
         "",
         "ipfs",
@@ -187,18 +181,18 @@ describe("DataRegistry contract", () => {
       expect(simulator.getLedger().refCounter).toBe(3n);
     });
 
-    it("generates unique refIds for successive stores", () => {
+    it("generates unique refIds for successive stores", async () => {
       const entry1 = randomEntry();
       const entry2 = randomEntry();
 
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
         entry1.metadata,
         entry1.writtenAt,
       );
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
@@ -211,9 +205,9 @@ describe("DataRegistry contract", () => {
       );
     });
 
-    it("allows multiple users to store references independently", () => {
+    it("allows multiple users to store references independently", async () => {
       const entry1 = randomEntry();
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
@@ -223,7 +217,7 @@ describe("DataRegistry contract", () => {
 
       simulator.switchUser(other.pk);
       const entry2 = randomEntry();
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
@@ -237,8 +231,8 @@ describe("DataRegistry contract", () => {
       expect(ledger.references.member(refId2)).toBe(true);
     });
 
-    it("stores public (unencrypted) references with empty encryptionScheme", () => {
-      const refId = simulator.storeReference(
+    it("stores public (unencrypted) references with empty encryptionScheme", async () => {
+      const refId = await simulator.storeReference(
         "arweave-tx-id-abc123",
         "",
         "arweave",
@@ -252,9 +246,9 @@ describe("DataRegistry contract", () => {
   });
 
   describe("removeReference", () => {
-    it("removes a reference stored by the owner", () => {
+    it("removes a reference stored by the owner", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -264,23 +258,23 @@ describe("DataRegistry contract", () => {
 
       expect(simulator.getLedger().references.member(refId)).toBe(true);
 
-      simulator.removeReference(refId);
+      await simulator.removeReference(refId);
 
       expect(simulator.getLedger().references.member(refId)).toBe(false);
       expect(simulator.getLedger().references.size()).toBe(0n);
     });
 
-    it("throws when trying to remove a non-existent reference", () => {
+    it("throws when trying to remove a non-existent reference", async () => {
       const nonExistentRefId = randomBytes(32);
-      expect(() => simulator.removeReference(nonExistentRefId)).toThrow(
+      await expect(simulator.removeReference(nonExistentRefId)).rejects.toThrow(
         "Reference not found",
       );
     });
 
-    it("throws when a non-owner tries to remove another user's reference", () => {
+    it("throws when a non-owner tries to remove another user's reference", async () => {
       const entry = randomEntry();
       // Owner stores with their secret
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -294,22 +288,22 @@ describe("DataRegistry contract", () => {
       // Switch to a different user and try to remove with a different secret
       simulator.switchUser(other.pk);
 
-      expect(() => simulator.removeReference(refId, other.secretKey)).toThrow(
-        "Not the owner",
-      );
+      await expect(
+        simulator.removeReference(refId, other.secretKey),
+      ).rejects.toThrow("Not the owner");
     });
 
-    it("removes only the targeted reference, leaving others intact", () => {
+    it("removes only the targeted reference, leaving others intact", async () => {
       const entry1 = randomEntry();
       const entry2 = randomEntry();
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
         entry1.metadata,
         entry1.writtenAt,
       );
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
@@ -317,7 +311,7 @@ describe("DataRegistry contract", () => {
         entry2.writtenAt,
       );
 
-      simulator.removeReference(refId1);
+      await simulator.removeReference(refId1);
 
       const ledger = simulator.getLedger();
       expect(ledger.references.member(refId1)).toBe(false);
@@ -327,9 +321,9 @@ describe("DataRegistry contract", () => {
   });
 
   describe("updateReference", () => {
-    it("updates all mutable fields of a reference", () => {
+    it("updates all mutable fields of a reference", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -343,7 +337,7 @@ describe("DataRegistry contract", () => {
       const newLabel = "updated-label";
       const newTimestamp = randomTimestamp();
 
-      simulator.updateReference(
+      await simulator.updateReference(
         refId,
         newStorageId,
         newEncryptionScheme,
@@ -360,9 +354,9 @@ describe("DataRegistry contract", () => {
       expect(updated.writtenAt).toBe(newTimestamp);
     });
 
-    it("preserves the ownerCommitment after update", () => {
+    it("preserves the ownerCommitment after update", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -374,7 +368,7 @@ describe("DataRegistry contract", () => {
         .getLedger()
         .references.lookup(refId).ownerCommitment;
 
-      simulator.updateReference(
+      await simulator.updateReference(
         refId,
         randomString(),
         "",
@@ -392,9 +386,9 @@ describe("DataRegistry contract", () => {
       );
     });
 
-    it("throws when trying to update a non-existent reference", () => {
+    it("throws when trying to update a non-existent reference", async () => {
       const nonExistentRefId = randomBytes(32);
-      expect(() =>
+      await expect(
         simulator.updateReference(
           nonExistentRefId,
           randomString(),
@@ -403,13 +397,13 @@ describe("DataRegistry contract", () => {
           "",
           randomTimestamp(),
         ),
-      ).toThrow("Reference not found");
+      ).rejects.toThrow("Reference not found");
     });
 
-    it("throws when a non-owner tries to update another user's reference", () => {
+    it("throws when a non-owner tries to update another user's reference", async () => {
       const entry = randomEntry();
       // Owner stores with their secret
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -422,7 +416,7 @@ describe("DataRegistry contract", () => {
 
       simulator.switchUser(other.pk);
 
-      expect(() =>
+      await expect(
         simulator.updateReference(
           refId,
           randomString(),
@@ -434,13 +428,13 @@ describe("DataRegistry contract", () => {
           new Uint8Array(32),
           other.secretKey,
         ),
-      ).toThrow("Not the owner");
+      ).rejects.toThrow("Not the owner");
     });
 
-    it("allows the owner to update their reference after another user stored a separate one", () => {
+    it("allows the owner to update their reference after another user stored a separate one", async () => {
       // Owner stores a reference with an explicit secret so it can be re-used after the user switch.
       const ownerEntry = randomEntry();
-      const ownerRefId = simulator.storeReference(
+      const ownerRefId = await simulator.storeReference(
         ownerEntry.storageId,
         ownerEntry.encryptionScheme,
         ownerEntry.storageProvider,
@@ -454,7 +448,7 @@ describe("DataRegistry contract", () => {
       // Other user stores their own reference
       simulator.switchUser(other.pk);
       const otherEntry = randomEntry();
-      simulator.storeReference(
+      await simulator.storeReference(
         otherEntry.storageId,
         otherEntry.encryptionScheme,
         otherEntry.storageProvider,
@@ -465,7 +459,7 @@ describe("DataRegistry contract", () => {
       // Owner switches back and updates their own reference using the same secret.
       simulator.switchUser(owner.pk);
       const newStorageId = randomString();
-      simulator.updateReference(
+      await simulator.updateReference(
         ownerRefId,
         newStorageId,
         "",
@@ -483,19 +477,19 @@ describe("DataRegistry contract", () => {
   });
 
   describe("pure circuit verification", () => {
-    it("returned refId matches deriveRefId(refCounter, contractAddress)", () => {
+    it("returned refId matches deriveRefId(refCounter, contractAddress)", async () => {
       const instanceSalt = encodeContractAddress(simulator.contractAddress);
 
       // Capture the counter value before the store — the circuit uses it as-is
       const counterBefore = simulator.getLedger().refCounter;
-      const counterBytes = convertFieldToBytes(32, counterBefore, "test");
+      const counterBytes = convertBigintToBytes(32, counterBefore, "test");
       const expectedRefId = pureCircuits.deriveRefId(
         counterBytes,
         instanceSalt,
       );
 
       const entry = randomEntry();
-      const actualRefId = simulator.storeReference(
+      const actualRefId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -508,18 +502,18 @@ describe("DataRegistry contract", () => {
       );
     });
 
-    it("verifies deriveRefId for successive stores (counter increments each time)", () => {
+    it("verifies deriveRefId for successive stores (counter increments each time)", async () => {
       const instanceSalt = encodeContractAddress(simulator.contractAddress);
       const entry = randomEntry();
 
       for (let i = 0; i < 3; i++) {
         const counterBefore = simulator.getLedger().refCounter;
         const expectedRefId = pureCircuits.deriveRefId(
-          convertFieldToBytes(32, counterBefore, "test"),
+          convertBigintToBytes(32, counterBefore, "test"),
           instanceSalt,
         );
 
-        const actualRefId = simulator.storeReference(
+        const actualRefId = await simulator.storeReference(
           randomString(),
           entry.encryptionScheme,
           entry.storageProvider,
@@ -533,12 +527,12 @@ describe("DataRegistry contract", () => {
       }
     });
 
-    it("stored ownerCommitment matches computeOwnerCommitment(ownerSecret, refId, contractAddress)", () => {
+    it("stored ownerCommitment matches computeOwnerCommitment(ownerSecret, refId, contractAddress)", async () => {
       const instanceSalt = encodeContractAddress(simulator.contractAddress);
       const ownerSecret = owner.secretKey; // 32-byte witness secret
 
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -565,13 +559,13 @@ describe("DataRegistry contract", () => {
       );
     });
 
-    it("ownerCommitment changes when a different ownerSecret is used", () => {
+    it("ownerCommitment changes when a different ownerSecret is used", async () => {
       const instanceSalt = encodeContractAddress(simulator.contractAddress);
       const entry = randomEntry();
 
       // Owner stores with their secret
       const ownerSecret = owner.secretKey;
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -585,7 +579,7 @@ describe("DataRegistry contract", () => {
       // Other user stores with a different secret
       const otherSecret = other.secretKey;
       simulator.switchUser(other.pk);
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -623,11 +617,11 @@ describe("DataRegistry contract", () => {
   });
 
   describe("keyEnvelope", () => {
-    it("stores and retrieves a non-empty keyEnvelope", () => {
+    it("stores and retrieves a non-empty keyEnvelope", async () => {
       const entry = randomEntry();
       const envelope =
         '{"kdf":"scrypt","N":131072,"r":8,"p":1,"wrappedDek":"abc123"}';
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -640,8 +634,8 @@ describe("DataRegistry contract", () => {
       expect(stored.keyEnvelope).toBe(envelope);
     });
 
-    it("stores empty keyEnvelope for public (unencrypted) uploads", () => {
-      const refId = simulator.storeReference(
+    it("stores empty keyEnvelope for public (unencrypted) uploads", async () => {
+      const refId = await simulator.storeReference(
         "arweave-tx-id-abc123",
         "",
         "arweave",
@@ -654,9 +648,9 @@ describe("DataRegistry contract", () => {
       expect(stored.keyEnvelope).toBe("");
     });
 
-    it("defaults keyEnvelope to empty string when not supplied", () => {
+    it("defaults keyEnvelope to empty string when not supplied", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -668,10 +662,10 @@ describe("DataRegistry contract", () => {
       expect(stored.keyEnvelope).toBe("");
     });
 
-    it("updateReference replaces keyEnvelope with a new value", () => {
+    it("updateReference replaces keyEnvelope with a new value", async () => {
       const entry = randomEntry();
       const originalEnvelope = '{"kdf":"scrypt","wrappedDek":"original"}';
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -681,7 +675,7 @@ describe("DataRegistry contract", () => {
       );
 
       const newEnvelope = '{"kdf":"scrypt","wrappedDek":"rotated"}';
-      simulator.updateReference(
+      await simulator.updateReference(
         refId,
         entry.storageId,
         entry.encryptionScheme,
@@ -695,9 +689,9 @@ describe("DataRegistry contract", () => {
       expect(updated.keyEnvelope).toBe(newEnvelope);
     });
 
-    it("updateReference can clear keyEnvelope by setting it to empty string", () => {
+    it("updateReference can clear keyEnvelope by setting it to empty string", async () => {
       const entry = randomEntry();
-      const refId = simulator.storeReference(
+      const refId = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -706,7 +700,7 @@ describe("DataRegistry contract", () => {
         '{"kdf":"scrypt","wrappedDek":"abc"}',
       );
 
-      simulator.updateReference(
+      await simulator.updateReference(
         refId,
         entry.storageId,
         "",
@@ -720,14 +714,14 @@ describe("DataRegistry contract", () => {
       expect(updated.keyEnvelope).toBe("");
     });
 
-    it("two references store independent keyEnvelopes", () => {
+    it("two references store independent keyEnvelopes", async () => {
       const envelope1 = '{"kdf":"scrypt","wrappedDek":"first"}';
       const envelope2 = '{"kdf":"scrypt","wrappedDek":"second"}';
 
       const entry1 = randomEntry();
       const entry2 = randomEntry();
 
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
@@ -735,7 +729,7 @@ describe("DataRegistry contract", () => {
         entry1.writtenAt,
         envelope1,
       );
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
@@ -752,14 +746,14 @@ describe("DataRegistry contract", () => {
       );
     });
 
-    it("updating one reference's keyEnvelope does not affect another's", () => {
+    it("updating one reference's keyEnvelope does not affect another's", async () => {
       const envelope1 = '{"kdf":"scrypt","wrappedDek":"first"}';
       const envelope2 = '{"kdf":"scrypt","wrappedDek":"second"}';
 
       const entry1 = randomEntry();
       const entry2 = randomEntry();
 
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         entry1.storageId,
         entry1.encryptionScheme,
         entry1.storageProvider,
@@ -767,7 +761,7 @@ describe("DataRegistry contract", () => {
         entry1.writtenAt,
         envelope1,
       );
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
@@ -776,7 +770,7 @@ describe("DataRegistry contract", () => {
         envelope2,
       );
 
-      simulator.updateReference(
+      await simulator.updateReference(
         refId1,
         entry1.storageId,
         entry1.encryptionScheme,
@@ -795,13 +789,13 @@ describe("DataRegistry contract", () => {
   describe("zero-secret rejection", () => {
     let validSecret: Uint8Array;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       validSecret = randomBytes(32);
     });
 
-    it("storeReference rejects an all-zeros ownerSecret", () => {
+    it("storeReference rejects an all-zeros ownerSecret", async () => {
       const entry = randomEntry();
-      expect(() =>
+      await expect(
         simulator.storeReference(
           entry.storageId,
           entry.encryptionScheme,
@@ -812,11 +806,11 @@ describe("DataRegistry contract", () => {
           new Uint8Array(32), // contentHash (zeros OK)
           new Uint8Array(32), // ownerSecret (zeros must be rejected)
         ),
-      ).toThrow("ownerSecret must not be zero");
+      ).rejects.toThrow("ownerSecret must not be zero");
     });
 
-    it("removeReference rejects an all-zeros ownerSecret", () => {
-      const refId = simulator.storeReference(
+    it("removeReference rejects an all-zeros ownerSecret", async () => {
+      const refId = await simulator.storeReference(
         randomString(32),
         "xchacha20poly1305-v1",
         "arweave",
@@ -826,13 +820,13 @@ describe("DataRegistry contract", () => {
         new Uint8Array(32),
         validSecret,
       );
-      expect(() =>
+      await expect(
         simulator.removeReference(refId, new Uint8Array(32)),
-      ).toThrow("ownerSecret must not be zero");
+      ).rejects.toThrow("ownerSecret must not be zero");
     });
 
-    it("updateReference rejects an all-zeros ownerSecret", () => {
-      const refId = simulator.storeReference(
+    it("updateReference rejects an all-zeros ownerSecret", async () => {
+      const refId = await simulator.storeReference(
         randomString(32),
         "xchacha20poly1305-v1",
         "arweave",
@@ -842,7 +836,7 @@ describe("DataRegistry contract", () => {
         new Uint8Array(32),
         validSecret,
       );
-      expect(() =>
+      await expect(
         simulator.updateReference(
           refId,
           randomString(),
@@ -854,11 +848,11 @@ describe("DataRegistry contract", () => {
           new Uint8Array(32), // contentHash (zeros OK)
           new Uint8Array(32), // ownerSecret (zeros must be rejected)
         ),
-      ).toThrow("ownerSecret must not be zero");
+      ).rejects.toThrow("ownerSecret must not be zero");
     });
 
-    it("updateReference rejects an all-zeros newOwnerSecret", () => {
-      const refId = simulator.storeReference(
+    it("updateReference rejects an all-zeros newOwnerSecret", async () => {
+      const refId = await simulator.storeReference(
         randomString(32),
         "xchacha20poly1305-v1",
         "arweave",
@@ -868,7 +862,7 @@ describe("DataRegistry contract", () => {
         new Uint8Array(32),
         validSecret,
       );
-      expect(() =>
+      await expect(
         simulator.updateReference(
           refId,
           randomString(),
@@ -881,11 +875,11 @@ describe("DataRegistry contract", () => {
           validSecret,
           new Uint8Array(32), // newOwnerSecret (zeros must be rejected)
         ),
-      ).toThrow("newOwnerSecret must not be zero");
+      ).rejects.toThrow("newOwnerSecret must not be zero");
     });
 
-    it("updateReference throws when newOwnerSecret is absent from private state", () => {
-      const refId = simulator.storeReference(
+    it("updateReference throws when newOwnerSecret is absent from private state", async () => {
+      const refId = await simulator.storeReference(
         randomString(32),
         "xchacha20poly1305-v1",
         "arweave",
@@ -895,12 +889,11 @@ describe("DataRegistry contract", () => {
         new Uint8Array(32),
         validSecret,
       );
-      simulator.circuitContext.currentPrivateState = {
-        ownerSecret: validSecret,
-      };
-      expect(() =>
+      await expect(
         simulator.contract.impureCircuits.updateReference(
-          simulator.circuitContext,
+          simulator.contextFor("updateReference", {
+            ownerSecret: validSecret,
+          }),
           refId,
           randomString(),
           "",
@@ -910,16 +903,16 @@ describe("DataRegistry contract", () => {
           "",
           new Uint8Array(32),
         ),
-      ).toThrow(
+      ).rejects.toThrow(
         "[dStorage/midnight] newOwnerSecret is not set in private state",
       );
     });
   });
 
   describe("ownership enforcement across circuits", () => {
-    it("owner can remove then store again (refId changes)", () => {
+    it("owner can remove then store again (refId changes)", async () => {
       const entry = randomEntry();
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         entry.storageId,
         entry.encryptionScheme,
         entry.storageProvider,
@@ -927,11 +920,11 @@ describe("DataRegistry contract", () => {
         entry.writtenAt,
       );
 
-      simulator.removeReference(refId1);
+      await simulator.removeReference(refId1);
       expect(simulator.getLedger().references.size()).toBe(0n);
 
       const entry2 = randomEntry();
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         entry2.storageId,
         entry2.encryptionScheme,
         entry2.storageProvider,
@@ -945,11 +938,11 @@ describe("DataRegistry contract", () => {
       );
     });
 
-    it("different users get different ownerCommitments for same storageId", () => {
+    it("different users get different ownerCommitments for same storageId", async () => {
       const storageId = randomString(32);
       const ts = randomTimestamp();
 
-      const refId1 = simulator.storeReference(
+      const refId1 = await simulator.storeReference(
         storageId,
         "xchacha20poly1305-v1",
         "arweave",
@@ -958,7 +951,7 @@ describe("DataRegistry contract", () => {
       );
 
       simulator.switchUser(other.pk);
-      const refId2 = simulator.storeReference(
+      const refId2 = await simulator.storeReference(
         storageId,
         "xchacha20poly1305-v1",
         "arweave",

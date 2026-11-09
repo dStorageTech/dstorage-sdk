@@ -89,7 +89,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       this.simulatorPromise =
         import("./midnight/contracts/src/test/dataregistry-simulator.js").then(
           ({ DataRegistrySimulator }) =>
-            new DataRegistrySimulator(this.senderPk),
+            DataRegistrySimulator.create(this.senderPk),
         );
     }
     return this.simulatorPromise;
@@ -138,7 +138,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       : new Uint8Array(32);
 
     const sim = await this.getSimulator();
-    const refIdBytes = sim.storeReference(
+    const refIdBytes = await sim.storeReference(
       ref.storageId ?? "",
       ref.encryptionScheme ?? "",
       ref.storageProvider,
@@ -237,7 +237,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       "dStorage/midnight-simulator",
       `removeReference → refId: ${refId}`,
     );
-    sim.removeReference(refIdBytes, ownerSecret);
+    await sim.removeReference(refIdBytes, ownerSecret);
   }
 
   async updateReference(
@@ -271,7 +271,7 @@ export class MidnightSimulatorChainAdapter implements ChainAdapter {
       "dStorage/midnight-simulator",
       `updateReference → refId: ${refId}`,
     );
-    sim.updateReference(
+    await sim.updateReference(
       refIdBytes,
       update.storageId,
       update.encryptionScheme,

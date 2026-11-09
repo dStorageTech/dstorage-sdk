@@ -23,9 +23,9 @@ export type ImpureCircuits<PS> = {
                  metadata_0: string,
                  writtenAt_0: bigint,
                  keyEnvelope_0: string,
-                 contentHash_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
+                 contentHash_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, Uint8Array>>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
-                  refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+                  refId_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
   updateReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array,
                   storageId_0: string,
@@ -34,7 +34,7 @@ export type ImpureCircuits<PS> = {
                   metadata_0: string,
                   writtenAt_0: bigint,
                   keyEnvelope_0: string,
-                  contentHash_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+                  contentHash_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
 }
 
 export type ProvableCircuits<PS> = {
@@ -45,9 +45,9 @@ export type ProvableCircuits<PS> = {
                  metadata_0: string,
                  writtenAt_0: bigint,
                  keyEnvelope_0: string,
-                 contentHash_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
+                 contentHash_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, Uint8Array>>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
-                  refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+                  refId_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
   updateReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array,
                   storageId_0: string,
@@ -56,7 +56,7 @@ export type ProvableCircuits<PS> = {
                   metadata_0: string,
                   writtenAt_0: bigint,
                   keyEnvelope_0: string,
-                  contentHash_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+                  contentHash_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
 }
 
 export type PureCircuits = {
@@ -66,7 +66,7 @@ export type PureCircuits = {
 export type Circuits<PS> = {
   deriveRefId(context: __compactRuntime.CircuitContext<PS>,
               refCounter_0: Uint8Array,
-              instanceSalt_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
+              instanceSalt_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, Uint8Array>>;
   storeReference(context: __compactRuntime.CircuitContext<PS>,
                  storageId_0: string,
                  encryptionScheme_0: string,
@@ -74,9 +74,9 @@ export type Circuits<PS> = {
                  metadata_0: string,
                  writtenAt_0: bigint,
                  keyEnvelope_0: string,
-                 contentHash_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
+                 contentHash_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, Uint8Array>>;
   removeReference(context: __compactRuntime.CircuitContext<PS>,
-                  refId_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+                  refId_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
   updateReference(context: __compactRuntime.CircuitContext<PS>,
                   refId_0: Uint8Array,
                   storageId_0: string,
@@ -85,7 +85,7 @@ export type Circuits<PS> = {
                   metadata_0: string,
                   writtenAt_0: bigint,
                   keyEnvelope_0: string,
-                  contentHash_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
+                  contentHash_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
 }
 
 export type Ledger = {
@@ -100,18 +100,17 @@ export type Ledger = {
   readonly contractVersion: bigint;
 }
 
-export type ContractReferenceLocations = any;
-
-export declare const contractReferenceLocations : ContractReferenceLocations;
-
 export declare class Contract<PS = any, W extends Witnesses<PS> = Witnesses<PS>> {
   witnesses: W;
   circuits: Circuits<PS>;
   impureCircuits: ImpureCircuits<PS>;
   provableCircuits: ProvableCircuits<PS>;
   constructor(witnesses: W);
-  initialState(context: __compactRuntime.ConstructorContext<PS>): __compactRuntime.ConstructorResult<PS>;
+  initialState(context: __compactRuntime.ConstructorContext<PS>): Promise<__compactRuntime.ConstructorResult<PS>>;
 }
 
 export declare function ledger(state: __compactRuntime.StateValue | __compactRuntime.ChargedState): Ledger;
 export declare const pureCircuits: PureCircuits;
+export declare const expectedVk: Record<string, string>;
+export declare const circuitSignatures: __compactRuntime.CircuitSignatures;
+export declare const declaredInterfaces: __compactRuntime.DeclaredInterfaces;

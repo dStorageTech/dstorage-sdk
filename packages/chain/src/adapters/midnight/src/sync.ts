@@ -7,7 +7,7 @@
 import type {
   WalletFacade,
   FacadeState,
-} from "@midnight-ntwrk/wallet-sdk/facade";
+} from "@midnightntwrk/wallet-sdk/facade";
 
 /**
  * Wait for a WalletFacade to report `isSynced`, falling back to the current

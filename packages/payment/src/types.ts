@@ -132,17 +132,18 @@ export interface PaymentReceipt {
 // ── Network-specific wallet provider interfaces ───────────────────────────────
 
 /**
- * Shape-compatible with @midnight-ntwrk/midnight-js-types WalletProvider.
- * Returned by ManagedPaymentAdapter.createMidnightWalletProvider().
+ * Shape-compatible with the ledger 9 wallet implementation that
+ * @midnight-ntwrk/midnight-js-types `createLedger9WalletProvider()` lifts into a
+ * WalletProvider. Returned by ManagedPaymentAdapter.createMidnightWalletProvider().
  *
- * No Midnight package imports are required here — TypeScript's structural
- * typing makes this assignable to the chain package's WalletProvider at the
- * call site without introducing a cross-package dependency.
+ * `balanceTx` answers with the balanced transaction's bytes, so no Midnight
+ * package imports are required here — wrap the result with
+ * `createLedger9WalletProvider()` before handing it to Midnight.js.
  */
 export interface MidnightWalletProvider {
   getCoinPublicKey(): string;
   getEncryptionPublicKey(): string;
-  balanceTx(tx: { serialize(): Uint8Array }, ttl?: Date): Promise<unknown>;
+  balanceTx(tx: { serialize(): Uint8Array }, ttl?: Date): Promise<Uint8Array>;
 }
 
 // ── PaymentAdapter interface ──────────────────────────────────────────────────

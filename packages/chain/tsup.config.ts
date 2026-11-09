@@ -3,13 +3,16 @@ import { defineConfig } from "tsup";
 // @dstorage/crypto and @dstorage/payment are real (published) dependencies,
 // not workspace-bundled siblings — keep them external so consumers resolve
 // them via their own package manager, matching tsup's default behavior for
-// package.json-listed deps. @midnight-ntwrk/ledger-v8 is never listed here
+// package.json-listed deps. @midnightntwrk/ledger-v9 is never listed here
 // (it's only reached transitively through @midnight-ntwrk/midnight-js-protocol),
 // so it needs an explicit external entry — without it, esbuild bundles it
 // fully, defaulting to its Node-only "exports" condition (fs.readFileSync-based
-// WASM loader) even in the browser build below.
+// WASM loader) even in the browser build below. The ledger, wallet SDK and
+// DApp Connector packages publish under @midnightntwrk, the Midnight.js and
+// Compact packages under @midnight-ntwrk.
 const external: (string | RegExp)[] = [
   /^@midnight-ntwrk\//,
+  /^@midnightntwrk\//,
   "@dstorage/crypto",
   "@dstorage/payment",
 ];
@@ -33,7 +36,7 @@ export default defineConfig([
       options.logOverride = { "ignored-bare-import": "silent" };
     },
   },
-  // Browser build: platform: "browser" so ledger-v8's package.json "exports"
+  // Browser build: platform: "browser" so ledger-v9's package.json "exports"
   // resolves its "browser" condition (WASM fetch/instantiate) instead of the
   // default Node condition (fs.readFileSync).
   {

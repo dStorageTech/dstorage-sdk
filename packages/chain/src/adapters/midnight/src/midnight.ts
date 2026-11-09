@@ -26,11 +26,11 @@ import type { PaymentReceipt, ManagedPaymentOptions } from "@dstorage/payment";
 import { hexToBytes, DStorageError, assertValidLogger } from "@dstorage/crypto";
 import { ChainErrorCode } from "../../../errors.js";
 import {
+  type NetworkId,
   type ProofProvider,
   type WalletProvider,
   type ZKConfigProvider,
 } from "@midnight-ntwrk/midnight-js-types";
-import type { FinalizedTransaction } from "@midnight-ntwrk/midnight-js-protocol/ledger";
 
 import type {
   ChainAdapter,
@@ -50,16 +50,22 @@ import type {
   ConnectedAPI,
   InitialAPI,
   ProvingProvider,
-} from "@midnight-ntwrk/dapp-connector-api";
+} from "@midnightntwrk/dapp-connector-api";
 import type { DataRegistryAPI } from "./contract-api.js";
 import type {
   DataRegistryProviders,
   DataRegistryCircuitKeys,
   AdapterWalletProvider,
 } from "./common-types.js";
-import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk/facade";
-import { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
+import type { WalletFacade } from "@midnightntwrk/wallet-sdk/facade";
+import type { ProvingProvider as LedgerProvingProvider } from "@midnight-ntwrk/midnight-js-protocol/v9";
 import { waitForFacadeSync } from "./sync.js";
+
+/**
+ * Lifetime of the intents the SDK builds. Midnight.js passes it to the wallet
+ * when balancing, so it also bounds how long a transaction can wait to land.
+ */
+const TX_TTL_SECONDS = 3600;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -231,7 +237,7 @@ export type MidnightChainAdapterConfig = BaseConfig &
          * Base URL from which the ZK artifacts for the DataRegistry contract are served.
          * Must be an absolute http/https URL.
          *
-         * In Vite apps: copy the compiled contract's keys/ and zkir/ directories
+         * In Vite apps: copy the compiled contract's compiler/, keys/ and zkir/ directories
          * to public/ and set this to window.location.origin.
          *
          * Required for write operations (storeReference, etc.) in connector mode.
@@ -496,7 +502,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_ZK_ARTIFACTS_PATH_EMPTY,
         "[dStorage/midnight] zkArtifactsPath must not be empty — " +
-          "set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.",
+          "set it to the directory containing compiler/, keys/ and zkir/ from the compiled DataRegistry contract.",
       );
     }
     this._zkConfigBaseUrl =
@@ -512,7 +518,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_ZK_CONFIG_BASE_URL_EMPTY,
         "[dStorage/midnight] zkConfigBaseUrl must not be empty — " +
-          "set it to the base URL where keys/ and zkir/ are served (e.g. window.location.origin).",
+          "set it to the base URL where compiler/, keys/ and zkir/ are served (e.g. window.location.origin).",
       );
     }
 
@@ -589,21 +595,27 @@ export class MidnightChainAdapter implements ChainAdapter {
     throw lastErr;
   }
 
-  private _wrapPaymentProvider(walletProvider: WalletProvider): WalletProvider {
+  private async _wrapPaymentProvider(
+    walletProvider: WalletProvider,
+  ): Promise<WalletProvider> {
     if (!this.managedPaymentAdapter) return walletProvider;
 
     const logger = this.logger;
-    return this.managedPaymentAdapter.createMidnightWalletProvider(
-      walletProvider.getCoinPublicKey(),
-      walletProvider.getEncryptionPublicKey(),
-      (receipt) => {
-        this._lastPaymentReceipt = receipt;
-        logger?.log(
-          "dStorage/midnight",
-          `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx?.length ?? 0})`,
-        );
-      },
-    ) as unknown as WalletProvider;
+    const { createLedger9WalletProvider } =
+      await import("@midnight-ntwrk/midnight-js-types");
+    return createLedger9WalletProvider(
+      this.managedPaymentAdapter.createMidnightWalletProvider(
+        walletProvider.getCoinPublicKey(),
+        walletProvider.getEncryptionPublicKey(),
+        (receipt) => {
+          this._lastPaymentReceipt = receipt;
+          logger?.log(
+            "dStorage/midnight",
+            `balanceTx: received balanced tx from managed payment service (length=${receipt.signedTx?.length ?? 0})`,
+          );
+        },
+      ),
+    );
   }
 
   // ── ZK config provider ─────────────────────────────────────────────────────
@@ -626,8 +638,8 @@ export class MidnightChainAdapter implements ChainAdapter {
         throw new DStorageError(
           ChainErrorCode.MIDNIGHT_ZK_CONFIG_BASE_URL_REQUIRED,
           "[dStorage/midnight] zkConfigBaseUrl is required in connector mode.\n" +
-            "  Set it to the base URL where keys/ and zkir/ are served.\n" +
-            "  In a Vite app: copy compiled keys/ and zkir/ to public/, then set\n" +
+            "  Set it to the base URL where compiler/, keys/ and zkir/ are served.\n" +
+            "  In a Vite app: copy compiled compiler/, keys/ and zkir/ to public/, then set\n" +
             "    zkConfigBaseUrl: window.location.origin",
         );
       }
@@ -637,11 +649,11 @@ export class MidnightChainAdapter implements ChainAdapter {
       );
       const { FetchZkConfigProvider } =
         await import("@midnight-ntwrk/midnight-js-fetch-zk-config-provider");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return new (FetchZkConfigProvider as any)(
-        baseUrl,
-        fetch.bind(globalThis),
-      );
+      // Artifacts are checked against compiler/contract-manifest.json, so
+      // compiler/ must be served next to keys/ and zkir/.
+      return new FetchZkConfigProvider<DataRegistryCircuitKeys>(baseUrl, {
+        fetchFunc: fetch.bind(globalThis),
+      });
     }
 
     // Facade mode: read ZK artifact files from the local filesystem.
@@ -649,7 +661,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_ZK_ARTIFACTS_PATH_REQUIRED,
         "[dStorage/midnight] zkArtifactsPath is required in facade mode.\n" +
-          "  Set it to the directory containing keys/ and zkir/ from the compiled DataRegistry contract.\n" +
+          "  Set it to the directory containing compiler/, keys/ and zkir/ from the compiled DataRegistry contract.\n" +
           "  Example: zkArtifactsPath: path.resolve(__dirname, '../packages/chain/src/adapters/midnight/contracts/dataregistry/managed')",
       );
     }
@@ -674,28 +686,6 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
-   * midnight-js-contracts expects privateStateProvider.setContractAddress().
-   * Some providers (e.g. in-memory) do not implement it, so we add a no-op shim.
-   * Providers that already implement it (e.g. levelPrivateStateProvider) are left
-   * untouched — their real implementation must run so the contract address is set
-   * before any private state access.
-   */
-  private _withContractAddressShim<T extends object>(
-    privateStateProvider: T,
-  ): T & { setContractAddress: (address: string) => void } {
-    if (!("setContractAddress" in privateStateProvider)) {
-      (privateStateProvider as Record<string, unknown>).setContractAddress = (
-        _address: string,
-      ) => {
-        /* no-op: provider doesn't use contract address for scoping */
-      };
-    }
-    return privateStateProvider as T & {
-      setContractAddress: (address: string) => void;
-    };
-  }
-
-  /**
    * Assemble DataRegistryProviders from mode-specific pieces.
    */
   private async _assembleDataRegistryProviders(params: {
@@ -712,9 +702,8 @@ export class MidnightChainAdapter implements ChainAdapter {
     );
 
     return {
-      privateStateProvider: this._withContractAddressShim(
-        params.privateStateProvider,
-      ) as unknown as DataRegistryProviders["privateStateProvider"],
+      privateStateProvider:
+        params.privateStateProvider as unknown as DataRegistryProviders["privateStateProvider"],
       publicDataProvider: indexerPublicDataProvider(
         params.indexerHttp,
         params.indexerWs,
@@ -725,6 +714,10 @@ export class MidnightChainAdapter implements ChainAdapter {
         params.walletProvider as unknown as DataRegistryProviders["walletProvider"],
       midnightProvider:
         params.midnightProvider as unknown as DataRegistryProviders["midnightProvider"],
+      config: {
+        networkId: this.config.networkId,
+        ttlSeconds: TX_TTL_SECONDS,
+      },
     };
   }
 
@@ -761,7 +754,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    * rethrown from proveTx() in place of whatever the WASM surfaces.
    */
   private async _makeProofProvider(
-    provingProvider: ProvingProvider,
+    provingProvider: LedgerProvingProvider,
     toError: (op: string, err: unknown) => DStorageError,
   ): Promise<ProofProvider> {
     let lastError: DStorageError | undefined;
@@ -775,7 +768,7 @@ export class MidnightChainAdapter implements ChainAdapter {
           throw lastError;
         }
       };
-    const wrapped: ProvingProvider = {
+    const wrapped: LedgerProvingProvider = {
       check: wrap("check the proof preimage", (preimage, keyLocation) =>
         provingProvider.check(preimage, keyLocation),
       ),
@@ -788,13 +781,18 @@ export class MidnightChainAdapter implements ChainAdapter {
         ) =>
           provingProvider.prove(preimage, keyLocation, overwriteBindingInput),
       ),
+      lookupKey: wrap(
+        "look up the circuit key material",
+        (keyLocation: string) => provingProvider.lookupKey(keyLocation),
+      ),
     };
 
-    const { createProofProvider } =
+    const { createLedger9ProofProvider } =
       await import("@midnight-ntwrk/midnight-js-types");
-    const inner = createProofProvider(wrapped);
+    const inner = createLedger9ProofProvider(wrapped);
     const logger = this.logger;
     return {
+      supportedEras: inner.supportedEras,
       proveTx: async (...args: Parameters<ProofProvider["proveTx"]>) => {
         lastError = undefined;
         try {
@@ -882,10 +880,10 @@ export class MidnightChainAdapter implements ChainAdapter {
       await import("./in-memory-private-state.js");
     const privateStateProvider = createInMemoryPrivateStateProvider();
 
-    // Use browser-safe helpers defined at module level — compact-runtime's toHex/fromHex
-    // use Buffer internally and are not safe in the browser.
+    const { createLedger9WalletProvider, createLedger9MidnightProvider } =
+      await import("@midnight-ntwrk/midnight-js-types");
     const { Transaction } =
-      await import("@midnight-ntwrk/midnight-js-protocol/ledger");
+      await import("@midnight-ntwrk/midnight-js-protocol/v9");
 
     const connectorAPI = this.connectorAPI;
     const logger = this.logger;
@@ -914,11 +912,13 @@ export class MidnightChainAdapter implements ChainAdapter {
     const { indexerHttp, indexerWs, proofServer } =
       this._resolveConnectorEndpoints();
 
-    const walletProvider = {
+    // Use browser-safe helpers defined at module level — compact-runtime's toHex/fromHex
+    // use Buffer internally and are not safe in the browser.
+    const walletProvider = createLedger9WalletProvider({
       getCoinPublicKey: () => coinPublicKey,
       getEncryptionPublicKey: () => encPublicKey,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      balanceTx: async (tx: any, _ttl?: Date): Promise<any> => {
+      // The wallet runs its own copy of the ledger, so transactions cross as bytes.
+      balanceTx: async (tx) => {
         const serializedTx = uint8ArrayToHex(tx.serialize());
         logger?.log(
           "dStorage/midnight",
@@ -940,18 +940,12 @@ export class MidnightChainAdapter implements ChainAdapter {
           "dStorage/midnight",
           `balanceTx: received balanced tx length=${balancedHex?.length}`,
         );
-        // Transaction.deserialize takes (sigType, proofType, bindingType, bytes) — see ledger-v8 API.
-        return Transaction.deserialize(
-          "signature",
-          "proof",
-          "binding",
-          hexToBytes(balancedHex, "balancedHex"),
-        );
+        return hexToBytes(balancedHex, "balancedHex");
       },
-    };
+    });
 
-    const midnightProvider = {
-      submitTx: async (tx: FinalizedTransaction): Promise<string> => {
+    const midnightProvider = createLedger9MidnightProvider(
+      async (tx): Promise<string> => {
         const serializedTx = uint8ArrayToHex(tx.serialize());
         logger?.log(
           "dStorage/midnight",
@@ -966,9 +960,9 @@ export class MidnightChainAdapter implements ChainAdapter {
             { cause: err },
           );
         }
-        return tx.identifiers()[0] ?? "";
+        return tx.deserialize({ v9: Transaction }).identifiers()[0] ?? "";
       },
-    };
+    );
 
     const proofProvider =
       proofServer === null
@@ -981,7 +975,7 @@ export class MidnightChainAdapter implements ChainAdapter {
       indexerHttp,
       indexerWs,
       proofProvider,
-      walletProvider: this._wrapPaymentProvider(walletProvider),
+      walletProvider: await this._wrapPaymentProvider(walletProvider),
       midnightProvider,
     });
   }
@@ -1013,8 +1007,25 @@ export class MidnightChainAdapter implements ChainAdapter {
       "Using the wallet's proving provider (proving delegated to the wallet).",
     );
 
+    // The wallet proves; the ledger still asks for the circuit's key material,
+    // which comes from this app's ZK artifacts. Locations that aren't this
+    // contract's circuits (protocol builtins) are left to the wallet.
+    const { ZKConfigRegistry, zkConfigToProvingKeyMaterial } =
+      await import("@midnight-ntwrk/midnight-js-types");
+    const registry = new ZKConfigRegistry([zkConfigProvider]);
     return this._makeProofProvider(
-      walletProving,
+      {
+        check: (preimage, keyLocation) =>
+          walletProving.check(preimage, keyLocation),
+        prove: (preimage, keyLocation, overwriteBindingInput) =>
+          walletProving.prove(preimage, keyLocation, overwriteBindingInput),
+        lookupKey: async (keyLocation) => {
+          const zkConfig = await registry.resolveKeyLocation(keyLocation);
+          return zkConfig === undefined
+            ? undefined
+            : zkConfigToProvingKeyMaterial(zkConfig);
+        },
+      },
       (op, err) =>
         new DStorageError(
           ChainErrorCode.MIDNIGHT_WALLET_PROVING_FAILED,
@@ -1038,20 +1049,18 @@ export class MidnightChainAdapter implements ChainAdapter {
     const { firstValueFrom } = await import("rxjs");
     const facadeState = await firstValueFrom(walletFacade.state());
     const { ShieldedAddress, UnshieldedAddress, DustAddress } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/wallet-sdk/address-format"
+      /* @vite-ignore */ "@midnightntwrk/wallet-sdk/address-format"
     );
-    const { getNetworkId } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-network-id"
-    );
+    const networkId = this.config.networkId;
     this.addresses = {
       shielded: ShieldedAddress.codec
-        .encode(getNetworkId(), facadeState.shielded.address)
+        .encode(networkId, facadeState.shielded.address)
         .toString(),
       unshielded: UnshieldedAddress.codec
-        .encode(getNetworkId(), facadeState.unshielded.address)
+        .encode(networkId, facadeState.unshielded.address)
         .toString(),
       dust: DustAddress.codec
-        .encode(getNetworkId(), facadeState.dust.address)
+        .encode(networkId, facadeState.dust.address)
         .toString(),
     };
 
@@ -1075,7 +1084,7 @@ export class MidnightChainAdapter implements ChainAdapter {
         this.config.proofServer!,
         zkConfigProvider,
       ),
-      walletProvider: this._wrapPaymentProvider(walletProvider),
+      walletProvider: await this._wrapPaymentProvider(walletProvider),
       midnightProvider: walletProvider,
     });
 
@@ -1485,12 +1494,6 @@ export class MidnightChainAdapter implements ChainAdapter {
   async init(): Promise<string> {
     this._initialized = true;
 
-    // Set global network ID (required by Midnight JS SDK).
-    // No /* @vite-ignore */ — midnight-js-network-id is browser-compatible.
-    const { setNetworkId } =
-      await import("@midnight-ntwrk/midnight-js-network-id");
-    setNetworkId(this.config.networkId);
-
     // Connector mode: connect to Lace wallet first so connectorAPI is available
     // before _getAPI() tries to build providers.
     if (this.walletMode === "connector") {
@@ -1772,7 +1775,7 @@ export class MidnightChainAdapter implements ChainAdapter {
    */
   async getBalances(): Promise<WalletBalances> {
     const { unshieldedToken } = await import(
-      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-protocol/ledger"
+      /* @vite-ignore */ "@midnight-ntwrk/midnight-js-protocol/v9"
     );
     if (this.walletMode === "provider") {
       if (!this.facade) {

@@ -5,7 +5,7 @@ import {
 } from "../adapters/midnight/src/midnight.js";
 import type { AdapterWalletProvider } from "../adapters/midnight/src/common-types.js";
 import { ChainErrorCode } from "../errors.js";
-import { createProofProvider } from "@midnight-ntwrk/midnight-js-types";
+import { createLedger9ProofProvider } from "@midnight-ntwrk/midnight-js-types";
 
 // Stand-in for the ledger's unprovenTx.prove(): proveTx hands the ProvingProvider
 // to the "transaction", so tests can drive check/prove without real circuits.
@@ -13,7 +13,8 @@ vi.mock("@midnight-ntwrk/midnight-js-types", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@midnight-ntwrk/midnight-js-types")
   >()),
-  createProofProvider: vi.fn((provingProvider: unknown) => ({
+  createLedger9ProofProvider: vi.fn((provingProvider: unknown) => ({
+    supportedEras: ["v9"],
     proveTx: (tx: { prove: (p: unknown) => Promise<unknown> }) =>
       tx.prove(provingProvider),
   })),
@@ -24,9 +25,9 @@ type TestProvingProvider = {
   prove: (p: Uint8Array, k: string, b?: bigint) => Promise<Uint8Array>;
 };
 
-/** The (wrapped) ProvingProvider most recently passed to createProofProvider. */
+/** The (wrapped) ProvingProvider most recently passed to createLedger9ProofProvider. */
 function lastProvingProvider(): TestProvingProvider {
-  return vi.mocked(createProofProvider).mock
+  return vi.mocked(createLedger9ProofProvider).mock
     .lastCall![0] as TestProvingProvider;
 }
 

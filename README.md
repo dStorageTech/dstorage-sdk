@@ -325,7 +325,7 @@ const chain = new MidnightChainAdapter({
   network: NETWORKS.preprod.networkId, // must match the wallet's network, or init() throws
   proofServerEndpoint: "http://127.0.0.1:6300", // required with the default prover
   // indexerEndpoint / indexerWsEndpoint: optional, override the wallet's indexer
-  zkConfigBaseUrl: window.location.origin, // serve keys/ and zkir/ from public/
+  zkConfigBaseUrl: window.location.origin, // serve compiler/, keys/ and zkir/ from public/
 });
 ```
 
@@ -344,7 +344,7 @@ const chain = new MidnightChainAdapter({
   walletMode: "connector",
   network: NETWORKS.preprod.networkId,
   prover: PROVER_MODE.WALLET_DELEGATED,
-  zkConfigBaseUrl: window.location.origin, // the wallet fetches keys/ and zkir/ from here
+  zkConfigBaseUrl: window.location.origin, // the wallet fetches compiler/, keys/ and zkir/ from here
 });
 ```
 
@@ -360,8 +360,14 @@ Provider/facade mode (`walletMode: "provider"`) is Node.js-only and cannot run i
 
 `MidnightChainAdapter` writes on-chain references through dStorage's own `DataRegistry`
 contract — the same fixed contract for every consumer, not something you compile
-yourself. Its compiled ZK artifacts (prover/verifier keys and ZKIR) ship inside this
-package at `dist/contracts/dataregistry/managed/{keys,zkir}`.
+yourself. Its compiled ZK artifacts (prover/verifier keys, ZKIR and the compiler
+manifest the keys are checked against) ship inside this package at
+`dist/contracts/dataregistry/managed/{compiler,keys,zkir}`.
+
+> **Midnight ledger 9.** The SDK targets the ledger 9 stack (Midnight.js 5, Wallet SDK 2,
+> Compact 0.36.0, proof server 9.0.0, indexer 4.4.101). `DataRegistry` is compiled with
+> Compact 0.36.0, which changes its verifier keys, so contracts deployed with earlier SDK
+> versions can't be used with this one: deploy a new `DataRegistry` contract.
 
 **Node.js (`walletMode: "provider"`)** — point `zkArtifactsPath` at the bundled copy.
 Resolving it via the package's own `package.json` (rather than hardcoding a
@@ -395,6 +401,7 @@ see the [Midnight docs](https://docs.midnight.network/) for the general pattern)
 point `zkConfigBaseUrl` at wherever you serve it from:
 
 ```sh
+cp -a node_modules/@dstorage-tech/dstorage-sdk/dist/contracts/dataregistry/managed/compiler ./public/
 cp -a node_modules/@dstorage-tech/dstorage-sdk/dist/contracts/dataregistry/managed/keys ./public/
 cp -a node_modules/@dstorage-tech/dstorage-sdk/dist/contracts/dataregistry/managed/zkir ./public/
 ```
@@ -402,7 +409,7 @@ cp -a node_modules/@dstorage-tech/dstorage-sdk/dist/contracts/dataregistry/manag
 ```typescript
 const chainAdapter = new MidnightChainAdapter({
   walletMode: "connector",
-  zkConfigBaseUrl: window.location.origin, // serves keys/ and zkir/ from public/
+  zkConfigBaseUrl: window.location.origin, // serves compiler/, keys/ and zkir/ from public/
   // ...
 });
 ```

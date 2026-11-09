@@ -24,6 +24,16 @@ export interface IntegrationEnv {
   };
 }
 
+function blockfrostPreprodEndpoints(projectId: string) {
+  const q = `?project_id=${encodeURIComponent(projectId)}`;
+  return {
+    node: `https://rpc.midnight-preprod.blockfrost.io${q}`,
+    nodeWs: `wss://rpc.midnight-preprod.blockfrost.io${q}`,
+    indexer: `https://midnight-preprod.blockfrost.io/api/v0${q}`,
+    indexerWs: `wss://midnight-preprod.blockfrost.io/api/v0/ws${q}`,
+  };
+}
+
 export function readEnv(): IntegrationEnv {
   const network =
     (process.env.INTEGRATION_MIDNIGHT_NETWORK as MidnightNetwork) ?? "preprod";
@@ -36,12 +46,10 @@ export function readEnv(): IntegrationEnv {
           indexer: "http://127.0.0.1:8088/api/v4/graphql",
           indexerWs: "ws://127.0.0.1:8088/api/v4/graphql/ws",
         }
-      : {
-          node: "https://rpc.preprod.midnight.network",
-          nodeWs: "wss://rpc.preprod.midnight.network",
-          indexer: "https://indexer.preprod.midnight.network/api/v4/graphql",
-          indexerWs: "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
-        };
+      : // Preprod is served by Blockfrost, with a Midnight Preprod project token.
+        blockfrostPreprodEndpoints(
+          process.env.INTEGRATION_BLOCKFROST_PROJECT_ID ?? "",
+        );
 
   return {
     arlocalUrl: process.env.INTEGRATION_ARLOCAL_URL ?? "http://localhost:1984",

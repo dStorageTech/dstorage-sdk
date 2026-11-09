@@ -22,4 +22,4 @@ export type {
   ProverMode,
   WalletAddresses,
 } from "./adapters/midnight/src/midnight.js";
-export type { NetworkId } from "@midnight-ntwrk/midnight-js-network-id";
+export type { NetworkId } from "@midnight-ntwrk/midnight-js-types";

@@ -21,15 +21,15 @@
     "@noble/hashes": "^2.3.0"
   },
   "peerDependencies": {
-    "@midnight-ntwrk/dapp-connector-api": "^4.0.1"
+    "@midnightntwrk/dapp-connector-api": "^4.1.0"
   },
   "peerDependenciesMeta": {
-    "@midnight-ntwrk/dapp-connector-api": {
+    "@midnightntwrk/dapp-connector-api": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
+    "@midnightntwrk/dapp-connector-api": "^4.1.0",
     "typescript": "^6.0.3"
   }
 }

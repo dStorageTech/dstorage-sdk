@@ -45,10 +45,10 @@ Build order (dependency DAG): `crypto → encryption → payment → storage →
 
 - Node.js 22+ and npm (download from [nodejs.org](https://nodejs.org))
 - Docker, for the Midnight proof server and Arweave Local (download from [docker.com/get-started](https://www.docker.com/get-started))
-- _Only if you modify the contract:_ Midnight [Compact developer tools](https://docs.midnight.network/blog/compact-developer-tools), compiler **version 0.31.1** (the committed ZK artifacts were built with it)
+- _Only if you modify the contract:_ Midnight [Compact developer tools](https://docs.midnight.network/blog/compact-developer-tools), compiler **version 0.36.0** (the committed ZK artifacts were built with it)
 - _For the browser demo's Midnight path:_ [Lace](https://www.lace.io) wallet extension (**version 1.36.2 or later**)
 - _For the browser demo's Arweave mainnet path:_ [Wander](https://www.wander.app) wallet extension
-- _For anything that talks to Midnight Preprod:_ NIGHT test tokens from the [Midnight Preprod Faucet](https://faucet.preprod.midnight.network/)
+- _For anything that talks to Midnight Preprod:_ NIGHT test tokens from the [Midnight Preprod Faucet](https://midnight-tmnight-preprod.nethermind.dev/)
 
 ### 1. Install dependencies
 
@@ -75,8 +75,9 @@ The `DataRegistry` contract is the on-chain index used by the SDK. It records re
 Its compiled output (`packages/chain/src/adapters/midnight/contracts/dataregistry/managed/`, including the ZK prover/verifier keys) is **committed to the repository**, so you only need to recompile if you change `DataRegistry.compact`:
 
 ```sh
-# Install Compact v0.31.1, matching the committed contract artifacts
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/download/v0.31.1/compact-installer.sh | sh
+# Install the Compact developer tools, then compiler 0.36.0 (matching the committed contract artifacts)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+compact update 0.36.0
 
 npm run compile:contract
 ```
@@ -88,7 +89,7 @@ npm run compile:contract
 Needed for real Midnight writes (console demo, browser demo's Midnight path, full-stack integration tests). See the Midnight [documentation](https://docs.midnight.network/getting-started/installation#run-the-proof-server).
 
 ```sh
-docker run -p 6300:6300 midnightntwrk/proof-server:8.1.0 -- midnight-proof-server -v
+docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0 -- midnight-proof-server -v
 ```
 
 ### 5. Run Arweave Local
@@ -189,7 +190,7 @@ Start the required services:
 docker run -d --rm -p 1984:1984 textury/arlocal
 
 # Midnight Proof Server (required for the full-stack suite)
-docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:8.1.0 -- midnight-proof-server -v
+docker run -d --rm -p 6300:6300 midnightntwrk/proof-server:9.0.0 -- midnight-proof-server -v
 
 # Bundler mock server (required only for the bundler suite) — separate terminal:
 npm run bundler-mock:run

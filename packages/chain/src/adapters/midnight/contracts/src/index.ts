@@ -1,4 +1,4 @@
-import { CompiledContract } from "@midnight-ntwrk/compact-js";
+import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/v9/compact-js";
 import type { WitnessContext } from "@midnight-ntwrk/compact-runtime";
 import {
   Contract,
@@ -59,4 +59,10 @@ export const CompiledDataRegistryContract = CompiledContract.make<
 >(
   "DataRegistry",
   Contract<DataRegistryPrivateState, Witnesses<DataRegistryPrivateState>>,
-).pipe(CompiledContract.withWitnesses(witnesses));
+).pipe(
+  CompiledContract.withWitnesses(witnesses),
+  // Midnight.js loads the keys and ZKIR through the ZK config provider
+  // (zkArtifactsPath / zkConfigBaseUrl), not from this path. It only names
+  // where the compiler output lives, which deploy and find require to be set.
+  CompiledContract.withCompiledFileAssets("dataregistry/managed"),
+);

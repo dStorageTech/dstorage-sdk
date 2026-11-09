@@ -2,13 +2,13 @@ services:
   # ── Midnight local network ──────────────────────────────────────────────────
 
   proof-server:
-    image: "midnightntwrk/proof-server:8.1.0"
+    image: "midnightntwrk/proof-server:9.0.0"
     container_name: midnight-proof-server
     ports:
       - "6300:6300"
 
   indexer:
-    image: "midnightntwrk/indexer-standalone:4.3.5"
+    image: "midnightntwrk/indexer-standalone:4.4.101"
     container_name: midnight-indexer
     # On a fresh "undeployed" chain the SPO sub-service can start before the
     # node has produced block 1 ("Cannot construct OnlineClientAtBlock: block
@@ -45,7 +45,7 @@ services:
         condition: service_started
 
   node:
-    image: "midnightntwrk/midnight-node:1.0.300"
+    image: "midnightntwrk/midnight-node:2.1.101"
     container_name: midnight-node
     ports:
       - "9944:9944"

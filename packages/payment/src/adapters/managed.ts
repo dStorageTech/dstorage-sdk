@@ -395,9 +395,8 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
    * they have — HD derivation, a server endpoint, etc.); the SDK only handles
    * the signing-server round-trip.
    *
-   * The returned object satisfies the @midnight-ntwrk/midnight-js-types
-   * WalletProvider interface via structural typing — no Midnight package
-   * import is required from the caller's side.
+   * Wrap the returned object with @midnight-ntwrk/midnight-js-types
+   * `createLedger9WalletProvider()` to get a Midnight.js WalletProvider.
    *
    * @param coinPublicKey        Midnight coin public key (hex) for the ZK fee circuit.
    * @param encryptionPublicKey  Midnight encryption public key (hex).
@@ -429,15 +428,7 @@ export class ManagedPaymentAdapter extends ArweavePaymentAdapter {
             "[dStorage/payment] Midnight managed payment server did not return a balanced transaction.",
           );
         }
-        const { Transaction } =
-          await import("@midnight-ntwrk/midnight-js-protocol/ledger");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (Transaction as any).deserialize(
-          "signature",
-          "proof",
-          "binding",
-          parseSignedTxBytes(receipt.signedTx),
-        );
+        return parseSignedTxBytes(receipt.signedTx);
       },
     };
   }

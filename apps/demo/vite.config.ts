@@ -62,7 +62,7 @@ export default defineConfig(({ mode }) => {
         // never execute in connector (browser) mode.
         external: [
           // Midnight wallet SDK (Node.js / facade mode only)
-          /^@midnight-ntwrk\/wallet-sdk/,
+          /^@midnightntwrk\/wallet-sdk/,
           /^@midnight-ntwrk\/midnight-js-node-zk-config-provider/,
           /^@midnight-ntwrk\/midnight-js-level-private-state-provider/,
           /^ssh2/,
@@ -72,7 +72,7 @@ export default defineConfig(({ mode }) => {
         output: {
           // Isolate the WASM runtime in its own chunk to avoid top-level await conflicts.
           manualChunks(id: string) {
-            if (id.includes("@midnight-ntwrk/onchain-runtime-v3")) {
+            if (id.includes("@midnightntwrk/onchain-runtime-v4")) {
               return "wasm";
             }
           },
@@ -105,14 +105,14 @@ export default defineConfig(({ mode }) => {
       // Exclude the raw WASM runtime (must be a separate chunk loaded at runtime).
       // Also exclude Node.js-only Midnight packages so esbuild doesn't choke on them.
       exclude: [
-        "@midnight-ntwrk/onchain-runtime-v3",
+        "@midnightntwrk/onchain-runtime-v4",
         "@midnight-ntwrk/midnight-js-node-zk-config-provider",
         "@midnight-ntwrk/midnight-js-level-private-state-provider",
-        "@midnight-ntwrk/wallet-sdk-facade",
-        "@midnight-ntwrk/wallet-sdk-shielded",
-        "@midnight-ntwrk/wallet-sdk-unshielded-wallet",
-        "@midnight-ntwrk/wallet-sdk-abstractions",
-        "@midnight-ntwrk/wallet-sdk-dust-wallet",
+        "@midnightntwrk/wallet-sdk-facade",
+        "@midnightntwrk/wallet-sdk-shielded",
+        "@midnightntwrk/wallet-sdk-unshielded-wallet",
+        "@midnightntwrk/wallet-sdk-abstractions",
+        "@midnightntwrk/wallet-sdk-dust-wallet",
       ],
     },
   };

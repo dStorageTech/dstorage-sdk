@@ -5,6 +5,7 @@ import type { ChainAdapterLogger } from "../../../types.js";
 import {
   type DataRegistryDerivedState,
   type DataRegistryContract,
+  type DataRegistryCircuitKeys,
   type DataRegistryProviders,
   type DeployedDataRegistryContract,
   dataRegistryPrivateStateKey,
@@ -18,7 +19,8 @@ import {
 import {
   deployContract,
   findDeployedContract,
-  withContractScopedTransaction,
+  withLedger9ContractScopedTransaction,
+  type Ledger9ContractProviders,
 } from "@midnight-ntwrk/midnight-js-contracts";
 import {
   combineLatest,
@@ -33,7 +35,7 @@ import {
   ReplaySubject,
   type Observable,
 } from "rxjs";
-import type { ContractState } from "@midnight-ntwrk/compact-runtime";
+import { ContractState } from "@midnight-ntwrk/compact-runtime";
 import { toHex } from "@midnight-ntwrk/midnight-js-utils";
 import { DStorageError } from "@dstorage/crypto";
 import { ChainErrorCode } from "../../../errors.js";
@@ -91,6 +93,12 @@ export function ledgerState$(
       type: "latest",
     }),
   ).pipe(
+    // The indexer hands back serialized state tagged with its ledger era.
+    // Decode it with the compact-runtime copy the contract was compiled
+    // against: DataRegistry.ledger() rejects objects from any other copy.
+    map((record) =>
+      record.value.contractState.deserialize({ v9: ContractState }),
+    ),
     throwIfEmpty(
       () =>
         new DStorageError(
@@ -169,9 +177,11 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
         //    private state once and always use the same value with `combineLatest`. In applications
         //    where the private state is expected to change, we would need to make this an `Observable`.
         from(
-          providers.privateStateProvider.get(
-            dataRegistryPrivateStateKey,
-          ) as Promise<DataRegistryPrivateState>,
+          providers.privateStateProvider
+            .forContract(this.deployedContractAddress)
+            .get(
+              dataRegistryPrivateStateKey,
+            ) as Promise<DataRegistryPrivateState>,
         ),
       ],
       // ...and combine them to produce the required derived state.
@@ -214,6 +224,26 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
   }
 
   /**
+   * The providers, typed for a scoped transaction that calls one circuit. The
+   * same provider set serves every DataRegistry circuit.
+   */
+  private providersFor<K extends DataRegistryCircuitKeys>(
+    _circuit: K,
+  ): Ledger9ContractProviders<DataRegistryContract, K> {
+    return this.providers as unknown as Ledger9ContractProviders<
+      DataRegistryContract,
+      K
+    >;
+  }
+
+  /** The private states this contract's circuits read their witnesses from. */
+  private privateStates() {
+    return this.providers.privateStateProvider.forContract(
+      this.deployedContractAddress,
+    );
+  }
+
+  /**
    * Gets the address of the current deployed contract.
    */
   readonly deployedContractAddress: ContractAddress;
@@ -238,12 +268,12 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       "dStorage/midnight",
       `storing reference: storageId=${storageId}`,
     );
-    await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
+    await this.privateStates().set(dataRegistryPrivateStateKey, {
       ownerSecret: new Uint8Array(ownerSecret),
     });
     try {
-      const txData = await withContractScopedTransaction(
-        this.providers,
+      const txData = await withLedger9ContractScopedTransaction(
+        this.providersFor("storeReference"),
         async (txCtx) => {
           await this.deployedContract.callTx.storeReference(
             txCtx,
@@ -280,10 +310,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
 
       return { refId: circuitResult, txHash, blockHeight };
     } finally {
-      await this.providers.privateStateProvider.set(
-        dataRegistryPrivateStateKey,
-        {},
-      );
+      await this.privateStates().set(dataRegistryPrivateStateKey, {});
     }
   }
 
@@ -295,12 +322,12 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       "dStorage/midnight",
       `removing reference: ${toHex(refId)}`,
     );
-    await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
+    await this.privateStates().set(dataRegistryPrivateStateKey, {
       ownerSecret: new Uint8Array(ownerSecret),
     });
     try {
-      const txData = await withContractScopedTransaction(
-        this.providers,
+      const txData = await withLedger9ContractScopedTransaction(
+        this.providersFor("removeReference"),
         async (txCtx) => {
           await this.deployedContract.callTx.removeReference(txCtx, refId);
         },
@@ -317,10 +344,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
 
       return { txHash, blockHeight };
     } finally {
-      await this.providers.privateStateProvider.set(
-        dataRegistryPrivateStateKey,
-        {},
-      );
+      await this.privateStates().set(dataRegistryPrivateStateKey, {});
     }
   }
 
@@ -340,15 +364,15 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       "dStorage/midnight",
       `updating reference: ${toHex(refId)}`,
     );
-    await this.providers.privateStateProvider.set(dataRegistryPrivateStateKey, {
+    await this.privateStates().set(dataRegistryPrivateStateKey, {
       ownerSecret: new Uint8Array(ownerSecret),
       // When no new secret is provided, pass the old one so the circuit recomputes the same
       // commitment and the stored value is preserved unchanged.
       newOwnerSecret: new Uint8Array(newOwnerSecret ?? ownerSecret),
     });
     try {
-      const txData = await withContractScopedTransaction(
-        this.providers,
+      const txData = await withLedger9ContractScopedTransaction(
+        this.providersFor("updateReference"),
         async (txCtx) => {
           await this.deployedContract.callTx.updateReference(
             txCtx,
@@ -375,10 +399,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
 
       return { txHash, blockHeight };
     } finally {
-      await this.providers.privateStateProvider.set(
-        dataRegistryPrivateStateKey,
-        {},
-      );
+      await this.privateStates().set(dataRegistryPrivateStateKey, {});
     }
   }
 
@@ -397,7 +418,7 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
     logger?.log("dStorage/midnight", "deploying DataRegistry contract...");
 
     // For a fresh deployment there is no prior private state — always start clean.
-    // We cannot call setContractAddress() here because the address doesn't exist yet.
+    // deployContract() stores it under the new contract's address.
     const deployedDataRegistryContract = await deployContract(providers, {
       compiledContract: CompiledDataRegistryContract,
       privateStateId: dataRegistryPrivateStateKey,
@@ -426,18 +447,15 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
       `joining DataRegistry contract at: ${contractAddress}`,
     );
 
-    // Set the contract address on the private state provider BEFORE calling get(),
-    // because levelPrivateStateProvider requires it to be set before any access.
-    // findDeployedContract() will also call setContractAddress() internally, but by
-    // then getPrivateState() below would have already thrown without this pre-call.
-    providers.privateStateProvider.setContractAddress(contractAddress);
-
     const deployedDataRegistryContract =
       await findDeployedContract<DataRegistryContract>(providers, {
         contractAddress,
         compiledContract: CompiledDataRegistryContract,
         privateStateId: dataRegistryPrivateStateKey,
-        initialPrivateState: await DataRegistryAPI.getPrivateState(providers),
+        initialPrivateState: await DataRegistryAPI.getPrivateState(
+          providers,
+          contractAddress,
+        ),
       });
 
     // Validate the on-chain contract version before accepting the contract.
@@ -453,10 +471,11 @@ export class DataRegistryAPI implements DeployedDataRegistryAPI {
 
   private static async getPrivateState(
     providers: DataRegistryProviders,
+    contractAddress: ContractAddress,
   ): Promise<DataRegistryPrivateState> {
-    const existingPrivateState = await providers.privateStateProvider.get(
-      dataRegistryPrivateStateKey,
-    );
+    const existingPrivateState = await providers.privateStateProvider
+      .forContract(contractAddress)
+      .get(dataRegistryPrivateStateKey);
     return existingPrivateState ?? createDataRegistryPrivateState();
   }
 }

@@ -1,9 +1,11 @@
 import {
   type CircuitContext,
-  QueryContext,
+  type CircuitResults,
+  type ChargedState,
+  type StateValue,
   sampleContractAddress,
   createConstructorContext,
-  emptyZswapLocalState,
+  createCircuitContext,
   ContractAddress,
   CostModel,
 } from "@midnight-ntwrk/compact-runtime";
@@ -18,39 +20,46 @@ import {
   createDataRegistryPrivateState,
 } from "../index.js";
 
+type DataRegistryCircuitId =
+  keyof Contract<DataRegistryPrivateState>["impureCircuits"];
+
 /**
  * Serves as a testbed to exercise the DataRegistry contract in tests.
+ *
+ * Circuits run asynchronously, so build an instance with {@link DataRegistrySimulator.create}.
  */
 export class DataRegistrySimulator {
   readonly contract: Contract<DataRegistryPrivateState>;
   readonly contractAddress: ContractAddress;
-  circuitContext: CircuitContext<DataRegistryPrivateState>;
   currentPk: string;
+  /** On-chain state of the simulated contract, updated after every circuit call. */
+  private contractState: StateValue | ChargedState;
   /** Default ownerSecret used when no secret is passed to circuit methods. Refreshed on switchUser(). */
   private _defaultOwnerSecret: Uint8Array = crypto.getRandomValues(
     new Uint8Array(32),
   );
 
-  constructor(senderPk: string) {
+  private constructor(
+    contract: Contract<DataRegistryPrivateState>,
+    contractState: StateValue | ChargedState,
+    senderPk: string,
+  ) {
     this.contractAddress = sampleContractAddress();
-    this.contract = new Contract<DataRegistryPrivateState>(witnesses);
+    this.contract = contract;
+    this.contractState = contractState;
     this.currentPk = senderPk;
-    const {
-      currentPrivateState,
-      currentContractState,
-      currentZswapLocalState,
-    } = this.contract.initialState(
+  }
+
+  static async create(senderPk: string): Promise<DataRegistrySimulator> {
+    const contract = new Contract<DataRegistryPrivateState>(witnesses);
+    const { currentContractState } = await contract.initialState(
       createConstructorContext(createDataRegistryPrivateState(), senderPk),
     );
-    this.circuitContext = {
-      currentPrivateState,
-      currentZswapLocalState,
-      costModel: CostModel.initialCostModel(),
-      currentQueryContext: new QueryContext(
-        currentContractState.data,
-        this.contractAddress,
-      ),
-    };
+    return new DataRegistrySimulator(
+      contract,
+      currentContractState.data,
+      senderPk,
+    );
   }
 
   /**
@@ -59,13 +68,42 @@ export class DataRegistrySimulator {
    */
   public switchUser(senderPk: string): void {
     this.currentPk = senderPk;
-    this.circuitContext.currentZswapLocalState = emptyZswapLocalState(senderPk);
-    this.circuitContext.currentPrivateState = createDataRegistryPrivateState();
     this._defaultOwnerSecret = crypto.getRandomValues(new Uint8Array(32));
   }
 
   public getLedger(): Ledger {
-    return ledger(this.circuitContext.currentQueryContext.state);
+    return ledger(this.contractState);
+  }
+
+  /**
+   * A circuit context for calling `circuitId` as the current user, against the
+   * current contract state, with the given private state.
+   */
+  public contextFor(
+    circuitId: DataRegistryCircuitId,
+    privateState: DataRegistryPrivateState,
+  ): CircuitContext<DataRegistryPrivateState> {
+    return createCircuitContext({
+      circuitId,
+      contractAddress: this.contractAddress,
+      coinPublicKeyOrZswapState: this.currentPk,
+      contractState: this.contractState,
+      privateState,
+      costModel: CostModel.initialCostModel(),
+    });
+  }
+
+  /** Run a circuit and keep the contract state it leaves behind. */
+  private async run<R>(
+    circuitId: DataRegistryCircuitId,
+    privateState: DataRegistryPrivateState,
+    call: (
+      context: CircuitContext<DataRegistryPrivateState>,
+    ) => Promise<CircuitResults<DataRegistryPrivateState, R>>,
+  ): Promise<R> {
+    const res = await call(this.contextFor(circuitId, privateState));
+    this.contractState = res.context.callContext.currentQueryContext.state;
+    return res.result;
   }
 
   public storeReference(
@@ -77,33 +115,28 @@ export class DataRegistrySimulator {
     keyEnvelope: string = "",
     contentHash: Uint8Array = new Uint8Array(32),
     ownerSecret: Uint8Array = this._defaultOwnerSecret,
-  ): Uint8Array {
-    this.circuitContext.currentPrivateState = { ownerSecret };
-    const res = this.contract.impureCircuits.storeReference(
-      this.circuitContext,
-      storageId,
-      encryptionScheme,
-      storageProvider,
-      metadata,
-      writtenAt,
-      keyEnvelope,
-      contentHash,
+  ): Promise<Uint8Array> {
+    return this.run("storeReference", { ownerSecret }, (context) =>
+      this.contract.impureCircuits.storeReference(
+        context,
+        storageId,
+        encryptionScheme,
+        storageProvider,
+        metadata,
+        writtenAt,
+        keyEnvelope,
+        contentHash,
+      ),
     );
-    this.circuitContext = { ...res.context, currentPrivateState: {} };
-    return res.result;
   }
 
   public removeReference(
     refId: Uint8Array,
     ownerSecret: Uint8Array = this._defaultOwnerSecret,
-  ): [] {
-    this.circuitContext.currentPrivateState = { ownerSecret };
-    const res = this.contract.impureCircuits.removeReference(
-      this.circuitContext,
-      refId,
+  ): Promise<[]> {
+    return this.run("removeReference", { ownerSecret }, (context) =>
+      this.contract.impureCircuits.removeReference(context, refId),
     );
-    this.circuitContext = { ...res.context, currentPrivateState: {} };
-    return res.result;
   }
 
   public computeOwnerCommitment(
@@ -130,23 +163,22 @@ export class DataRegistrySimulator {
     contentHash: Uint8Array = new Uint8Array(32),
     ownerSecret: Uint8Array = this._defaultOwnerSecret,
     newOwnerSecret?: Uint8Array,
-  ): [] {
-    this.circuitContext.currentPrivateState = {
-      ownerSecret,
-      newOwnerSecret: newOwnerSecret ?? ownerSecret,
-    };
-    const res = this.contract.impureCircuits.updateReference(
-      this.circuitContext,
-      refId,
-      storageId,
-      encryptionScheme,
-      storageProvider,
-      metadata,
-      writtenAt,
-      keyEnvelope,
-      contentHash,
+  ): Promise<[]> {
+    return this.run(
+      "updateReference",
+      { ownerSecret, newOwnerSecret: newOwnerSecret ?? ownerSecret },
+      (context) =>
+        this.contract.impureCircuits.updateReference(
+          context,
+          refId,
+          storageId,
+          encryptionScheme,
+          storageProvider,
+          metadata,
+          writtenAt,
+          keyEnvelope,
+          contentHash,
+        ),
     );
-    this.circuitContext = { ...res.context, currentPrivateState: {} };
-    return res.result;
   }
 }

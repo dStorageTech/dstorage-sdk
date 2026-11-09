@@ -28,6 +28,7 @@ const sharedNoExternal = [
 // resolved underneath it regardless of what's hoisted at the top level.
 const sharedExternal: (string | RegExp)[] = [
   /^@midnight-ntwrk\//,
+  /^@midnightntwrk\//,
   "arweave",
   /^@ardrive\//,
   /^@dha-team\//,
