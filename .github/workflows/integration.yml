@@ -63,9 +63,9 @@ jobs:
           exit 1
 
       - name: Fund test wallet (NIGHT + DUST)
-        # fund-wallet.sh auto-clones midnightntwrk/midnight-local-dev (the
-        # official tool) and installs deps via npm when the directory is
-        # absent. It always funds NIGHT + registers DUST together.
+        # fund-wallet.sh runs tools/fund-wallet.ts (Wallet SDK 2): NIGHT from
+        # the devnet's genesis wallet, then DUST registration so the test
+        # wallet can pay fees.
         run: |
           MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
           for attempt in 1 2 3; do
