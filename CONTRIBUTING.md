@@ -43,7 +43,7 @@ Build order (dependency DAG): `crypto → encryption → payment → storage →
 
 ### Prerequisites
 
-- Node.js 22+ and npm (download from [nodejs.org](https://nodejs.org))
+- Node.js 22.12+ or 24 (or 26+) and npm (download from [nodejs.org](https://nodejs.org)); odd-numbered releases such as 25 are not supported
 - Docker, for the Midnight proof server and Arweave Local (download from [docker.com/get-started](https://www.docker.com/get-started))
 - _Only if you modify the contract:_ Midnight [Compact developer tools](https://docs.midnight.network/blog/compact-developer-tools), compiler **version 0.36.0** (the committed ZK artifacts were built with it)
 - _For the browser demo's Midnight path:_ [Lace](https://www.lace.io) wallet extension (**version 1.36.2 or later**)

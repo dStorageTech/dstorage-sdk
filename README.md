@@ -65,7 +65,7 @@ For developers, the SDK is designed to get out of the way. You configure it once
 
 ## Quick Start
 
-Requires Node.js 22+.
+Requires Node.js 22.12+ or 24 (or 26+; odd-numbered releases such as 25 are not supported).
 
 ```sh
 npm install @dstorage-tech/dstorage-sdk
