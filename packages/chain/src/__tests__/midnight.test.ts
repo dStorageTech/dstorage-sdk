@@ -662,6 +662,49 @@ describe("MidnightChainAdapter", () => {
       );
     });
 
+    it("reports the connector error code and how to recover when connect() fails", async () => {
+      const oneAm = makeFakeWallet({ name: "1AM" });
+      oneAm.connect.mockRejectedValue({
+        type: "DAppConnectorAPIError",
+        code: "InternalError",
+        reason: "Request failed",
+      });
+      stubWindowMidnight({ "1am": oneAm });
+      const adapter = makeConnectorAdapter("1am", makeMockLogger());
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const err = await (adapter as any)
+        ._initConnector()
+        .catch((e: unknown) => e);
+
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_WALLET_CONNECT_FAILED,
+        message: expect.stringContaining(
+          'Failed to connect to wallet "1am": Request failed (InternalError)',
+        ),
+      });
+      expect(err.message).toContain("Open the wallet extension");
+    });
+
+    it("gives no recovery hint when the user rejects the connection", async () => {
+      const oneAm = makeFakeWallet({ name: "1AM" });
+      oneAm.connect.mockRejectedValue({
+        type: "DAppConnectorAPIError",
+        code: "Rejected",
+        reason: "User rejected the connection",
+      });
+      stubWindowMidnight({ "1am": oneAm });
+      const adapter = makeConnectorAdapter("1am", makeMockLogger());
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const err = await (adapter as any)
+        ._initConnector()
+        .catch((e: unknown) => e);
+
+      expect(err.message).toContain("User rejected the connection (Rejected)");
+      expect(err.message).not.toContain("Open the wallet extension");
+    });
+
     it("selects the wallet whose name matches connectorName (no rdns match)", async () => {
       const lace = makeFakeWallet({ name: "lace", rdns: "io.lace.wallet" });
       const oneAm = makeFakeWallet({

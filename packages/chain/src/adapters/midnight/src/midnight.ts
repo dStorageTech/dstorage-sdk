@@ -298,7 +298,10 @@ function findErrorDetail(
   const obj = err as Record<string, unknown>;
   const message = obj["reason"] ?? obj["message"];
   if (typeof message === "string" && message) {
-    const tag = obj["_tag"];
+    // Effect-TS errors carry `_tag`; DApp Connector errors carry the spec's `code`.
+    const tag =
+      obj["_tag"] ??
+      (obj["type"] === "DAppConnectorAPIError" ? obj["code"] : undefined);
     return typeof tag === "string" ? { message, tag } : { message };
   }
   for (const key of ["failure", "cause", "error"]) {
@@ -1658,10 +1661,18 @@ export class MidnightChainAdapter implements ChainAdapter {
       connectedAPI = await selected.wallet.connect(this.config.networkId);
       this.connectorAPI = connectedAPI;
     } catch (err) {
+      // Showing a connection prompt is up to the wallet; some can't open their
+      // UI from a page request and fail instead, so point the user at it.
+      const hint = isWalletRejection(err)
+        ? ""
+        : `\n  Open the wallet extension (click its toolbar icon), make sure it is unlocked and on the ` +
+          `"${this.config.networkId}" network, then try again. If it keeps failing, check the ` +
+          `extension's own console for the underlying error.`;
       throw new DStorageError(
         ChainErrorCode.MIDNIGHT_WALLET_CONNECT_FAILED,
         `[dStorage/midnight] Failed to connect to wallet "${selected.id}": ` +
-          describeConnectorError(err),
+          describeConnectorError(err) +
+          hint,
         { cause: err },
       );
     }
