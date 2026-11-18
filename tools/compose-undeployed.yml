@@ -2,7 +2,7 @@ services:
   # ── Midnight local network ──────────────────────────────────────────────────
 
   proof-server:
-    image: "midnightntwrk/proof-server:9.0.0"
+    image: "midnightntwrk/proof-server:9.0.2"
     container_name: midnight-proof-server
     ports:
       - "6300:6300"

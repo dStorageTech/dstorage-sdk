@@ -364,9 +364,10 @@ yourself. Its compiled ZK artifacts (prover/verifier keys, ZKIR and the compiler
 manifest the keys are checked against) ship inside this package at
 `dist/contracts/dataregistry/managed/{compiler,keys,zkir}`.
 
-> **Midnight ledger 9.** The SDK targets the ledger 9 stack (Midnight.js 5, Wallet SDK 2,
-> Compact 0.36.0, proof server 9.0.0, indexer 4.4.101). `DataRegistry` is compiled with
-> Compact 0.36.0, which changes its verifier keys, so contracts deployed with earlier SDK
+> **Midnight ledger 9.** The SDK targets the ledger 9 stack (Midnight.js 5.0.1, Wallet SDK 2.0.1,
+> Compact 0.36.1, proof server 9.0.2, indexer 4.4.101). `DataRegistry` is compiled with
+> Compact 0.36.1. Its verifier keys are identical to the 0.36.0 build, but differ from those
+> of SDK versions built before Compact 0.36, so contracts deployed with those earlier SDK
 > versions can't be used with this one: deploy a new `DataRegistry` contract.
 
 **Node.js (`walletMode: "provider"`)** — point `zkArtifactsPath` at the bundled copy.
