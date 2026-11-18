@@ -87,6 +87,211 @@ export interface DStorageConfig {
    * Omit to suppress all SDK log output.
    */
   logger?: Logger;
+  /**
+   * Overrides how `storageAdapters` are used, per operation and outcome.
+   * Omit to keep the default: try in order, stop at the first success.
+   * Returning `"continue"` from `onSuccess` on a write stores further copies,
+   * which `retrieveByRefId()` falls back to automatically.
+   *
+   * @example
+   * // Store on every adapter and require at least two copies
+   * storagePolicy: {
+   *   onSuccess: () => "continue",
+   *   onComplete: ({ successes }) => (successes.length >= 2 ? "accept" : "fail"),
+   * }
+   */
+  storagePolicy?: StoragePolicy;
+  /**
+   * Overrides how `chainAdapters` are used, per operation and outcome.
+   * A reference always lives on one chain, so `onSuccess` only runs for the
+   * `"init"` operation, where `"continue"` initializes the remaining adapters.
+   *
+   * @example
+   * // Retry a failed read once, then fall back
+   * chainPolicy: {
+   *   onFailure: ({ operation, attempt }) =>
+   *     operation === "read" && attempt === 1
+   *       ? { action: "retry", delayMs: 500 }
+   *       : "next",
+   * }
+   */
+  chainPolicy?: ChainPolicy;
+}
+
+// ── Adapter policies ──────────────────────────────────────────────────────────
+
+export type AdapterKind = "storage" | "chain";
+
+export type StorageOperation =
+  | "store"
+  | "storeChunked"
+  | "update"
+  | "retrieve"
+  | "retrieveChunk"
+  | "estimateCost";
+
+export type ChainOperation =
+  | "init"
+  | "store"
+  | "registerReference"
+  | "read"
+  | "update"
+  | "retryUpdate"
+  | "rotateKeys"
+  | "remove"
+  | "list"
+  | "estimateCost";
+
+/**
+ * Identifies a configured adapter to a policy hook. Hooks get this rather than
+ * the instance because adapters can hold payment credentials.
+ * `index` is the only reliable identity: names aren't unique per instance.
+ */
+export interface AdapterInfo {
+  readonly index: number;
+  readonly name: string;
+  readonly providerName: string;
+}
+
+/** Which copy of the content a `retrieve` attempt is reading. */
+export type ReplicaLocationRef =
+  | { readonly kind: "primary" }
+  | {
+      readonly kind: "replica";
+      readonly replicaIndex: number;
+      readonly provider: string;
+    };
+
+export interface AdapterCandidate {
+  readonly adapter: AdapterInfo;
+  readonly location?: ReplicaLocationRef;
+}
+
+/** A successful attempt. Never includes content bytes or key envelopes. */
+export interface PolicySuccess {
+  readonly adapter: AdapterInfo;
+  readonly attempt: number;
+  readonly location?: ReplicaLocationRef;
+  readonly storageId?: string;
+  readonly provider?: string;
+  readonly refId?: string;
+}
+
+export interface PolicyFailure {
+  readonly adapter: AdapterInfo;
+  readonly attempt: number;
+  readonly location?: ReplicaLocationRef;
+  readonly error: unknown;
+}
+
+interface PolicyContextBase<K extends AdapterKind, O extends string> {
+  readonly kind: K;
+  readonly operation: O;
+}
+
+export interface PolicyOrderContext<
+  K extends AdapterKind,
+  O extends string,
+> extends PolicyContextBase<K, O> {
+  readonly candidates: readonly AdapterCandidate[];
+}
+
+export interface PolicySuccessContext<K extends AdapterKind, O extends string>
+  extends PolicyContextBase<K, O>, AdapterCandidate {
+  /** 1-based attempt number on this adapter. */
+  readonly attempt: number;
+  /** Every success so far in this operation, including this one. */
+  readonly successes: readonly PolicySuccess[];
+  readonly failures: readonly PolicyFailure[];
+}
+
+export interface PolicyFailureContext<
+  K extends AdapterKind,
+  O extends string,
+> extends PolicySuccessContext<K, O> {
+  /** Unfiltered adapter error. May contain endpoint URLs or other adapter details. */
+  readonly error: unknown;
+}
+
+export interface PolicyCompleteContext<
+  K extends AdapterKind,
+  O extends string,
+> extends PolicyContextBase<K, O> {
+  readonly successes: readonly PolicySuccess[];
+  readonly failures: readonly PolicyFailure[];
+}
+
+export type PolicyFailureDecision =
+  "next" | "abort" | { action: "retry"; delayMs?: number };
+
+type MaybePromise<T> = T | Promise<T>;
+
+/**
+ * Decision hooks for one adapter type. Every hook is optional, and omitting one
+ * keeps the default for that decision. Hooks can run concurrently, and throwing
+ * from one ends the operation with `ADAPTER_POLICY_HOOK_FAILED`.
+ *
+ * Retrying isn't free: a retried write can pay twice, a chunked retry restarts
+ * from chunk 0, and a chain write that timed out may still have landed.
+ */
+export interface AdapterPolicy<K extends AdapterKind, O extends string> {
+  /**
+   * Reorder or filter candidates. Must return a non-empty subset of the objects
+   * in `ctx.candidates`. Not called for operations pinned to one adapter.
+   * Filtering `"read"` also affects update/remove/rotate, which use it to find
+   * the adapter holding a reference.
+   */
+  order?(
+    ctx: PolicyOrderContext<K, O>,
+  ): MaybePromise<readonly AdapterCandidate[]>;
+  /**
+   * Default `"stop"`. Only runs where `"continue"` can apply: storage writes
+   * (`store`, `storeChunked`, `update`) and chain `init`. Use `onComplete` to
+   * observe other operations.
+   */
+  onSuccess?(
+    ctx: PolicySuccessContext<K, O>,
+  ): MaybePromise<"stop" | "continue">;
+  /**
+   * Default `"next"`, except `estimateCost`, which stops at the first failure.
+   * Retries are limited to 32 attempts per candidate. `"abort"` is invalid for
+   * chain `list`, whose calls run in parallel.
+   */
+  onFailure?(
+    ctx: PolicyFailureContext<K, O>,
+  ): MaybePromise<PolicyFailureDecision>;
+  /**
+   * Runs once when the operation finishes naturally, not after an abort or a
+   * hook error. `"fail"` throws `ADAPTER_POLICY_REJECTED`. If nothing succeeded,
+   * the usual adapter error is thrown whichever value is returned.
+   */
+  onComplete?(
+    ctx: PolicyCompleteContext<K, O>,
+  ): MaybePromise<"accept" | "fail">;
+}
+
+export type StoragePolicy = AdapterPolicy<"storage", StorageOperation>;
+export type ChainPolicy = AdapterPolicy<"chain", ChainOperation>;
+
+// ── Storage replicas ──────────────────────────────────────────────────────────
+
+/** An extra copy of the content, recorded with the on-chain reference. */
+export interface ReplicaLocation {
+  /** `name` of the storage adapter that holds this copy. */
+  provider: string;
+  /** Storage network ID of this copy. */
+  id: string;
+  /**
+   * BLAKE3 hash of this copy, hex-encoded. Only set when it differs from the
+   * on-chain `contentHash`, as with chunked uploads, where each copy has its
+   * own manifest.
+   */
+  contentHash?: string;
+}
+
+/** A `ReplicaLocation` as reported after a write, with its cost. */
+export interface StoredReplica extends ReplicaLocation {
+  cost?: { amount: string; token: TokenSymbol };
 }
 
 /**
@@ -108,6 +313,11 @@ export interface StoreRecovery {
    * Pass to `registerReference()` to preserve the on-chain integrity check on the recovered reference.
    */
   contentHash?: string;
+  /**
+   * Extra copies stored by a `storagePolicy`. Pass to `registerReference()`
+   * (`retryUpdate()` reads it from here), or the reference won't record them.
+   */
+  replicas?: ReplicaLocation[];
 }
 
 export interface StoreProgress {
@@ -123,15 +333,18 @@ export interface StoreProgress {
    */
   recovery?: StoreRecovery;
   /**
-   * Zero-based index of which configured `storageAdapters` candidate this
-   * progress event belongs to. Only meaningful for chunked uploads (>10 MB):
-   * if the first storage adapter fails partway through, the whole chunked
-   * upload restarts from scratch against the next candidate, so
-   * `chunksUploaded`/`bytesUploaded` will visibly rewind to 0 — a bump in
-   * `attemptIndex` distinguishes that rewind from data corruption. Always 0
-   * for the single-shot (≤10 MB) path, which never retries.
+   * Zero-based count of whole-upload attempts so far. Only set for chunked
+   * uploads (>10 MB): if an attempt fails partway through, the whole upload
+   * restarts from scratch, so `chunksUploaded`/`bytesUploaded` will visibly
+   * rewind to 0 — a bump in `attemptIndex` distinguishes that rewind from data
+   * corruption. Matches the adapter's position only when no `storagePolicy`
+   * changes the order or retries.
    */
   attemptIndex?: number;
+  /** Chunked uploads with a `storagePolicy`: position of the adapter being written. */
+  adapterIndex?: number;
+  /** Chunked uploads with a `storagePolicy`: copies completed before this attempt. */
+  copyIndex?: number;
 }
 
 export interface StoreOptions {
@@ -222,8 +435,16 @@ export interface StoreResult {
    * Pass this back to retrieveByStorageId() to decrypt locally.
    */
   cryptoScheme?: CryptoScheme;
-  /** Estimated cost of the store operation */
+  /**
+   * Estimated cost of the store operation. Covers the primary copy only; see
+   * `replicas` for the cost of each extra copy.
+   */
   costEstimate: CostEstimate;
+  /**
+   * Extra copies written because `storagePolicy.onSuccess` returned `"continue"`.
+   * `storageId` remains the primary copy. Absent when there are none.
+   */
+  replicas?: StoredReplica[];
 }
 
 /** Options for dStorage.listReferences() */
@@ -247,6 +468,8 @@ export type ListedDataReference = DataReferenceSummary & {
    * reliable way to disambiguate which chain a result came from.
    */
   sourceAdapterIndex?: number;
+  /** Extra copies recorded with this reference, when the caller can read them. */
+  replicas?: ReplicaLocation[];
 };
 
 /** Options for dStorage.registerReference() */
@@ -289,6 +512,11 @@ export interface RegisterReferenceOptions {
    * recovered reference carries the same on-chain hash as a normal `store()` write.
    */
   contentHash?: string;
+  /**
+   * Recovery: `replicas` from `StorePartialError.recovery`, so the new reference
+   * records the extra copies. Requires `storageId` and `keyEnvelope`.
+   */
+  replicas?: ReplicaLocation[];
 }
 
 /** Result returned from dStorage.registerReference() */
@@ -303,6 +531,8 @@ export interface UpdateResult {
   chainRefId: string;
   /** StorageId of the newly stored content. */
   storageId: string;
+  /** Extra copies of the new content. Absent when there are none. */
+  replicas?: StoredReplica[];
 }
 
 /** Result returned from dStorage.retrieveByRefId() / retrieveByStorageId() */
@@ -335,6 +565,9 @@ export const MANIFEST_AAD: Uint8Array = _aadEnc.encode("dstorage:manifest:v1");
 
 /** AAD for encrypted on-chain metadata (stored in ChainReference.encryptedMetadata). */
 export const METADATA_AAD: Uint8Array = _aadEnc.encode("dstorage:metadata:v1");
+
+/** AAD for the encrypted list of extra copies stored in the on-chain storageId. */
+export const REPLICAS_AAD: Uint8Array = _aadEnc.encode("dstorage:replicas:v1");
 
 /**
  * HKDF salt for ownerSecret derivation in metadata-only references (no storageId).

@@ -15,4 +15,7 @@ export {
   CoreErrorCode,
   StorePartialError,
   isStorePartialError,
+  AdapterPolicyError,
+  isAdapterPolicyError,
 } from "./errors.js";
+export type { AdapterFailure } from "./errors.js";

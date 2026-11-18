@@ -1,5 +1,10 @@
 import { DStorageError } from "@dstorage/crypto";
-import type { StoreRecovery } from "./types.js";
+import type {
+  AdapterKind,
+  PolicyFailure,
+  PolicySuccess,
+  StoreRecovery,
+} from "./types.js";
 
 export const CoreErrorCode = {
   // store — 10001-10009
@@ -69,9 +74,23 @@ export const CoreErrorCode = {
 
   // config validation — 10110-10119
   CONFIG_STORAGE_ADAPTERS_EMPTY: 10110,
+  CONFIG_POLICY_INVALID: 10111,
 
   // init() — 10120-10129
   INIT_CHAIN_ALL_FAILED: 10120,
+
+  // adapter policies — 10130-10139
+  ADAPTER_POLICY_INVALID_DECISION: 10130,
+  ADAPTER_POLICY_HOOK_FAILED: 10131,
+  ADAPTER_POLICY_ABORTED: 10132,
+  ADAPTER_POLICY_REJECTED: 10133,
+
+  // storage replicas — 10140-10149
+  REPLICA_LIST_INVALID: 10140,
+  REPLICAS_REQUIRE_KEY_ENVELOPE: 10141,
+
+  // estimateCost — 10150-10159
+  ESTIMATE_COST_ALL_FAILED: 10150,
 
   // generic catch-all — 10999
   UNKNOWN_ERROR: 10999,
@@ -87,6 +106,10 @@ export type CoreErrorCode = (typeof CoreErrorCode)[keyof typeof CoreErrorCode];
 export interface AdapterFailure {
   adapterName: string;
   error: unknown;
+  /** Position in the configured adapter array. Only set when a policy is configured. */
+  adapterIndex?: number;
+  /** 1-based attempt number on this adapter. Only set when a policy is configured. */
+  attempt?: number;
 }
 
 /**
@@ -121,4 +144,66 @@ export class StorePartialError extends DStorageError {
 
 export function isStorePartialError(err: unknown): err is StorePartialError {
   return err instanceof StorePartialError;
+}
+
+/**
+ * Thrown when a configured `storagePolicy`/`chainPolicy` ends an operation:
+ * a hook threw or returned an invalid decision, `onFailure` returned `"abort"`,
+ * or `onComplete` returned `"fail"`.
+ *
+ * `successes` lists work that already happened and can't be undone, such as
+ * paid storage copies. When `committed` is true, a chain write has landed:
+ * don't call `registerReference()` to recover, because that would create a
+ * duplicate reference. Use the `refId` in `successes` instead.
+ */
+export class AdapterPolicyError extends DStorageError {
+  readonly kind: AdapterKind;
+  readonly operation: string;
+  /** The hook involved, when the error came from a specific hook. */
+  readonly hook: string | undefined;
+  readonly successes: readonly PolicySuccess[];
+  readonly failures: readonly PolicyFailure[];
+  readonly committed: boolean;
+
+  constructor(
+    code: CoreErrorCode,
+    message: string,
+    details: {
+      kind: AdapterKind;
+      operation: string;
+      hook?: string;
+      successes: readonly PolicySuccess[];
+      failures: readonly PolicyFailure[];
+      committed: boolean;
+      cause?: unknown;
+    },
+  ) {
+    super(
+      code,
+      message,
+      details.cause !== undefined ? { cause: details.cause } : undefined,
+    );
+    this.name = "AdapterPolicyError";
+    this.kind = details.kind;
+    this.operation = details.operation;
+    this.hook = details.hook;
+    this.successes = details.successes;
+    this.failures = details.failures;
+    this.committed = details.committed;
+  }
+}
+
+/**
+ * Checks by code rather than `instanceof`: the `./errors` entry point is a
+ * separate bundle, so its class differs from the one thrown by the main bundle.
+ */
+export function isAdapterPolicyError(err: unknown): err is AdapterPolicyError {
+  if (typeof err !== "object" || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return (
+    code === CoreErrorCode.ADAPTER_POLICY_INVALID_DECISION ||
+    code === CoreErrorCode.ADAPTER_POLICY_HOOK_FAILED ||
+    code === CoreErrorCode.ADAPTER_POLICY_ABORTED ||
+    code === CoreErrorCode.ADAPTER_POLICY_REJECTED
+  );
 }
