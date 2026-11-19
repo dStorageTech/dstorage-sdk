@@ -868,6 +868,28 @@ describe("MidnightChainAdapter", () => {
       return { log: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
     }
 
+    const GENESIS_A = "aa".repeat(32);
+    const GENESIS_B = "bb".repeat(32);
+
+    /**
+     * Stub fetch for the indexer genesis-hash query. Maps an indexer URL to the
+     * genesis hash it returns, or to an Error it fails with; any URL not
+     * listed returns GENESIS_A.
+     */
+    function stubGenesis(byUrl: Record<string, string | Error>) {
+      const fetchMock = vi.fn(async (url: string) => {
+        const entry = byUrl[url] ?? GENESIS_A;
+        if (entry instanceof Error) throw entry;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { block: { hash: entry } } }),
+        };
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    }
+
     async function initWithWalletConfig(
       config: Partial<
         Extract<
@@ -921,6 +943,7 @@ describe("MidnightChainAdapter", () => {
     }
 
     it("configured endpoints take priority over the wallet's", async () => {
+      stubGenesis({});
       const { resolve, logger } = await initWithWalletConfig(
         {
           indexerEndpoint: "http://my-indexer/graphql",
@@ -934,7 +957,7 @@ describe("MidnightChainAdapter", () => {
         indexerWs: "ws://my-indexer/graphql/ws",
         proofServer: "http://my-prover:6300",
       });
-      expect(logger.log).toHaveBeenCalledWith(
+      expect(logger.warn).toHaveBeenCalledWith(
         "dStorage/midnight",
         expect.stringContaining(
           'Using configured indexerEndpoint "http://my-indexer/graphql"',
@@ -1063,6 +1086,101 @@ describe("MidnightChainAdapter", () => {
           `[dStorage/midnight] Wallet is connected to network "preprod" but the adapter is configured for "${MOCK_NETWORK}"`,
         ),
       });
+    });
+
+    // ── Configured indexer vs the wallet's chain ──────────────────────────────
+
+    const OTHER_CHAIN_INDEXER =
+      "https://other-chain-indexer.example/api/v0?project_id=secret-key-123";
+
+    it("throws MIDNIGHT_INDEXER_NETWORK_MISMATCH when the configured indexer is on another chain", async () => {
+      stubGenesis({
+        [OTHER_CHAIN_INDEXER]: GENESIS_B,
+        [WALLET_CONFIG.indexerUri]: GENESIS_A,
+      });
+      const err = await initWithWalletConfig(
+        {
+          indexerEndpoint: OTHER_CHAIN_INDEXER,
+          proofServerEndpoint: "http://my-prover:6300",
+        },
+        Promise.resolve(WALLET_CONFIG),
+      ).catch((e: unknown) => e);
+      expect(err).toMatchObject({
+        code: ChainErrorCode.MIDNIGHT_INDEXER_NETWORK_MISMATCH,
+        message: expect.stringContaining(
+          '[dStorage/midnight] The configured indexerEndpoint "https://other-chain-indexer.example/api/v0" serves a different chain',
+        ),
+      });
+      expect((err as Error).message).not.toContain("secret-key-123");
+    });
+
+    it("never logs the configured indexer's query string", async () => {
+      stubGenesis({});
+      const { logger } = await initWithWalletConfig(
+        {
+          indexerEndpoint: OTHER_CHAIN_INDEXER,
+          proofServerEndpoint: "http://my-prover:6300",
+        },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      const logged = JSON.stringify([
+        logger.log.mock.calls,
+        logger.warn.mock.calls,
+        logger.debug.mock.calls,
+      ]);
+      expect(logged).not.toContain("secret-key-123");
+    });
+
+    it("accepts a different indexer URL on the same chain", async () => {
+      const fetchMock = stubGenesis({});
+      const { resolve } = await initWithWalletConfig(
+        {
+          indexerEndpoint: "https://same-chain-mirror.example/graphql",
+          proofServerEndpoint: "http://my-prover:6300",
+        },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(resolve().indexerHttp).toBe(
+        "https://same-chain-mirror.example/graphql",
+      );
+    });
+
+    it("skips the chain check when no indexer is configured", async () => {
+      const fetchMock = stubGenesis({});
+      await initWithWalletConfig(
+        { proofServerEndpoint: "http://my-prover:6300" },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("skips the chain check when the configured indexer is the wallet's", async () => {
+      const fetchMock = stubGenesis({});
+      await initWithWalletConfig(
+        {
+          indexerEndpoint: WALLET_CONFIG.indexerUri,
+          proofServerEndpoint: "http://my-prover:6300",
+        },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("warns and continues when an indexer can't be queried", async () => {
+      stubGenesis({ [OTHER_CHAIN_INDEXER]: new TypeError("fetch failed") });
+      const { resolve, logger } = await initWithWalletConfig(
+        {
+          indexerEndpoint: OTHER_CHAIN_INDEXER,
+          proofServerEndpoint: "http://my-prover:6300",
+        },
+        Promise.resolve(WALLET_CONFIG),
+      );
+      expect(resolve().indexerHttp).toBe(OTHER_CHAIN_INDEXER);
+      expect(logger.warn).toHaveBeenCalledWith(
+        "dStorage/midnight",
+        expect.stringContaining("Could not check that indexerEndpoint"),
+      );
     });
   });
 

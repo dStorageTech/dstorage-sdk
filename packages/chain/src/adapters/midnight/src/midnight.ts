@@ -274,6 +274,57 @@ function isHttpOrHttps(url: string): boolean {
   }
 }
 
+/**
+ * Strip the query string and credentials from a URL before logging it.
+ * Hosted indexers often carry an API key in the query (e.g. `?project_id=…`).
+ */
+function redactUrl(url: string): string {
+  try {
+    const { origin, pathname } = new URL(url);
+    return `${origin}${pathname}`;
+  } catch {
+    return "<invalid URL>";
+  }
+}
+
+const GENESIS_QUERY_TIMEOUT_MS = 10_000;
+
+/**
+ * Ask an indexer for its genesis block hash. Two indexers on the same chain
+ * return the same hash, whatever their URLs. Throws on any failure.
+ */
+async function fetchIndexerGenesisHash(indexerHttp: string): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GENESIS_QUERY_TIMEOUT_MS);
+  try {
+    const res = await fetch(indexerHttp, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: "query { block(offset: { height: 0 }) { hash } }",
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = (await res.json()) as {
+      data?: { block?: { hash?: unknown } | null } | null;
+      errors?: { message?: unknown }[];
+    };
+    const hash = body.data?.block?.hash;
+    if (typeof hash !== "string" || !hash) {
+      const gqlError = body.errors?.[0]?.message;
+      throw new Error(
+        typeof gqlError === "string"
+          ? `indexer returned an error: ${gqlError}`
+          : "response has no data.block.hash",
+      );
+    }
+    return hash.toLowerCase().replace(/^0x/, "");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Convert a Uint8Array to a lowercase hex string (browser-safe, no Buffer). */
 function uint8ArrayToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -1145,7 +1196,15 @@ export class MidnightChainAdapter implements ChainAdapter {
           );
         }
       }
-      this.logger?.log("dStorage/midnight", "Deploying DataRegistry contract…");
+      const watchedIndexer =
+        this.config.indexerHttp ?? this.connectorIndexerHttp;
+      this.logger?.log(
+        "dStorage/midnight",
+        "Deploying DataRegistry contract…" +
+          (watchedIndexer
+            ? ` (waiting for confirmation from indexer ${redactUrl(watchedIndexer)})`
+            : ""),
+      );
       this._api = await DataRegistryAPI.deploy(providers, this.logger);
       this._contractAddress = this._api.deployedContractAddress;
       this.logger?.log(
@@ -1509,6 +1568,50 @@ export class MidnightChainAdapter implements ChainAdapter {
   }
 
   /**
+   * When a configured indexerEndpoint overrides the wallet's, check that both
+   * indexers serve the same chain by comparing genesis block hashes. The
+   * wallet submits transactions to its own network while the SDK waits for
+   * them on the configured indexer, so a mismatch would hang deploys and
+   * calls forever. URL names are not trusted for this; only the chain itself.
+   * If either indexer can't be queried, warn and carry on.
+   */
+  private async _assertIndexerOnWalletChain(
+    walletConfig: WalletConfiguration,
+  ): Promise<void> {
+    const configured = this.config.indexerHttp;
+    const fromWallet = walletConfig.indexerUri;
+    if (!configured || !fromWallet || configured === fromWallet) return;
+
+    let configuredHash: string;
+    let walletHash: string;
+    try {
+      [configuredHash, walletHash] = await Promise.all([
+        fetchIndexerGenesisHash(configured),
+        fetchIndexerGenesisHash(fromWallet),
+      ]);
+    } catch (err) {
+      this.logger?.warn(
+        "dStorage/midnight",
+        `Could not check that indexerEndpoint "${redactUrl(configured)}" is on the same chain as ` +
+          `the wallet's indexer "${redactUrl(fromWallet)}": ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+
+    if (configuredHash !== walletHash) {
+      throw new DStorageError(
+        ChainErrorCode.MIDNIGHT_INDEXER_NETWORK_MISMATCH,
+        `[dStorage/midnight] The configured indexerEndpoint "${redactUrl(configured)}" serves a ` +
+          `different chain than the wallet's indexer "${redactUrl(fromWallet)}" (the wallet is on ` +
+          `"${walletConfig.networkId || this.config.networkId}"). Transactions submitted by the ` +
+          `wallet would never be observed. Point indexerEndpoint and indexerWsEndpoint at that ` +
+          `network, or remove them to use the wallet's.`,
+      );
+    }
+  }
+
+  /**
    * Record the endpoints supplied by the connected wallet. They are only used
    * for endpoints not set in the adapter config (see _buildConnectorProviders).
    * Throws if the wallet is on a different network than the configured one.
@@ -1529,24 +1632,33 @@ export class MidnightChainAdapter implements ChainAdapter {
       label: string,
       configured: string | undefined,
       fromWallet: string | undefined,
+      level: "log" | "warn" = "log",
     ) => {
       if (configured && fromWallet && configured !== fromWallet) {
-        this.logger?.log(
+        this.logger?.[level](
           "dStorage/midnight",
-          `Using configured ${label} "${configured}" instead of the wallet's "${fromWallet}".`,
+          `Using configured ${label} "${redactUrl(configured)}" instead of the wallet's "${redactUrl(fromWallet)}".` +
+            (level === "warn"
+              ? " Transactions are submitted by the wallet but confirmed through this indexer; " +
+                "if it serves a different network, they will never be observed."
+              : ""),
         );
       }
     };
 
+    // The indexer is where the SDK waits for the wallet's transactions to
+    // land, so overriding it is the riskier choice: warn, don't just log.
     preferConfigured(
       "indexerEndpoint",
       this.config.indexerHttp,
       walletConfig.indexerUri,
+      "warn",
     );
     preferConfigured(
       "indexerWsEndpoint",
       this.config.indexerWs,
       walletConfig.indexerWsUri,
+      "warn",
     );
     this.connectorIndexerHttp = walletConfig.indexerUri || null;
     this.connectorIndexerWs = walletConfig.indexerWsUri || null;
@@ -1700,6 +1812,7 @@ export class MidnightChainAdapter implements ChainAdapter {
     }
     if (walletConfig) {
       this._applyWalletConfiguration(walletConfig);
+      await this._assertIndexerOnWalletChain(walletConfig);
     }
 
     // Step 3: Extract addresses from connector
